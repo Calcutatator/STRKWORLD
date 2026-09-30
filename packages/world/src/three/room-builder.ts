@@ -34,6 +34,8 @@ import {
   ENDUR,
   NEAR,
   VESU,
+  VESU_MARK,
+  addVesuMark,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -41,6 +43,7 @@ import {
   coneGeometry,
   createOpacityFader,
   createTickerStrip,
+  css,
   cylinderGeometry,
   faceBox,
   faceDisc,
@@ -67,6 +70,7 @@ import {
   standardMaterial,
   stationTheme,
   unlitMaterial,
+  vesuMarkColour,
   type DegenMotif,
   type DegenToken,
   type Face,
@@ -742,18 +746,9 @@ function stationProps(
       bin.add('unlit', faceBox(face, cx - 0.25, top + 0.13, 0.043, cx + 0.26, top + 0.19, 0.046), theme.floorAccent);
       break;
     }
-    case 'vesu': {
-      // A small lending card: white on an ink stand, one periwinkle field
-      // over the blue primary pill. No figure on it.
-      const cx = (x0 + x1) / 2;
-      const face: Face = { normal: 'z+', plane: z0 + 0.12 };
-      bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.14), VESU.ink);
-      bin.add('body', faceBox(face, cx - 0.44, top + 0.08, 0, cx + 0.44, top + 0.56, 0.05), VESU.blueSoft);
-      bin.add('unlit', facePanel(face, cx - 0.4, top + 0.12, cx + 0.4, top + 0.52, 0.052, 0.06), VESU.white);
-      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.33, cx + 0.34, top + 0.46, 0.055, 0.05), VESU.blueSoft);
-      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.16, cx + 0.34, top + 0.27, 0.055, 0.055), VESU.blue);
+    case 'vesu':
+      vesuCounter(bin, x0, x1, z0, z1, top);
       break;
-    }
     case 'endur':
       endurCounter(bin, x0, x1, z0, z1, top);
       break;
@@ -794,6 +789,35 @@ function endurCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: 
     const ub = x0 + 0.12 + ((x1 - x0 - 0.24) * (i + 1)) / steps;
     bin.add('body', beamGeometry(faceToWorld(front, ua, wave(i), 0.012), faceToWorld(front, ub, wave(i + 1), 0.012), 0.012, 0.024), ENDUR.greenDeep);
   }
+}
+
+/**
+ * Vesu's lending counter: a white desk under an ink top with a supply card
+ * standing on it in the app's idiom (a token field with its disc and a
+ * periwinkle tab, an amount field, a rate bar, the electric-blue primary
+ * button), and the V standing at its east end, a desk-sized mark in the
+ * logo's light-page gradients. Bars and fields only: no figure on it.
+ */
+function vesuCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number): void {
+  const cx = (x0 + x1) / 2 - 0.16;
+  const face: Face = { normal: 'z+', plane: z0 + 0.12 };
+  bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.12), VESU.ink);
+  bin.add('body', facePanel(face, cx - 0.46, top + 0.07, cx + 0.46, top + 0.6, 0.004, 0.08), VESU.fill);
+  bin.add('unlit', facePanel(face, cx - 0.44, top + 0.09, cx + 0.44, top + 0.58, 0.012, 0.07), VESU.white);
+  // The token field: a disc, a name bar and the periwinkle tab.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.42, cx + 0.38, top + 0.53, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.475, 0.018, 0.035, 0.006, 12), 0x6d4df2);
+  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.466, cx - 0.02, top + 0.484, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.16, top + 0.448, cx + 0.34, top + 0.502, 0.024, 0.027), VESU.blueSoft);
+  // The amount field, and the rate bar under it.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.29, cx + 0.38, top + 0.39, 0.018, 0.04), VESU.page);
+  bin.add('unlit', facePanel(face, cx - 0.32, top + 0.33, cx + 0.02, top + 0.35, 0.024, 0.01), VESU.ink);
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.245, cx - 0.12, top + 0.265, 0.018, 0.01), VESU.blueText);
+  // The primary button.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.12, cx + 0.38, top + 0.21, 0.018, 0.04), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.1, top + 0.157, cx + 0.1, top + 0.173, 0.024, 0.008), VESU.white);
+  // The V, on the desk's east end.
+  addVesuMark(bin, 'unlit', { normal: 'z+', plane: (z0 + z1) / 2 }, x1 - 0.24, top, 0.34, 0, 0.05, 'light');
 }
 
 function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y: number) => Color {
@@ -984,7 +1008,7 @@ function decorateRoom(
       bridgeDecor(theme, shell, map, res, animators);
       return;
     case 'vesu':
-      vesuDecor(theme, shell, map);
+      vesuDecor(theme, shell, map, res, labels, textLabels);
       return;
     case 'plain':
       return;
@@ -1672,55 +1696,215 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
 }
 
 /**
- * Vesu (the Vault, opened on shadow accounts, D-077): white pages, ink and
- * one electric blue. A blue line runs along the top of every wall. Behind
- * the counter hangs a lending card in Vesu's idiom, a white card edged in
- * periwinkle with two periwinkle fields over the blue pill, between two
- * smaller cards; the side walls carry a card either side of their middle,
- * and a white runner edged in blue light leads from the exit to the counter.
- * No figure, rate or price anywhere: the World must not know what money is
- * (AGENTS.md §4).
+ * Vesu (the Vault, opened on shadow accounts, D-077), in its app's light
+ * pages and its mark: white walls over a periwinkle wainscot, a white floor
+ * laid in large tiles with hairline joints, one electric blue running along
+ * the top of every wall. Behind the counter hangs Vesu's avatar, the V
+ * glowing on black in its social art's gradients, with a soft light round
+ * it; either side, a market board in the app's idiom, white cards listing
+ * markets as token discs, name bars and rate bars. The side walls are lined
+ * with safe-deposit lockers, `vesu` in the wordmark's wide ink letters above
+ * them, and white planters close the ends. Underfoot, a periwinkle runner
+ * edged in blue light leads from the exit to the counter over the V inlaid
+ * in the floor. Decoration only: no figure, rate, symbol or price anywhere,
+ * and nothing live. The World must not know what money is (AGENTS.md §4).
  */
-function vesuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
+function vesuDecor(
+  theme: RoomTheme,
+  shell: InteriorShell,
+  map: FixedRoomLevelMap,
+  res: ResourceBag,
+  labels: LabelFactory,
+  textLabels: TextLabel[],
+): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
   for (const wall of Object.values(shell.walls)) {
     for (const [a, b] of wall.spans) wall.bins.add('unlit', faceBox(wall.face, a, 2.05, 0, b, 2.09, 0.03), VESU.blue);
   }
-  const [u0, u1] = [anchor - 1.5, anchor + 1.5];
-  if (inSpans(north, u0 - 0.05, u1 + 0.05)) {
-    vesuCard(north, u0, 0.96, u1, 1.98);
-    for (const [v0, v1] of [[1.58, 1.82], [1.28, 1.52]] as const) {
-      north.bins.add('unlit', facePanel(nf, u0 + 0.18, v0, u1 - 0.18, v1, 0.04, 0.12), VESU.blueSoft);
-      north.bins.add('unlit', faceDisc(nf, u0 + 0.34, (v0 + v1) / 2, 0.04, 0.06, 0.012, 12), VESU.blue);
-    }
-    north.bins.add('unlit', facePanel(nf, u0 + 0.18, 1.04, u1 - 0.18, 1.2, 0.04, 0.08), VESU.blue);
+
+  // Vesu's avatar behind the counter: the V glowing on black.
+  const [p0, p1, q0, q1] = [anchor - 0.98, anchor + 0.98, 0.3, 2.0];
+  if (inSpans(north, p0 - 0.1, p1 + 0.1)) {
+    north.bins.add('body', facePanel(nf, p0 - 0.05, q0 - 0.05, p1 + 0.05, q1 + 0.05, 0.012, 0.2), VESU.fill);
+    north.bins.add('unlit', facePanel(nf, p0, q0, p1, q1, 0.03, 0.18), VESU.ink);
+    addVesuMark(north.bins, 'unlit', nf, anchor, q0 + 0.24, 1.26, 0.04, 0.06, 'dark');
+    north.group.add(vesuGlow(north, res, anchor, q0 + 0.86, 0.78, 0.74));
   }
-  for (const u of [anchor - 4.4, anchor + 4.4]) {
-    if (!inSpans(north, u - 0.9, u + 0.9)) continue;
-    vesuCard(north, u - 0.85, 1.2, u + 0.85, 1.9);
-    north.bins.add('unlit', facePanel(nf, u - 0.65, 1.62, u + 0.65, 1.72, 0.04, 0.05), VESU.blueSoft);
-    north.bins.add('unlit', facePanel(nf, u - 0.65, 1.36, u + 0.15, 1.46, 0.04, 0.05), VESU.blue);
+
+  // The market boards: rows of token discs, name bars and rate bars.
+  for (const [u, seed] of [[anchor - 3.35, 1], [anchor + 3.35, 2]] as const) {
+    if (!inSpans(north, u - 1.45, u + 1.45)) continue;
+    vesuMarketBoard(north, u - 1.3, 0.92, u + 1.3, 1.96, seed);
   }
+  // White planters at the north wall's ends, clear of the boards.
+  for (const [a, b] of north.spans) {
+    vesuPlanter(north, a + 0.55);
+    vesuPlanter(north, b - 0.55);
+  }
+
+  // Down each side, a bank of safe-deposit lockers under `vesu`.
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const [s0, s1] of wall.spans) {
       const mid = (s0 + s1) / 2;
-      for (const u of [mid - 2, mid + 2]) {
-        if (!inSpans(wall, u - 0.75, u + 0.75)) continue;
-        vesuCard(wall, u - 0.7, 1.2, u + 0.7, 1.84);
-        wall.bins.add('unlit', facePanel(wall.face, u - 0.52, 1.52, u + 0.52, 1.64, 0.04, 0.06), VESU.blueSoft);
-        wall.bins.add('unlit', facePanel(wall.face, u - 0.52, 1.32, u + 0.1, 1.42, 0.04, 0.05), VESU.blue);
-      }
+      const [l0, l1] = [mid - 2.4, mid + 1.6];
+      if (!inSpans(wall, l0 - 0.1, l1 + 0.1)) continue;
+      vesuLockers(wall, l0, l1);
+      const sign = labels.sign(VESU_WORDMARK_TEXT, VESU_WALL_WORDMARK);
+      textLabels.push(sign);
+      sign.object.position.set(...faceToWorld(wall.face, (l0 + l1) / 2, 1.84, 0.05));
+      sign.object.rotation.y = faceYaw(wall.face);
+      sign.object.userData['area'] = 'vesu-wordmark';
+      wall.group.add(sign.object);
+      vesuPlanter(wall, s1 - 0.8);
     }
   }
-  carpet(shell, map, VESU.white, theme.floorAccent, 'glow');
+
+  // Underfoot: hairline joints, the runner edged in blue light, the V inlaid.
+  const joint = VESU.fill;
+  for (let x = 3; x < map.width - 1; x += 2) shell.floor.add('floor', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.003), joint);
+  for (let y = 3; y < map.height - 1; y += 2) shell.floor.add('floor', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.003), joint);
+  carpet(shell, map, VESU.blueSoft, theme.floorAccent, 'glow');
+  const exit = map.exit;
+  if (exit) {
+    const cx = exit.x + exit.width / 2;
+    const inlay: Face = { normal: 'z+', plane: 0 };
+    // Lying flat, its top towards the counter; a thin geometry on the floor's own glow bin.
+    const mark = new GeometryBin();
+    try {
+      addVesuMark(mark, 'glow', inlay, 0, 0, 1.25, 0, 0.001, 'light');
+      const geometry = mark.take('glow');
+      if (geometry) {
+        geometry.rotateX(-Math.PI / 2).translate(cx, 0.006, exit.y - 1.25);
+        shell.floor.add('glow', geometry, (x, _y, z) => vesuMarkColour('light', (x - cx) / 1.25, (exit.y - 1.25 - z) / 1.25));
+      }
+    } finally {
+      mark.dispose();
+    }
+  }
+  // A pool of blue light round the counter.
+  const station = map.stations[0];
+  if (station) {
+    const c = new Color(VESU.blue);
+    const scx = station.x + station.width / 2;
+    shell.floor.addRGBA('light', flatQuad(scx - 2.4, station.y - 1.6, scx + 2.4, station.y + station.height + 2.2, 0.012), (x, _y, z) => {
+      const dx = (x - scx) / 2.4;
+      const dz = (z - (station.y + station.height)) / 2.2;
+      return [c.r, c.g, c.b, 0.14 * clamp01(1 - Math.hypot(dx, dz))];
+    });
+  }
 }
 
-/** A Vesu card on a wall: a white self-lit panel edged in periwinkle. */
+/** Vesu's wordmark, in lowercase as its logo sets it. */
+export const VESU_WORDMARK_TEXT = 'vesu';
+
+/** `vesu` over the lockers: the wordmark's ink letters with no board, widened like Base Neue Wide. */
+const VESU_WALL_WORDMARK: SignStyleOptions = Object.freeze({
+  width: 2.2,
+  height: 0.46,
+  background: 'rgba(255,255,255,0)',
+  foreground: css(VESU.ink),
+  accent: css(VESU.ink),
+  cornerRadius: 0,
+  borderWidth: 0,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleStretch: 1.4,
+  titleTracking: -0.01,
+  lowercase: true,
+});
+
+/** A Vesu card on a wall: a white self-lit panel on the page grey, 8 px round. */
 function vesuCard(wall: InteriorWall, u0: number, v0: number, u1: number, v1: number): void {
-  wall.bins.add('unlit', facePanel(wall.face, u0 - 0.03, v0 - 0.03, u1 + 0.03, v1 + 0.03, 0.02, 0.15), VESU.blueSoft);
-  wall.bins.add('unlit', facePanel(wall.face, u0, v0, u1, v1, 0.03, 0.13), VESU.white);
+  wall.bins.add('unlit', facePanel(wall.face, u0 - 0.03, v0 - 0.03, u1 + 0.03, v1 + 0.03, 0.02, 0.12), VESU.fill);
+  wall.bins.add('unlit', facePanel(wall.face, u0, v0, u1, v1, 0.03, 0.1), VESU.white);
+}
+
+/**
+ * A board in the idiom of Vesu's market list: a title bar and a periwinkle
+ * tab, then rows striped in the page grey, each a token disc, a name bar and
+ * a rate bar in the blues. Bars and discs only: no figure, no symbol,
+ * nothing live. Orange and green stay the V's alone.
+ */
+function vesuMarketBoard(wall: InteriorWall, u0: number, v0: number, u1: number, v1: number, seed: number): void {
+  const f = wall.face;
+  vesuCard(wall, u0, v0, u1, v1);
+  const pad = 0.12;
+  wall.bins.add('unlit', facePanel(f, u0 + pad, v1 - 0.17, u0 + pad + 0.62, v1 - 0.1, 0.034, 0.03), VESU.ink);
+  wall.bins.add('unlit', facePanel(f, u1 - pad - 0.44, v1 - 0.19, u1 - pad, v1 - 0.08, 0.034, 0.05), VESU.blueSoft);
+  wall.bins.add('unlit', facePanel(f, u1 - pad - 0.38, v1 - 0.155, u1 - pad - 0.06, v1 - 0.115, 0.036, 0.02), VESU.blueText);
+  const discs = [0x6d4df2, 0x2775ca, 0x627eea, VESU.muted, VESU.blueText];
+  const rows = 4;
+  const top = v1 - 0.26;
+  const step = (top - (v0 + 0.08)) / rows;
+  for (let i = 0; i < rows; i++) {
+    const r0 = top - step * (i + 1);
+    const r1 = top - step * i;
+    const mid = (r0 + r1) / 2;
+    if (i % 2 === 0) wall.bins.add('unlit', facePanel(f, u0 + 0.06, r0 + 0.01, u1 - 0.06, r1 - 0.01, 0.032, 0.05), VESU.page);
+    wall.bins.add('unlit', faceDisc(f, u0 + pad + 0.06, mid, 0.032, 0.055, 0.004, 12), discs[(i + seed) % discs.length]!);
+    wall.bins.add('unlit', facePanel(f, u0 + pad + 0.18, mid - 0.025, u0 + pad + 0.18 + 0.36 + 0.2 * hash01(seed, i, 411), mid + 0.025, 0.034, 0.02), VESU.fill);
+    const length = 0.25 + 0.45 * hash01(seed, i, 412);
+    wall.bins.add('unlit', facePanel(f, u1 - pad - length, mid - 0.03, u1 - pad, mid + 0.03, 0.034, 0.03), i % 3 === 1 ? VESU.blueText : VESU.blue);
+  }
+}
+
+/** A bank of safe-deposit lockers on a wall: white doors on a page-grey carcass, a chrome pull each, a few lit blue. */
+function vesuLockers(wall: InteriorWall, u0: number, u1: number): void {
+  const f = wall.face;
+  const [v0, v1] = [0.16, 1.58];
+  const depth = 0.26;
+  wall.bins.add('body', faceBox(f, u0, v0, 0, u1, v1, depth), VESU.page);
+  const cols = Math.max(2, Math.round((u1 - u0) / 0.5));
+  const rows = 4;
+  const cw = (u1 - u0 - 0.1) / cols;
+  const rh = (v1 - v0 - 0.1) / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const a = u0 + 0.05 + c * cw;
+      const b = v0 + 0.05 + r * rh;
+      wall.bins.add('body', facePanel(f, a + 0.03, b + 0.03, a + cw - 0.03, b + rh - 0.03, depth + 0.004, 0.035), VESU.white);
+      wall.bins.add('body', faceBox(f, a + cw - 0.12, b + rh / 2 - 0.015, depth + 0.004, a + cw - 0.07, b + rh / 2 + 0.015, depth + 0.03), 0xc9ccd2);
+      if (hash01(r, c, 421) < 0.22) wall.bins.add('unlit', faceDisc(f, a + 0.09, b + rh - 0.09, depth + 0.004, 0.018, 0.006, 8), VESU.blue);
+    }
+  }
+  wall.bins.add('body', faceBox(f, u0 - 0.02, v1, 0, u1 + 0.02, v1 + 0.04, depth + 0.02), VESU.fill);
+}
+
+/** A white planter on a wall's decor strip: Vesu's white, with greenery. */
+function vesuPlanter(wall: InteriorWall, u: number): void {
+  if (!inSpans(wall, u - 0.25, u + 0.25)) return;
+  const w = wall.depth * 0.5;
+  wall.bins.add('body', faceBox(wall.face, u - 0.2, 0, w - 0.18, u + 0.2, 0.42, w + 0.18), VESU.white);
+  wall.bins.add('body', faceBox(wall.face, u - 0.21, 0.4, w - 0.19, u + 0.21, 0.44, w + 0.19), VESU.fill);
+  const [x, , z] = faceToWorld(wall.face, u, 0, w);
+  wall.bins.add('body', sphereGeometry(x, 0.66, z, 0.22, { widthSegments: 6, heightSegments: 4, scaleY: 1.2 }), PALETTE.hedgeLight);
+  wall.bins.add('body', sphereGeometry(x + 0.07, 0.88, z - 0.04, 0.15, { widthSegments: 6, heightSegments: 4 }), PALETTE.hedge);
+}
+
+/** A soft glow round the avatar's V: mint at its heart, fading out, additive, fading with its wall. */
+function vesuGlow(wall: InteriorWall, res: ResourceBag, u: number, v: number, rx: number, ry: number): Mesh {
+  const glow = new RingGeometry(0, 1, 32, 5);
+  const position = glow.getAttribute('position');
+  const colours = new Float32Array(position.count * 4);
+  const inner = new Color(VESU_MARK.dark.triangle[1]![3]!);
+  const outer = new Color(VESU.blue);
+  const tint = new Color();
+  for (let i = 0; i < position.count; i++) {
+    const r = Math.min(1, Math.hypot(position.getX(i), position.getY(i)));
+    tint.copy(inner).lerp(outer, clamp01(r * 1.2));
+    colours.set([tint.r, tint.g, tint.b, 0.3 * (1 - r) ** 1.6], i * 4);
+  }
+  glow.setAttribute('color', new BufferAttribute(colours, 4));
+  const mesh = new Mesh(res.geometry(glow.scale(rx, ry, 1)), res.material(unlitMaterial({ additive: true })));
+  mesh.name = `${wall.group.name}:glow`;
+  mesh.renderOrder = 2;
+  mesh.position.set(...faceToWorld(wall.face, u, v, 0.034));
+  mesh.rotation.y = faceYaw(wall.face);
+  wall.fadeMaterials.push(mesh.material);
+  return mesh;
 }
 
 /** A NEAR card on a wall: a black panel in a hairline frame, crosshairs in its corners. */

@@ -69,3 +69,24 @@ SHA-256s, licence) remains in git history before the removal commit.
 | `degen-posters/cash.webp` (17 KB) | CASH / Opus | `https://cdn.prod.website-files.com/62a717dce62f321947cb33d7/64e7c57c4f672466b07300ab_opengraph.png` (og:image: dash field and opus wordmark, 262 KB); `https://raw.githubusercontent.com/lindy-labs/opus_contracts/main/assets/CASH_no_margin_2x.png` (CASH logo, 2x of the avnu `logoUri` asset, 13 KB) | Dash field and wordmark cropped (headline and button left out); "CASH" in Helvetica Neue after the site's grotesk |
 | `degen-posters/dog.webp` (99 KB) | DOG / DOG•GO•TO•THE•MOON | `https://dogofbitcoin.com/images/dog-of-bitcoin.webp` (og:image art, 297 KB) | Cropped to portrait; the faint ticker on the moon softened; "DOG" and "DOG•GO•TO•THE•MOON" in Arial Rounded MT Bold with the site logo's black outline and bitcoin orange |
 | `degen-posters/sstr.webp` (73 KB) | SSTR / Sister | `https://res.cloudinary.com/dikavhrql/image/upload/v1732475722/pp-twitter-sstr_t2hd5h.png` (the avatar avnu lists, 157 KB); `https://media.tenor.com/BEs0KOwtMdsAAAA1/gm-sister.webp` and `https://media.tenor.com/4-ngEFkYHwgAAAA1/sstr-tobby.webp` (stickers from the project's public Tenor profile, 448 KB and 366 KB) | Avatar framed in its violet ring; stickers' first frames; "SSTR" and "SISTER" in Arial Rounded MT Bold. The project's site, `sstr.fun`, now redirects to an unrelated casino domain and was not used |
+
+## Vesu's mark and wordmark (drawn, not stored)
+
+- What: the Vault's V (the crest on its roof, the avatar behind its counter,
+  the inlay in its floor, the one on its desk) and the `vesu` wordmark on its
+  attic, its counter and its walls, plus the V beside the Vault window's
+  title. No image file ships: the V is low-poly relief painted with the
+  logo's own gradients (`addVesuMark` and `VESU_MARK` in
+  `src/three/palette.ts`) and, in the window, an inline SVG in
+  `apps/web/src/styles.css`; the wordmark is the platform's own sans,
+  widened, on a canvas label. Nothing is fetched from Vesu at runtime.
+- Sources, retrieved 2026-09-30: the V's outline and gradients from Vesu's
+  logo art, `https://vesu.xyz/img/vesu-logo-light.png` and
+  `https://vesu.xyz/img/vesu-logo-dark.png` (1228x282, and their
+  282x282 `-mobile` squares), its og:image
+  `https://docs.vesu.xyz/img/vesu.png` and its GitHub avatar
+  `https://github.com/vesuxyz.png`; the palette, radii and type from the app's
+  stylesheet, `https://vesu.xyz/assets/index-EjXmYiWE.css`.
+- Ownership: Vesu's mark and wordmark belong to Vesu and are used only to
+  represent Vesu's lending route at the Vault. STRKWORLD claims no rights in
+  them and implies no endorsement.

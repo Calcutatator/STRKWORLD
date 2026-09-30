@@ -62,6 +62,13 @@ export interface SignStyleOptions extends SignOptions {
   /** Letter spacing in em; negative is tight. */
   readonly titleTracking?: number;
   readonly subtitleTracking?: number;
+  /**
+   * Widens each line's glyphs by this factor, 1 (none) to 2: a wide grotesk
+   * approximated from the platform's own sans (Vesu's Base Neue Wide), since
+   * no brand face is ever loaded.
+   */
+  readonly titleStretch?: number;
+  readonly subtitleStretch?: number;
   /** Colour of the lines after the first; defaults to `foreground`. */
   readonly subtitleColor?: string;
   readonly uppercase?: boolean;
@@ -372,14 +379,28 @@ function setTracking(context: CanvasRenderingContext2D, em: number): void {
   if ('letterSpacing' in target) target.letterSpacing = `${em}em`;
 }
 
-function signFace(options: SignStyleOptions, line: number): { font: LabelFont; tracking: number; weight?: number } {
+function signFace(
+  options: SignStyleOptions,
+  line: number,
+): { font: LabelFont; tracking: number; weight?: number; stretch: number } {
   return line === 0
-    ? { font: options.titleFont ?? 'rounded', tracking: options.titleTracking ?? 0, weight: fontWeight(options.titleWeight) }
+    ? {
+        font: options.titleFont ?? 'rounded',
+        tracking: options.titleTracking ?? 0,
+        weight: fontWeight(options.titleWeight),
+        stretch: glyphStretch(options.titleStretch),
+      }
     : {
         font: options.subtitleFont ?? options.titleFont ?? 'rounded',
         tracking: options.subtitleTracking ?? 0,
         weight: fontWeight(options.subtitleWeight),
+        stretch: glyphStretch(options.subtitleStretch),
       };
+}
+
+/** A horizontal glyph scale from 1 to 2; anything else is 1. */
+export function glyphStretch(stretch: number | undefined): number {
+  return typeof stretch === 'number' && Number.isFinite(stretch) ? Math.min(2, Math.max(1, stretch)) : 1;
 }
 
 /** A CSS weight from 100 to 900 in steps of 100, or none to keep the face's. */
@@ -433,7 +454,7 @@ function drawSign(
       const face = signFace(options, index);
       context.font = fontString(face.font, px, face.weight);
       setTracking(context, face.tracking);
-      return context.measureText(line).width;
+      return context.measureText(line).width * face.stretch;
     },
     { width, height, padding: Math.max(2, height * 0.05) * 2.6 },
   );
@@ -443,15 +464,24 @@ function drawSign(
     const face = signFace(options, index);
     context.font = fontString(face.font, line.fontPx, face.weight);
     setTracking(context, face.tracking);
+    // A stretched line is drawn about its own centre, so it widens both ways.
+    const stretched = face.stretch !== 1;
+    const [x, y] = stretched ? [0, 0] : [width / 2, line.y];
+    if (stretched) {
+      context.save();
+      context.translate(width / 2, line.y);
+      context.scale(face.stretch, 1);
+    }
     if (index === 0 && options.gradient && options.gradient.length > 0) {
-      const gradient = context.createLinearGradient(0, line.y - line.fontPx * 0.5, 0, line.y + line.fontPx * 0.5);
+      const gradient = context.createLinearGradient(0, y - line.fontPx * 0.5, 0, y + line.fontPx * 0.5);
       const stops = options.gradient;
       stops.forEach((stop, i) => gradient.addColorStop(stops.length === 1 ? 0 : i / (stops.length - 1), stop));
       context.fillStyle = gradient;
     } else {
       context.fillStyle = index > 0 && options.subtitleColor ? options.subtitleColor : options.foreground ?? '#3b2a14';
     }
-    context.fillText(line.text, width / 2, line.y);
+    context.fillText(line.text, x, y);
+    if (stretched) context.restore();
   });
   setTracking(context, 0);
 }

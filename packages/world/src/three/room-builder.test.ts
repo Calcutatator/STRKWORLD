@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AdditiveBlending,
   Box3,
   BufferGeometry,
   Color,
@@ -44,8 +45,11 @@ import {
   STRK20,
   STRK20_STATION_LOOKS,
   VESU,
+  VESU_MARK,
   VESU_STATION_LOOKS,
+  VESU_STATION_THEME,
   roomTheme,
+  stationTheme,
 } from './palette.js';
 import {
   DEGEN_POSTER_BOTTOM,
@@ -418,41 +422,42 @@ describe('buildFixedRoom', () => {
     expect(endurPlate!.userData['disposed']).toBe(true);
   });
 
-  it('dresses the opened Vault in Vesu (D-077): white pages, ink and one electric blue', () => {
+  it('dresses the opened Vault in Vesu (D-077): its light pages, its blue, its V and its wordmark', () => {
     const theme = roomTheme('vault');
     expect(theme).toBe(ROOM_THEMES.vault);
     expect(theme).not.toBe(DEFAULT_ROOM_THEME);
     expect(theme).toMatchObject({
       decor: 'vesu',
       floorA: VESU.white,
-      floorB: VESU.blueSoft,
+      floorB: VESU.page,
       wall: VESU.white,
       wallLower: VESU.blueSoft,
       wallTop: VESU.ink,
       skirting: VESU.ink,
       trim: VESU.blue,
-      kioskBase: VESU.blueSoft,
-      kioskTop: VESU.white,
       exitGlow: VESU.blue,
       stationLooks: VESU_STATION_LOOKS,
     });
+    // Its counter wears Vesu's own look, as the Bank's staking counter wears Endur's.
+    expect(stationTheme(theme, VAULT_LENDING_STATION)).toBe(VESU_STATION_THEME);
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
     expect(room.building).toBe('vault');
     expect(room.group.name).toBe('room:vault');
-    // Its one counter, locked until the Shell opens it, under Vesu's pill label.
+    // Its one counter, locked until the Shell opens it, under a label in the
+    // style of Vesu's secondary button.
     const counter = stationGroup(room, VAULT_LENDING_STATION);
     expect(counter.userData['status']).toBe('locked');
     const label = floatingLabel(counter);
     expect(label.userData['text']).toBe('SUPPLY / REDEEM');
     expect(label.userData['options']).toMatchObject({
       font: 'sans',
-      cornerRadius: 0.5,
+      cornerRadius: 0.22,
       foreground: '#2030b6',
       background: 'rgba(224,229,255,0.96)',
       border: '#2c41f6',
     });
-    // A light room: every walkable floor tile is Vesu's white or periwinkle.
+    // A light room: every walkable floor tile is Vesu's white, page grey or periwinkle.
     room.group.updateMatrixWorld(true);
     const floor = meshNamed(room.group, ':floor');
     const position = floor.geometry.getAttribute('position');
@@ -484,23 +489,72 @@ describe('buildFixedRoom', () => {
     expect(accent.emissiveIntensity).toBeGreaterThan(ready.glow);
     expect(halo.opacity).toBeGreaterThan(ready.halo);
     expect(halo.color.getHex()).toBe(new Color(VESU.blueText).getHex());
-    // The lending card behind the counter, self-lit in Vesu's colours on the
-    // north wall, and a small one on the counter. No word or figure anywhere
-    // but the Shell's label.
+    // Behind the counter, self-lit on the north wall: Vesu's avatar (the V on
+    // ink) between market boards in the app's white, page grey and blues.
     const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
     const lights = coloursOf(meshNamed(north.object, ':lights'));
-    for (const hex of [VESU.white, VESU.blueSoft, VESU.blue]) expect(lights).toContain(new Color(hex).getHex());
+    for (const hex of [VESU.white, VESU.page, VESU.fill, VESU.blueSoft, VESU.blue, VESU.blueText, VESU.ink]) {
+      expect(lights).toContain(new Color(hex).getHex());
+    }
+    for (const [, hex] of VESU_MARK.dark.bar) expect(lights).toContain(new Color(hex).getHex());
+    // A soft light round the avatar, fading with its wall.
+    const glow = meshNamed(north.object, ':glow').material as Material;
+    expect(glow.blending).toBe(AdditiveBlending);
+    north.setOpacity(0.5);
+    expect(glow.opacity).toBeCloseTo(0.5);
+    north.setOpacity(1);
+    // The counter: a white desk under an ink top, the supply card and the V on
+    // it, and Vesu's name on its status panel, as Endur's is on its own.
+    const desk = coloursOf(meshNamed(counter, ':counter'));
+    for (const hex of [VESU_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
+    // Its body is white, shaded towards the floor.
+    expect(Math.max(...desk.map((hex) => new Color(hex).getHSL(hsl, SRGBColorSpace).l))).toBeGreaterThan(0.95);
     const card = coloursOf(meshNamed(counter, ':screen'));
-    for (const hex of [VESU.white, VESU.blue]) expect(card).toContain(new Color(hex).getHex());
+    for (const hex of [VESU.white, VESU.page, VESU.blueSoft, VESU.blue]) expect(card).toContain(new Color(hex).getHex());
+    for (const [, hex] of VESU_MARK.light.bar) expect(card).toContain(new Color(hex).getHex());
+    const plate = counter.children.find((child) => child.userData['brand'] === VAULT_LENDING_STATION)!;
+    expect(plate.userData['text']).toBe('vesu');
+    expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
+    expect(plate.position.z).toBeGreaterThan(meshNamed(counter, ':status').geometry.boundingBox!.max.z);
+    // Words: the Shell's label, and Vesu's name, on the plate and over each
+    // bank of lockers. No figure, rate or symbol anywhere.
     const labels: Object3D[] = [];
     room.group.traverse((object) => {
       if (object.userData['kind']) labels.push(object);
     });
-    expect(labels).toEqual([label]);
-    // Blue leads: nothing in the Bank's orange or the Bridge's and Endur's green.
-    const hues = huesOf(room.group);
-    expect(hues.filter(isOrange)).toEqual([]);
-    expect(hues.filter(isGreen)).toEqual([]);
+    expect(labels.filter((object) => object !== label).map((object) => object.userData['text'])).toEqual(['vesu', 'vesu', 'vesu']);
+    const wordmarks = labels.filter((object) => object.userData['area'] === 'vesu-wordmark');
+    expect(wordmarks).toHaveLength(2);
+    for (const wordmark of wordmarks) expect(wordmark.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', borderWidth: 0 });
+    // Blue leads. Orange and green, the Bank's and the Bridge's and Endur's,
+    // appear only in Vesu's V: the avatar, the desk's mark and the floor's inlay.
+    const anchor = map.stations[0]!.x + map.stations[0]!.width / 2;
+    const exit = map.exit!;
+    const marks = [
+      { x0: anchor - 1, x1: anchor + 1, y0: 0.3, y1: 2, z0: 0.5, z1: 0.8 },
+      { x0: anchor + 0.4, x1: anchor + 0.95, y0: 0.99, y1: 1.4, z0: 3.3, z1: 3.8 },
+      { x0: exit.x + exit.width / 2 - 0.7, x1: exit.x + exit.width / 2 + 0.7, y0: -0.01, y1: 0.02, z0: exit.y - 2.6, z1: exit.y - 1.2 },
+    ];
+    const outside: string[] = [];
+    let marked = 0;
+    const colour = new Color();
+    room.group.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const attribute = object.geometry.getAttribute('color');
+      const points = object.geometry.getAttribute('position');
+      for (let i = 0; attribute && i < attribute.count; i++) {
+        colour.setRGB(attribute.getX(i), attribute.getY(i), attribute.getZ(i)).getHSL(hsl, SRGBColorSpace);
+        const hue = { h: hsl.h * 360, s: hsl.s, l: hsl.l };
+        if (!isOrange(hue) && !isGreen(hue)) continue;
+        vertex.fromBufferAttribute(points, i).applyMatrix4(object.matrixWorld);
+        const [x, y, z] = [vertex.x - OX, vertex.y, vertex.z - OZ];
+        const inMark = marks.some((box) => x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1 && z >= box.z0 && z <= box.z1);
+        if (inMark) marked += 1;
+        else outside.push(`${object.name} ${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`);
+      }
+    });
+    expect(outside).toEqual([]);
+    expect(marked).toBeGreaterThan(100);
     room.dispose();
   });
 
