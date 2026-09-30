@@ -184,7 +184,7 @@ export function buildFootball(options: FootballViewOptions): FootballView {
   const prompt = addLabel(options.labels.floating(PITCH_KICK_PROMPT, PITCH_THEME.prompt), 'prompt');
   const cheer = addLabel(options.labels.floating(PITCH_GOAL_TEXT, PITCH_THEME.cheer), 'cheer');
 
-  const pieceGeometry = new BoxGeometry(0.16, 0.02, 0.1);
+  const pieceGeometry = new BoxGeometry(0.2, 0.02, 0.13);
   const pieceMaterial = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
   const confetti = new InstancedMesh(pieceGeometry, pieceMaterial, CONFETTI_COUNT);
   confetti.name = 'football:confetti';
@@ -228,17 +228,17 @@ export function buildFootball(options: FootballViewOptions): FootballView {
       const r1 = hash01(i, 1, 941);
       const r2 = hash01(i, 2, 941);
       const r3 = hash01(i, 3, 941);
-      const angle = fountain ? r1 * Math.PI * 2 : (r1 - 0.5) * 2.4;
-      const speed = 2.5 + r2 * 3.5;
+      const angle = fountain ? r1 * Math.PI * 2 : (r1 - 0.5) * 2.2;
+      const speed = 3 + r2 * 4;
       const colour = PITCH_THEME.confetti[i % PITCH_THEME.confetti.length]!;
       pieces.push({
         x,
         y: 0.6 + r3 * 0.6,
         z,
-        // Out of the goal's mouth into the field, fanned; or all round, from the centre spot.
-        vx: fountain ? Math.cos(angle) * speed * 0.6 : into * Math.cos(angle) * speed,
-        vy: 4 + r3 * 3.5,
-        vz: fountain ? Math.sin(angle) * speed * 0.6 : Math.sin(angle) * speed,
+        // Out of the goal's mouth into the field, fanned wide; or all round, from the centre spot.
+        vx: fountain ? Math.cos(angle) * speed * 0.7 : into * (1.5 + Math.cos(angle) * speed),
+        vy: 3.5 + r3 * 3,
+        vz: fountain ? Math.sin(angle) * speed * 0.7 : Math.sin(angle) * speed * 0.9,
         spin: 6 + r2 * 10,
         axis: new Vector3(r1 - 0.5, r2 - 0.5, r3 - 0.5).normalize(),
         colour,
