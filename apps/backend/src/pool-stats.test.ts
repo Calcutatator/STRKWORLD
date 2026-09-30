@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { hash } from 'starknet';
 import {
@@ -11,17 +10,25 @@ import {
 } from './index.js';
 import { POOL_STATS_PATH } from './api.js';
 import {
+  DEFAULT_POOL_VALUE_URL,
   DEPOSIT_EVENT,
   DEPOSIT_WINDOW_BLOCKS,
+  HttpPoolValueSource,
+  MAX_TOP_HOLDINGS,
   POOL_FIRST_BLOCK,
   POOL_STATS_RATE_LIMIT,
-  POOL_STATS_TOKENS,
+  POOL_VALUE_FETCH_TIMEOUT_MS,
   PoolStatsCache,
   VIEWING_KEY_SET_EVENT,
   isPoolStatsRpc,
+  parsePoolValueResponse,
 } from './pool-stats.js';
-import { BALANCE_OF_SELECTOR, StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { PoolEventsPage, PoolStatsRpcPort } from './types.js';
+import { StarknetRpcPoolPort } from './starknet-rpc.js';
+import type { PoolEventsPage, PoolStatsRpcPort, PoolValueRead, PoolValueSourcePort } from './types.js';
+
+/** Two valid felt addresses, for the pool-value tests; their identity does not matter. */
+const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+const USDC = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
 
 /**
  * The Privacy Plaza's pool stats (D-076): incremental cursor-based scans
@@ -34,15 +41,14 @@ const POOL = '0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a
 const hashOf = (block: number): string => `0x${(block * 7 + 0xb10c).toString(16)}`;
 
 /**
- * A chain: events by key and block, token balances, a head, and every read
- * made. With a lag, the node answering the events trails the one that gave
- * the head, as one behind a load balancer can; like Pathfinder, it answers a
- * numeric `to_block` past its tip short, with no error, and refuses a block
- * hash it has not reached.
+ * A chain: events by key and block, a head, and every read made. With a lag,
+ * the node answering the events trails the one that gave the head, as one
+ * behind a load balancer can; like Pathfinder, it answers a numeric
+ * `to_block` past its tip short, with no error, and refuses a block hash it
+ * has not reached.
  */
 function fakeChain(options: { head: number; pageBlocks?: number } = { head: 0 }) {
   const events = new Map<string, number[]>([[VIEWING_KEY_SET_EVENT, []], [DEPOSIT_EVENT, []]]);
-  const balances = new Map<string, bigint>(POOL_STATS_TOKENS.map((token, index) => [token, BigInt(index + 1) * 10n ** 18n]));
   const reads: Array<{ key: string; from: number; to: number; hash: string | null; token: string | null }> = [];
   let head = options.head;
   let lag = 0;
@@ -66,16 +72,11 @@ function fakeChain(options: { head: number; pageBlocks?: number } = { head: 0 })
       const blocks = (events.get(filter.key) ?? []).filter((block) => block >= start && block <= end);
       return { blocks, continuationToken: end < last ? String(end + 1) : null };
     },
-    async getPoolBalance(token) {
-      if (fail?.('held')) throw new Error('balance failed');
-      return balances.get(token) ?? 0n;
-    },
   };
   return {
     rpc,
     reads,
     events,
-    balances,
     setHead(value: number) {
       head = value;
     },
@@ -88,6 +89,36 @@ function fakeChain(options: { head: number; pageBlocks?: number } = { head: 0 })
     },
     add(key: string, ...blocks: number[]) {
       events.get(key)!.push(...blocks);
+    },
+  };
+}
+
+/** A fake external pool-value aggregate (D-080): one switchable answer, and a call count. */
+function fakeValueSource(initial: PoolValueRead = { usd: 1_177_415, topHoldings: [], tokenCount: 40 }) {
+  let current: PoolValueRead | Error = initial;
+  let callCount = 0;
+  const source: PoolValueSourcePort = {
+    async load() {
+      callCount += 1;
+      if (current instanceof Error) throw current;
+      return current;
+    },
+  };
+  return {
+    source,
+    set(next: PoolValueRead) {
+      current = next;
+    },
+    fail(error: Error) {
+      current = error;
+    },
+    /** The current successful answer; throws if it is currently set to fail. */
+    answer(): PoolValueRead {
+      if (current instanceof Error) throw new Error('fakeValueSource is set to fail');
+      return current;
+    },
+    get calls() {
+      return callCount;
     },
   };
 }
@@ -137,10 +168,9 @@ async function settle(): Promise<void> {
 const HEAD = POOL_FIRST_BLOCK + 999_999;
 
 describe('the pool constants (D-076)', () => {
-  it("pins the ViewingKeySet and Deposit event keys and balance_of's selector", () => {
+  it('pins the ViewingKeySet and Deposit event keys', () => {
     expect(BigInt(VIEWING_KEY_SET_EVENT)).toBe(BigInt(hash.getSelectorFromName('ViewingKeySet')));
     expect(BigInt(DEPOSIT_EVENT)).toBe(BigInt(hash.getSelectorFromName('Deposit')));
-    expect(BigInt(BALANCE_OF_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('balance_of')));
   });
 
   it('starts at the pool\'s first block and counts a day of 1.68 s blocks', () => {
@@ -148,11 +178,9 @@ describe('the pool constants (D-076)', () => {
     expect(DEPOSIT_WINDOW_BLOCKS).toBe(51_429);
   });
 
-  it("reads the balances of exactly the web Exchange catalog's tokens", () => {
-    const catalog = readFileSync(new URL('../../web/src/panels/exchange/catalog.ts', import.meta.url), 'utf8');
-    const listed = [...catalog.matchAll(/token: '(0x[0-9a-f]+)'/g)].map((match) => BigInt(match[1]!));
-    expect(listed).toHaveLength(6);
-    expect(POOL_STATS_TOKENS.map((token) => BigInt(token))).toEqual(listed);
+  it('defaults the pool value URL to strkprice.com, https only (D-080)', () => {
+    expect(DEFAULT_POOL_VALUE_URL).toBe('https://strkprice-pool-api-production.up.railway.app/api/pool');
+    expect(new URL(DEFAULT_POOL_VALUE_URL).protocol).toBe('https:');
   });
 });
 
@@ -255,43 +283,55 @@ describe('the pool stats cache (D-076)', () => {
     expect(cache.peek().deposits24h).toBe(1);
   });
 
-  it("reads each pinned token's pool balance", async () => {
+  it("reads the pool's USD value, top holdings and token count (D-080)", async () => {
+    const chain = fakeChain({ head: HEAD });
+    const value = fakeValueSource({
+      usd: 1_177_415.13,
+      topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }, { symbol: 'USDC', usd: 198_000 }],
+      tokenCount: 40,
+    });
+    const { cache } = cacheFor(chain, { poolValue: value.source, now: () => 1_700_000_000_000 });
+    await cache.refresh();
+    expect(cache.peek()).toMatchObject({
+      valueUsd: 1_177_415.13,
+      topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }, { symbol: 'USDC', usd: 198_000 }],
+      tokenCount: 40,
+      valueAsOf: new Date(1_700_000_000_000).toISOString(),
+    });
+  });
+
+  it('bounds the pool value read to its own timeout, distinct from the RPC one (12-15 s, D-080)', async () => {
+    const chain = fakeChain({ head: HEAD });
+    const schedule = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      expect(POOL_VALUE_FETCH_TIMEOUT_MS).toBeGreaterThanOrEqual(12_000);
+      expect(POOL_VALUE_FETCH_TIMEOUT_MS).toBeLessThanOrEqual(15_000);
+      const value = fakeValueSource();
+      const { cache } = cacheFor(chain, { poolValue: value.source, poolValueTimeoutMs: 12_000 });
+      await cache.refresh();
+      expect(schedule).toHaveBeenCalledWith(expect.any(Function), 12_000);
+      expect(() => new PoolStatsCache({ rpc: chain.rpc, poolValueTimeoutMs: 0 })).toThrow(/poolValueTimeoutMs/);
+    } finally {
+      schedule.mockRestore();
+    }
+  });
+
+  it('leaves the pool value null forever without a poolValue port, and never calls one', async () => {
     const chain = fakeChain({ head: HEAD });
     const { cache } = cacheFor(chain);
     await cache.refresh();
-    expect(cache.peek().held).toEqual(POOL_STATS_TOKENS.map((token, index) => ({ token, amount: BigInt(index + 1) * 10n ** 18n })));
-  });
-
-  it("keeps a token's last good balance when only its read fails, and leaves out one never read", async () => {
-    const chain = fakeChain({ head: HEAD });
-    const { cache } = cacheFor(chain);
-    const balance = vi.spyOn(chain.rpc, 'getPoolBalance');
-    balance.mockImplementation(async (token) => {
-      if (token === POOL_STATS_TOKENS[5]) throw new Error('strkBTC down');
-      return 7n;
-    });
-    await cache.refresh().catch(() => undefined);
-    expect(cache.peek().held?.map((entry) => entry.token)).toEqual(POOL_STATS_TOKENS.slice(0, 5));
-    balance.mockImplementation(async (token) => {
-      if (token === POOL_STATS_TOKENS[0]) throw new Error('STRK down');
-      return 9n;
-    });
-    await cache.refresh().catch(() => undefined);
-    const held = cache.peek().held!;
-    expect(held.find((entry) => entry.token === POOL_STATS_TOKENS[0])?.amount).toBe(7n);
-    expect(held.find((entry) => entry.token === POOL_STATS_TOKENS[5])?.amount).toBe(9n);
-    balance.mockRestore();
+    expect(cache.peek()).toMatchObject({ valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null });
   });
 
   it('serves nothing it has not counted: accounts stay null until the scan has caught up', async () => {
     const chain = fakeChain({ head: HEAD });
-    const { cache } = cacheFor(chain);
-    expect(cache.peek()).toEqual({ accounts: null, deposits24h: null, held: null });
-    // The registration scan fails partway: held and deposits are served, accounts are not.
+    const value = fakeValueSource();
+    const { cache } = cacheFor(chain, { poolValue: value.source });
+    expect(cache.peek()).toEqual({ accounts: null, deposits24h: null, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null });
+    // The registration scan fails partway: the value and deposits are served, accounts are not.
     chain.failWhen((what) => what === `registrations:${POOL_FIRST_BLOCK + 500_000}`);
     await expect(cache.refresh()).rejects.toThrow(/partial/);
-    expect(cache.peek()).toMatchObject({ accounts: null, deposits24h: 0 });
-    expect(cache.peek().held).toHaveLength(POOL_STATS_TOKENS.length);
+    expect(cache.peek()).toMatchObject({ accounts: null, deposits24h: 0, valueUsd: value.answer().usd });
     // The next refresh resumes at the window that failed, not at the pool's first block.
     chain.failWhen(null);
     chain.reads.length = 0;
@@ -305,16 +345,18 @@ describe('the pool stats cache (D-076)', () => {
     const chain = fakeChain({ head: HEAD });
     chain.add(VIEWING_KEY_SET_EVENT, HEAD);
     chain.add(DEPOSIT_EVENT, HEAD);
-    const { cache } = cacheFor(chain);
+    const value = fakeValueSource({ usd: 100, topHoldings: [], tokenCount: 1 });
+    const { cache } = cacheFor(chain, { poolValue: value.source });
     await cache.refresh();
     const good = cache.peek();
-    chain.balances.set(POOL_STATS_TOKENS[0]!, 1n);
+    value.set({ usd: 999, topHoldings: [], tokenCount: 2 });
     chain.add(DEPOSIT_EVENT, HEAD + 1);
     chain.setHead(HEAD + 1);
-    chain.failWhen((what) => what === 'held' || what === 'deposits');
+    chain.failWhen((what) => what === 'deposits');
+    value.fail(new Error('aggregate down'));
     await expect(cache.refresh()).rejects.toThrow();
-    expect(cache.peek().held).toEqual(good.held);
-    expect(cache.peek().deposits24h).toBe(1);
+    expect(cache.peek().valueUsd).toBe(good.valueUsd);
+    expect(cache.peek().deposits24h).toBe(good.deposits24h);
     // A failed head read changes nothing at all.
     chain.failWhen((what) => what === 'head');
     await expect(cache.refresh()).rejects.toThrow('head failed');
@@ -377,13 +419,15 @@ describe('the pool stats cache (D-076)', () => {
     expect(clock.scheduled()).toHaveLength(0);
   });
 
-  it('holds only counts, block numbers and pinned token balances', async () => {
+  it('holds only counts, the pool value and its top holdings', async () => {
     const chain = fakeChain({ head: HEAD });
     chain.add(VIEWING_KEY_SET_EVENT, HEAD);
     chain.add(DEPOSIT_EVENT, HEAD);
-    const { cache } = cacheFor(chain);
+    const { cache } = cacheFor(chain, { poolValue: fakeValueSource().source });
     await cache.refresh();
-    expect(Object.keys(cache.peek()).sort()).toEqual(['accounts', 'deposits24h', 'held']);
+    expect(Object.keys(cache.peek()).sort()).toEqual(
+      ['accounts', 'deposits24h', 'tokenCount', 'topHoldings', 'valueAsOf', 'valueUsd'].sort(),
+    );
   });
 });
 
@@ -459,21 +503,151 @@ describe('the pool stats reads (D-076)', () => {
     await expect(rpc.getPoolEvents({ key: DEPOSIT_EVENT, fromBlock: 20, toBlock: 10 })).rejects.toThrow(/filter is invalid/);
   });
 
-  it("reads balance_of(pool) as a u256", async () => {
-    const { rpc, requests } = port(() => ['0x21e7d1373cbb85295cf05', '0x1']);
-    await expect(rpc.getPoolBalance(POOL_STATS_TOKENS[0]!)).resolves.toBe(0x21e7d1373cbb85295cf05n + (1n << 128n));
-    expect(requests[0]).toMatchObject({
-      method: 'starknet_call',
-      params: [{ contract_address: POOL_STATS_TOKENS[0], entry_point_selector: BALANCE_OF_SELECTOR, calldata: [POOL] }, 'latest'],
-    });
-    const short = port(() => ['0x1']);
-    await expect(short.rpc.getPoolBalance(POOL_STATS_TOKENS[0]!)).rejects.toThrow(/balance/);
-  });
-
   it('is what the runtime composes the cache over', () => {
     const { rpc } = port(() => null);
     expect(isPoolStatsRpc(rpc)).toBe(true);
     expect(isPoolStatsRpc({ getBlockNumber: () => 1 })).toBe(false);
+  });
+});
+
+describe("the pool value aggregate's parsing and validation (D-080)", () => {
+  const good = Object.freeze({
+    t: 1_700_000_000,
+    usd: 1_177_415.13,
+    starknet_tvl: 999,
+    pct: 12.3,
+    tokenCount: 40,
+    unpriced: ['FOO', 'BAR'],
+    tokens: [
+      { symbol: 'xSTRK', address: STRK, usd: 453_000 },
+      { symbol: 'USDC', address: USDC, usd: 198_000 },
+    ],
+  });
+
+  it('parses a good answer, sorted by usd descending however the tokens arrived', () => {
+    expect(parsePoolValueResponse(good)).toEqual({
+      usd: 1_177_415.13,
+      topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }, { symbol: 'USDC', usd: 198_000 }],
+      tokenCount: 40,
+    });
+    const reversed = { ...good, tokens: [...good.tokens].reverse() };
+    expect(parsePoolValueResponse(reversed).topHoldings).toEqual([
+      { symbol: 'xSTRK', usd: 453_000 },
+      { symbol: 'USDC', usd: 198_000 },
+    ]);
+  });
+
+  it('rejects a malformed or missing top-level body', () => {
+    for (const bad of [null, undefined, [], 'x', 7, {}, { usd: 1 }, { usd: 1, tokens: 'not-an-array' }, { tokens: [] }]) {
+      expect(() => parsePoolValueResponse(bad), JSON.stringify(bad)).toThrow(/malformed/);
+    }
+    const accessor = Object.defineProperty({ tokens: [] }, 'usd', { get: () => 100, enumerable: true });
+    expect(() => parsePoolValueResponse(accessor)).toThrow(/malformed/);
+  });
+
+  it.each([
+    ['negative', -1],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['a numeric string', '1177415'],
+    ['missing', undefined],
+  ])('rejects a %s total usd', (_label, usd) => {
+    const body = { ...good, usd };
+    if (usd === undefined) delete (body as { usd?: unknown }).usd;
+    expect(() => parsePoolValueResponse(body)).toThrow(/malformed/);
+  });
+
+  it('drops one malformed token rather than failing every other one', () => {
+    const tokens = [
+      { symbol: 'xSTRK', address: STRK, usd: 453_000 },
+      { symbol: 'NEG', address: USDC, usd: -1 },
+      { symbol: 'NAN', address: USDC, usd: Number.NaN },
+      { symbol: 'BADADDR', address: 'not-a-felt', usd: 100 },
+      { symbol: 'ZEROADDR', address: '0x0', usd: 100 },
+      { symbol: 'STRSTR', address: USDC, usd: '100' },
+      { symbol: '', address: USDC, usd: 50 },
+      'not-an-object',
+      null,
+      42,
+    ];
+    expect(parsePoolValueResponse({ ...good, tokens }).topHoldings).toEqual([{ symbol: 'xSTRK', usd: 453_000 }]);
+  });
+
+  it('cleans a hostile symbol to short printable ASCII, or drops it when nothing printable is left', () => {
+    const tokens = [
+      { symbol: 'xSTRK\u0000​', address: STRK, usd: 10 },
+      { symbol: '𝔁𝕊𝕋ℝ𝕂', address: USDC, usd: 20 },
+      { symbol: 'A'.repeat(17), address: STRK, usd: 5 },
+      { symbol: '  padded  ', address: USDC, usd: 1 },
+    ];
+    const parsed = parsePoolValueResponse({ ...good, tokens });
+    expect(parsed.topHoldings.map((holding) => holding.symbol)).toEqual(['xSTRK', 'padded']);
+  });
+
+  it('caps the holdings kept to the top 10 by usd', () => {
+    const tokens = Array.from({ length: 40 }, (_, index) => ({ symbol: `T${index}`, address: STRK, usd: index }));
+    const parsed = parsePoolValueResponse({ ...good, tokens });
+    expect(parsed.topHoldings).toHaveLength(MAX_TOP_HOLDINGS);
+    expect(parsed.topHoldings[0]).toEqual({ symbol: 'T39', usd: 39 });
+    expect(parsed.topHoldings.at(-1)).toEqual({ symbol: 'T30', usd: 30 });
+  });
+
+  it('handles a huge token list without trouble, capped the same way', () => {
+    const tokens = Array.from({ length: 10_000 }, (_, index) => ({ symbol: `T${index}`, address: STRK, usd: index }));
+    const parsed = parsePoolValueResponse({ ...good, tokens });
+    expect(parsed.topHoldings).toHaveLength(MAX_TOP_HOLDINGS);
+    expect(parsed.topHoldings[0]).toEqual({ symbol: 'T9999', usd: 9_999 });
+  });
+
+  it('takes tokenCount as a plain count: null when absent or not a safe non-negative integer', () => {
+    expect(parsePoolValueResponse({ ...good, tokenCount: 1.5 }).tokenCount).toBeNull();
+    expect(parsePoolValueResponse({ ...good, tokenCount: -1 }).tokenCount).toBeNull();
+    expect(parsePoolValueResponse({ ...good, tokenCount: '40' }).tokenCount).toBeNull();
+    const withoutCount: Record<string, unknown> = { ...good };
+    delete withoutCount['tokenCount'];
+    expect(parsePoolValueResponse(withoutCount).tokenCount).toBeNull();
+  });
+
+  it('never reads the unpriced list beyond confirming its shape', () => {
+    expect(parsePoolValueResponse({ ...good, unpriced: ['🚀', 'ok'] }).usd).toBe(good.usd);
+    expect(() => parsePoolValueResponse({ ...good, unpriced: 'not-an-array' })).toThrow(/malformed/);
+    const withoutUnpriced: Record<string, unknown> = { ...good };
+    delete withoutUnpriced['unpriced'];
+    expect(() => parsePoolValueResponse(withoutUnpriced)).not.toThrow();
+  });
+});
+
+describe('HttpPoolValueSource (D-080)', () => {
+  function fetcherReturning(body: unknown, options: { ok?: boolean } = {}) {
+    return vi.fn(async () => new Response(JSON.stringify(body), { status: options.ok === false ? 502 : 200 }));
+  }
+
+  it('requires an https URL', () => {
+    expect(() => new HttpPoolValueSource({ url: 'http://strkprice.example/api/pool' })).toThrow(/https/);
+  });
+
+  it('fetches by GET, parses and validates the answer', async () => {
+    const fetcher = fetcherReturning({ usd: 100, tokens: [{ symbol: 'STRK', address: STRK, usd: 100 }] });
+    const source = new HttpPoolValueSource({ url: 'https://pool-value.example/api/pool', fetcher });
+    await expect(source.load()).resolves.toEqual({ usd: 100, topHoldings: [{ symbol: 'STRK', usd: 100 }], tokenCount: null });
+    expect(fetcher).toHaveBeenCalledWith('https://pool-value.example/api/pool', expect.objectContaining({ method: 'GET' }));
+  });
+
+  it('passes an abort signal through, so the cache can bound the read', async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return new Response(JSON.stringify({ usd: 1, tokens: [] }));
+    });
+    const source = new HttpPoolValueSource({ url: 'https://pool-value.example/api/pool', fetcher });
+    await source.load(new AbortController().signal);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the read when the aggregate refuses, or answers with a malformed body', async () => {
+    const refused = new HttpPoolValueSource({ url: 'https://pool-value.example/api/pool', fetcher: fetcherReturning({}, { ok: false }) });
+    await expect(refused.load()).rejects.toThrow(/refused/);
+    const malformed = new HttpPoolValueSource({ url: 'https://pool-value.example/api/pool', fetcher: fetcherReturning({ nope: true }) });
+    await expect(malformed.load()).rejects.toThrow(/malformed/);
   });
 });
 
@@ -520,7 +694,10 @@ describe('the pool stats route (D-076)', () => {
     snapshot: () => ({
       accounts: 2_932,
       deposits24h: 23,
-      held: [{ token: POOL_STATS_TOKENS[0]!, amount: 2_561_829_878_412_000_000_000_000n }],
+      valueUsd: 1_177_415.13,
+      topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }],
+      valueAsOf: '2026-09-30T00:00:00.000Z',
+      tokenCount: 40,
     }),
   };
   const api = (overrides: Partial<BackendConfig> = {}, poolStats: PoolStatsPort | null = stats) =>
@@ -533,22 +710,30 @@ describe('the pool stats route (D-076)', () => {
     });
   const ASK = { method: 'POST', path: POOL_STATS_PATH, body: { v: 1 } } as const;
 
-  it('answers POST /v1/rpc/pool-stats with the three aggregates and nothing else', async () => {
+  it('answers POST /v1/rpc/pool-stats with the aggregates and nothing else', async () => {
     const response = await api().handle({ method: 'POST', path: '/v1/rpc/pool-stats', body: { v: 1 } });
     expect(response).toEqual({
       status: 200,
       body: {
         accounts: 2_932,
         deposits24h: 23,
-        held: [{ token: POOL_STATS_TOKENS[0], amount: '2561829878412000000000000' }],
+        valueUsd: 1_177_415.13,
+        topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }],
+        valueAsOf: '2026-09-30T00:00:00.000Z',
+        tokenCount: 40,
       },
     });
   });
 
   it('serves nulls for parts not counted yet', async () => {
-    const empty: PoolStatsPort = { snapshot: () => ({ accounts: null, deposits24h: null, held: null }) };
+    const empty: PoolStatsPort = {
+      snapshot: () => ({ accounts: null, deposits24h: null, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null }),
+    };
     const response = await api({}, empty).handle({ method: 'POST', path: '/v1/rpc/pool-stats', body: { v: 1 } });
-    expect(response).toEqual({ status: 200, body: { accounts: null, deposits24h: null, held: null } });
+    expect(response).toEqual({
+      status: 200,
+      body: { accounts: null, deposits24h: null, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null },
+    });
   });
 
   it('takes nothing but its version, and only by POST', async () => {
@@ -649,12 +834,42 @@ describe('the pool stats route (D-076)', () => {
     ];
     const served = await api({}, clock.cache).handle(ASK);
     await settle();
-    expect(served).toEqual({ status: 200, body: { accounts: null, deposits24h: null, held: null } });
+    expect(served).toEqual({
+      status: 200,
+      body: { accounts: null, deposits24h: null, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null },
+    });
     // The failed refresh booked the next one, which fails the same way.
     expect(clock.scheduled()).toHaveLength(1);
     clock.advance(60_000);
     await clock.runDue();
     expect(heads).toHaveBeenCalledTimes(2);
+    for (const spy of spies) {
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    }
+    clock.cache.stop();
+  });
+
+  it('writes nothing when only the pool value read fails, chain reads still succeeding (D-014, D-080)', async () => {
+    const chain = fakeChain({ head: HEAD });
+    const value = fakeValueSource();
+    value.fail(new Error('aggregate down'));
+    const clock = cacheFor(chain, { poolValue: value.source });
+    const spies = [
+      ...(['log', 'info', 'warn', 'error', 'debug'] as const).map((level) => vi.spyOn(console, level)),
+      vi.spyOn(process.stdout, 'write'),
+      vi.spyOn(process.stderr, 'write'),
+    ];
+    // The route answers from the snapshot taken at call time, before the
+    // refresh it kicks off (in the background) has run at all.
+    const served = await api({}, clock.cache).handle(ASK);
+    await settle();
+    expect(served).toEqual({
+      status: 200,
+      body: { accounts: null, deposits24h: null, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null },
+    });
+    // The background refresh ran (chain reads succeeded, the value read failed) and logged nothing either way.
+    expect(clock.cache.peek()).toMatchObject({ accounts: 0, deposits24h: 0, valueUsd: null, tokenCount: null });
     for (const spy of spies) {
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();

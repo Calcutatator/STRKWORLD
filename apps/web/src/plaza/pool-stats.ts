@@ -1,27 +1,36 @@
 import type { ShellEvents } from '@strkworld/shared';
-import type { Address, WalletRoutePolicy } from '@strkworld/privacy';
-import { EXCHANGE_CATALOG, catalogAsset } from '../panels/exchange/catalog.js';
-import { formatTokenAmountExact, looksLikeAddress, sameAddress } from '../format.js';
 
 /**
- * The Privacy Plaza's pool stats (D-076), as the Shell reads and shows them.
+ * The Privacy Plaza's pool stats (D-076; USD value D-080), as the Shell reads
+ * and shows them.
  *
  * Public, pool-wide aggregates from the backend's cache: accounts registered,
- * deposits in the last day, and the pool's balance of each token. Nothing
- * here is about the player: the request carries only a version, and the
- * answer holds only counts and per-token totals. The World gets them
- * pre-formatted (`plaza:stats`), the way it gets the HUD balance.
+ * deposits in the last day, and the pool's total USD value with its highest-
+ * value holdings. The value is read by the backend from Voyager through
+ * strkprice.com, a public aggregate with no key and no user data (D-080);
+ * the browser never calls it directly. Nothing here is about the player: the
+ * request carries only a version, and the answer holds only counts, a total
+ * and per-symbol totals. The World gets them pre-formatted (`plaza:stats`),
+ * the way it gets the HUD balance.
  */
 
-export interface PoolHolding {
-  readonly token: Address;
-  readonly amount: bigint;
+/** D-080: one token's share of the pool's value, as the backend reports it. */
+export interface PoolTokenValue {
+  readonly symbol: string;
+  readonly usd: number;
 }
 
 export interface PoolStatsSnapshot {
   readonly accounts: number | null;
   readonly deposits24h: number | null;
-  readonly held: readonly PoolHolding[] | null;
+  /** D-080: the pool's total USD value. */
+  readonly valueUsd: number | null;
+  /** D-080: the highest-value tokens the pool holds, most valuable first. */
+  readonly topHoldings: readonly PoolTokenValue[] | null;
+  /** D-080: when the value was last refreshed, as an ISO timestamp. */
+  readonly valueAsOf: string | null;
+  /** D-080: how many distinct tokens the pool holds, priced or not. */
+  readonly tokenCount: number | null;
 }
 
 export interface PoolStatsSource {
@@ -30,19 +39,14 @@ export interface PoolStatsSource {
   load(signal?: AbortSignal): Promise<PoolStatsSnapshot>;
 }
 
-/** A token the plaza can show, with its display metadata. */
-export interface PlazaToken {
-  readonly token: Address;
-  readonly symbol: string;
-  readonly decimals: number;
-}
-
 /** The backend route, under the same-origin `/api` prefix the edge strips. */
 export const POOL_STATS_PATH = '/v1/rpc/pool-stats';
 
-const MAX_HELD = 16;
+/** Matches the backend's own cap, kept here as a sanity backstop on the answer. */
+const MAX_TOP_HOLDINGS = 10;
+const MAX_SYMBOL_LENGTH = 16;
 const MAX_COUNT = 1_000_000_000_000;
-const MAX_UINT256 = (1n << 256n) - 1n;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -78,80 +82,43 @@ export function createBackendPoolStats(options: { baseUrl: string; fetch?: Fetch
 /**
  * Read the backend's answer strictly. A part that is null stays null (not
  * counted yet); a part that is malformed fails the whole answer, so nothing
- * half-read is ever shown.
+ * half-read is ever shown. The backend has already cleaned and capped
+ * `topHoldings`; this is a defence-in-depth backstop, not a second pass of
+ * leniency, so one bad entry still fails the whole answer.
  */
 export function parsePoolStatsResponse(value: unknown): PoolStatsSnapshot {
   if (!isRecord(value)) throw invalid();
   const accounts = count(ownValue(value, 'accounts'));
   const deposits24h = count(ownValue(value, 'deposits24h'));
-  const heldValue = ownValue(value, 'held');
-  let held: readonly PoolHolding[] | null = null;
-  if (heldValue !== null) {
-    if (!Array.isArray(heldValue)) throw invalid();
-    const items = ownItems(heldValue);
-    if (items.length > MAX_HELD) throw invalid();
-    held = Object.freeze(items.map((item) => {
+  const valueUsd = usdOrNull(ownValue(value, 'valueUsd'));
+  const valueAsOf = isoStringOrNull(ownValue(value, 'valueAsOf'));
+  const tokenCount = count(ownValue(value, 'tokenCount'));
+  const topHoldingsValue = ownValue(value, 'topHoldings');
+  let topHoldings: readonly PoolTokenValue[] | null = null;
+  if (topHoldingsValue !== null) {
+    if (!Array.isArray(topHoldingsValue)) throw invalid();
+    const items = ownItems(topHoldingsValue);
+    if (items.length > MAX_TOP_HOLDINGS) throw invalid();
+    topHoldings = Object.freeze(items.map((item) => {
       if (!isRecord(item)) throw invalid();
-      const token = ownValue(item, 'token');
-      const amount = ownValue(item, 'amount');
-      if (typeof token !== 'string' || !looksLikeAddress(token) || BigInt(token) === 0n) throw invalid();
-      if (typeof amount !== 'string' || !/^(?:0|[1-9][0-9]{0,77})$/.test(amount)) throw invalid();
-      const parsed = BigInt(amount);
-      if (parsed > MAX_UINT256) throw invalid();
-      return Object.freeze({ token: token as Address, amount: parsed });
+      const symbol = ownValue(item, 'symbol');
+      const usd = ownValue(item, 'usd');
+      if (typeof symbol !== 'string' || symbol.length < 1 || symbol.length > MAX_SYMBOL_LENGTH) throw invalid();
+      if (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0) throw invalid();
+      return Object.freeze({ symbol, usd });
     }));
   }
-  return Object.freeze({ accounts, deposits24h, held });
-}
-
-/**
- * The tokens the plaza shows: this build's shield allowlist, in its order,
- * that the Exchange catalog describes (the shell's one token metadata
- * source, D-042). No policy (the demo, tests) restricts nothing, as
- * everywhere else: every catalog token.
- */
-export function plazaTokens(policy: WalletRoutePolicy | null): readonly PlazaToken[] {
-  let listed: readonly unknown[];
-  try {
-    const allowlist = policy === null ? EXCHANGE_CATALOG.map((asset) => asset.token) : policy.allowedTokens.shield;
-    listed = Array.isArray(allowlist) ? [...allowlist] : [];
-  } catch {
-    return Object.freeze([]);
-  }
-  const tokens: PlazaToken[] = [];
-  for (const token of listed) {
-    if (typeof token !== 'string') continue;
-    const asset = catalogAsset(token);
-    if (!asset || tokens.some((entry) => sameAddress(entry.token, asset.token))) continue;
-    tokens.push(Object.freeze({ token: asset.token, symbol: asset.symbol, decimals: asset.decimals }));
-  }
-  return Object.freeze(tokens);
-}
-
-/** One held line per shown token the answer covers, in the shown order. */
-export function plazaHeldLines(
-  held: readonly PoolHolding[] | null,
-  tokens: readonly PlazaToken[],
-  format: (amount: bigint, decimals: number) => string,
-): readonly string[] | null {
-  if (held === null) return null;
-  const lines: string[] = [];
-  for (const token of tokens) {
-    const holding = held.find((entry) => sameAddress(entry.token, token.token));
-    if (holding) lines.push(`${format(holding.amount, token.decimals)} ${token.symbol}`);
-  }
-  return lines.length > 0 ? Object.freeze(lines) : null;
+  return Object.freeze({ accounts, deposits24h, valueUsd, topHoldings, valueAsOf, tokenCount });
 }
 
 /** What the monument draws: short figures, "…" in the World for any null. */
-export function plazaStatsEvent(
-  stats: PoolStatsSnapshot | null,
-  tokens: readonly PlazaToken[],
-): ShellEvents['plaza:stats'] {
+export function plazaStatsEvent(stats: PoolStatsSnapshot | null): ShellEvents['plaza:stats'] {
+  const holdings = stats?.topHoldings;
   return Object.freeze({
     accounts: stats?.accounts == null ? null : formatPlazaCount(stats.accounts),
     deposits24h: stats?.deposits24h == null ? null : formatPlazaCount(stats.deposits24h),
-    held: plazaHeldLines(stats?.held ?? null, tokens, formatCompactAmount),
+    valueUsd: stats?.valueUsd == null ? null : formatCompactUsd(stats.valueUsd),
+    topHoldings: holdings && holdings.length > 0 ? Object.freeze(holdings.map(formatMonumentHoldingLine)) : null,
   });
 }
 
@@ -161,38 +128,53 @@ export function formatPlazaCount(value: number): string {
 }
 
 /**
- * Three significant figures, truncated like every shortened amount here
- * (`format.ts`): `2.56M`, `200K`, `10.3K`, `18.9`, `0.359`.
+ * Compact USD, rounded (not truncated, unlike a token amount — a rounded
+ * dollar figure reads naturally; a rounded-up token balance would not):
+ * "$1.18M", "$453K", "$198K", "$11K", "$42", "$0".
  */
-export function formatCompactAmount(amount: bigint, decimals: number): string {
-  if (amount <= 0n) return '0';
-  const [whole = '0', fraction = ''] = formatTokenAmountExact(amount, decimals).split('.');
-  if (whole !== '0') {
-    for (const [power, suffix] of [[12, 'T'], [9, 'B'], [6, 'M'], [3, 'K']] as const) {
-      if (whole.length <= power) continue;
-      const head = whole.slice(0, whole.length - power);
-      const rest = whole.slice(whole.length - power);
-      const tail = rest.slice(0, Math.max(0, 3 - head.length)).replace(/0+$/, '');
-      return tail ? `${head}.${tail}${suffix}` : `${head}${suffix}`;
+export function formatCompactUsd(usd: number): string {
+  if (!Number.isFinite(usd) || usd <= 0) return '$0';
+  for (const [power, suffix] of [[12, 'T'], [9, 'B'], [6, 'M'], [3, 'K']] as const) {
+    const unit = 10 ** power;
+    if (usd >= unit) {
+      const scaled = usd / unit;
+      const decimals = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+      return `$${trimTrailingZeros(scaled.toFixed(decimals))}${suffix}`;
     }
-    const tail = fraction.slice(0, Math.max(0, 3 - whole.length)).replace(/0+$/, '');
-    return tail ? `${whole}.${tail}` : whole;
   }
-  const lead = fraction.search(/[1-9]/);
-  return lead < 0 ? '0' : `0.${fraction.slice(0, lead + 3).replace(/0+$/, '')}`;
+  return usd >= 1 ? `$${Math.round(usd)}` : `$${usd.toFixed(2)}`;
 }
 
-/** The panel's fuller figure: `2,561,829.87`, `18.97`, `0.3593`. Truncated. */
-export function formatPanelAmount(amount: bigint, decimals: number): string {
-  if (amount <= 0n) return '0';
-  const [whole = '0', fraction = ''] = formatTokenAmountExact(amount, decimals).split('.');
-  if (whole !== '0') {
-    const tail = fraction.slice(0, 2).replace(/0+$/, '');
-    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return tail ? `${grouped}.${tail}` : grouped;
-  }
-  const lead = fraction.search(/[1-9]/);
-  return lead < 0 ? '0' : `0.${fraction.slice(0, lead + 4).replace(/0+$/, '')}`;
+/** The exact figure, for small print or a hover title: "$1,177,415". */
+export function formatExactUsd(usd: number): string {
+  if (!Number.isFinite(usd) || usd < 0) return '$0';
+  return `$${Math.round(usd).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+}
+
+/** The panel's list line: "xSTRK $453K". */
+export function formatHoldingLine(holding: PoolTokenValue): string {
+  return `${holding.symbol} ${formatCompactUsd(holding.usd)}`;
+}
+
+/** The monument's cycling line: "xSTRK · $453K". */
+export function formatMonumentHoldingLine(holding: PoolTokenValue): string {
+  return `${holding.symbol} · ${formatCompactUsd(holding.usd)}`;
+}
+
+function trimTrailingZeros(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+}
+
+function usdOrNull(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw invalid();
+  return value;
+}
+
+function isoStringOrNull(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !ISO_TIMESTAMP.test(value)) throw invalid();
+  return value;
 }
 
 function count(value: unknown): number | null {

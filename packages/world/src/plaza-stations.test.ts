@@ -210,10 +210,10 @@ describe('the plaza stations (D-076)', () => {
 
   it("forwards the Shell's figures, checked", () => {
     const plaza = setup();
-    plaza.shellEmit('plaza:stats', { accounts: '2,932', deposits24h: '23', held: ['2.56M STRK', '18.9 ETH'] });
-    plaza.shellEmit('plaza:stats', { accounts: null, deposits24h: null, held: null });
+    plaza.shellEmit('plaza:stats', { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] });
+    plaza.shellEmit('plaza:stats', { accounts: null, deposits24h: null, valueUsd: null, topHoldings: null });
     expect(plaza.stats).toEqual([
-      { accounts: '2,932', deposits24h: '23', held: ['2.56M STRK', '18.9 ETH'] },
+      { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] },
       EMPTY_PLAZA_STATS,
     ]);
   });
@@ -239,20 +239,26 @@ describe('the plaza stations (D-076)', () => {
   });
 });
 
-describe('the monument figures (D-076)', () => {
+describe('the monument figures (D-076; USD value D-080)', () => {
   it('reads only short strings from own data fields', () => {
-    expect(normalizePlazaStats({ accounts: ' 2,932 ', deposits24h: '23', held: ['2.56M STRK'] })).toEqual({
+    expect(normalizePlazaStats({
+      accounts: ' 2,932 ',
+      deposits24h: '23',
+      valueUsd: '$1.18M',
+      topHoldings: ['xSTRK · $453K'],
+    })).toEqual({
       accounts: '2,932',
       deposits24h: '23',
-      held: ['2.56M STRK'],
+      valueUsd: '$1.18M',
+      topHoldings: ['xSTRK · $453K'],
     });
-    expect(normalizePlazaStats({ accounts: 2932, deposits24h: 23n, held: 'STRK' })).toEqual(EMPTY_PLAZA_STATS);
-    expect(normalizePlazaStats({ accounts: 'x'.repeat(MAX_PLAZA_FIGURE_LENGTH + 1), deposits24h: '', held: [] })).toEqual(EMPTY_PLAZA_STATS);
-    expect(normalizePlazaStats({ accounts: 'two\nlines', deposits24h: null, held: null }).accounts).toBeNull();
+    expect(normalizePlazaStats({ accounts: 2932, deposits24h: 23n, valueUsd: 1_177_415, topHoldings: 'xSTRK' })).toEqual(EMPTY_PLAZA_STATS);
+    expect(normalizePlazaStats({ accounts: 'x'.repeat(MAX_PLAZA_FIGURE_LENGTH + 1), deposits24h: '', valueUsd: '', topHoldings: [] })).toEqual(EMPTY_PLAZA_STATS);
+    expect(normalizePlazaStats({ accounts: 'two\nlines', deposits24h: null, valueUsd: null, topHoldings: null }).accounts).toBeNull();
     expect(normalizePlazaStats(null)).toEqual(EMPTY_PLAZA_STATS);
   });
 
-  it('refuses accessors, bad lines and too many tokens', () => {
+  it('refuses accessors, bad lines and too many holdings', () => {
     const hostile = {};
     let read = false;
     Object.defineProperty(hostile, 'accounts', {
@@ -263,8 +269,8 @@ describe('the monument figures (D-076)', () => {
     });
     expect(normalizePlazaStats(hostile).accounts).toBeNull();
     expect(read).toBe(false);
-    expect(normalizePlazaStats({ held: ['1 STRK', 7] }).held).toBeNull();
-    expect(normalizePlazaStats({ held: Array.from({ length: MAX_PLAZA_HELD_LINES + 1 }, () => '1 STRK') }).held).toBeNull();
-    expect(normalizePlazaStats({ held: Array.from({ length: MAX_PLAZA_HELD_LINES }, () => '1 STRK') }).held).toHaveLength(MAX_PLAZA_HELD_LINES);
+    expect(normalizePlazaStats({ topHoldings: ['xSTRK · $1', 7] }).topHoldings).toBeNull();
+    expect(normalizePlazaStats({ topHoldings: Array.from({ length: MAX_PLAZA_HELD_LINES + 1 }, () => 'xSTRK · $1') }).topHoldings).toBeNull();
+    expect(normalizePlazaStats({ topHoldings: Array.from({ length: MAX_PLAZA_HELD_LINES }, () => 'xSTRK · $1') }).topHoldings).toHaveLength(MAX_PLAZA_HELD_LINES);
   });
 });

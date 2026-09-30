@@ -41,6 +41,9 @@ describe('the pinned Vault contracts and selectors', () => {
     expect(BigInt(PREVIEW_REDEEM_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('preview_redeem')));
     expect(BigInt(MAX_WITHDRAW_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('max_withdraw')));
     expect(BigInt(MAX_REDEEM_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('max_redeem')));
+    // Shared with the pool: also the shares read here (`balance_of(account)` on vSTRK).
+    // D-080 removed the pool-stats.ts held-balance reads that used to pin this.
+    expect(BigInt(BALANCE_OF_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('balance_of')));
   });
 
   it('pins the canonical anonymizer and Vesu vSTRK, as read on mainnet', () => {

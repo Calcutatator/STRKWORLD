@@ -6,6 +6,7 @@ import {
   DEGEN_MIN_CACHE_TTL_MS,
   DEGEN_TAGS,
 } from './degen-catalog.js';
+import { DEFAULT_POOL_VALUE_URL } from './pool-stats.js';
 import type { StarknetRpcOptions } from './starknet-rpc.js';
 import type { BackendConfig, DegenConfig, DegenTag, PrivateRoute, RoutePolicy } from './types.js';
 import { isFelt } from './validation.js';
@@ -25,6 +26,8 @@ export interface ParsedBackendEnvironment {
   rpc: StarknetRpcOptions;
   swapPlanner: AvnuSwapPlannerOptions;
   authorizationSecret: string;
+  /** D-080: the Privacy Plaza's external pool-value aggregate. */
+  poolValue: { url: string };
 }
 
 /** Strict production configuration. Errors name variables but never their values. */
@@ -40,6 +43,10 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
   const rpcUrl = parseUrl(environment, 'STARKNET_RPC_URL');
   const paymasterBaseUrl = parseOptionalUrl(environment, 'AVNU_PAYMASTER_BASE_URL');
   const avnuBaseUrl = parseOptionalUrl(environment, 'AVNU_BASE_URL');
+  // D-080: public, no key; strkprice.com's default applies when unset. https
+  // only, like every other URL here (parseOptionalUrl), and fails closed on
+  // a placeholder or malformed value rather than silently falling back.
+  const poolValueUrl = parseOptionalUrl(environment, 'PLAZA_POOL_VALUE_URL') ?? DEFAULT_POOL_VALUE_URL;
   const requestTimeoutMs = parseInteger(environment, 'BACKEND_REQUEST_TIMEOUT_MS', 1, MAX_NODE_TIMEOUT_MS);
   requireDelayWithinDeadline(requestTimeoutMs, { transfer, unshield, ...(stake ? { stake } : {}) });
 
@@ -88,6 +95,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       ...(avnuBaseUrl ? { baseUrl: avnuBaseUrl } : {}),
     },
     authorizationSecret: parseSecret(environment, 'FEE_AUTHORIZATION_SECRET', 32),
+    poolValue: { url: poolValueUrl },
   };
 }
 

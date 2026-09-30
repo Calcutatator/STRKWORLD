@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { parseBackendEnvironment, RELAY_SUBMISSION_HEADROOM_MS } from './environment.js';
+import { DEFAULT_POOL_VALUE_URL } from './pool-stats.js';
 import {
   createBackendRuntime,
   listenBackendServer,
@@ -157,6 +158,8 @@ describe('strict production backend environment', () => {
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['negative transfer queue delay', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '-1' }],
     ['delayed swap', { BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '1' }],
+    ['non-https pool value URL', { PLAZA_POOL_VALUE_URL: 'http://strkprice.example/api/pool' }],
+    ['placeholder pool value URL', { PLAZA_POOL_VALUE_URL: 'https://REPLACE_ME.example/api/pool' }],
   ])('rejects %s', (_label, override) => {
     expect(() => parseBackendEnvironment(validEnvironment(override))).toThrow(/invalid|required/i);
   });
@@ -173,6 +176,18 @@ describe('strict production backend environment', () => {
     // A placeholder is still refused rather than sent to AVNU.
     expect(() => parseBackendEnvironment(validEnvironment({ AVNU_PAYMASTER_API_KEY: 'REPLACE_WITH_AVNU_PAYMASTER_KEY' })))
       .toThrow(/AVNU_PAYMASTER_API_KEY/);
+  });
+
+  it('defaults the pool value URL to strkprice.com, https-only, overridable (D-080)', () => {
+    const defaulted = parseBackendEnvironment(validEnvironment());
+    expect(defaulted.poolValue.url).toBe(DEFAULT_POOL_VALUE_URL);
+    expect(defaulted.poolValue.url.startsWith('https://')).toBe(true);
+    const empty = parseBackendEnvironment(validEnvironment({ PLAZA_POOL_VALUE_URL: '' }));
+    expect(empty.poolValue.url).toBe(DEFAULT_POOL_VALUE_URL);
+    const overridden = parseBackendEnvironment(validEnvironment({
+      PLAZA_POOL_VALUE_URL: 'https://pool-value.example/api/pool',
+    }));
+    expect(overridden.poolValue.url).toBe('https://pool-value.example/api/pool');
   });
 
   it('never includes a rejected secret value in its error', () => {

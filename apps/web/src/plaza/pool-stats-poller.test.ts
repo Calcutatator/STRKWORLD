@@ -17,8 +17,17 @@ import type { PoolStatsSnapshot, PoolStatsSource } from './pool-stats.js';
  * to the minute when reads keep failing or a part stays uncounted.
  */
 
-const FULL: PoolStatsSnapshot = Object.freeze({ accounts: 2932, deposits24h: 23, held: Object.freeze([]) });
-const PARTIAL: PoolStatsSnapshot = Object.freeze({ accounts: null, deposits24h: 23, held: Object.freeze([]) });
+const FULL: PoolStatsSnapshot = Object.freeze({
+  accounts: 2932,
+  deposits24h: 23,
+  valueUsd: 1_177_415,
+  topHoldings: Object.freeze([]),
+  valueAsOf: '2026-09-30T00:00:00.000Z',
+  tokenCount: 40,
+});
+const PARTIAL: PoolStatsSnapshot = Object.freeze({ ...FULL, accounts: null });
+/** Everything counted but the USD value: the other new "part" that also makes an answer incomplete. */
+const VALUE_PENDING: PoolStatsSnapshot = Object.freeze({ ...FULL, valueUsd: null, topHoldings: null, valueAsOf: null, tokenCount: null });
 
 /** An answer that never comes, whatever the signal says. */
 const STALL = Symbol('stall');
@@ -145,6 +154,17 @@ describe('the pool stats poller (D-076)', () => {
     }
     expect(waits).toEqual([POOL_STATS_INCOMPLETE_MS, 20_000, 40_000, POOL_STATS_POLL_MS, POOL_STATS_POLL_MS]);
     // A full answer puts it back on the minute.
+    expect(test.nextIn()).toBe(POOL_STATS_POLL_MS);
+  });
+
+  it('treats the USD value as its own part too (D-080): still asked again sooner while it alone is uncounted', async () => {
+    const test = harness([VALUE_PENDING, FULL]);
+    test.poller.setNear(true);
+    await test.flush();
+    expect(test.poller.store.getState().stats).toBe(VALUE_PENDING);
+    expect(test.nextIn()).toBe(POOL_STATS_INCOMPLETE_MS);
+    await test.advance(test.nextIn());
+    expect(test.poller.store.getState().stats).toBe(FULL);
     expect(test.nextIn()).toBe(POOL_STATS_POLL_MS);
   });
 

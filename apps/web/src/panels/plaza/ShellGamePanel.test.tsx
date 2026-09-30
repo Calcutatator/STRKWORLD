@@ -49,7 +49,7 @@ function mount(options: { reducedMotion?: boolean } = {}): void {
   const shell = createEventBus<ShellEvents>();
   act(() => {
     root!.render(
-      <PlazaProvider world={world} shell={shell} policy={null}>
+      <PlazaProvider world={world} shell={shell}>
         <ShellGamePanel onClose={() => {}} random={die()} reducedMotion={options.reducedMotion ?? false} />
       </PlazaProvider>,
     );

@@ -568,10 +568,11 @@ export class BackendApi {
 
   /**
    * D-076: the Privacy Plaza's public pool stats, straight from the cache,
-   * which never waits on the chain. Aggregates only: two counts and a pool
-   * balance per pinned token, each null until the background scan has one.
-   * The request carries nothing but the version, so no player can choose,
-   * add or probe a contract here.
+   * which never waits on the chain or the value aggregate. Aggregates only:
+   * two counts, the pool's USD value and its top holdings by value (D-080),
+   * each null until the background scan or fetch has one. The request
+   * carries nothing but the version, so no player can choose, add or probe a
+   * contract here.
    */
   private poolStats(body: unknown): ApiResponse {
     requireVersion(requireRecord(body, ['v']));
@@ -582,9 +583,12 @@ export class BackendApi {
       body: {
         accounts: snapshot.accounts,
         deposits24h: snapshot.deposits24h,
-        held: snapshot.held === null
+        valueUsd: snapshot.valueUsd,
+        topHoldings: snapshot.topHoldings === null
           ? null
-          : snapshot.held.map(({ token, amount }) => ({ token, amount: amount.toString() })),
+          : snapshot.topHoldings.map(({ symbol, usd }) => ({ symbol, usd })),
+        valueAsOf: snapshot.valueAsOf,
+        tokenCount: snapshot.tokenCount,
       },
     };
   }

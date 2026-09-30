@@ -19,22 +19,31 @@ import { isPlazaNearby, plazaStationAtApproach } from './map/plaza.js';
  * forwards the Shell's pre-formatted figures (`plaza:stats`) to the monument.
  */
 
-/** The monument's figures as the World draws them; a null part reads "…". */
+/**
+ * The monument's figures as the World draws them; a null part reads "…".
+ * D-080: `held`'s per-token amounts were replaced with the pool's USD value
+ * and its top holdings by value, so the held face now cycles the total, then
+ * each holding.
+ */
 export interface PlazaStatsPresentation {
   readonly accounts: string | null;
   readonly deposits24h: string | null;
-  readonly held: readonly string[] | null;
+  /** Compact total held in the pool, e.g. "$1.18M". */
+  readonly valueUsd: string | null;
+  /** Compact "SYMBOL · $usd" lines, most valuable first. */
+  readonly topHoldings: readonly string[] | null;
 }
 
 export const EMPTY_PLAZA_STATS: PlazaStatsPresentation = Object.freeze({
   accounts: null,
   deposits24h: null,
-  held: null,
+  valueUsd: null,
+  topHoldings: null,
 });
 
 /** Longest figure the monument prints; anything longer is not a figure. */
 export const MAX_PLAZA_FIGURE_LENGTH = 24;
-/** Most token lines the monument cycles through. */
+/** Most holding lines the monument cycles through. */
 export const MAX_PLAZA_HELD_LINES = 16;
 
 export interface PlazaInputGate {
@@ -219,29 +228,33 @@ export function createPlazaController(options: PlazaControllerOptions): PlazaCon
 
 /**
  * The Shell's figures, read strictly: own data fields, strings only, short,
- * and at most `MAX_PLAZA_HELD_LINES` token lines. Anything else reads as not
- * known, which the monument draws as "…"; it is never a number to compute on.
+ * and at most `MAX_PLAZA_HELD_LINES` holding lines. Anything else reads as
+ * not known, which the monument draws as "…"; it is never a number to
+ * compute on.
  */
 export function normalizePlazaStats(value: unknown): PlazaStatsPresentation {
-  const held = ownData(value, 'held');
-  let lines: string[] | null = null;
-  if (Array.isArray(held)) {
-    const length = ownData(held, 'length');
-    if (typeof length === 'number' && Number.isSafeInteger(length) && length > 0 && length <= MAX_PLAZA_HELD_LINES) {
-      const read: string[] = [];
-      for (let index = 0; index < length; index += 1) {
-        const line = figure(ownData(held, String(index)));
-        if (line === null) break;
-        read.push(line);
-      }
-      if (read.length === length) lines = read;
-    }
-  }
   return Object.freeze({
     accounts: figure(ownData(value, 'accounts')),
     deposits24h: figure(ownData(value, 'deposits24h')),
-    held: lines ? Object.freeze(lines) : null,
+    valueUsd: figure(ownData(value, 'valueUsd')),
+    topHoldings: figureLines(ownData(value, 'topHoldings')),
   });
+}
+
+/** A bounded array of short figure strings, or null if anything about it is off. */
+function figureLines(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value)) return null;
+  const length = ownData(value, 'length');
+  if (typeof length !== 'number' || !Number.isSafeInteger(length) || length <= 0 || length > MAX_PLAZA_HELD_LINES) {
+    return null;
+  }
+  const read: string[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const line = figure(ownData(value, String(index)));
+    if (line === null) break;
+    read.push(line);
+  }
+  return read.length === length ? Object.freeze(read) : null;
 }
 
 function figure(value: unknown): string | null {

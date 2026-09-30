@@ -47,19 +47,25 @@ export {
   relayStartupNotice,
 } from './relay.js';
 export {
+  DEFAULT_POOL_VALUE_URL,
   DEPOSIT_EVENT,
   DEPOSIT_WINDOW_BLOCKS,
   EMPTY_POOL_STATS,
+  HttpPoolValueSource,
+  MAX_SYMBOL_LENGTH,
+  MAX_TOP_HOLDINGS,
   POOL_FIRST_BLOCK,
   POOL_STATS_IDLE_MS,
   POOL_STATS_RATE_LIMIT,
   POOL_STATS_REFRESH_MS,
-  POOL_STATS_TOKENS,
+  POOL_VALUE_FETCH_TIMEOUT_MS,
   PoolStatsCache,
   VIEWING_KEY_SET_EVENT,
   isPoolStatsRpc,
+  parsePoolValueResponse,
   type PoolStatsCacheOptions,
   type PoolStatsScheduler,
+  type PoolValueSourceOptions,
 } from './pool-stats.js';
 export { decodeServerActions, validateServerActionRoute } from './server-actions.js';
 export { BALANCE_OF_SELECTOR, StarknetRpcPoolPort, type StarknetRpcOptions } from './starknet-rpc.js';
@@ -100,6 +106,9 @@ export type {
   PoolStatsPort,
   PoolStatsRpcPort,
   PoolStatsSnapshot,
+  PoolTokenValue,
+  PoolValueRead,
+  PoolValueSourcePort,
   PreparedArtifact,
   PrivateRoute,
   RelayFee,
