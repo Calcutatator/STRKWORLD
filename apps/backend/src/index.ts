@@ -108,6 +108,7 @@ export type {
   SwapAuthorizationBinding,
   SwapPlan,
   SwapPlannerPort,
+  VaultPositionFigures,
   VaultPositionRead,
   VaultRateRead,
   VaultRatesPort,

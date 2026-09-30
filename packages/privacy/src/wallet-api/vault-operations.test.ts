@@ -44,14 +44,15 @@ const ONE = 10n ** 18n;
 const USDC_ONE = 10n ** 6n;
 
 /** The backend's answer: one row per pinned vault, STRK's holding a position. */
-function rows(overrides: Record<string, Partial<VaultPositionRow>> = {}): VaultPositionRow[] {
+function rows(overrides: Record<string, Record<string, unknown>> = {}): VaultPositionRow[] {
   return VAULT_MARKETS.map((market) => ({
     vault: market.vault,
+    ok: true,
     ...(market === STRK_MARKET
       ? { shares: 50n * ONE, assets: 51n * ONE, maxWithdraw: 51n * ONE, maxRedeem: 50n * ONE }
       : { shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n }),
     ...overrides[market.symbol],
-  }));
+  }) as VaultPositionRow);
 }
 
 function vaultPolicy(overrides: Partial<WalletRoutePolicy> = {}): WalletRoutePolicy {
@@ -307,6 +308,25 @@ describe('vaultPositions', () => {
     expect(f.stages.filter((stage) => stage.stage === 'position')).toEqual([{ stage: 'position', ok: true }]);
   });
 
+  it('needs good rows only for the vaults it admits: another vault’s failed read never blocks it', async () => {
+    const f = fixture({ policy: vaultTokens(STRK) });
+    f.state.rows = rows({ WBTC: { ok: false, shares: undefined, assets: undefined, maxWithdraw: undefined, maxRedeem: undefined } })
+      .map((row) => (row.ok ? row : { vault: row.vault, ok: false as const }));
+    await expect(f.operations.vaultPositions()).resolves.toMatchObject({ positions: [{ token: STRK, shares: 50n * ONE }] });
+    await expect(f.operations.prepareVaultRedeem(STRK, 'all')).resolves.toMatchObject({ action: { token: STRK, all: true } });
+  });
+
+  it('reads an admitted vault the backend could not read as unreachable, never as empty', async () => {
+    const f = fixture({ policy: vaultTokens(STRK, USDC) });
+    f.state.rows = rows().map((row) => (row.vault === USDC_MARKET.vault ? { vault: row.vault, ok: false as const } : row));
+    await expect(f.operations.vaultPositions({ onStage: f.onStage })).rejects.toMatchObject({ kind: 'unreachable' });
+    expect(f.stages.at(-1)).toEqual({ stage: 'position', ok: false });
+    await expect(f.operations.prepareVaultRedeem(USDC, 'all')).rejects.toMatchObject({ kind: 'unreachable' });
+    // A redeem of the other token needs only its own vault's row.
+    await expect(f.operations.prepareVaultRedeem(STRK, 'all')).resolves.toMatchObject({ action: { token: STRK } });
+    expect(f.invoked).toEqual([]);
+  });
+
   it('ignores rows for vaults the build does not admit, and reads the stand-in address canonically', async () => {
     const f = fixture({ policy: vaultTokens(USDC) });
     f.state.shadowAddress = `0x${'0'.repeat(64 - SHADOW.slice(2).length)}${SHADOW.slice(2)}`;
@@ -451,6 +471,8 @@ describe('Vault refusals: fail closed before the wallet is asked', () => {
     ['no row for an admitted vault', rows().filter((row) => row.vault !== STRK_MARKET.vault)],
     ['two rows for one vault', [...rows(), rows()[0]!]],
     ['a row whose vault is not an address', rows().map((row, index) => (index === 0 ? { ...row, vault: 42 } : row))],
+    ['a row that says neither ok nor not', rows({ STRK: { ok: 'yes' } })],
+    ['a row with figures but no ok', rows().map((row, index) => (index === 0 ? { ...row, ok: undefined } : row))],
     ['an object, not a list', { ...rows() }],
     ['more rows than any backend pins', Array.from({ length: 17 }, () => rows()[1]!)],
   ])('refuses a position read with %s', async (_label, answer) => {
@@ -502,6 +524,8 @@ describe('vaultRates (D-079)', () => {
     ['a number value', [{ vault: STRK_MARKET.vault, supplyApy: { value: 1, decimals: 18 } }]],
     ['fractional decimals', [{ vault: STRK_MARKET.vault, supplyApy: { value: 1n, decimals: 1.5 } }]],
     ['too many decimals', [{ vault: STRK_MARKET.vault, supplyApy: { value: 1n, decimals: 37 } }]],
+    ['a rate of 10,000%', [{ vault: STRK_MARKET.vault, supplyApy: { value: 100n * ONE, decimals: 18 } }]],
+    ['a rate past u256', [{ vault: STRK_MARKET.vault, supplyApy: { value: 1n << 256n, decimals: 18 } }]],
     ['no rate', [{ vault: STRK_MARKET.vault }]],
     ['two rows for one vault', [
       { vault: STRK_MARKET.vault, supplyApy: { value: 1n, decimals: 2 } },

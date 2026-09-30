@@ -517,9 +517,10 @@ export class BackendApi {
 
   /**
    * D-077, D-079: a stand-in address's position in every pinned vault, one
-   * row each, as decimal base units. Public data, read here rather than from
-   * the browser so the player's IP never reaches a third-party RPC next to
-   * the address. The request names the address alone: never a vault.
+   * row each, as decimal base units, or `ok: false` for a vault whose read
+   * failed. Public data, read here rather than from the browser so the
+   * player's IP never reaches a third-party RPC next to the address. The
+   * request names the address alone: never a vault.
    */
   private async vaultPosition(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'account']);
@@ -530,13 +531,16 @@ export class BackendApi {
     return {
       status: 200,
       body: {
-        positions: rows.map((row) => ({
-          vault: row.vault,
-          shares: row.shares.toString(),
-          assets: row.assets.toString(),
-          maxWithdraw: row.maxWithdraw.toString(),
-          maxRedeem: row.maxRedeem.toString(),
-        })),
+        positions: rows.map((row) => (row.ok
+          ? {
+              vault: row.vault,
+              ok: true,
+              shares: row.shares.toString(),
+              assets: row.assets.toString(),
+              maxWithdraw: row.maxWithdraw.toString(),
+              maxRedeem: row.maxRedeem.toString(),
+            }
+          : { vault: row.vault, ok: false })),
       },
     };
   }

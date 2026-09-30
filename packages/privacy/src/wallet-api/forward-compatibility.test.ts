@@ -186,8 +186,8 @@ describe('Wallet Standard forward compatibility', () => {
           : path === '/api/v1/rpc/vault-position'
             ? {
                 positions: [
-                  { vault: VSTRK, shares: '50', assets: '51', maxWithdraw: '51', maxRedeem: '50' },
-                  { vault: VUSDC, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
+                  { vault: VSTRK, ok: true, shares: '50', assets: '51', maxWithdraw: '51', maxRedeem: '50' },
+                  { vault: VUSDC, ok: true, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
                 ],
               }
             : path === '/api/v1/vault-rates'

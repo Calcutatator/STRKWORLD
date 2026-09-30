@@ -28,8 +28,8 @@ export const VESU_RATES_TTL_MS = 300_000;
 /** After a failed read, how long "no rates" stands before Vesu is asked again. */
 export const VESU_RATES_FAILURE_RETRY_MS = 60_000;
 const DEFAULT_FETCH_TIMEOUT_MS = 5_000;
-/** Vesu's Prime answer is about 40,000 characters; far more is not a pool answer. */
-export const VESU_RATES_MAX_BODY_LENGTH = 1_000_000;
+/** Vesu's Prime answer is about 40 kB; far more is not a pool answer, and reading stops there. */
+export const VESU_RATES_MAX_BODY_BYTES = 1_000_000;
 const MAX_ASSETS = 128;
 const MAX_DECIMALS = 36;
 
@@ -106,11 +106,48 @@ export class VesuVaultRates implements VaultRatesPort {
     });
     if (!response.ok) throw new Error('Vesu refused the pool read.');
     const declared = Number(response.headers.get('content-length') ?? '0');
-    if (!Number.isFinite(declared) || declared > VESU_RATES_MAX_BODY_LENGTH) throw new Error("Vesu's pool answer is too large.");
-    const text = await response.text();
-    if (text.length > VESU_RATES_MAX_BODY_LENGTH) throw new Error("Vesu's pool answer is too large.");
-    return JSON.parse(text) as unknown;
+    if (!Number.isFinite(declared) || declared > VESU_RATES_MAX_BODY_BYTES) throw new Error("Vesu's pool answer is too large.");
+    return JSON.parse(await readBoundedText(response, VESU_RATES_MAX_BODY_BYTES)) as unknown;
   }
+}
+
+/**
+ * The body as text, read chunk by chunk and abandoned the moment it passes
+ * `maxBytes`, decompressed bytes counted, so neither a missing
+ * `content-length` nor a compressed body can make the backend buffer more.
+ * The fetch's own timeout still ends a slow body.
+ */
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  const body = response.body;
+  if (!body) return '';
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error("Vesu's pool answer is too large.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Already released by the cancel.
+    }
+  }
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(joined);
 }
 
 /**

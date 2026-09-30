@@ -119,14 +119,17 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     if (rows.length > MAX_VAULT_ROWS) {
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
-    return Object.freeze(rows.map((item) => {
+    return Object.freeze(rows.map((item): VaultPositionRow => {
       const row = asRecord(item);
       const vault = asFelt(ownField(row, 'vault'));
-      if (BigInt(vault) === 0n || Reflect.ownKeys(row).length !== 5) {
+      const ok = ownField(row, 'ok');
+      if (BigInt(vault) === 0n || typeof ok !== 'boolean' || Reflect.ownKeys(row).length !== (ok ? 6 : 2)) {
         throw new PrivacyError('unknown', 'The private service returned an invalid response.');
       }
+      if (!ok) return Object.freeze({ vault, ok: false as const });
       return Object.freeze({
         vault,
+        ok: true as const,
         shares: asUint256(ownField(row, 'shares')),
         assets: asUint256(ownField(row, 'assets')),
         maxWithdraw: asUint256(ownField(row, 'maxWithdraw')),

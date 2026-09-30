@@ -265,11 +265,15 @@ function admitsStrk(tokens: readonly string[]): boolean {
   return Array.isArray(tokens) && tokens.some((token) => sameAddress(token, STRK_TOKEN));
 }
 
-/** A non-empty Vault list whose every token has a pinned vault, as the build's parser requires. */
+/**
+ * A non-empty Vault list whose every token has a pinned vault and appears
+ * once, as the build's parser and the privacy adapter both require.
+ */
 function admitsVaultTokens(tokens: readonly string[]): boolean {
   return Array.isArray(tokens)
     && tokens.length > 0
-    && tokens.every((token) => VAULT_TOKENS.some((pinned) => sameAddress(pinned, token)));
+    && tokens.every((token, index) => VAULT_TOKENS.some((pinned) => sameAddress(pinned, token))
+      && tokens.findIndex((other) => sameAddress(other, token)) === index);
 }
 
 /** A route-specific "not switched on in this build" door, falling back to a generic line for an unmapped route id. */

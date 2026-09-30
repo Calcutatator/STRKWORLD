@@ -1383,6 +1383,7 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
   const VUSDC = '0x387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65';
   const row = (vault: string, fields: Record<string, unknown> = {}) => ({
     vault,
+    ok: true,
     shares: '50000000000000000000',
     assets: '51000000000000000000',
     maxWithdraw: '51000000000000000000',
@@ -1403,14 +1404,19 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
 
   it('asks the position route for the stand-in address alone, and reads one row per vault in decimal base units', async () => {
     const fetcher = vi.fn(async () => response({
-      positions: [row(VSTRK), row(VUSDC, { shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' })],
+      positions: [
+        row(VSTRK),
+        row(VUSDC, { shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' }),
+        { vault: '0x4ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', ok: false },
+      ],
     }));
     const client = new BackendPrivacyClient('/api', fetcher);
 
     const rows = await client.vaultPositions(SHADOW);
     expect(rows).toEqual([
-      { vault: VSTRK, shares: 50n * 10n ** 18n, assets: 51n * 10n ** 18n, maxWithdraw: 51n * 10n ** 18n, maxRedeem: 50n * 10n ** 18n },
-      { vault: VUSDC, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: VSTRK, ok: true, shares: 50n * 10n ** 18n, assets: 51n * 10n ** 18n, maxWithdraw: 51n * 10n ** 18n, maxRedeem: 50n * 10n ** 18n },
+      { vault: VUSDC, ok: true, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: '0x4ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', ok: false },
     ]);
     expect(Object.isFrozen(rows)).toBe(true);
     expect(Object.isFrozen(rows[0])).toBe(true);
@@ -1458,6 +1464,9 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
     ['a number', { positions: [row(VSTRK, { shares: 1 })] }],
     ['a figure past u256', { positions: [row(VSTRK, { shares: (MAX_UINT256 + 1n).toString() })] }],
     ['an extra field in a row', { positions: [row(VSTRK, { account: SHADOW })] }],
+    ['no ok flag', { positions: [{ vault: VSTRK, shares: '1', assets: '1', maxWithdraw: '1', maxRedeem: '1' }] }],
+    ['an ok flag that is not a boolean', { positions: [row(VSTRK, { ok: 'true' })] }],
+    ['an unread row that still carries figures', { positions: [row(VSTRK, { ok: false })] }],
     ['a missing field in a row', { positions: [{ vault: VSTRK, shares: '1', assets: '1', maxWithdraw: '1' }] }],
     ['a zero vault', { positions: [row('0x0')] }],
     ['a vault that is not a felt', { positions: [row('vSTRK')] }],

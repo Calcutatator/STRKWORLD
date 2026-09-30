@@ -98,7 +98,8 @@ there. `POST /v1/rpc/vault-position` with `{ "v": 1, "account" }` reads
 `balance_of`, and with shares `preview_redeem`, `max_withdraw` and
 `max_redeem`, on every Vesu Prime vault in `VESU_VAULTS` (STRK, ETH, USDC,
 USDT, WBTC), answering `{ positions: [...] }`, one row per vault in decimal
-base units. `POST /v1/vault-rates` with `{ "v": 1 }` answers each pinned
+base units, or `ok: false` for a vault whose read failed, so one vault never
+blocks another. `POST /v1/vault-rates` with `{ "v": 1 }` answers each pinned
 vault's supply APY as Vesu states it (`{ value, decimals }`), from Vesu's
 keyless public pool endpoint, which this service alone fetches, at most once
 every five minutes (`vesu-rates.ts`); a failed fetch answers no rates for a

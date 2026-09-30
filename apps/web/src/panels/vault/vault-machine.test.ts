@@ -241,6 +241,27 @@ describe('the Vault counter (D-077)', () => {
     expect(failures).toEqual([]);
   });
 
+  it('reads the rates once a recheck finds the wallet able, and never for an open that was overtaken', async () => {
+    const operations = fake();
+    const rates = vi.spyOn(operations, 'vaultRates');
+    vi.spyOn(operations, 'capability').mockRejectedValueOnce(Object.assign(new Error('socket'), { kind: 'unreachable' }));
+    const { panel } = machine(operations);
+    await panel.open();
+    expect(panel.store.getState().capability).toMatchObject({ status: 'failed' });
+    expect(rates).not.toHaveBeenCalled();
+    await panel.recheck();
+    expect(panel.store.getState()).toMatchObject({ capability: { status: 'supported' }, rates: { status: 'loaded' } });
+    expect(rates).toHaveBeenCalledTimes(1);
+
+    const again = fake();
+    const reads = vi.spyOn(again, 'vaultRates');
+    const { panel: other } = machine(again);
+    const first = other.open();
+    const second = other.open();
+    await Promise.all([first, second]);
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the rates again beside the positions', async () => {
     const operations = fake();
     const rates = vi.spyOn(operations, 'vaultRates');

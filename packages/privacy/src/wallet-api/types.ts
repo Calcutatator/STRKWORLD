@@ -36,8 +36,9 @@ export interface VaultReadClient {
   /**
    * A stand-in address's position in every vault the backend pins, one row
    * per vault in its order, in base units: the vault's shares, what they
-   * redeem for now in its token, and the vault's two limits. The caller picks
-   * the vaults it admits by address.
+   * redeem for now in its token, and the vault's two limits, or `ok: false`
+   * for a vault the backend could not read. The caller picks the vaults it
+   * admits by address, and needs good rows for those alone.
    */
   vaultPositions(account: Address, signal?: AbortSignal): Promise<readonly VaultPositionRow[]>;
   /**
@@ -48,14 +49,17 @@ export interface VaultReadClient {
   vaultRates(signal?: AbortSignal): Promise<readonly VaultRateRow[]>;
 }
 
-/** One vault's row in a position read (D-079). */
-export interface VaultPositionRow {
-  readonly vault: Address;
-  readonly shares: bigint;
-  readonly assets: bigint;
-  readonly maxWithdraw: bigint;
-  readonly maxRedeem: bigint;
-}
+/** One vault's row in a position read (D-079): its figures, or a read that failed. */
+export type VaultPositionRow =
+  | {
+      readonly vault: Address;
+      readonly ok: true;
+      readonly shares: bigint;
+      readonly assets: bigint;
+      readonly maxWithdraw: bigint;
+      readonly maxRedeem: bigint;
+    }
+  | { readonly vault: Address; readonly ok: false };
 
 /** One vault's supply APY, `value / 10^decimals` as a yearly fraction (D-079). */
 export interface VaultRateRow {

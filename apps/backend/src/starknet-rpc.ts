@@ -227,17 +227,26 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
    * D-077, D-079: `account`'s position in every pinned vault, one row each in
    * `VESU_VAULTS` order, read together. A vault holding no shares has
    * nothing to preview, so one read answers it; otherwise the preview and
-   * both limits are read too. Every value is a u256 as two u128 felts, and
-   * anything else fails the whole answer.
+   * both limits are read too. Every value is a u256 as two u128 felts. A
+   * vault whose read fails or is malformed answers `ok: false`, so one
+   * vault's trouble never blocks another token: the browser needs only the
+   * rows of the vaults it lends through. A cancelled request still rejects.
    */
   async getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]> {
     if (!isFelt(account) || BigInt(account) === 0n) throw new Error('Vault account is invalid.');
-    return Promise.all(VESU_VAULTS.map(({ vault }) => this.readVaultPosition(vault, account, signal)));
+    return Promise.all(VESU_VAULTS.map(async ({ vault }): Promise<VaultPositionRead> => {
+      try {
+        return await this.readVaultPosition(vault, account, signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return { vault, ok: false };
+      }
+    }));
   }
 
   private async readVaultPosition(vault: string, account: string, signal?: AbortSignal): Promise<VaultPositionRead> {
     const shares = u256Of(await this.callContract(vault, BALANCE_OF_SELECTOR, [account], signal), 'vault shares');
-    if (shares === 0n) return { vault, shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+    if (shares === 0n) return { vault, ok: true, shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
     const [assets, maxWithdraw, maxRedeem] = await Promise.all([
       this.callContract(vault, PREVIEW_REDEEM_SELECTOR, u256Felts(shares), signal),
       this.callContract(vault, MAX_WITHDRAW_SELECTOR, [account], signal),
@@ -245,6 +254,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
     ]);
     return {
       vault,
+      ok: true,
       shares,
       assets: u256Of(assets, 'vault preview'),
       maxWithdraw: u256Of(maxWithdraw, 'vault withdraw limit'),

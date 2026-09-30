@@ -3997,10 +3997,12 @@ other than STRK has yet gone through the anonymizer.
 - **The position read.** The backend's route still takes only the stand-in
   address, never a vault. It answers one row per pinned vault
   (`balance_of`, and for a held position `preview_redeem`, `max_withdraw` and
-  `max_redeem`, on that vault only). The adapter takes the rows of the
-  vaults it admits by address, and one missing, repeated or malformed row
-  fails the whole read. One commitment, one address read and one position
-  read answer every token.
+  `max_redeem`, on that vault only), or `ok: false` for a vault whose read
+  failed, so one vault's trouble never blocks another. The adapter takes the
+  rows of the vaults it admits by address. One of those missing, repeated or
+  malformed fails the read, and one the backend could not read fails it as
+  unreachable. A redeem needs only its own vault's row. One commitment, one
+  address read and one position read answer every token.
 - **Vesu's rate.** `POST /v1/vault-rates` with `{ v: 1 }` answers each pinned
   vault's `stats.supplyApy` from Vesu's public Prime pool endpoint. The
   backend alone fetches it, so Vesu never sees a player's IP (D-014, as
@@ -4058,9 +4060,9 @@ stand-in address, so a watcher links the positions to each other, which the
 disclosure already says of every supply and redeem. The Vault now depends on
 five third-party vaults, and for its rate on Vesu's API, which it only
 displays: a wrong or missing rate cannot move funds. The backend reads up to
-twenty `starknet_call`s per position request instead of four. Once a minute
-at most it makes one outbound request to `api.vesu.xyz`, and only after a
-player opens the Vault. A non-STRK action may fail with too little STRK in
+twenty `starknet_call`s per position request instead of four. At most once a
+minute it makes one outbound request to `api.vesu.xyz`, and only when a
+request asks for the rates. A non-STRK action may fail with too little STRK in
 the pool, depending on the wallet's fee token, and the first live non-STRK
 supply is the check of which token Ready uses. strkBTC waits on the lead's
 choice of a pool. A rebuild with the new list is needed to open the extra

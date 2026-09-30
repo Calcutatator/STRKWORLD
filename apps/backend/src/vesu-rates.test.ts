@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { VESU_PRIME_POOL, VESU_PRIME_POOL_API_URL, VESU_VAULTS } from './vault.js';
 import {
   VESU_RATES_FAILURE_RETRY_MS,
-  VESU_RATES_MAX_BODY_LENGTH,
+  VESU_RATES_MAX_BODY_BYTES,
   VESU_RATES_TTL_MS,
   VesuVaultRates,
   parseVesuPoolRates,
@@ -108,6 +108,22 @@ function jsonResponse(body: unknown, init: { status?: number; headers?: Record<s
   return new Response(JSON.stringify(body), { status: init.status ?? 200, headers: { 'content-type': 'application/json', ...init.headers } });
 }
 
+/** A chunked body past the cap that never ends by itself: reading must stop at the cap and cancel it. */
+let lastStreamCancelled = false;
+function oversizedStream(): Response {
+  lastStreamCancelled = false;
+  const chunk = new TextEncoder().encode(' '.repeat(64 * 1024));
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.enqueue(chunk);
+    },
+    cancel() {
+      lastStreamCancelled = true;
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
 describe('the cached Vesu read (D-079)', () => {
   it('asks Vesu’s pinned Prime endpoint with a GET and no body, and serves one answer for the TTL', async () => {
     let now = 1_000;
@@ -142,7 +158,8 @@ describe('the cached Vesu read (D-079)', () => {
     ['a refusal', () => jsonResponse({ error: 'no' }, { status: 500 })],
     ['a malformed body', () => new Response('not json', { status: 200 })],
     ['another pool', () => jsonResponse(primeAnswer(undefined, { id: '0x0123' }))],
-    ['an oversized declared body', () => jsonResponse(primeAnswer(), { headers: { 'content-length': String(VESU_RATES_MAX_BODY_LENGTH + 1) } })],
+    ['an oversized declared body', () => jsonResponse(primeAnswer(), { headers: { 'content-length': String(VESU_RATES_MAX_BODY_BYTES + 1) } })],
+    ['an oversized body with no declared length', () => oversizedStream()],
     ['an unreachable API', () => { throw new TypeError('fetch failed'); }],
   ])('answers no rates after %s, and asks again only after the retry window', async (_label, answer) => {
     let now = 5_000;
@@ -155,6 +172,12 @@ describe('the cached Vesu read (D-079)', () => {
     fetch.mockImplementation(async () => jsonResponse(primeAnswer()));
     await expect(rates.rates()).resolves.toEqual(LIVE_RATES);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops reading an endless body at the cap, and cancels it', async () => {
+    const rates = new VesuVaultRates({ fetch: async () => oversizedStream() });
+    await expect(rates.rates()).resolves.toEqual([]);
+    expect(lastStreamCancelled).toBe(true);
   });
 
   it('gives up on a slow Vesu after its own timeout', async () => {

@@ -288,7 +288,7 @@ withdrawal is the wallet's choice. StarkWare's reference wallet
 (`starkware-libs/starknet-privacy`, `client/src/sdk-wallet.ts`) folds in
 whatever `paymaster_buildTransaction` quotes for its `fee_mode.pool_fee_token`.
 Of 216 such withdrawals in the 200,000 blocks to 15,668,951, 98 were STRK,
-89 USDC, 21 strkBTC, 4 ETH, 2 USDC.e and 1 xSTRK, mostly but not always in
+89 USDC, 21 strkBTC, 4 ETH, 2 USDC.e, 1 xSTRK and 1 another token, mostly but not always in
 the token the transaction moved: USDC paid for a strkBTC withdraw, and STRK
 for USDC ones. The relayer also paid the network fee on the Vault's STRK
 probe, and the player's repayment was exactly the 6 STRK pool fee. All 62
@@ -313,6 +313,11 @@ some STRK in the pool. Traps met on the way:
   method-less object (the known `--localstorage-file` warning). A test
   reads the page's storage through `window`, as `viewer-storage.test.ts`
   expects.
+- A position read touches every pinned vault, so the backend answers a
+  vault it could not read as `ok: false` rather than failing the request. A
+  STRK-only build must not depend on the WBTC vault. Each row's four figures
+  still come from separate `latest` calls, so a supply landing between them
+  can make one row read as invalid until the next read; that predates D-079.
 - The web may not value-import `@strkworld/privacy`, and the backend does not
   depend on it. So `production/config.ts` inlines `VAULT_TOKENS` and the
   backend pins `VESU_VAULTS`, each pinned by a test to `VAULT_MARKETS`. The
@@ -326,7 +331,8 @@ takes the token first, and `vaultRates(signal?)` is new. Every hand-written
 `PrivacyOperations` needs the renamed and new methods; the compiler refuses
 any that misses one. `VaultReadClient` now has `vaultPositions(account)` and
 `vaultRates()`, and the backend's position route answers `{ positions: [...]
-}`, one row per pinned vault. The fake exports `DEMO_VAULT_STAND_IN` and
+}`, one row per pinned vault, each `ok: true` with its figures or `ok:
+false`. The fake exports `DEMO_VAULT_STAND_IN` and
 takes `vault.markets` and `vault.rates`.
 
 *Verified:* read-only `starknet_call`, `starknet_getClass`,

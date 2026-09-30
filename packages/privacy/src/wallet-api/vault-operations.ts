@@ -241,9 +241,12 @@ export class ShadowVault {
       const apy = ownData(row, 'supplyApy');
       const value = ownData(apy, 'value');
       const decimals = ownData(apy, 'decimals');
+      // A yearly rate of 100 (10,000%) or more is not a supply rate: the
+      // backend drops one, and so does this, whoever sent it.
       if (
-        typeof value !== 'bigint' || value < 0n || value > MAX_UINT256
+        typeof value !== 'bigint' || value < 0n
         || typeof decimals !== 'number' || !Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_RATE_DECIMALS
+        || value >= 100n * 10n ** BigInt(decimals)
       ) {
         throw new PrivacyError('unknown', 'The Vault rates read is invalid.');
       }
@@ -327,7 +330,10 @@ export class ShadowVault {
   /**
    * One public read of every pinned vault's row for `address`, and each of
    * `markets`' rows out of it, in order. A row missing, repeated or malformed
-   * for any of them fails the whole read: nothing half-read is returned.
+   * for any of them fails the whole read, and one the backend could not read
+   * fails it as unreachable: nothing half-read is returned. Rows for other
+   * vaults are ignored, whatever they say, so a vault this call does not
+   * need can never block it.
    */
   private async readPositions(
     address: Address,
@@ -356,6 +362,9 @@ export class ShadowVault {
       const rows = ownRows(answer, 'The Vault position read is invalid.');
       for (const market of markets) {
         const row = rowFor(rows, market, 'The Vault position read is invalid.', true)!;
+        const ok = ownData(row, 'ok');
+        if (ok === false) throw new PrivacyError('unreachable', 'The Vault could not read its position.');
+        if (ok !== true) throw new PrivacyError('unknown', 'The Vault position read is invalid.');
         const values = ['shares', 'assets', 'maxWithdraw', 'maxRedeem'].map((key) => ownData(row, key));
         if (values.some((value) => typeof value !== 'bigint' || value < 0n || value > MAX_UINT256)) {
           throw new PrivacyError('unknown', 'The Vault position read is invalid.');

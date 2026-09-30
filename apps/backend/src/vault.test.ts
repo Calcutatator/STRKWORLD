@@ -117,7 +117,7 @@ describe('the shadow-account read (D-077)', () => {
 });
 
 describe('the position read across every pinned vault (D-077, D-079)', () => {
-  const empty = { shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+  const empty = { ok: true, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
 
   it('answers empty positions from each vault’s balance alone, one row per vault in pinned order', async () => {
     const { rpc, requests } = port(() => ['0x0', '0x0']);
@@ -139,8 +139,10 @@ describe('the position read across every pinned vault (D-077, D-079)', () => {
       return null;
     });
     const rows = await rpc.getVaultPositions(SHADOW);
-    expect(rows[2]).toEqual({ vault: usdcVault, shares, assets: 100n, maxWithdraw: 96n, maxRedeem: (1n << 128n) + 4n });
-    expect(rows.filter((row) => row.vault !== usdcVault).every((row) => row.shares === 0n && row.assets === 0n)).toBe(true);
+    expect(rows[2]).toEqual({ vault: usdcVault, ok: true, shares, assets: 100n, maxWithdraw: 96n, maxRedeem: (1n << 128n) + 4n });
+    expect(rows.filter((row) => row.vault !== usdcVault)).toEqual(
+      VESU_VAULTS.filter(({ vault }) => vault !== usdcVault).map(({ vault }) => ({ vault, ...empty })),
+    );
     const followUps = requests.map(callOf).filter((call) => call.entry_point_selector !== BALANCE_OF_SELECTOR);
     expect(followUps).toHaveLength(3);
     expect(followUps.every((call) => call.contract_address === usdcVault)).toBe(true);
@@ -161,15 +163,27 @@ describe('the position read across every pinned vault (D-077, D-079)', () => {
     ['a one-felt balance', () => ['0x5']],
     ['a limb above u128', () => [`0x${(1n << 128n).toString(16)}`, '0x0']],
     ['a non-felt limb', () => ['5', '0x0']],
-  ])('refuses %s', async (_label, answer) => {
+  ])('answers every vault as unread after %s, never as a figure', async (_label, answer) => {
     const { rpc } = port(answer);
-    await expect(rpc.getVaultPositions(SHADOW)).rejects.toThrow();
+    await expect(rpc.getVaultPositions(SHADOW)).resolves.toEqual(VESU_VAULTS.map(({ vault }) => ({ vault, ok: false })));
   });
 
-  it('fails the whole answer when one vault’s read is malformed', async () => {
+  it('marks only the vault whose read is malformed, so it never blocks another token', async () => {
     const wbtcVault = VESU_VAULTS[4]!.vault;
     const { rpc } = port((request) => (callOf(request).contract_address === wbtcVault ? ['0x5'] : ['0x0', '0x0']));
-    await expect(rpc.getVaultPositions(SHADOW)).rejects.toThrow();
+    const rows = await rpc.getVaultPositions(SHADOW);
+    expect(rows[4]).toEqual({ vault: wbtcVault, ok: false });
+    expect(rows.slice(0, 4)).toEqual(VESU_VAULTS.slice(0, 4).map(({ vault }) => ({ vault, ...empty })));
+  });
+
+  it('still rejects a cancelled read rather than calling every vault unread', async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      controller.abort();
+      throw init?.signal?.reason ?? new DOMException('Aborted', 'AbortError');
+    });
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: POOL, feeToken: STRK, fetcher });
+    await expect(rpc.getVaultPositions(SHADOW, controller.signal)).rejects.toBeDefined();
   });
 
   it('refuses a zero or malformed account before the RPC is asked', async () => {
@@ -216,8 +230,9 @@ function vaultPort(): VaultRpcPort & { getShadowAccount: ReturnType<typeof vi.fn
   return {
     getShadowAccount: vi.fn(async () => ({ address: SHADOW, deployed: false })),
     getVaultPositions: vi.fn(async () => [
-      { vault: VESU_VSTRK, shares: 10n ** 18n, assets: 1_019_826_000_000_000_000n, maxWithdraw: 10n ** 18n, maxRedeem: 10n ** 18n },
-      { vault: VESU_VAULTS[2]!.vault, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: VESU_VSTRK, ok: true as const, shares: 10n ** 18n, assets: 1_019_826_000_000_000_000n, maxWithdraw: 10n ** 18n, maxRedeem: 10n ** 18n },
+      { vault: VESU_VAULTS[2]!.vault, ok: true as const, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: VESU_VAULTS[4]!.vault, ok: false as const },
     ]),
   };
 }
@@ -237,7 +252,7 @@ describe('the Vault read routes (D-077)', () => {
     expect(vault.getShadowAccount).toHaveBeenCalledWith(PARTIAL, expect.any(AbortSignal));
   });
 
-  it('answers every pinned vault’s position in decimal base units, one row each', async () => {
+  it('answers every pinned vault’s position in decimal base units, one row each, and an unread vault as such', async () => {
     const vault = vaultPort();
     const api = apiWith(vault);
     await expect(api.handle({ method: 'POST', path: VAULT_POSITION_PATH, body: { v: 1, account: SHADOW } }))
@@ -247,12 +262,14 @@ describe('the Vault read routes (D-077)', () => {
           positions: [
             {
               vault: VESU_VSTRK,
+              ok: true,
               shares: '1000000000000000000',
               assets: '1019826000000000000',
               maxWithdraw: '1000000000000000000',
               maxRedeem: '1000000000000000000',
             },
-            { vault: VESU_VAULTS[2]!.vault, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
+            { vault: VESU_VAULTS[2]!.vault, ok: true, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
+            { vault: VESU_VAULTS[4]!.vault, ok: false },
           ],
         },
       });

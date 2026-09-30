@@ -511,7 +511,9 @@ describe('the Vault switch (D-077, D-079)', () => {
     const list = (vault: string[]): WalletRoutePolicy => ({ ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } });
     const noList: WalletRoutePolicy = { ...vaultOn, allowedTokens: denyAll.allowedTokens };
     const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
-    for (const policy of [list(['0x123']), list([]), list([STRK, STRKBTC]), noList]) {
+    // A repeat by value, padded or not, is refused as the parser and the adapter refuse it.
+    const repeated = list([STRK, `0x${STRK.slice(3)}`]);
+    for (const policy of [list(['0x123']), list([]), list([STRK, STRKBTC]), repeated, noList]) {
       expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
     }
   });

@@ -196,7 +196,11 @@ export interface VaultRpcPort {
    * deployed yet. It is deployed lazily, on its first invoke.
    */
   getShadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<ShadowAccountRead>;
-  /** `account`'s position in every pinned vault, one row each in `VESU_VAULTS` order, in base units. */
+  /**
+   * `account`'s position in every pinned vault, one row each in
+   * `VESU_VAULTS` order, in base units. A vault whose read fails answers
+   * `ok: false` rather than failing the others (D-079).
+   */
   getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]>;
 }
 
@@ -205,9 +209,12 @@ export interface ShadowAccountRead {
   readonly deployed: boolean;
 }
 
-export interface VaultPositionRead {
+export type VaultPositionRead = VaultPositionFigures | { readonly vault: string; readonly ok: false };
+
+export interface VaultPositionFigures {
   /** The pinned vault this row reads. */
   readonly vault: string;
+  readonly ok: true;
   /** `balance_of(account)`: the vault's shares. */
   readonly shares: bigint;
   /** `preview_redeem(shares)`: what those shares redeem for now, in the vault's token. Zero with no shares. */

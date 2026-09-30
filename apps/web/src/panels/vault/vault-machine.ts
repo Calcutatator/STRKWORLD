@@ -401,6 +401,12 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
     }
   }
 
+  /** Vesu's rates, once the door is open and the wallet can run the Vault: nothing to show otherwise. */
+  async function loadRatesIfOpen(signal?: AbortSignal): Promise<void> {
+    const state = store.getState();
+    if (state.door.open && state.capability.status === 'supported' && tokens.length > 0) await loadRates(signal);
+  }
+
   function amountFromText(decimals: number): bigint | null {
     const amount = parseTokenAmount(store.getState().amountText, decimals);
     return amount !== null && amount > 0n ? amount : null;
@@ -411,6 +417,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
 
     async open(signal?: AbortSignal): Promise<void> {
       session += 1;
+      const mySession = session;
       begin();
       discardPrepared();
       positionRead += 1;
@@ -426,8 +433,9 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
         patch({ flow: { name: 'composing' } });
       }
       await checkCapability(signal);
-      const state = store.getState();
-      if (state.door.open && state.capability.status === 'supported' && tokens.length > 0) await loadRates(signal);
+      // A newer open or a close took over while the wallet answered.
+      if (session !== mySession) return;
+      await loadRatesIfOpen(signal);
     },
 
     close(): void {
@@ -439,7 +447,12 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       capabilityRead += 1;
     },
 
-    recheck: (signal?: AbortSignal) => checkCapability(signal),
+    async recheck(signal?: AbortSignal): Promise<void> {
+      const mySession = session;
+      await checkCapability(signal);
+      if (session !== mySession || store.getState().rates.status === 'loaded') return;
+      await loadRatesIfOpen(signal);
+    },
 
     setMode(mode: VaultMode): void {
       if (!ALL_VAULT_MODES.includes(mode)) return;
