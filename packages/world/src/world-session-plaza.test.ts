@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type ShellEvents, type WorldEvents } from '@strkworld/shared';
 import { PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION } from './map/plaza.js';
 import { TILE_SIZE } from './map/street.js';
 import type { MovementInput } from './street-movement.js';
@@ -103,9 +103,12 @@ function setup(options: { claim?: boolean } = {}) {
   };
 }
 
-/** Put the player on a street tile and let the session report it. */
+/**
+ * Put the player on a street tile and let the session report it. `x` counts
+ * from the street's first column, as the plaza's own layout does (D-078).
+ */
 function standAt(world: ReturnType<typeof setup>, x: number, y: number): void {
-  (world.session as unknown as { position: { x: number; y: number } }).position = centre(x, y);
+  (world.session as unknown as { position: { x: number; y: number } }).position = centre(STREET_ORIGIN_X + x, y);
   // One tiny step reports the tile, then stand still.
   world.keyboard.hold({ up: true });
   world.session.update(1);

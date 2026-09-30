@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { Mesh, PerspectiveCamera, PlaneGeometry, Vector3 } from 'three';
+import { STREET_ORIGIN_X } from '@strkworld/shared';
 import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from '../fixed-room.js';
 import { createStreetMap } from '../map/street.js';
 import { createNullLabelFactory } from './labels.js';
@@ -188,6 +189,9 @@ describe('camera rig', () => {
  */
 const FRAMING_EXEMPT: ReadonlySet<string> = new Set(['building:exchange']);
 
+/** In front of each facade's centre: the street's x 6.5 to 42.5, counted from its first column (D-078). */
+const FACADE_CENTRES = [6.5, 15.5, 24.5, 33.5, 42.5].map((x) => STREET_ORIGIN_X + x);
+
 const STREET_SPOTS = [
   ['the north pavement', 11.6],
   ['the north pavement kerb', 12.9],
@@ -247,7 +251,7 @@ describe('fixed camera framing', () => {
   });
 
   it.each(STREET_SPOTS)('runs the Exchange tower out of frame from %s (z %d), its sign, plate and LED band whole', (_where, z) => {
-    for (const x of [6.5, 15.5, 24.5, 33.5, 42.5]) {
+    for (const x of FACADE_CENTRES) {
       const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
       createCameraRig({ camera }).update(16, { x, z }, null);
       camera.updateMatrixWorld(true);
@@ -256,7 +260,7 @@ describe('fixed camera framing', () => {
     }
     // In front of the tower its street-facing signage is whole in frame.
     const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
-    createCameraRig({ camera }).update(16, { x: 15.5, z }, null);
+    createCameraRig({ camera }).update(16, { x: STREET_ORIGIN_X + 15.5, z }, null);
     camera.updateMatrixWorld(true);
     for (const board of boards) {
       for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
@@ -268,7 +272,7 @@ describe('fixed camera framing', () => {
   });
 
   it.each(STREET_SPOTS)('shows every other rooftop whole from %s (z %d)', (_where, z) => {
-    for (const x of [6.5, 15.5, 24.5, 33.5, 42.5]) {
+    for (const x of FACADE_CENTRES) {
       const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
       const rig = createCameraRig({ camera });
       rig.update(16, { x, z }, null);

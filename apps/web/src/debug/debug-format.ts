@@ -432,7 +432,7 @@ export function describeBankStep(step: unknown): { level: DebugLevel; event: str
 }
 
 /**
- * The tile a sandbox burst came from (D-071), as `x=60 y=10`: two integers
+ * The tile a sandbox burst came from (D-071), as `x=89 y=10`: two integers
  * inside the square, or null for anything else.
  */
 export function describeSandboxTile(tile: unknown): string | null {

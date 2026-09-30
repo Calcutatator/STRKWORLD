@@ -19,6 +19,7 @@ import type { BufferGeometry, Material, Object3D } from 'three';
 import { SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
 import {
   isSolidAt,
+  westRoadColumn,
   type BuildingExteriorLabel,
   type DistrictMap,
   type DoorZone,
@@ -28,6 +29,7 @@ import {
   EXCHANGE_TICKER,
   GeometryBin,
   PALETTE,
+  PITCH_THEME,
   ResourceBag,
   SANDBOX_THEME,
   AVNU,
@@ -81,8 +83,9 @@ import {
 } from '../fixed-room.js';
 import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
+import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
-import type { LabelFactory, Occluder, OccluderBounds, PlazaView, StreetView, TextLabel } from './types.js';
+import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
 export const SANDBOX_SIGN_TEXT = 'SANDBOX\nPICK UP \u00b7 STACK \u00b7 BUILD';
@@ -139,8 +142,11 @@ const AURA = 'aura';
 
 type Animator = (elapsedMs: number) => void;
 
-/** A street occluder, naming what it fades: a building, the sandbox gate, or a Privacy Plaza piece (D-076). */
-export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder;
+/**
+ * A street occluder, naming what it fades: a building, the sandbox gate, a
+ * Privacy Plaza piece (D-076) or the pitch gate (D-078).
+ */
+export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder | PitchOccluder;
 
 /** A street occluder that also names the building it fades. */
 export interface BuildingOccluder extends Occluder {
@@ -183,6 +189,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
   const animators: Animator[] = [];
   const occluders: StreetOccluder[] = [];
   let plaza: PlazaView | null = null;
+  let pitch: PitchView | null = null;
 
   try {
     const kinds = classifyGround(map);
@@ -281,6 +288,18 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
       floorHeight: PAVEMENT_HEIGHT,
     });
     occluders.push(...plazaOccluders);
+
+    // The football pitch (D-078), likewise in its own module and merged into
+    // the street's groups: its field, stands, goals, fence and scoreboard.
+    const pitchOccluders: PitchOccluder[] = [];
+    pitch = buildPitch(map, labels, res, {
+      ground,
+      labels: signs,
+      textLabels,
+      animators,
+      occluders: pitchOccluders,
+    });
+    occluders.push(...pitchOccluders);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -301,6 +320,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     labels: signs,
     occluders,
     plaza,
+    pitch,
     update(deltaMs) {
       if (disposed) return;
       const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
@@ -338,10 +358,12 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
  * What the ground looks like, which the tile kind alone does not say: a
  * pavement strip crossing the road is a zebra crossing at road level, a
  * pavement run through grass is a garden path, road or pavement meeting the
- * sandbox plate is the gate's stone threshold at road level, the rest is
- * raised kerbed pavement.
+ * sandbox plate or the pitch square's walkway is its gate's stone threshold
+ * at road level, the rest is raised kerbed pavement. The pitch square's own
+ * tiles are laid by pitch-builder.ts (D-078), as the plaza's are by
+ * plaza-builder.ts.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -361,6 +383,8 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const kind = kindAt(map, x, y);
   // The Privacy Plaza paves its own tiles, furniture footings included (D-076).
   if (kind === 'plaza' || kind === 'plinth') return 'plaza';
+  // So does the pitch square, its field, walkway and footings (D-078).
+  if (kind === 'turf' || kind === 'walkway' || kind === 'footing') return 'pitch';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
   if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
@@ -373,13 +397,17 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   return 'sidewalk';
 }
 
-/** Whether a tile borders the sandbox floor: where the street reaches the square. */
+/**
+ * Whether a tile borders the sandbox floor or the pitch square's walkway
+ * (D-078): where the street reaches one of its two squares.
+ */
 function touchesPlate(map: DistrictMap, x: number, y: number): boolean {
+  const square = (kind: TileKind | undefined): boolean => kind === 'sandbox' || kind === 'walkway';
   return (
-    kindAt(map, x + 1, y) === 'sandbox' ||
-    kindAt(map, x - 1, y) === 'sandbox' ||
-    kindAt(map, x, y + 1) === 'sandbox' ||
-    kindAt(map, x, y - 1) === 'sandbox'
+    square(kindAt(map, x + 1, y)) ||
+    square(kindAt(map, x - 1, y)) ||
+    square(kindAt(map, x, y + 1)) ||
+    square(kindAt(map, x, y - 1))
   );
 }
 
@@ -464,19 +492,35 @@ function roadExtent(kinds: GroundKind[][], band: { r0: number; r1: number }, wid
 /**
  * Rows whose tile on one map edge is road or pavement: where the street runs
  * off the map on that side. The east end now runs into the sandbox instead.
+ * The west end runs into the pitch square (D-078), and the road runs on west
+ * past it: its rows are those the square's gate lets in (`westRunoff`).
  */
 function edgeBand(map: DistrictMap, kinds: GroundKind[][], side: 'west' | 'east'): { top: number; bottom: number } | null {
-  const edgeX = side === 'west' ? 0 : map.width - 1;
+  const edgeX = map.width - 1;
   let top = -1;
   let bottom = -1;
   for (let y = 0; y < map.height; y++) {
-    const kind = kinds[y]?.[edgeX];
+    const kind = side === 'west' ? westRunoff(map, y) : kinds[y]?.[edgeX];
     if (kind === 'road' || kind === 'sidewalk' || kind === 'crossing') {
       if (top < 0) top = y;
       bottom = y + 1;
     }
   }
   return top < 0 ? null : { top, bottom };
+}
+
+/**
+ * What runs off the map's west edge on row `y`: road, pavement or nothing.
+ * Read at `westRoadColumn`, which is the west edge itself where the street
+ * runs off the map, and the pitch square's gate where the square takes the
+ * road's west end (D-078): past the square the road carries on west as it
+ * did past the map before, so the outskirts, the barrier, the lamps and the
+ * backdrop's houses and trees line it as they always did.
+ */
+function westRunoff(map: DistrictMap, y: number): 'road' | 'sidewalk' | null {
+  const x = westRoadColumn(map);
+  const kind = x < 0 ? undefined : map.tiles[y]?.[x];
+  return kind === 'road' ? 'road' : kind === 'pavement' ? 'sidewalk' : null;
 }
 
 /** Tile bounds of the sandbox build plate, if the map has one. */
@@ -581,13 +625,17 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
           case 'plaza':
             // Paved by plaza-builder.ts, level with the pavement.
             break;
+          case 'pitch':
+            // Laid by pitch-builder.ts: turf, walkway and footings (D-078).
+            break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'
-            // bevels like a contact shadow; under buildings the apron.
+            // bevels like a contact shadow; under the pitch fence its kerb
+            // (D-078); under buildings the apron.
             bin.add(
               'sidewalk',
               flatQuad(x, y, x + 1, y + 1, 0),
-              kindAt(map, x, y) === 'fence' ? SANDBOX_THEME.border : PALETTE.apron,
+              kindAt(map, x, y) === 'fence' ? SANDBOX_THEME.border : kindAt(map, x, y) === 'railing' ? PITCH_THEME.kerb : PALETTE.apron,
             );
             break;
         }
@@ -784,29 +832,39 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
     const top = band.r0 + 0.14;
     const bottom = band.r1 + 1 - 0.14;
     // Paint runs off the map only where the road does; where the road ends
-    // (into the sandbox), the lines end with it.
+    // (into the sandbox, or into the pitch square, D-078), the lines end with it.
     const extent = roadExtent(kinds, band, map.width);
     const start = extent.x0 <= 0 ? -HINTERLAND : extent.x0;
     const end = extent.x1 >= map.width ? map.width + HINTERLAND : extent.x1;
+    // Dashes keep to one grid counted from the street's own start, a gap short of either square.
+    const anchor = Math.max(0, extent.x0);
+    const dashStart = extent.x0 <= 0 ? start : start + 1.2;
     const dashEnd = extent.x1 >= map.width ? end : end - 1.2;
-    for (let x = start; x < dashEnd; x += 1.2) {
-      const a = x + 0.25;
-      const b = Math.min(x + 0.95, dashEnd);
-      if (b - a < 0.2) continue;
-      if (crossings.some((run) => b > run.x0 - 1.4 && a < run.x1 + 1.4)) continue;
-      bin.add('paint', flatQuad(a, centre - 0.05, b, centre + 0.05, y), PALETTE.paintCentre);
-    }
-    for (const [za, zb] of [
-      [top, top + 0.07],
-      [bottom - 0.07, bottom],
-    ] as const) {
-      let from = start;
-      for (const run of crossings) {
-        if (run.x0 - 0.1 > from) bin.add('paint', flatQuad(from, za, run.x0 - 0.1, zb, y), PALETTE.paint);
-        from = run.x1 + 0.1;
+    const lanes = (from: number, to: number, dashFrom: number, dashTo: number): void => {
+      for (let x = anchor + Math.ceil((dashFrom - anchor) / 1.2 - 1e-9) * 1.2; x < dashTo; x += 1.2) {
+        const a = x + 0.25;
+        const b = Math.min(x + 0.95, dashTo);
+        if (b - a < 0.2) continue;
+        if (crossings.some((run) => b > run.x0 - 1.4 && a < run.x1 + 1.4)) continue;
+        bin.add('paint', flatQuad(a, centre - 0.05, b, centre + 0.05, y), PALETTE.paintCentre);
       }
-      if (end > from) bin.add('paint', flatQuad(from, za, end, zb, y), PALETTE.paint);
-    }
+      for (const [za, zb] of [
+        [top, top + 0.07],
+        [bottom - 0.07, bottom],
+      ] as const) {
+        let edge = from;
+        for (const run of crossings) {
+          if (run.x1 <= from || run.x0 >= to) continue;
+          if (run.x0 - 0.1 > edge) bin.add('paint', flatQuad(edge, za, run.x0 - 0.1, zb, y), PALETTE.paint);
+          edge = run.x1 + 0.1;
+        }
+        if (to > edge) bin.add('paint', flatQuad(edge, za, to, zb, y), PALETTE.paint);
+      }
+    };
+    lanes(start, end, dashStart, dashEnd);
+    // Past the pitch square the road runs on west, off the map, as it did
+    // before the square took its end (D-078): its paint runs on with it.
+    if (extent.x0 > 0 && westRunoff(map, band.r0) === 'road') lanes(-HINTERLAND, 0, -HINTERLAND, 0);
     for (const run of crossings) {
       for (let row = band.r0; row <= band.r1; row++) {
         for (const offset of [0.125, 0.625]) {
@@ -829,8 +887,9 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
   meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
   for (let y = 0; y < H; y++) {
     for (const side of [-1, 1] as const) {
-      const edgeX = side < 0 ? 0 : W - 1;
-      const kind = kinds[y]?.[edgeX];
+      const edgeX = W - 1;
+      // West, the road that runs on past the map, or past the pitch square (D-078).
+      const kind = side < 0 ? westRunoff(map, y) : kinds[y]?.[edgeX];
       const x0 = side < 0 ? -OUTSKIRT : W;
       const x1 = side < 0 ? 0 : W + OUTSKIRT;
       if (kind === 'road' || kind === 'crossing') {
@@ -849,7 +908,7 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
           }
         }
         for (const dy of [-1, 1]) {
-          const neighbour = kinds[y + dy]?.[edgeX];
+          const neighbour = side < 0 ? westRunoff(map, y + dy) : kinds[y + dy]?.[edgeX];
           if (neighbour === 'sidewalk') continue;
           const z0 = dy < 0 ? y : y + 1 - KERB_WIDTH;
           bin.add('sidewalk', boxGeometry(x0, 0, z0, x1, KERB_HEIGHT, z0 + KERB_WIDTH), PALETTE.kerb);

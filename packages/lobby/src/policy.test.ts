@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STREET_ORIGIN_X } from '@strkworld/shared';
 import {
   DEFAULT_ROOM_CONFIG,
   DEFAULT_SPRITE_KEYS,
@@ -20,6 +21,13 @@ import {
   normalizeSprite,
   selectVisible,
 } from './policy';
+
+/**
+ * D-078 moved the street, the sandbox with it, east by the pitch square. The
+ * tiles here keep D-060's numbering: `S(n)` is the street's column `n`, so the
+ * square is `S(54)` to `S(81)`.
+ */
+const S = (column: number): number => STREET_ORIGIN_X + column;
 
 const SPRITES = ['avatar-1', 'avatar-2'];
 
@@ -54,12 +62,12 @@ describe('default lobby vocabulary ownership', () => {
 
 describe('normalizeSandboxTile', () => {
   it('accepts an integer tile inside the sandbox and returns a frozen copy', () => {
-    const raw = { x: 54, y: 0, extra: 'dropped' };
+    const raw = { x: S(54), y: 0, extra: 'dropped' };
     const tile = normalizeSandboxTile(raw);
-    expect(tile).toEqual({ x: 54, y: 0 });
+    expect(tile).toEqual({ x: S(54), y: 0 });
     expect(Object.isFrozen(tile)).toBe(true);
     expect(tile).not.toBe(raw);
-    expect(normalizeSandboxTile({ x: 81, y: 27 })).toEqual({ x: 81, y: 27 });
+    expect(normalizeSandboxTile({ x: S(81), y: 27 })).toEqual({ x: S(81), y: 27 });
   });
 
   it('rejects everything else without invoking accessors or traps', () => {
@@ -68,7 +76,7 @@ describe('normalizeSandboxTile', () => {
       enumerable: true,
       get: () => {
         touched = true;
-        return 60;
+        return S(60);
       },
     });
     const trap = new Proxy({}, {
@@ -80,20 +88,20 @@ describe('normalizeSandboxTile', () => {
     for (const raw of [
       null,
       undefined,
-      60,
-      '60,1',
-      [60, 1],
+      S(60),
+      `${S(60)},1`,
+      [S(60), 1],
       {},
-      { x: 60 },
-      { x: 53, y: 1 },
-      { x: 82, y: 1 },
-      { x: 60, y: -1 },
-      { x: 60, y: 28 },
-      { x: 60.5, y: 1 },
+      { x: S(60) },
+      { x: S(53), y: 1 },
+      { x: S(82), y: 1 },
+      { x: S(60), y: -1 },
+      { x: S(60), y: 28 },
+      { x: S(60) + 0.5, y: 1 },
       { x: Number.NaN, y: 1 },
-      { x: 60, y: Number.POSITIVE_INFINITY },
-      { x: '60', y: '1' },
-      Object.create({ x: 60, y: 1 }),
+      { x: S(60), y: Number.POSITIVE_INFINITY },
+      { x: String(S(60)), y: '1' },
+      Object.create({ x: S(60), y: 1 }),
       accessor,
     ]) {
       expect(normalizeSandboxTile(raw)).toBeNull();

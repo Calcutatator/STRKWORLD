@@ -121,8 +121,16 @@ export interface StreetView {
   readonly occluders: readonly Occluder[];
   /** The Privacy Plaza's live parts (D-076), or null on a map without it. */
   readonly plaza?: PlazaView | null;
+  /** The football pitch's live parts (D-078), or null on a map without it. */
+  readonly pitch?: PitchView | null;
   update(deltaMs: number): void;
   dispose(): void;
+}
+
+/** What changes on the football pitch itself (D-078): the scoreboard. The ball is football-view.ts's. */
+export interface PitchView {
+  /** Redraw the scoreboard: "WEST 0 – 0 EAST". */
+  setScore(west: number, east: number): void;
 }
 
 /** What the session changes on the Privacy Plaza (D-076): its figures and its E prompt. */

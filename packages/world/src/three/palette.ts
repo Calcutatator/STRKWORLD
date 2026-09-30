@@ -450,6 +450,88 @@ export const PLAZA_THEME = Object.freeze({
   } satisfies FloatingStyleOptions),
 });
 
+/**
+ * The football pitch (D-078): a mown field in the street's lawn greens, warm
+ * paving round it, a concrete stand and bleachers seated in the two sides'
+ * colours, white goals and green-painted steel, lit by warm floodlights. The
+ * sides wear blue (West) and red (East), two of the sandbox's own block
+ * colours; the Bank keeps orange.
+ */
+export const PITCH_THEME = Object.freeze({
+  turf: 0x69a84b,
+  turfStripe: 0x5b9942,
+  line: 0xf5f3ea,
+  walkway: 0xcfc2a8,
+  walkwayAlt: 0xc4b69b,
+  walkwayEdge: 0xb2a386,
+  kerb: 0xa39c91,
+  board: 0x2f4d3c,
+  boardTop: 0xe9e5d9,
+  concrete: 0xc3b9a7,
+  concreteDark: 0xa39a89,
+  roof: 0x55606a,
+  steel: 0x2f4a3c,
+  mesh: 0x6f8578,
+  goal: 0xf7f5ef,
+  net: 0xdcdcd4,
+  west: SANDBOX_THEME.blocks[5]!,
+  east: SANDBOX_THEME.blocks[0]!,
+  pole: 0x49525a,
+  lamp: 0xfff1cf,
+  ballLight: 0xf7f5ee,
+  ballDark: 0x2b2e35,
+  shadow: 0x1d2a1a,
+  /** The celebration's confetti: both sides, the lines' white and the ticker's yellow. */
+  confetti: Object.freeze([SANDBOX_THEME.blocks[5]!, SANDBOX_THEME.blocks[0]!, 0xf5f3ea, SANDBOX_THEME.blocks[2]!]),
+  /** The scoreboard over the stand: a dark brand plate with the score as its title. */
+  scoreboard: Object.freeze({
+    width: 5.6,
+    height: 1.25,
+    background: '#1b2230',
+    foreground: '#fdfbf2',
+    accent: css(SANDBOX_THEME.blocks[2]!),
+    cornerRadius: 0.1,
+    borderWidth: 0.05,
+    hairline: false,
+    titleFont: 'display',
+    titleWeight: 900,
+    titleTracking: 0.02,
+    subtitleFont: 'mono',
+    subtitleTracking: 0.12,
+    subtitleColor: '#cfd6e4',
+    uppercase: true,
+  } satisfies SignStyleOptions),
+  /** The board over the gate, in the sandbox gate's cream enamel with the field's green. */
+  gate: Object.freeze({
+    width: 3.4,
+    height: 0.72,
+    background: '#fff6e3',
+    foreground: '#23402d',
+    accent: '#4f8f41',
+    cornerRadius: 0.22,
+    borderWidth: 0.05,
+  } satisfies SignStyleOptions),
+  /** "E · KICK" over the ball. */
+  prompt: Object.freeze({
+    lineHeight: 0.24,
+    font: 'rounded',
+    foreground: '#fdfbf2',
+    background: 'rgba(27,34,48,0.86)',
+    border: css(SANDBOX_THEME.blocks[2]!),
+    uppercase: true,
+  } satisfies FloatingStyleOptions),
+  /** GOAL! and FULL TIME, over the field. */
+  cheer: Object.freeze({
+    lineHeight: 0.95,
+    font: 'display',
+    foreground: '#fdfbf2',
+    background: 'rgba(27,34,48,0.82)',
+    border: css(SANDBOX_THEME.blocks[2]!),
+    tracking: 0.04,
+    uppercase: true,
+  } satisfies FloatingStyleOptions),
+});
+
 /** A facade sign: board size, CSS colours and the optional type treatment. */
 export type SignStyle = SignStyleOptions;
 

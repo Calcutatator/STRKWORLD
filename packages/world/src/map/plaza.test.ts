@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PITCH_AREA, SANDBOX_AREA, STREET_ORIGIN_X } from '@strkworld/shared';
 import {
   PLAZA_AREA,
   PLAZA_FIXTURES,
@@ -20,6 +21,8 @@ import { createStreetMap, isSolidAt, TILES } from './street.js';
  */
 
 const map = createStreetMap();
+/** D-078: the street's first column; the plaza is laid out from it. */
+const X = STREET_ORIGIN_X;
 
 function tilesOf(rect: PlazaRect): [number, number][] {
   const tiles: [number, number][] = [];
@@ -50,8 +53,8 @@ function approachOf(rect: PlazaRect): [number, number][] {
 }
 
 describe('the Privacy Plaza is placed on the street (D-076)', () => {
-  it('paves x 0-10, y 19-27: the empty grass below the south pavement at the west end', () => {
-    expect(PLAZA_AREA).toEqual({ x: 0, y: 19, width: 11, height: 9 });
+  it('paves the street\'s x 0-10, y 19-27: the empty grass below the south pavement at its west end', () => {
+    expect(PLAZA_AREA).toEqual({ x: X, y: 19, width: 11, height: 9 });
     expect(PLAZA_AREA.y + PLAZA_AREA.height).toBe(map.height);
     for (const [x, y] of tilesOf(PLAZA_AREA)) {
       expect(['plaza', 'plinth'], `${x},${y}`).toContain(map.tiles[y]![x]);
@@ -76,8 +79,8 @@ describe('the Privacy Plaza is placed on the street (D-076)', () => {
 
   it('is entered from the south pavement through its gateway', () => {
     const [west, east] = PLAZA_FIXTURES.filter((piece) => piece.kind === 'arch-post');
-    expect(west).toMatchObject({ x: 3, y: 19 });
-    expect(east).toMatchObject({ x: 7, y: 19 });
+    expect(west).toMatchObject({ x: X + 3, y: 19 });
+    expect(east).toMatchObject({ x: X + 7, y: 19 });
     for (let x = west!.x + 1; x < east!.x; x++) {
       expect(isSolidAt(map, x, PLAZA_AREA.y), `gateway ${x}`).toBe(false);
       expect(map.tiles[PLAZA_AREA.y - 1]![x]).toBe('pavement');
@@ -101,7 +104,35 @@ describe('the Privacy Plaza is placed on the street (D-076)', () => {
       expect(map.tiles[y]![studio.x]).toBe('pavement');
       expect(map.tiles[y]![studio.x + 1]).toBe('pavement');
     }
-    expect(PLAZA_AREA.x + PLAZA_AREA.width).toBeLessThan(54);
+    expect(PLAZA_AREA.x + PLAZA_AREA.width).toBeLessThan(SANDBOX_AREA.x - 1);
+  });
+
+  it('moved east with the street and nowhere else when the pitch square took the road\'s west end (D-078)', () => {
+    // D-076's layout, counted from the street's first column: nothing in it moved.
+    const layout = PLAZA_FIXTURES.map(({ kind, x, y, width, height }) => [kind, x - X, y, width, height]);
+    expect(layout).toEqual([
+      ['monument', 4, 22, 3, 3],
+      ['table', 9, 23, 1, 1],
+      ['arch-post', 3, 19, 1, 1],
+      ['arch-post', 7, 19, 1, 1],
+      ['planter', 0, 19, 3, 1],
+      ['planter', 8, 19, 3, 1],
+      ['tree', 0, 20, 1, 1],
+      ['tree', 10, 20, 1, 1],
+      ['bench', 0, 23, 1, 2],
+      ['bench', 10, 25, 1, 2],
+      ['bench', 2, 27, 2, 1],
+      ['bench', 7, 27, 2, 1],
+      ['lamp', 0, 27, 1, 1],
+      ['lamp', 10, 27, 1, 1],
+    ]);
+    expect(PLAZA_STATIONS.map(({ x, y }) => [x - X, y])).toEqual([[4, 22], [9, 23]]);
+    expect(PLAZA_NEARBY).toEqual({ x: X, y: 14, width: 16, height: 14 });
+    // The pitch square and its fence lie wholly west of it: the fence is its west neighbour.
+    expect(PLAZA_AREA.x).toBeGreaterThan(PITCH_AREA.x + PITCH_AREA.width);
+    for (let y = PLAZA_AREA.y; y < PLAZA_AREA.y + PLAZA_AREA.height; y++) {
+      expect(map.tiles[y]![PLAZA_AREA.x - 1], `fence ${y}`).toBe('railing');
+    }
   });
 
   it('puts every fixture on its own solid plinth tiles inside the plaza', () => {
@@ -151,17 +182,19 @@ describe('the Privacy Plaza is placed on the street (D-076)', () => {
       expect(plazaStationAtApproach(station.x, station.y)).toBeNull();
     }
     expect(plazaStationAtApproach(map.spawn.x, map.spawn.y)).toBeNull();
-    expect(plazaStationAtApproach(5, 20)).toBeNull();
+    expect(plazaStationAtApproach(X + 5, 20)).toBeNull();
   });
 
   it('counts the plaza near from the road, the south pavement and the plaza itself', () => {
     for (const [x, y] of tilesOf(PLAZA_AREA)) expect(isPlazaNearby(x, y), `${x},${y}`).toBe(true);
-    expect(isPlazaNearby(5, 17)).toBe(true);
-    expect(isPlazaNearby(5, 14)).toBe(true);
+    expect(isPlazaNearby(X + 5, 17)).toBe(true);
+    expect(isPlazaNearby(X + 5, 14)).toBe(true);
     // From the north pavement the camera looks away from it; the spawn is far off.
-    expect(isPlazaNearby(5, 12)).toBe(false);
+    expect(isPlazaNearby(X + 5, 12)).toBe(false);
     expect(isPlazaNearby(map.spawn.x, map.spawn.y)).toBe(false);
-    expect(isPlazaNearby(30, 20)).toBe(false);
+    expect(isPlazaNearby(X + 30, 20)).toBe(false);
+    // Nor from the pitch square, west past its fence.
+    expect(isPlazaNearby(X - 3, 20)).toBe(false);
   });
 
   it('names itself on the gateway sign', () => {
