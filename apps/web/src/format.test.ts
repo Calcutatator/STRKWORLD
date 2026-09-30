@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatRatePercent,
   formatStrk,
   formatTokenAmount,
   formatTokenAmountExact,
@@ -70,5 +71,25 @@ describe('addresses', () => {
 
   it('shortens for display only', () => {
     expect(shortenAddress('0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd')).toBe('0x0471…1f5cd');
+  });
+});
+
+describe('formatRatePercent (D-079)', () => {
+  it.each([
+    // Vesu's Prime supply APYs as its API stated them on 2026-09-30.
+    [27351899613523568n, 18, '2.73%'],
+    [30925508207480051n, 18, '3.09%'],
+    [118732256710697075n, 18, '11.87%'],
+    [403060248317937n, 18, '0.04%'],
+    [3324823423464714n, 18, '0.33%'],
+    [0n, 18, '0.00%'],
+    [1n, 2, '1.00%'],
+    [5n, 0, '500.00%'],
+  ] as const)('shows %s at %s decimals as %s, truncated', (value, decimals, text) => {
+    expect(formatRatePercent(value, decimals)).toBe(text);
+  });
+
+  it('never rounds a rate up', () => {
+    expect(formatRatePercent(27_999_999_999_999_999n, 18)).toBe('2.79%');
   });
 });

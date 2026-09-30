@@ -259,6 +259,103 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-30 — Vesu's Prime vaults share vSTRK's class; a wallet-submitted pool fee is repaid in a token the wallet picks (D-079)
+
+Vesu's public API (`https://api.vesu.xyz/pools/<pool id>`, no key) lists
+each asset of a pool with its `vToken` and `stats.supplyApy` as `{ value,
+decimals }`, an integer and its decimal places (Prime's STRK read
+`27351899613523568` with 18, 2.73%). `GET /pools` lists every pool. Read
+over `https://api.cartridge.gg/x/starknet/mainnet` at block 15,669,141, the
+Prime vaults for ETH (`0x006ac248…043e`), USDC (`0x00387e8d…4e65`), USDT
+(`0x06be9f89…2f9d`) and WBTC (`0x04ecb066…f56c`) all run vSTRK's class
+(`0x41b16e0c…4f78`), so every entry point the Vault calls has one shape. Each
+`asset()` is its token and each `pool_contract()` the Prime pool
+(`0x0451fe48…c3b5`), and each token's `approve` takes `(ContractAddress,
+u256)`. A vToken reports 18 decimals whatever its token, so shares are not
+the token's units: `convert_to_assets(10^18)` read 1.018084 USDC, 1.00418410
+WBTC and 0.997247 ETH. A share can be worth less than its token, so a
+position can shrink. Prime lists USDC and the bridged USDC.e as separate
+assets, each with its own vUSDC. The one the Exchange catalog calls USDC is
+Circle's native USDC. strkBTC is in no Prime pool, only in Clearstar USDC
+Reactor, Re7 xBTC and Re7 USDC Prime, all curated.
+
+The pool charges its fee (`get_fee_amount`, 6 STRK) in STRK from whoever
+calls it. When a wallet submits (`wallet_strk20InvokeTransaction`), avnu's
+paymaster forwarder (`0x0127021a…584f`) pays it to the pool's fee collector
+(`get_fee_collector()`, `0x00d79041…9e77`), and the wallet adds a `withdraw`
+of the fee from the player's notes to that forwarder. The token of that
+withdrawal is the wallet's choice. StarkWare's reference wallet
+(`starkware-libs/starknet-privacy`, `client/src/sdk-wallet.ts`) folds in
+whatever `paymaster_buildTransaction` quotes for its `fee_mode.pool_fee_token`.
+Of 216 such withdrawals in the 200,000 blocks to 15,668,951, 98 were STRK,
+89 USDC, 21 strkBTC, 4 ETH, 2 USDC.e, 1 xSTRK and 1 another token, mostly but not always in
+the token the transaction moved: USDC paid for a strkBTC withdraw, and STRK
+for USDC ones. The relayer also paid the network fee on the Vault's STRK
+probe, and the player's repayment was exactly the 6 STRK pool fee. All 62
+anonymizer invocations to date moved STRK, and one vSTRK redeem repaid its
+fee in USDC. How Ready picks the fee token for a non-STRK Vault action is
+unverified, so the counter tells a player lending another token to keep
+some STRK in the pool. Traps met on the way:
+
+- The forward-compatibility source scanner (`walletIdentityReads`) fails
+  closed on any computed element access in production privacy source, since
+  it could read a wallet's `name`: `reads[index]` in `vault-operations.ts`
+  failed it. Pair values in the array instead of indexing a parallel one.
+- The lead's live probe left their stand-in address and transaction hashes
+  on-chain. They are public, but writing them here would tie that address
+  to the project's lead. Fixtures use the address the anonymizer derives
+  for the synthetic commitment `0x5f2e1d`.
+- An "earned since you supplied" figure needs a cost basis. Reading one
+  vault's `Deposit` and `Withdraw` events for one address, from the
+  anonymizer's first use (block 12,390,000), took 41 `starknet_getEvents`
+  pages and about 11 seconds on the Cartridge RPC, so the Vault shows none.
+- Under jsdom on Node 25, the bare `localStorage` global is Node's own
+  method-less object (the known `--localstorage-file` warning). A test
+  reads the page's storage through `window`, as `viewer-storage.test.ts`
+  expects.
+- A position read touches every pinned vault, so the backend answers a
+  vault it could not read as `ok: false` rather than failing the request. A
+  STRK-only build must not depend on the WBTC vault. Each row's four figures
+  still come from separate `latest` calls, so a supply landing between them
+  can make one row read as invalid until the next read; that predates D-079.
+- The web may not value-import `@strkworld/privacy`, and the backend does not
+  depend on it. So `production/config.ts` inlines `VAULT_TOKENS` and the
+  backend pins `VESU_VAULTS`, each pinned by a test to `VAULT_MARKETS`. The
+  backend's test imports the privacy package's `vault.ts` by relative path,
+  as `deploy/fly/src/compose.test.ts` imports the backend's relay.
+
+**Seam heads-up (D-036).** `vaultPositions(options?)` replaces
+`vaultPosition(options?)` and answers `{ standIn, positions }`, one position
+per admitted token. `prepareVaultRedeem(token, amount | 'all', options?)`
+takes the token first, and `vaultRates(signal?)` is new. Every hand-written
+`PrivacyOperations` needs the renamed and new methods; the compiler refuses
+any that misses one. `VaultReadClient` now has `vaultPositions(account)` and
+`vaultRates()`, and the backend's position route answers `{ positions: [...]
+}`, one row per pinned vault, each `ok: true` with its figures or `ok:
+false`. The fake exports `DEMO_VAULT_STAND_IN` and
+takes `vault.markets` and `vault.rates`.
+
+*Verified:* read-only `starknet_call`, `starknet_getClass`,
+`starknet_getClassHashAt`, `starknet_getEvents` and
+`starknet_getTransactionReceipt` against the Cartridge public RPC on
+2026-09-30 (the five vaults' class, `asset`, `pool_contract`, `name`,
+`symbol`, `decimals`, `convert_to_assets`, `total_assets` and `max_deposit`,
+the tokens' `approve`, the pool's `get_fee_collector`, the fee withdrawals
+and the anonymizer's invocations); `GET https://api.vesu.xyz/pools` and
+`/pools/<Prime>` for the vaults and rates; `sdk-wallet.ts` and
+`paymaster.ts` in `starkware-libs/starknet-privacy`. Headless:
+`vault.test.ts` (the map, every token's shapes against vSTRK's golden ones),
+`vault-operations.test.ts`, `backend-client.test.ts`, `session.test.ts`,
+`fake-vault.test.ts`, `forward-compatibility.test.ts` (a USDC supply through
+real `WalletAccountV6`, pinning the wire request), the backend's
+`vault.test.ts` and `vesu-rates.test.ts`, `config.test.ts`, `routes.test.ts`,
+`vault-machine.test.ts`, `VaultPanel.flow.test.tsx`, `copy.test.ts`,
+`format.test.ts`, `privacy-grades.test.ts` and
+`scripts/check-invariants.test.mjs`. No wallet was opened and nothing was
+submitted. Whether Ready runs a non-STRK Vault action, and which token pays
+its fee, is the lead's next probe (`deploy/RAILWAY.md`). Nobody has looked at
+the multi-token counter in a browser.
+
 ### 2026-09-30 — A Colyseus simulation interval cannot be paused; the street moved behind `STREET_ORIGIN_X` (D-078)
 
 The football needed a fixed step that runs only while someone is near the

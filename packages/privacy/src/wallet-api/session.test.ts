@@ -2049,10 +2049,11 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     prepare: async () => prepared,
     hasPrivateFunds: async () => false,
     depositStatus: async () => 'pending',
-    // D-077: not exercised here.
-    vaultPosition: async () => { throw new Error('unused'); },
+    // D-077, D-079: not exercised here.
+    vaultPositions: async () => { throw new Error('unused'); },
     prepareVaultSupply: async () => { throw new Error('unused'); },
     prepareVaultRedeem: async () => { throw new Error('unused'); },
+    vaultRates: async () => { throw new Error('unused'); },
   };
 }
 
@@ -2104,12 +2105,19 @@ describe('WalletSession Vault ownership (D-077)', () => {
     };
   }
 
-  function operationsWithVault(prepared: PreparedVaultBatch, position?: () => Promise<unknown>): PrivacyOperations {
+  function operationsWithVault(
+    prepared: PreparedVaultBatch,
+    position?: () => Promise<unknown>,
+    rates?: () => Promise<unknown>,
+  ): PrivacyOperations {
     return {
       ...operationsWithBatch(batch(), '0.10.4'),
-      vaultPosition: (async () => (position ? position() : { token: STRK, shares: 1n, assets: 1n, redeemable: 1n })) as never,
+      vaultPositions: (async () => (position
+        ? position()
+        : { standIn: '0x5ad', positions: [{ token: STRK, shares: 1n, assets: 1n, redeemable: 1n }] })) as never,
       prepareVaultSupply: async () => prepared,
       prepareVaultRedeem: async () => prepared,
+      vaultRates: (async () => (rates ? rates() : [])) as never,
     };
   }
 
@@ -2141,16 +2149,30 @@ describe('WalletSession Vault ownership (D-077)', () => {
     let release!: (value: unknown) => void;
     const pending = new Promise((resolve) => { release = resolve; });
     const { session, connected } = await connectedSession(operationsWithVault(vaultBatch(), () => pending));
-    const reading = session.operations.vaultPosition();
+    const reading = session.operations.vaultPositions();
     connected.changeAccount('0x222');
-    release({ token: STRK, shares: 1n, assets: 1n, redeemable: 1n });
+    release({ standIn: '0x5ad', positions: [{ token: STRK, shares: 1n, assets: 1n, redeemable: 1n }] });
     await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('refuses a rates read answered for a retired account, and passes one for the current account through (D-079)', async () => {
+    let release!: (value: unknown) => void;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const { session, connected } = await connectedSession(operationsWithVault(vaultBatch(), undefined, () => pending));
+    const reading = session.operations.vaultRates();
+    connected.changeAccount('0x222');
+    release([]);
+    await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+
+    const rates = [{ token: STRK, supplyApy: { value: 27n, decimals: 3 } }];
+    const current = await connectedSession(operationsWithVault(vaultBatch(), undefined, async () => rates));
+    await expect(current.session.operations.vaultRates()).resolves.toBe(rates);
   });
 
   it('never confirms a batch prepared for a retired account', async () => {
     const prepared = vaultBatch();
     const { session, connected } = await connectedSession(operationsWithVault(prepared));
-    const owned = await session.operations.prepareVaultRedeem('all');
+    const owned = await session.operations.prepareVaultRedeem(STRK, 'all');
     connected.changeAccount('0x222');
 
     await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'user-rejected' });

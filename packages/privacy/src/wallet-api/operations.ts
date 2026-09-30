@@ -9,7 +9,8 @@ import type {
   PreparedVaultBatch,
   PrivacyOperations,
   VaultCallOptions,
-  VaultPosition,
+  VaultPositions,
+  VaultRate,
   WalletCapability,
 } from '../operations.js';
 import { depositStatusFromReceipt } from '../pool.js';
@@ -56,7 +57,7 @@ export interface WalletApiPrivacyOperationsOptions {
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
   now?: () => number;
-  /** The Vault's two backend reads (D-077). Absent, every Vault call fails closed. */
+  /** The Vault's backend reads (D-077, D-079). Absent, every Vault call fails closed. */
   vault?: VaultReadClient;
   /** How the Vault waits between receipt reads; a test passes its own. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -96,9 +97,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     });
   }
 
-  /** D-077: the Vault position on the player's shadow account. See `PrivacyOperations`. */
-  vaultPosition(options?: VaultCallOptions): Promise<VaultPosition> {
-    return this.vault.position(options);
+  /** D-077, D-079: the Vault positions on the player's shadow account. See `PrivacyOperations`. */
+  vaultPositions(options?: VaultCallOptions): Promise<VaultPositions> {
+    return this.vault.positions(options);
   }
 
   /** D-077: a Vault supply, proved and submitted by the wallet. See `PrivacyOperations`. */
@@ -106,9 +107,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     return this.vault.prepareSupply(token, amount, options);
   }
 
-  /** D-077: a Vault redeem back into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
-  prepareVaultRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
-    return this.vault.prepareRedeem(amount, options);
+  /** D-077, D-079: a Vault redeem back into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareVaultRedeem(token: Address, amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+    return this.vault.prepareRedeem(token, amount, options);
+  }
+
+  /** D-079: Vesu's supply APY for each admitted Vault token, read through the backend. See `PrivacyOperations`. */
+  vaultRates(signal?: AbortSignal): Promise<readonly VaultRate[]> {
+    return this.vault.rates(signal);
   }
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {

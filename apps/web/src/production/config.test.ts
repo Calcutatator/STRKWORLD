@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseProductionWalletConfig, parseRoutePolicy, usesProductionWallet } from './config.js';
+import {
+  MAX_VAULT_TOKENS,
+  VAULT_TOKENS,
+  parseProductionWalletConfig,
+  parseRoutePolicy,
+  usesProductionWallet,
+} from './config.js';
+import { catalogAsset } from '../panels/exchange/catalog.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -641,17 +648,24 @@ describe('production shield admission for any token (D-072)', () => {
   });
 });
 
-describe('production Vault admission (D-077)', () => {
+describe('production Vault admission (D-077, D-079)', () => {
   const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const USDT = '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8';
+  const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
+  const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+  const USDC_E = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
+  /** The list the Railway test deployment sets (D-079): every token with a pinned vault. */
+  const RAILWAY = [STRK_TOKEN, ETH, USDC, USDT, WBTC];
   const base = {
     VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
     VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
     VITE_BACKEND_BASE_URL: '/api',
   };
-  const vault = {
+  const vault = (tokens: string | undefined = STRK_TOKEN) => ({
     VITE_STRK20_VAULT_ENABLED: 'true',
-    VITE_STRK20_VAULT_ALLOWED_TOKENS: STRK_TOKEN,
-  };
+    VITE_STRK20_VAULT_ALLOWED_TOKENS: tokens,
+  });
   const transfer = {
     VITE_STRK20_TRANSFER_ENABLED: 'true',
     VITE_STRK20_TRANSFER_MAX_INTENTS: '3',
@@ -664,14 +678,25 @@ describe('production Vault admission (D-077)', () => {
     expect(BigInt(STRK_TOKEN)).toBe(BigInt(VESU_VSTRK_ASSET));
   }, 30_000);
 
+  it('pins the inlined Vault tokens to the privacy package’s token → vault map, in its order', async () => {
+    const { VAULT_MARKETS } = await import('@strkworld/privacy');
+    expect(VAULT_TOKENS).toEqual(VAULT_MARKETS.map((market) => market.token));
+    expect(MAX_VAULT_TOKENS).toBe(5);
+    expect(Object.isFrozen(VAULT_TOKENS)).toBe(true);
+    // The catalog the counter reads symbols and decimals from agrees with the chain.
+    for (const market of VAULT_MARKETS) {
+      expect(catalogAsset(market.token), market.symbol).toMatchObject({ symbol: market.symbol, decimals: market.decimals });
+    }
+  }, 30_000);
+
   it('stays denied by default: no Vault route and no Vault list at all', () => {
     const { policy } = parseProductionWalletConfig(base);
     expect(policy.enabledRoutes).toEqual([]);
     expect('vault' in policy.allowedTokens).toBe(false);
   });
 
-  it('opts into the Vault alone: STRK only, no relay-fee authority, one action at a time', () => {
-    const { policy } = parseProductionWalletConfig({ ...base, ...vault });
+  it('opts into the Vault alone: no relay-fee authority, one action at a time', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...vault() });
     expect(policy.enabledRoutes).toEqual(['vault']);
     expect(policy.allowedTokens.vault).toEqual([STRK_TOKEN]);
     expect(policy.maxRelayFee).toBe(0n);
@@ -680,8 +705,34 @@ describe('production Vault admission (D-077)', () => {
     expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
   });
 
+  it('admits exactly the Railway list, in the order given, frozen', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...vault(RAILWAY.join(',')) });
+    expect(policy.enabledRoutes).toEqual(['vault']);
+    expect(policy.allowedTokens.vault).toEqual(RAILWAY);
+    expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
+    // A space after each comma is the same list; another order is kept as given.
+    expect(parseRoutePolicy(vault(RAILWAY.join(', '))).allowedTokens.vault).toEqual(RAILWAY);
+    expect(parseRoutePolicy(vault(`${WBTC},${USDC}`)).allowedTokens.vault).toEqual([WBTC, USDC]);
+  });
+
+  it('documents a Railway value that parses to exactly those five tokens', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    const lines = example.split('\n').map((line) => line.trim());
+    const at = lines.findIndex((line) => line.startsWith('# --- Browser Vault admission'));
+    const documented = lines.slice(at).find((line) => /^# 0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+$/.test(line));
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(documented).toBeDefined();
+    expect(parseRoutePolicy(vault(documented!.slice(2))).allowedTokens.vault).toEqual(RAILWAY);
+  });
+
+  it('needs no STRK on the list: any single pinned token opens the Vault', () => {
+    for (const token of [USDC, ETH, WBTC, USDT]) {
+      expect(parseRoutePolicy(vault(token)).allowedTokens.vault, token).toEqual([token]);
+    }
+  });
+
   it('never narrows another route', () => {
-    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault });
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault(RAILWAY.join(',')) });
     expect(policy.enabledRoutes).toEqual(['transfer', 'vault']);
     expect(policy.maxIntents).toBe(3);
     expect(policy.maxRelayFee).toBe(5_000_000_000_000_000n);
@@ -693,12 +744,27 @@ describe('production Vault admission (D-077)', () => {
     ['an unset flag', { VITE_STRK20_VAULT_ENABLED: undefined }],
     ['missing tokens', { VITE_STRK20_VAULT_ALLOWED_TOKENS: undefined }],
     ['an empty token list', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '' }],
-    ['a non-STRK token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: ETH }],
-    ['STRK plus another token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${ETH}` }],
-    ['STRK twice', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+    ['a blank entry', { VITE_STRK20_VAULT_ALLOWED_TOKENS: ' ' }],
+    ['a trailing comma', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},` }],
+    ['an empty entry between two', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},,${USDC}` }],
+    ['a symbol', { VITE_STRK20_VAULT_ALLOWED_TOKENS: 'USDC' }],
     ['a decimal STRK', { VITE_STRK20_VAULT_ALLOWED_TOKENS: BigInt(STRK_TOKEN).toString() }],
-  ])('keeps the Vault denied on %s, and touches no other route', (_label, override) => {
-    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault, ...override });
+    ['an uppercase 0X prefix', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `0X${USDC.slice(2)}` }],
+    ['a non-hex digit', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},0xnothex` }],
+    ['zero', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x0' }],
+    ['more than 64 hex digits', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `0x0${USDC.slice(2)}` }],
+    ['a separator other than a comma', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN};${USDC}` }],
+    ['STRK twice', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+    ['one token padded and unpadded', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${USDC},0x${USDC.slice(3)}` }],
+    ['one token in two cases', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${ETH},0x${ETH.slice(2).toUpperCase()}` }],
+    ['a repeat at the end of the full list', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, WBTC].join(',') }],
+    ['strkBTC, which has no pinned vault', { VITE_STRK20_VAULT_ALLOWED_TOKENS: STRKBTC }],
+    ['an unpinned token beside pinned ones', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${USDC},${STRKBTC}` }],
+    ['the bridged USDC.e', { VITE_STRK20_VAULT_ALLOWED_TOKENS: USDC_E }],
+    ['a token nobody lends', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x1234' }],
+    ['a list longer than the pinned vaults', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, '0x1234'].join(',') }],
+  ])('keeps the whole Vault denied on %s, and touches no other route', (_label, override) => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault(), ...override });
     expect(policy.enabledRoutes).toEqual(['transfer']);
     expect('vault' in policy.allowedTokens).toBe(false);
   });

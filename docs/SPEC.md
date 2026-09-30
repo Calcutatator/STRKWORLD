@@ -227,9 +227,12 @@ the browser uses `buildStrk20Actions`, and the connected wallet calls
 paymaster without exposing its key. The bought asset becomes an `OPEN` pool
 note atomically, so it is already part of the game's private balance.
 
-### The Vault — Vesu lending · no Cairo (D-077)
+### The Vault — Vesu lending · no Cairo (D-077, D-079)
 
-The player's STRK20 shadow account holds the position: a keyless address per
+The Vault lends STRK, ETH, USDC, USDT and WBTC, each to its own Vesu Prime
+vault (`VAULT_MARKETS` in `packages/privacy/src/vault.ts`); strkBTC has no
+Prime vault and is not offered (D-079). The player's STRK20 shadow account
+holds every position: a keyless address per
 (player, `dapp_name` `strkworld-vault`, nonce 0) that only the canonical
 `ShadowAccountAnonymizer` can execute through. The wallet derives the partial
 commitment (`strk20ShadowAccountCommitment('strkworld-vault')`), the backend
@@ -239,23 +242,29 @@ sending anything there. The wallet proves and submits both actions itself:
 
 ```ts
 // supply: pool → shadow account, then Vesu through it; the shares stay there
+// (token and vault: one pinned market, e.g. STRK and vSTRK, or USDC and vUSDC)
 invoke([
-  { type:'withdraw', token: STRK, amount, recipient: shadow },
+  { type:'withdraw', token, amount, recipient: shadow },
   { type:'shadow_account_invoke', dapp_name:'strkworld-vault', nonce:'0x0',
-    calls: [STRK.approve(vSTRK, amount), vSTRK.deposit(amount, shadow)],
+    calls: [token.approve(vault, amount), vault.deposit(amount, shadow)],
     collect_policy: { type:'exact', amount:'0x0' } },
 ])
 // redeem: one open note, then withdraw(assets) or redeem(all shares); collect the gain
 invoke([
-  { type:'transfer', token: STRK, amount:'OPEN', recipient: player },
+  { type:'transfer', token, amount:'OPEN', recipient: player },
   { type:'shadow_account_invoke', dapp_name:'strkworld-vault', nonce:'0x0',
-    calls: [vSTRK.withdraw(assets, shadow, shadow)],
+    calls: [vault.withdraw(assets, shadow, shadow)],
     collect_policy: { type:'diff' } },
 ])
 ```
 
-The shadow account's address, balances, calls and position are public; only
-its link to the player's wallet is hidden. The earlier plan, a project-owned
+The shadow account's address, balances in every token, calls and positions
+are public; only its link to the player's wallet is hidden. The counter
+shows each position in its token's own units (the vault's `preview_redeem`
+of its shares), Vesu's supply APY as Vesu's figure, and the stand-in address
+itself, with an optional Voyager link. The pool fee is set in STRK whatever
+the token; the wallet repays it from the shielded balance in a token it
+chooses, which can be STRK. The earlier plan, a project-owned
 `privacy_invoke` adapter of about 150–200 lines of Cairo with its own review
 and audit, is superseded for supply and redeem (D-007, D-018).
 
@@ -477,7 +486,7 @@ Multiplayer resilience, mainnet regression suite, dependency and security harden
 
 ### The Vault · Vesu — on shadow accounts (D-077)
 
-**No longer blocked on Cairo.** D-007 cut it from v1 as the only building needing new Cairo; shadow accounts removed that need. Supply and redeem of STRK ship behind a fail-closed build switch (`VITE_STRK20_VAULT_ENABLED` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`), locked by default, and the first live use is the probe of whether the wallet runs shadow accounts end to end. Borrowing and collateral remain a separate, larger piece of work.
+**No longer blocked on Cairo.** D-007 cut it from v1 as the only building needing new Cairo; shadow accounts removed that need. Supply and redeem ship behind a fail-closed build switch (`VITE_STRK20_VAULT_ENABLED` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`), locked by default. The first live use, in STRK, showed that the wallet runs shadow accounts end to end, and D-079 widened the list to STRK, ETH, USDC, USDT and WBTC. strkBTC waits on a choice of curated pool. Borrowing and collateral remain a separate, larger piece of work.
 
 The Cairo toolchain note that stood here (Scarb `2.17.0`, Starknet Foundry `0.59.0`, the seven Vesu anonymizer unit tests) applied to the superseded adapter plan.
 

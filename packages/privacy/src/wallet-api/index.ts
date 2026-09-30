@@ -30,6 +30,8 @@ export type {
   PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
+  VaultPositionRow,
+  VaultRateRow,
   VaultReadClient,
   WalletRoutePolicy,
   WalletStrk20Account,

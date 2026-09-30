@@ -1,8 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import { COPY } from '../../copy.js';
-import { formatStrk, formatStrkExact, shortenAddress } from '../../format.js';
+import {
+  formatRatePercent,
+  formatStrkExact,
+  formatTokenAmount,
+  formatTokenAmountExact,
+  sameAddress,
+  shortenAddress,
+} from '../../format.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
+import { STRK_TOKEN } from '../../production/config.js';
 import { useStore } from '../../store/use-store.js';
 import { WalletAttentionCue } from '../../wallet/WalletAttentionCue.js';
 import { ConfirmGate } from '../ConfirmGate.js';
@@ -14,16 +22,28 @@ import { routeDoor } from '../routes.js';
 import {
   ROUTE_BY_VAULT_MODE,
   createVaultPanel,
+  voyagerContractUrl,
   type VaultMode,
   type VaultPanel as VaultPanelMachine,
   type VaultState,
+  type VaultTokenView,
 } from './vault-machine.js';
 
 const VAULT_MODES: readonly VaultMode[] = ['supply', 'redeem'];
 
+/** A position figure: up to eight decimal places, truncated, with the token's symbol (D-079). */
+function formatHolding(amount: bigint, token: VaultTokenView): string {
+  return `${formatTokenAmount(amount, token.decimals, Math.min(token.decimals, 8))} ${token.symbol}`;
+}
+
+/** A figure the player agrees to: exact, in the token's decimals, with its symbol. */
+function formatExact(amount: bigint, token: VaultTokenView): string {
+  return `${formatTokenAmountExact(amount, token.decimals)} ${token.symbol}`;
+}
+
 /**
  * The Vault (D-077): lending with Vesu, from the player's STRK20 shadow
- * account, in Vesu's look.
+ * account, in Vesu's look, in every token this build admits (D-079).
  *
  * A thin view over `vault-machine.ts`, like the Bank over its machine. It
  * enforces what is purely about rendering: a route this build has not
@@ -89,6 +109,7 @@ export function VaultPanel({
     : state.flow.name === 'submitting' && state.flow.stage === 'awaiting-approval'
       ? 'confirm'
       : null;
+  const token = state.token === null ? undefined : state.tokens.find((entry) => sameAddress(entry.token, state.token!));
 
   return (
     <div className="vault-experience" data-experience={experience}>
@@ -101,11 +122,13 @@ export function VaultPanel({
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
       >
-        <VaultIntro />
+        <VaultIntro token={token} />
         <ModeTabs state={state} register={register} onSelect={(mode) => panel.setMode(mode)} />
 
         {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
+        ) : !token ? (
+          <LockedNotice reason="not-enabled" message={COPY.vault.noToken} />
         ) : state.capability.status === 'checking' ? (
           <p className="vault-checking" aria-busy="true">{COPY.vault.checking}</p>
         ) : state.capability.status === 'unsupported' ? (
@@ -123,7 +146,7 @@ export function VaultPanel({
             ) : state.flow.name === 'submitted' ? (
               <SubmittedBlock state={state} onBack={() => panel.acknowledge()} />
             ) : gateBlocked || (state.flow.name === 'failed' && state.flow.recovery === 'close') ? null : (
-              <ComposeBlock state={state} panel={panel} />
+              <ComposeBlock state={state} token={token} panel={panel} />
             )}
             {state.flow.name === 'failed' ? (
               <div className="flow-failed" role="alert">
@@ -147,16 +170,20 @@ export function VaultPanel({
 }
 
 /**
- * The counter's header: whose vault this is, what it does, and the one thing
- * about fees a lender must know to get back out. None of it is a disclosure;
- * what is public is the register's to say, at the commit point.
+ * The counter's header: whose vaults these are, what they do, and what a
+ * lender must know about fees to get back out. None of it is a disclosure;
+ * what is public is the register's to say, at the commit point. While a token
+ * other than STRK is chosen, a second note says the pool fee is set in STRK
+ * and the wallet may take it in STRK (D-079).
  */
-function VaultIntro() {
+function VaultIntro({ token }: { token: VaultTokenView | undefined }) {
+  const otherToken = token !== undefined && !sameAddress(token.token, STRK_TOKEN);
   return (
     <div className="vault-intro">
       <p className="vault-eyebrow">{COPY.vault.eyebrow}</p>
       <p className="panel-intro">{COPY.vault.intro}</p>
       <p className="vault-note">{COPY.vault.feeNote}</p>
+      {otherToken ? <p className="vault-note vault-fee-token">{COPY.vault.feeInStrk}</p> : null}
     </div>
   );
 }
@@ -192,12 +219,48 @@ function ModeTabs({
   );
 }
 
-/** The position, read only when the player asks: a public read, after the wallet's commitment. */
+/**
+ * Every offered token, with Vesu's supply APY where Vesu states one (read
+ * when the counter opens, no prompt) and the position once the player asks
+ * for it: a public read, after the wallet's commitment. The figures are one
+ * read, and say so; the stand-in address they sit on is public, and the line
+ * under them says that too, with a link the player may open.
+ */
 function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () => void }) {
-  const { position } = state;
+  const { position, rates } = state;
+  const loaded = position.status === 'loaded' ? position : null;
   return (
     <div className="panel-balance vault-position">
       <h3>{COPY.vault.position.title}</h3>
+      <ul className="vault-markets">
+        {state.tokens.map((entry) => {
+          const rate = rates.status === 'loaded' ? rates.rates.find((candidate) => sameAddress(candidate.token, entry.token)) : undefined;
+          const held = loaded?.positions.find((candidate) => sameAddress(candidate.token, entry.token));
+          return (
+            <li key={entry.token} className="vault-market" data-token={entry.symbol}>
+              <p className="vault-market-head">
+                <strong className="vault-market-symbol">{entry.symbol}</strong>
+                {rate ? (
+                  <span className="vault-apy">
+                    {`${COPY.vault.rates.label} ${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}`}
+                  </span>
+                ) : null}
+              </p>
+              {held === undefined ? null : held.shares === 0n ? (
+                <p className="vault-market-none">{COPY.vault.position.none}</p>
+              ) : (
+                <dl className="vault-figures">
+                  <dt>{COPY.vault.position.worth}</dt>
+                  <dd className="balance-total">{formatHolding(held.assets, entry)}</dd>
+                  <dt>{COPY.vault.position.redeemable}</dt>
+                  <dd>{formatHolding(held.redeemable, entry)}</dd>
+                </dl>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {rates.status === 'failed' ? <p className="vault-rates-note">{COPY.vault.rates.unavailable}</p> : null}
       {position.status === 'unrequested' ? (
         <>
           <p>{COPY.vault.position.unrequested}</p>
@@ -212,24 +275,38 @@ function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () 
         </>
       ) : (
         <>
-          {position.shares === 0n ? (
-            <p>{COPY.vault.position.empty}</p>
-          ) : (
-            <dl className="vault-figures">
-              <dt>{COPY.vault.position.worth}</dt>
-              <dd className="balance-total">{formatStrk(position.assets)}</dd>
-              <dt>{COPY.vault.position.redeemable}</dt>
-              <dd>{formatStrk(position.redeemable)}</dd>
-            </dl>
-          )}
+          {position.positions.every((entry) => entry.shares === 0n) ? <p>{COPY.vault.position.empty}</p> : null}
+          <p className="vault-as-of">{COPY.vault.position.asOf}</p>
           <button type="button" onClick={onRefresh}>{COPY.vault.position.again}</button>
+          <StandInLine address={position.standIn} />
         </>
       )}
     </div>
   );
 }
 
-function ComposeBlock({ state, panel }: { state: VaultState; panel: VaultPanelMachine }) {
+/**
+ * The stand-in address is public (D-079): a short line saying so, and an
+ * optional Voyager link, which opens a new tab without telling Voyager where
+ * it came from. The address lives in this render only.
+ */
+function StandInLine({ address }: { address: string }) {
+  const href = voyagerContractUrl(address);
+  if (href === null) return null;
+  return (
+    <p className="vault-stand-in">
+      {`${COPY.vault.standIn.lead} `}
+      <code>{shortenAddress(address)}</code>
+      {`, ${COPY.vault.standIn.tail} `}
+      <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+        {COPY.vault.standIn.voyager}
+      </a>
+      <span className="vault-stand-in-note">{COPY.vault.standIn.voyagerNote}</span>
+    </p>
+  );
+}
+
+function ComposeBlock({ state, token, panel }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine }) {
   const preparing = state.flow.name === 'preparing';
   const all = state.mode === 'redeem' && state.redeemAll;
   return (
@@ -240,6 +317,23 @@ function ComposeBlock({ state, panel }: { state: VaultState; panel: VaultPanelMa
         void panel.prepare();
       }}
     >
+      {state.tokens.length > 1 ? (
+        <label>
+          {COPY.vault.token}
+          <select
+            name="token"
+            value={token.token}
+            disabled={preparing}
+            onChange={(event) => panel.setToken(event.target.value)}
+          >
+            {state.tokens.map((entry) => (
+              <option key={entry.token} value={entry.token}>
+                {entry.symbol}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {state.mode === 'redeem' ? (
         <label className="vault-all">
           <input
@@ -253,7 +347,7 @@ function ComposeBlock({ state, panel }: { state: VaultState; panel: VaultPanelMa
       ) : null}
       {all ? null : (
         <label>
-          {COPY.vault.amount}
+          {`${COPY.vault.amount} (${token.symbol})`}
           <input
             name="amount"
             inputMode="decimal"
@@ -274,7 +368,9 @@ function ComposeBlock({ state, panel }: { state: VaultState; panel: VaultPanelMa
 /**
  * Review and submission are one surface, as in the Bank: the figures and the
  * approved disclosure stay on screen while the wallet works. The network fee
- * is the wallet's to state when it asks, so no total is invented here.
+ * is the wallet's to state when it asks, so no total is invented here. The
+ * pool fee is the pool's, in STRK; for another token the review says the
+ * wallet chooses which token pays it (D-079).
  */
 function CommitBlock({
   state,
@@ -288,19 +384,20 @@ function CommitBlock({
   const flow = state.flow;
   if (flow.name !== 'review' && flow.name !== 'submitting') return null;
   const { summary } = flow;
-  const { action } = summary;
+  const { action, token } = summary;
   const all = action.kind === 'redeem' && action.all;
+  const otherToken = !sameAddress(token.token, STRK_TOKEN);
   return (
     <div className="panel-review">
       <h3>{COPY.flow.review}</h3>
       <dl className="vault-review">
         <dt>{action.kind === 'supply' ? COPY.vault.review.supply : all ? COPY.vault.review.redeemAll : COPY.vault.review.redeem}</dt>
-        <dd>{formatStrkExact(action.amount)}</dd>
+        <dd>{formatExact(action.amount, token)}</dd>
       </dl>
       {action.kind === 'redeem' ? (
         <p className="vault-review-note">
           {all ? `${COPY.vault.review.allNote} ` : ''}
-          {COPY.vault.review.landsIn}
+          {`${COPY.vault.review.landsInLead} ${token.symbol} ${COPY.vault.review.landsInTail}`}
         </p>
       ) : null}
       <dl className="review-costs">
@@ -309,6 +406,7 @@ function CommitBlock({
         <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
         <dd>{COPY.vault.review.networkByWallet}</dd>
       </dl>
+      {otherToken ? <p className="vault-review-note vault-fee-token">{COPY.vault.review.feeTokenByWallet}</p> : null}
       {flow.name === 'submitting' ? (
         <p className="flow-pending" aria-live="polite" data-stage={flow.stage}>
           {flow.message}

@@ -34,9 +34,10 @@ import type {
   PrivateRoute,
   RoutePolicy,
   SwapPlannerPort,
+  VaultRatesPort,
   VaultRpcPort,
 } from './types.js';
-import { VAULT_POSITION_PATH, VAULT_SHADOW_ACCOUNT_PATH } from './vault.js';
+import { VAULT_POSITION_PATH, VAULT_RATES_PATH, VAULT_SHADOW_ACCOUNT_PATH } from './vault.js';
 import {
   ApiFailure,
   isFelt,
@@ -76,6 +77,8 @@ export interface BackendApiOptions {
   poolStatsRateLimiter?: RequestRateLimiterPort;
   /** The Vault's two pinned public reads (D-077). Without it, both routes answer 503. */
   vault?: VaultRpcPort;
+  /** Vesu's supply APY for the pinned vaults (D-079). Without it, that route answers 503. */
+  vaultRates?: VaultRatesPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
   /**
@@ -100,6 +103,7 @@ export class BackendApi {
   private readonly degenCatalog?: DegenCatalogPort;
   private readonly poolStatsPort?: PoolStatsPort;
   private readonly vault?: VaultRpcPort;
+  private readonly vaultRates?: VaultRatesPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -118,6 +122,7 @@ export class BackendApi {
     this.degenCatalog = options.degenCatalog;
     this.poolStatsPort = options.poolStats;
     this.vault = options.vault;
+    this.vaultRates = options.vaultRates;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
@@ -182,6 +187,7 @@ export class BackendApi {
           case POOL_STATS_PATH: response = this.poolStats(request.body); break;
           case VAULT_SHADOW_ACCOUNT_PATH: response = await abortable(this.shadowAccount(request.body, deadline.signal), deadline.signal); break;
           case VAULT_POSITION_PATH: response = await abortable(this.vaultPosition(request.body, deadline.signal), deadline.signal); break;
+          case VAULT_RATES_PATH: response = await abortable(this.vaultRateList(request.body, deadline.signal), deadline.signal); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -510,23 +516,52 @@ export class BackendApi {
   }
 
   /**
-   * D-077: a stand-in address's position in the pinned vSTRK vault, as
-   * decimal base units. Public data, read here rather than from the browser
-   * so the player's IP never reaches a third-party RPC next to the address.
+   * D-077, D-079: a stand-in address's position in every pinned vault, one
+   * row each, as decimal base units, or `ok: false` for a vault whose read
+   * failed. Public data, read here rather than from the browser so the
+   * player's IP never reaches a third-party RPC next to the address. The
+   * request names the address alone: never a vault.
    */
   private async vaultPosition(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'account']);
     requireVersion(value);
     const account = requireNonzeroFelt(value.account, 'account');
     if (!this.vault) throw new ApiFailure(503, 'The Vault reads are unavailable.');
-    const read = await this.vault.getVaultPosition(account, signal);
+    const rows = await this.vault.getVaultPositions(account, signal);
     return {
       status: 200,
       body: {
-        shares: read.shares.toString(),
-        assets: read.assets.toString(),
-        maxWithdraw: read.maxWithdraw.toString(),
-        maxRedeem: read.maxRedeem.toString(),
+        positions: rows.map((row) => (row.ok
+          ? {
+              vault: row.vault,
+              ok: true,
+              shares: row.shares.toString(),
+              assets: row.assets.toString(),
+              maxWithdraw: row.maxWithdraw.toString(),
+              maxRedeem: row.maxRedeem.toString(),
+            }
+          : { vault: row.vault, ok: false })),
+      },
+    };
+  }
+
+  /**
+   * D-079: Vesu's supply APY for each pinned vault, from this service's own
+   * cached read of Vesu's public API. The request carries a version and
+   * nothing else, and the answer holds only pinned vaults and their rates:
+   * nothing about any player.
+   */
+  private async vaultRateList(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    requireVersion(requireRecord(body, ['v']));
+    if (!this.vaultRates) throw new ApiFailure(503, 'The Vault rates are unavailable.');
+    const rates = await this.vaultRates.rates(signal);
+    return {
+      status: 200,
+      body: {
+        rates: rates.map((rate) => ({
+          vault: rate.vault,
+          supplyApy: { value: rate.supplyApy.value.toString(), decimals: rate.supplyApy.decimals },
+        })),
       },
     };
   }

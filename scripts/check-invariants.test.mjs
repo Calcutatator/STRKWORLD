@@ -51,7 +51,7 @@ function editEntry(route, pattern, replacement) {
   };
 }
 
-describe('check 8: the privacy register gate, with the Vault routes (D-077)', () => {
+describe('check 8: the privacy register gate, with the Vault routes (D-077, D-079)', () => {
   it('passes the register as committed', async () => {
     const output = await runCheck();
     expect(output).toContain('ok   every privacy deviation is approved');
@@ -66,6 +66,15 @@ describe('check 8: the privacy register gate, with the Vault routes (D-077)', ()
 
   it('fails an approved Vault route with its disclosure removed', async () => {
     const output = await runCheck(editEntry('vault.redeem', /disclosure:\s*\n\s*'[^']*',/, 'disclosure: null,'));
+    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.redeem/);
+  }, 30_000);
+
+  it('refuses a waiver citing D-079, which widens the Vault and waives nothing', async () => {
+    const output = await runCheck(editEntry(
+      'vault.redeem',
+      /disclosure:\s*\n\s*'[^']*',/,
+      "disclosure: null,\n    disclosureWaivedBy: 'D-079',",
+    ));
     expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.redeem/);
   }, 30_000);
 

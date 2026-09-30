@@ -5,8 +5,9 @@ import type { PrivacyOperations } from './operations.js';
 /**
  * The D-036 freeze, made mechanical.
  *
- * `PrivacyOperations` is frozen at ten methods: D-036's five, the two
- * entry-gate reads D-072 added, and the Vault's three from D-077. Adding
+ * `PrivacyOperations` is frozen at eleven methods: D-036's five, the two
+ * entry-gate reads D-072 added, the Vault's three from D-077, and the Vault's
+ * rates read D-079 added when it renamed the position read. Adding
  * another, or removing or renaming one of these, needs a decision entry and a
  * heads-up to dependent lanes before implementation, so it must not be
  * possible to do it quietly. These assertions turn seam drift into an error
@@ -22,9 +23,12 @@ const PINNED_METHODS = [
   'hasPrivateFunds',
   'depositStatus',
   // D-077: the Vault's position read and its two prepared shadow-account batches.
-  'vaultPosition',
+  // D-079: the read covers every admitted token and names the stand-in address.
+  'vaultPositions',
   'prepareVaultSupply',
   'prepareVaultRedeem',
+  // D-079: Vesu's supply APY for each admitted token, a public read.
+  'vaultRates',
 ] as const;
 
 type PinnedMethod = (typeof PINNED_METHODS)[number];
@@ -48,8 +52,8 @@ type NoMissingMember = MustBeNever<Exclude<PinnedMethod, keyof PrivacyOperations
 type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMethod, SeamMethod>>;
 
 describe('D-036 PrivacyOperations freeze', () => {
-  it('pins ten distinct method names', () => {
-    expect(new Set(PINNED_METHODS).size).toBe(10);
+  it('pins eleven distinct method names', () => {
+    expect(new Set(PINNED_METHODS).size).toBe(11);
   });
 
   it('names methods the shipped test double implements', () => {

@@ -4,7 +4,7 @@ import { BackendApi } from './api.js';
 import { MemoryAuthorizationCodec } from './authorization.js';
 import { createBackendRuntime } from './runtime.js';
 import { BALANCE_OF_SELECTOR, StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { BackendConfig, PoolRpcPort, VaultRpcPort } from './types.js';
+import type { BackendConfig, PoolRpcPort, VaultRatesPort, VaultRpcPort } from './types.js';
 import {
   GET_SHADOW_ACCOUNTS_SELECTOR,
   MAX_REDEEM_SELECTOR,
@@ -12,13 +12,21 @@ import {
   PREVIEW_REDEEM_SELECTOR,
   SHADOW_ACCOUNT_ANONYMIZER,
   VAULT_POSITION_PATH,
+  VAULT_RATES_PATH,
   VAULT_SHADOW_ACCOUNT_PATH,
+  VESU_PRIME_POOL,
+  VESU_PRIME_POOL_API_URL,
+  VESU_VAULTS,
   VESU_VSTRK,
 } from './vault.js';
+// The one token -> vault map (D-079), which this service pins its own copy of.
+import { VAULT_MARKETS, VESU_PRIME_POOL as PRIVACY_PRIME_POOL } from '../../../packages/privacy/src/vault.js';
 
 /**
- * D-077: the Vault's two public reads. Each is pinned to one contract and one
- * selector, takes one value from the request, and logs nothing about it.
+ * D-077: the Vault's public reads. Each is pinned to its contracts and
+ * selectors, takes one value from the request, and logs nothing about it.
+ * D-079: the position read covers every pinned vault, and a third route
+ * answers Vesu's supply APY from this service's own cached read.
  */
 
 const POOL = '0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a';
@@ -38,6 +46,14 @@ describe('the pinned Vault contracts and selectors', () => {
   it('pins the canonical anonymizer and Vesu vSTRK, as read on mainnet', () => {
     expect(SHADOW_ACCOUNT_ANONYMIZER).toBe('0x04f33230dc57855c6e7eabe66dfa0fde82c5458fd0e54827cdb7cb4c474888a7');
     expect(VESU_VSTRK).toBe('0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d');
+  });
+
+  it('pins the same vaults as the privacy package’s token → vault map, in its order (D-079)', () => {
+    expect(VESU_VAULTS.map(({ token, vault }) => [token, vault])).toEqual(VAULT_MARKETS.map(({ token, vault }) => [token, vault]));
+    expect(VESU_VAULTS[0]).toEqual({ token: STRK, vault: VESU_VSTRK });
+    expect(VESU_PRIME_POOL).toBe(PRIVACY_PRIME_POOL);
+    expect(VESU_PRIME_POOL_API_URL).toBe(`https://api.vesu.xyz/pools/${VESU_PRIME_POOL}`);
+    expect(Object.isFrozen(VESU_VAULTS)).toBe(true);
   });
 });
 
@@ -100,57 +116,86 @@ describe('the shadow-account read (D-077)', () => {
   });
 });
 
-describe('the vSTRK position read (D-077)', () => {
-  it('answers an empty position from its balance alone', async () => {
+describe('the position read across every pinned vault (D-077, D-079)', () => {
+  const empty = { ok: true, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+
+  it('answers empty positions from each vault’s balance alone, one row per vault in pinned order', async () => {
     const { rpc, requests } = port(() => ['0x0', '0x0']);
-    await expect(rpc.getVaultPosition(SHADOW)).resolves.toEqual({ shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n });
-    expect(requests.map(callOf)).toEqual([
-      { contract_address: VESU_VSTRK, entry_point_selector: BALANCE_OF_SELECTOR, calldata: [SHADOW] },
-    ]);
+    await expect(rpc.getVaultPositions(SHADOW)).resolves.toEqual(VESU_VAULTS.map(({ vault }) => ({ vault, ...empty })));
+    expect(requests.map(callOf)).toEqual(VESU_VAULTS.map(({ vault }) => (
+      { contract_address: vault, entry_point_selector: BALANCE_OF_SELECTOR, calldata: [SHADOW] }
+    )));
   });
 
-  it('previews the shares and reads both limits of a held position, as u256 values', async () => {
+  it('previews the shares and reads both limits of a held position, as u256 values, on its own vault only', async () => {
     const shares = (1n << 128n) + 5n;
+    const usdcVault = VESU_VAULTS[2]!.vault;
     const { rpc, requests } = port((request) => {
-      const selector = callOf(request).entry_point_selector;
-      if (selector === BALANCE_OF_SELECTOR) return ['0x5', '0x1'];
-      if (selector === PREVIEW_REDEEM_SELECTOR) return ['0x64', '0x0'];
-      if (selector === MAX_WITHDRAW_SELECTOR) return ['0x60', '0x0'];
-      if (selector === MAX_REDEEM_SELECTOR) return ['0x4', '0x1'];
+      const call = callOf(request);
+      if (call.entry_point_selector === BALANCE_OF_SELECTOR) return call.contract_address === usdcVault ? ['0x5', '0x1'] : ['0x0', '0x0'];
+      if (call.entry_point_selector === PREVIEW_REDEEM_SELECTOR) return ['0x64', '0x0'];
+      if (call.entry_point_selector === MAX_WITHDRAW_SELECTOR) return ['0x60', '0x0'];
+      if (call.entry_point_selector === MAX_REDEEM_SELECTOR) return ['0x4', '0x1'];
       return null;
     });
-    await expect(rpc.getVaultPosition(SHADOW)).resolves.toEqual({
-      shares,
-      assets: 100n,
-      maxWithdraw: 96n,
-      maxRedeem: (1n << 128n) + 4n,
-    });
-    const calls = requests.map(callOf);
-    expect(calls.every((call) => call.contract_address === VESU_VSTRK)).toBe(true);
-    expect(calls.find((call) => call.entry_point_selector === PREVIEW_REDEEM_SELECTOR)?.calldata).toEqual(['0x5', '0x1']);
-    expect(calls.find((call) => call.entry_point_selector === MAX_WITHDRAW_SELECTOR)?.calldata).toEqual([SHADOW]);
-    expect(calls.find((call) => call.entry_point_selector === MAX_REDEEM_SELECTOR)?.calldata).toEqual([SHADOW]);
+    const rows = await rpc.getVaultPositions(SHADOW);
+    expect(rows[2]).toEqual({ vault: usdcVault, ok: true, shares, assets: 100n, maxWithdraw: 96n, maxRedeem: (1n << 128n) + 4n });
+    expect(rows.filter((row) => row.vault !== usdcVault)).toEqual(
+      VESU_VAULTS.filter(({ vault }) => vault !== usdcVault).map(({ vault }) => ({ vault, ...empty })),
+    );
+    const followUps = requests.map(callOf).filter((call) => call.entry_point_selector !== BALANCE_OF_SELECTOR);
+    expect(followUps).toHaveLength(3);
+    expect(followUps.every((call) => call.contract_address === usdcVault)).toBe(true);
+    expect(followUps.find((call) => call.entry_point_selector === PREVIEW_REDEEM_SELECTOR)?.calldata).toEqual(['0x5', '0x1']);
+    expect(followUps.find((call) => call.entry_point_selector === MAX_WITHDRAW_SELECTOR)?.calldata).toEqual([SHADOW]);
+    expect(followUps.find((call) => call.entry_point_selector === MAX_REDEEM_SELECTOR)?.calldata).toEqual([SHADOW]);
+  });
+
+  it('never calls a contract outside the pinned vaults', async () => {
+    const { rpc, requests } = port((request) => (callOf(request).entry_point_selector === BALANCE_OF_SELECTOR ? ['0x1', '0x0'] : ['0x1', '0x0']));
+    await rpc.getVaultPositions(SHADOW);
+    const pinned = new Set(VESU_VAULTS.map(({ vault }) => vault));
+    expect(requests.map(callOf).every((call) => pinned.has(call.contract_address))).toBe(true);
+    expect(requests).toHaveLength(VESU_VAULTS.length * 4);
   });
 
   it.each([
     ['a one-felt balance', () => ['0x5']],
     ['a limb above u128', () => [`0x${(1n << 128n).toString(16)}`, '0x0']],
     ['a non-felt limb', () => ['5', '0x0']],
-  ])('refuses %s', async (_label, answer) => {
+  ])('answers every vault as unread after %s, never as a figure', async (_label, answer) => {
     const { rpc } = port(answer);
-    await expect(rpc.getVaultPosition(SHADOW)).rejects.toThrow();
+    await expect(rpc.getVaultPositions(SHADOW)).resolves.toEqual(VESU_VAULTS.map(({ vault }) => ({ vault, ok: false })));
+  });
+
+  it('marks only the vault whose read is malformed, so it never blocks another token', async () => {
+    const wbtcVault = VESU_VAULTS[4]!.vault;
+    const { rpc } = port((request) => (callOf(request).contract_address === wbtcVault ? ['0x5'] : ['0x0', '0x0']));
+    const rows = await rpc.getVaultPositions(SHADOW);
+    expect(rows[4]).toEqual({ vault: wbtcVault, ok: false });
+    expect(rows.slice(0, 4)).toEqual(VESU_VAULTS.slice(0, 4).map(({ vault }) => ({ vault, ...empty })));
+  });
+
+  it('still rejects a cancelled read rather than calling every vault unread', async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      controller.abort();
+      throw init?.signal?.reason ?? new DOMException('Aborted', 'AbortError');
+    });
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: POOL, feeToken: STRK, fetcher });
+    await expect(rpc.getVaultPositions(SHADOW, controller.signal)).rejects.toBeDefined();
   });
 
   it('refuses a zero or malformed account before the RPC is asked', async () => {
     const { rpc, fetcher } = port(() => ['0x0', '0x0']);
     for (const bad of ['0x0', 'abc', `0x${'f'.repeat(64)}`]) {
-      await expect(rpc.getVaultPosition(bad)).rejects.toThrow(/account is invalid/);
+      await expect(rpc.getVaultPositions(bad)).rejects.toThrow(/account is invalid/);
     }
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
 
-function apiWith(vault?: VaultRpcPort, overrides: Partial<BackendConfig> = {}) {
+function apiWith(vault?: VaultRpcPort, overrides: Partial<BackendConfig> = {}, vaultRates?: VaultRatesPort) {
   const rpc: PoolRpcPort = {
     getPoolConfig: vi.fn(async () => ({ feeAmount: 6n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 })),
     getPublicKey: vi.fn(async () => '0x0'),
@@ -177,13 +222,24 @@ function apiWith(vault?: VaultRpcPort, overrides: Partial<BackendConfig> = {}) {
     rpc,
     authorizations: new MemoryAuthorizationCodec(),
     ...(vault ? { vault } : {}),
+    ...(vaultRates ? { vaultRates } : {}),
   });
 }
 
-function vaultPort(): VaultRpcPort & { getShadowAccount: ReturnType<typeof vi.fn>; getVaultPosition: ReturnType<typeof vi.fn> } {
+function vaultPort(): VaultRpcPort & { getShadowAccount: ReturnType<typeof vi.fn>; getVaultPositions: ReturnType<typeof vi.fn> } {
   return {
     getShadowAccount: vi.fn(async () => ({ address: SHADOW, deployed: false })),
-    getVaultPosition: vi.fn(async () => ({ shares: 10n ** 18n, assets: 1_019_826_000_000_000_000n, maxWithdraw: 10n ** 18n, maxRedeem: 10n ** 18n })),
+    getVaultPositions: vi.fn(async () => [
+      { vault: VESU_VSTRK, ok: true as const, shares: 10n ** 18n, assets: 1_019_826_000_000_000_000n, maxWithdraw: 10n ** 18n, maxRedeem: 10n ** 18n },
+      { vault: VESU_VAULTS[2]!.vault, ok: true as const, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: VESU_VAULTS[4]!.vault, ok: false as const },
+    ]),
+  };
+}
+
+function ratesPort(): VaultRatesPort & { rates: ReturnType<typeof vi.fn> } {
+  return {
+    rates: vi.fn(async () => [{ vault: VESU_VSTRK, supplyApy: { value: 27351899613523568n, decimals: 18 } }]),
   };
 }
 
@@ -196,20 +252,46 @@ describe('the Vault read routes (D-077)', () => {
     expect(vault.getShadowAccount).toHaveBeenCalledWith(PARTIAL, expect.any(AbortSignal));
   });
 
-  it('answers a position in decimal base units', async () => {
+  it('answers every pinned vault’s position in decimal base units, one row each, and an unread vault as such', async () => {
     const vault = vaultPort();
     const api = apiWith(vault);
     await expect(api.handle({ method: 'POST', path: VAULT_POSITION_PATH, body: { v: 1, account: SHADOW } }))
       .resolves.toEqual({
         status: 200,
         body: {
-          shares: '1000000000000000000',
-          assets: '1019826000000000000',
-          maxWithdraw: '1000000000000000000',
-          maxRedeem: '1000000000000000000',
+          positions: [
+            {
+              vault: VESU_VSTRK,
+              ok: true,
+              shares: '1000000000000000000',
+              assets: '1019826000000000000',
+              maxWithdraw: '1000000000000000000',
+              maxRedeem: '1000000000000000000',
+            },
+            { vault: VESU_VAULTS[2]!.vault, ok: true, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
+            { vault: VESU_VAULTS[4]!.vault, ok: false },
+          ],
         },
       });
-    expect(vault.getVaultPosition).toHaveBeenCalledWith(SHADOW, expect.any(AbortSignal));
+    expect(vault.getVaultPositions).toHaveBeenCalledWith(SHADOW, expect.any(AbortSignal));
+  });
+
+  it('answers Vesu’s rates as an integer and its decimals, for a request carrying nothing but a version (D-079)', async () => {
+    const rates = ratesPort();
+    const api = apiWith(vaultPort(), {}, rates);
+    await expect(api.handle({ method: 'POST', path: VAULT_RATES_PATH, body: { v: 1 } })).resolves.toEqual({
+      status: 200,
+      body: { rates: [{ vault: VESU_VSTRK, supplyApy: { value: '27351899613523568', decimals: 18 } }] },
+    });
+    for (const body of [{ v: 2 }, { v: 1, vault: VESU_VSTRK }, { v: 1, account: SHADOW }, {}]) {
+      await expect(api.handle({ method: 'POST', path: VAULT_RATES_PATH, body }), JSON.stringify(body)).resolves.toMatchObject({ status: 400 });
+    }
+    expect(rates.rates).toHaveBeenCalledTimes(1);
+    await expect(apiWith(vaultPort()).handle({ method: 'POST', path: VAULT_RATES_PATH, body: { v: 1 } }))
+      .resolves.toMatchObject({ status: 503 });
+    await expect(apiWith(vaultPort(), { globalEnabled: false }, rates).handle({ method: 'POST', path: VAULT_RATES_PATH, body: { v: 1 } }))
+      .resolves.toMatchObject({ status: 503 });
+    expect(rates.rates).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -226,7 +308,7 @@ describe('the Vault read routes (D-077)', () => {
     const api = apiWith(vault);
     await expect(api.handle({ method: 'POST', path, body })).resolves.toMatchObject({ status: 400 });
     expect(vault.getShadowAccount).not.toHaveBeenCalled();
-    expect(vault.getVaultPosition).not.toHaveBeenCalled();
+    expect(vault.getVaultPositions).not.toHaveBeenCalled();
   });
 
   it('answers 503 on a service composed without the Vault reads', async () => {
@@ -242,7 +324,7 @@ describe('the Vault read routes (D-077)', () => {
     const api = apiWith(vault, { globalEnabled: false });
     await expect(api.handle({ method: 'POST', path: VAULT_POSITION_PATH, body: { v: 1, account: SHADOW } }))
       .resolves.toMatchObject({ status: 503 });
-    expect(vault.getVaultPosition).not.toHaveBeenCalled();
+    expect(vault.getVaultPositions).not.toHaveBeenCalled();
   });
 
   it('maps a provider failure to the generic answer without echoing it, and keeps metrics aggregate', async () => {
@@ -261,7 +343,7 @@ describe('the Vault read routes (D-077)', () => {
       rpc: {
         getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn(),
         getShadowAccount: vi.fn(async () => ({ address: SHADOW, deployed: true })),
-        getVaultPosition: vi.fn(),
+        getVaultPositions: vi.fn(),
       } as PoolRpcPort,
       swapPlanner: { prepare: vi.fn() },
     });

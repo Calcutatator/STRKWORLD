@@ -20,7 +20,16 @@ import { createBackendFetchHandler } from './http.js';
 import { PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, PoolStatsPort, SwapPlannerPort, VaultRpcPort } from './types.js';
+import type {
+  DegenCatalogPort,
+  PaymasterPort,
+  PoolRpcPort,
+  PoolStatsPort,
+  SwapPlannerPort,
+  VaultRatesPort,
+  VaultRpcPort,
+} from './types.js';
+import { VesuVaultRates } from './vesu-rates.js';
 
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
@@ -29,6 +38,8 @@ export interface BackendRuntimeOverrides {
   degenCatalog?: DegenCatalogPort;
   /** The Privacy Plaza's pool stats (D-076); by default a cache over the RPC port. */
   poolStats?: PoolStatsPort;
+  /** Vesu's supply APY for the Vault (D-079); by default a cached read of Vesu's public API. */
+  vaultRates?: VaultRatesPort;
   /** The D-069 debug sink, with a test writer in place of stdout. */
   debugLogs?: DebugLogSink;
 }
@@ -189,14 +200,17 @@ function createBackendApi(
   // and only when the port offers their narrow reads.
   const poolStats = overrides.poolStats ?? (isPoolStatsRpc(rpc) ? new PoolStatsCache({ rpc }) : undefined);
   // D-077: the Vault's two pinned reads use the same private RPC, when the
-  // port offers them.
+  // port offers them. D-079: Vesu's rates come from its public API, fetched
+  // by this service alone, and only once a request asks.
   const vault = isVaultRpc(rpc) ? rpc : undefined;
+  const vaultRates = overrides.vaultRates ?? new VesuVaultRates();
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
     rpc,
     ...(poolStats ? { poolStats } : {}),
     ...(vault ? { vault } : {}),
+    vaultRates,
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
@@ -214,7 +228,7 @@ function createBackendApi(
 function isVaultRpc(value: unknown): value is VaultRpcPort {
   if (!value || typeof value !== 'object') return false;
   const port = value as Partial<Record<keyof VaultRpcPort, unknown>>;
-  return typeof port.getShadowAccount === 'function' && typeof port.getVaultPosition === 'function';
+  return typeof port.getShadowAccount === 'function' && typeof port.getVaultPositions === 'function';
 }
 
 type FetchHandler = (request: Request) => Promise<Response>;

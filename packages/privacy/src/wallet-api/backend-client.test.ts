@@ -1376,9 +1376,20 @@ describe('BackendPrivacyClient receipt lookup (D-072)', () => {
   });
 });
 
-describe('BackendPrivacyClient Vault reads (D-077)', () => {
+describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
   const PARTIAL = '0x5f2e1d';
   const SHADOW = '0x24915cb456ef2876c9611af4f021747f8d9761ff2d7bc716722ce4527091ac9';
+  const VSTRK = '0x6d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d';
+  const VUSDC = '0x387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65';
+  const row = (vault: string, fields: Record<string, unknown> = {}) => ({
+    vault,
+    ok: true,
+    shares: '50000000000000000000',
+    assets: '51000000000000000000',
+    maxWithdraw: '51000000000000000000',
+    maxRedeem: '50000000000000000000',
+    ...fields,
+  });
 
   it('asks the shadow-account route for the partial commitment alone', async () => {
     const fetcher = vi.fn(async () => response({ address: SHADOW, deployed: false }));
@@ -1391,24 +1402,41 @@ describe('BackendPrivacyClient Vault reads (D-077)', () => {
     expect(JSON.parse(String(init.body))).toEqual({ v: 1, partialCommitment: PARTIAL });
   });
 
-  it('asks the position route for the stand-in address alone, and reads decimal base units', async () => {
+  it('asks the position route for the stand-in address alone, and reads one row per vault in decimal base units', async () => {
     const fetcher = vi.fn(async () => response({
-      shares: '50000000000000000000',
-      assets: '51000000000000000000',
-      maxWithdraw: '51000000000000000000',
-      maxRedeem: '50000000000000000000',
+      positions: [
+        row(VSTRK),
+        row(VUSDC, { shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' }),
+        { vault: '0x4ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', ok: false },
+      ],
     }));
     const client = new BackendPrivacyClient('/api', fetcher);
 
-    await expect(client.vaultPosition(SHADOW)).resolves.toEqual({
-      shares: 50n * 10n ** 18n,
-      assets: 51n * 10n ** 18n,
-      maxWithdraw: 51n * 10n ** 18n,
-      maxRedeem: 50n * 10n ** 18n,
-    });
+    const rows = await client.vaultPositions(SHADOW);
+    expect(rows).toEqual([
+      { vault: VSTRK, ok: true, shares: 50n * 10n ** 18n, assets: 51n * 10n ** 18n, maxWithdraw: 51n * 10n ** 18n, maxRedeem: 50n * 10n ** 18n },
+      { vault: VUSDC, ok: true, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n },
+      { vault: '0x4ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', ok: false },
+    ]);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(Object.isFrozen(rows[0])).toBe(true);
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/v1/rpc/vault-position');
     expect(JSON.parse(String(init.body))).toEqual({ v: 1, account: SHADOW });
+  });
+
+  it('asks the rates route for nothing but a version, and reads each vault’s APY as an integer and its decimals', async () => {
+    const fetcher = vi.fn(async () => response({
+      rates: [{ vault: VSTRK, supplyApy: { value: '27351899613523568', decimals: 18 } }],
+    }));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.vaultRates()).resolves.toEqual([
+      { vault: VSTRK, supplyApy: { value: 27351899613523568n, decimals: 18 } },
+    ]);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/vault-rates');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1 });
   });
 
   it('refuses a malformed commitment or account without a request', async () => {
@@ -1416,7 +1444,7 @@ describe('BackendPrivacyClient Vault reads (D-077)', () => {
     const client = new BackendPrivacyClient('/api', fetcher);
     for (const bad of ['', '0x0', 'shadow', `0x${STARK_FIELD_PRIME.toString(16)}`, 1 as unknown as string]) {
       await expect(client.shadowAccount(bad)).rejects.toMatchObject({ kind: 'unknown' });
-      await expect(client.vaultPosition(bad)).rejects.toMatchObject({ kind: 'unknown' });
+      await expect(client.vaultPositions(bad)).rejects.toMatchObject({ kind: 'unknown' });
     }
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -1432,14 +1460,39 @@ describe('BackendPrivacyClient Vault reads (D-077)', () => {
   });
 
   it.each([
-    ['a hex figure', { shares: '0x1', assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
-    ['a number', { shares: 1, assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
-    ['a figure past u256', { shares: (MAX_UINT256 + 1n).toString(), assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
-    ['an extra field', { shares: '1', assets: '1', maxWithdraw: '1', maxRedeem: '1', account: SHADOW }],
-    ['a missing field', { shares: '1', assets: '1', maxWithdraw: '1' }],
+    ['a hex figure', { positions: [row(VSTRK, { shares: '0x1' })] }],
+    ['a number', { positions: [row(VSTRK, { shares: 1 })] }],
+    ['a figure past u256', { positions: [row(VSTRK, { shares: (MAX_UINT256 + 1n).toString() })] }],
+    ['an extra field in a row', { positions: [row(VSTRK, { account: SHADOW })] }],
+    ['no ok flag', { positions: [{ vault: VSTRK, shares: '1', assets: '1', maxWithdraw: '1', maxRedeem: '1' }] }],
+    ['an ok flag that is not a boolean', { positions: [row(VSTRK, { ok: 'true' })] }],
+    ['an unread row that still carries figures', { positions: [row(VSTRK, { ok: false })] }],
+    ['a missing field in a row', { positions: [{ vault: VSTRK, shares: '1', assets: '1', maxWithdraw: '1' }] }],
+    ['a zero vault', { positions: [row('0x0')] }],
+    ['a vault that is not a felt', { positions: [row('vSTRK')] }],
+    ['a single position rather than a list', row(VSTRK)],
+    ['an extra top-level field', { positions: [row(VSTRK)], account: SHADOW }],
+    ['more rows than any backend pins', { positions: Array.from({ length: 17 }, () => row(VSTRK)) }],
   ])('refuses a position answer with %s', async (_label, body) => {
     const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
-    await expect(client.vaultPosition(SHADOW)).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(client.vaultPositions(SHADOW)).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
+    ['a hex value', { rates: [{ vault: VSTRK, supplyApy: { value: '0x1', decimals: 18 } }] }],
+    ['a number value', { rates: [{ vault: VSTRK, supplyApy: { value: 1, decimals: 18 } }] }],
+    ['a negative value', { rates: [{ vault: VSTRK, supplyApy: { value: '-1', decimals: 18 } }] }],
+    ['string decimals', { rates: [{ vault: VSTRK, supplyApy: { value: '1', decimals: '18' } }] }],
+    ['too many decimals', { rates: [{ vault: VSTRK, supplyApy: { value: '1', decimals: 37 } }] }],
+    ['negative decimals', { rates: [{ vault: VSTRK, supplyApy: { value: '1', decimals: -1 } }] }],
+    ['an extra rate field', { rates: [{ vault: VSTRK, supplyApy: { value: '1', decimals: 18, source: 'vesu' } }] }],
+    ['an extra row field', { rates: [{ vault: VSTRK, supplyApy: { value: '1', decimals: 18 }, apr: '1' }] }],
+    ['a zero vault', { rates: [{ vault: '0x0', supplyApy: { value: '1', decimals: 18 } }] }],
+    ['no list', { rates: null }],
+    ['an extra top-level field', { rates: [], pool: VSTRK }],
+  ])('refuses a rates answer with %s', async (_label, body) => {
+    const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
+    await expect(client.vaultRates()).rejects.toMatchObject({ kind: 'unknown' });
   });
 
   it('reads an unreachable or switched-off service as unreachable', async () => {
@@ -1449,6 +1502,8 @@ describe('BackendPrivacyClient Vault reads (D-077)', () => {
       { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' },
       503,
     )));
-    await expect(off.vaultPosition(SHADOW)).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(off.vaultPositions(SHADOW)).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(off.vaultRates()).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(down.vaultRates()).rejects.toMatchObject({ kind: 'unreachable' });
   });
 });

@@ -20,13 +20,15 @@ import type {
   VaultAction,
   VaultCallOptions,
   VaultPosition,
+  VaultPositions,
+  VaultRate,
   VaultStage,
   VaultStageCallback,
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
-import { VESU_VSTRK_ASSET } from '../vault.js';
+import { VAULT_MARKETS, VESU_VSTRK_ASSET, vaultMarket, type VaultMarket } from '../vault.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
@@ -44,12 +46,19 @@ function demoStakeShares(assets: bigint): bigint {
 }
 
 /**
- * DEMO RATE, not Vesu's. The fake's Vault (D-077) prices a vSTRK share at a
- * fixed 1.02 STRK (51 STRK per 50 shares) so demo mode stays deterministic.
- * A fixture that never reads the vault, and must never be presented as a live
- * share price or yield.
+ * DEMO RATE, not Vesu's. The fake's Vault (D-077) prices a share of every
+ * vault at a fixed 1.02 of its token (51 per 50 shares, in the token's base
+ * units, D-079) so demo mode stays deterministic. A fixture that never reads
+ * a vault, and must never be presented as a live share price or yield.
  */
 const DEMO_VSTRK_ASSETS_PER_SHARE = { numerator: 51n, denominator: 50n } as const;
+
+/**
+ * The demo player's stand-in address (D-079): a fixed placeholder, not a
+ * shadow account anyone derived. It holds nothing on-chain.
+ */
+export const DEMO_VAULT_STAND_IN: Address =
+  '0x000000000000000000000000000000000000000000000000000000000000de70';
 
 /** Shares a demo supply of `assets` mints, floored, as an ERC-4626 deposit rounds. */
 function demoVaultShares(assets: bigint): bigint {
@@ -118,8 +127,16 @@ export interface FakeConfig {
    * The demo Vault (D-077): vSTRK shares the demo stand-in address starts
    * with, and `liquidity`, the most STRK the demo vault pays out at once.
    * Omitted, the position starts empty and the vault pays out in full.
+   * `markets` (D-079) sets the same for any pinned token's vault, by token;
+   * for STRK it overrides `shares` and `liquidity`. `rates` are DEMO supply
+   * APYs by token, never Vesu's; omitted, `vaultRates` states none.
    */
-  vault?: { shares?: bigint; liquidity?: bigint };
+  vault?: {
+    shares?: bigint;
+    liquidity?: bigint;
+    markets?: Readonly<Record<Address, { shares?: bigint; liquidity?: bigint }>>;
+    rates?: Readonly<Record<Address, { value: bigint; decimals: number }>>;
+  };
 }
 
 /**
@@ -200,7 +217,9 @@ export interface Fault {
     /** D-077: the Vault's position read, its two prepares, and its confirm. */
     | 'vaultPosition'
     | 'vaultPrepare'
-    | 'vaultConfirm';
+    | 'vaultConfirm'
+    /** D-079: the Vault's rates read. */
+    | 'vaultRates';
   message?: string;
   sticky?: boolean;
 }
@@ -235,13 +254,16 @@ export class FakePrivacyOperations implements PrivacyOperations {
   readonly submitted: Intent[][] = [];
   /** Every confirmed Vault action, in order (D-077). */
   readonly vaultSubmitted: VaultAction[] = [];
-  /** The demo stand-in address's vSTRK shares (D-077). */
-  private vaultShares = 0n;
+  /** The demo stand-in address's shares in each pinned vault, and each demo vault's payout limit (D-079). */
+  private readonly vaultHoldings = new Map<VaultMarket, { shares: bigint; liquidity?: bigint }>(
+    VAULT_MARKETS.map((market) => [market, { shares: 0n }]),
+  );
   /** Whether the demo stand-in address has run a Vault call yet, as a real one deploys on first use. */
   private vaultDeployed = false;
   /** Whether the demo wallet has answered the commitment request yet: it is asked once. */
   private vaultCommitted = false;
-  private readonly vaultLiquidity?: bigint;
+  /** DEMO supply APYs by pinned market (D-079). */
+  private readonly vaultRatesByMarket = new Map<VaultMarket, { value: bigint; decimals: number }>();
 
   constructor(config: FakeConfig = {}) {
     const balances = config.balances ?? {};
@@ -321,16 +343,39 @@ export class FakePrivacyOperations implements PrivacyOperations {
       this.configuredSwapReview = Object.freeze({ ...config.swapReview });
     }
     if (config.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(config.demoSwapRates);
-    if (config.vault !== undefined) {
-      const shares = config.vault.shares ?? 0n;
-      const liquidity = config.vault.liquidity;
-      if (typeof shares !== 'bigint' || shares < 0n || (liquidity !== undefined && (typeof liquidity !== 'bigint' || liquidity < 0n))) {
-        throw new PrivacyError('unknown', 'The fake Vault configuration is invalid.');
+    if (config.vault !== undefined) this.ownVaultConfig(config.vault);
+  }
+
+  /** Own the demo Vault's starting positions and rates, every token a pinned market's (D-077, D-079). */
+  private ownVaultConfig(vault: NonNullable<FakeConfig['vault']>): void {
+    const invalid = () => new PrivacyError('unknown', 'The fake Vault configuration is invalid.');
+    const holding = (shares: unknown, liquidity: unknown): { shares: bigint; liquidity?: bigint } => {
+      const owned = shares ?? 0n;
+      if (typeof owned !== 'bigint' || owned < 0n || (liquidity !== undefined && (typeof liquidity !== 'bigint' || liquidity < 0n))) {
+        throw invalid();
       }
-      this.vaultShares = shares;
-      this.vaultDeployed = shares > 0n;
-      if (liquidity !== undefined) this.vaultLiquidity = liquidity;
+      return liquidity === undefined ? { shares: owned } : { shares: owned, liquidity: liquidity as bigint };
+    };
+    const strk = vaultMarket(VESU_VSTRK_ASSET)!;
+    this.vaultHoldings.set(strk, holding(vault.shares, vault.liquidity));
+    for (const [token, entry] of ownRecordEntries(vault.markets, invalid)) {
+      const market = vaultMarket(token);
+      if (!market || !entry || typeof entry !== 'object') throw invalid();
+      this.vaultHoldings.set(market, holding(ownField(entry, 'shares'), ownField(entry, 'liquidity')));
     }
+    for (const [token, rate] of ownRecordEntries(vault.rates, invalid)) {
+      const market = vaultMarket(token);
+      const value = ownField(rate, 'value');
+      const decimals = ownField(rate, 'decimals');
+      if (
+        !market || typeof value !== 'bigint' || value < 0n
+        || typeof decimals !== 'number' || !Number.isSafeInteger(decimals) || decimals < 0 || decimals > 36
+      ) {
+        throw invalid();
+      }
+      this.vaultRatesByMarket.set(market, { value, decimals });
+    }
+    this.vaultDeployed = [...this.vaultHoldings.values()].some((entry) => entry.shares > 0n);
   }
 
   // -- test controls --------------------------------------------------------
@@ -616,81 +661,114 @@ export class FakePrivacyOperations implements PrivacyOperations {
     };
   }
 
-  // -- The Vault (D-077) ----------------------------------------------------
+  // -- The Vault (D-077, D-079) ----------------------------------------------
 
   /**
-   * The demo stand-in address's position, at the DEMO share rate. Reports the
-   * stages the Wallet API adapter reports, in the same order, so the Shell's
-   * probe logging is exercised in demo mode too.
+   * The demo stand-in address's position in every pinned vault, at the DEMO
+   * share rate, and the demo stand-in address. Reports the stages the Wallet
+   * API adapter reports, in the same order, so the Shell's probe logging is
+   * exercised in demo mode too. The fake has no build policy: it answers for
+   * every token `VAULT_MARKETS` pins, in that order.
    */
-  async vaultPosition(options?: VaultCallOptions): Promise<VaultPosition> {
+  async vaultPositions(options?: VaultCallOptions): Promise<VaultPositions> {
     const { signal, onStage } = ownVaultOptions(options);
     await this.tick('vaultPosition', signal);
     this.vaultIdentity(onStage);
     emitVaultStage(onStage, { stage: 'position', ok: true });
-    return this.vaultPositionNow();
+    return Object.freeze({
+      standIn: DEMO_VAULT_STAND_IN,
+      positions: Object.freeze(VAULT_MARKETS.map((market) => this.vaultPositionNow(market))),
+    });
   }
 
   async prepareVaultSupply(token: Address, amount: bigint, options?: VaultCallOptions): Promise<PreparedVaultBatch> {
     const { signal, onStage } = ownVaultOptions(options);
     await this.tick('vaultPrepare', signal);
-    if (typeof token !== 'string' || !sameAddress(token, VESU_VSTRK_ASSET)) {
-      throw new PrivacyError('unknown', 'The Vault lends STRK only.');
-    }
+    const market = vaultMarket(token);
+    if (!market) throw new PrivacyError('unknown', 'The Vault does not lend that token in this build.');
     if (typeof amount !== 'bigint' || amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
     this.vaultIdentity(onStage);
-    this.assertVaultFunds(amount);
-    const action: VaultAction = Object.freeze({ kind: 'supply', token: VESU_VSTRK_ASSET, amount });
+    this.assertVaultFunds(market, amount);
+    const action: VaultAction = Object.freeze({ kind: 'supply', token: market.token, amount });
     return this.vaultBatch(action, () => {
-      this.assertVaultFunds(amount);
-      this.debit(VESU_VSTRK_ASSET, amount + this.pool.feeAmount);
-      this.vaultShares += demoVaultShares(amount);
+      this.assertVaultFunds(market, amount);
+      this.debit(market.token, amount);
+      this.debit(this.pool.feeToken, this.pool.feeAmount);
+      this.vaultHolding(market).shares += demoVaultShares(amount);
       this.vaultDeployed = true;
     });
   }
 
-  async prepareVaultRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+  async prepareVaultRedeem(token: Address, amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
     const { signal, onStage } = ownVaultOptions(options);
     await this.tick('vaultPrepare', signal);
+    const market = vaultMarket(token);
+    if (!market) throw new PrivacyError('unknown', 'The Vault does not lend that token in this build.');
     if (amount !== 'all' && (typeof amount !== 'bigint' || amount <= 0n)) {
       throw new PrivacyError('unknown', 'Amounts must be positive.');
     }
     this.vaultIdentity(onStage);
     emitVaultStage(onStage, { stage: 'position', ok: true });
-    const position = this.vaultPositionNow();
-    this.assertVaultFunds(0n);
+    const position = this.vaultPositionNow(market);
+    this.assertVaultFunds(market, 0n);
     if (amount === 'all') {
       if (position.shares === 0n) throw new PrivacyError('unknown', 'There is nothing in the Vault to redeem.');
       if (position.redeemable < position.assets) {
         throw new PrivacyError('unknown', 'The vault cannot pay out the whole position right now.');
       }
-      const action: VaultAction = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount: position.assets, all: true });
+      const action: VaultAction = Object.freeze({ kind: 'redeem', token: market.token, amount: position.assets, all: true });
       return this.vaultBatch(action, () => {
-        this.assertVaultFunds(0n);
-        const assets = demoVaultAssets(this.vaultShares);
-        this.debit(VESU_VSTRK_ASSET, this.pool.feeAmount);
-        this.vaultShares = 0n;
-        if (assets > 0n) this.mintNote(VESU_VSTRK_ASSET, assets);
+        this.assertVaultFunds(market, 0n);
+        const holding = this.vaultHolding(market);
+        const assets = demoVaultAssets(holding.shares);
+        this.debit(this.pool.feeToken, this.pool.feeAmount);
+        holding.shares = 0n;
+        if (assets > 0n) this.mintNote(market.token, assets);
       });
     }
     if (amount > position.redeemable) {
       throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
     }
-    const action: VaultAction = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount, all: false });
+    const action: VaultAction = Object.freeze({ kind: 'redeem', token: market.token, amount, all: false });
     return this.vaultBatch(action, () => {
-      this.assertVaultFunds(0n);
+      this.assertVaultFunds(market, 0n);
+      const holding = this.vaultHolding(market);
       const burned = demoVaultSharesToWithdraw(amount);
-      if (burned > this.vaultShares) throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
-      this.debit(VESU_VSTRK_ASSET, this.pool.feeAmount);
-      this.vaultShares -= burned;
-      this.mintNote(VESU_VSTRK_ASSET, amount);
+      if (burned > holding.shares) throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
+      this.debit(this.pool.feeToken, this.pool.feeAmount);
+      holding.shares -= burned;
+      this.mintNote(market.token, amount);
     });
   }
 
-  private vaultPositionNow(): VaultPosition {
-    const assets = demoVaultAssets(this.vaultShares);
-    const redeemable = this.vaultLiquidity !== undefined && this.vaultLiquidity < assets ? this.vaultLiquidity : assets;
-    return Object.freeze({ token: VESU_VSTRK_ASSET, shares: this.vaultShares, assets, redeemable });
+  /**
+   * The DEMO supply APYs this fake was configured with, in `VAULT_MARKETS`
+   * order (D-079). Not Vesu's figures: a demo seam states none by default.
+   */
+  async vaultRates(signal?: AbortSignal): Promise<readonly VaultRate[]> {
+    await this.tick('vaultRates', signal);
+    const rates: VaultRate[] = [];
+    for (const market of VAULT_MARKETS) {
+      const rate = this.vaultRatesByMarket.get(market);
+      if (rate) rates.push(Object.freeze({ token: market.token, supplyApy: Object.freeze({ ...rate }) }));
+    }
+    return Object.freeze(rates);
+  }
+
+  private vaultHolding(market: VaultMarket): { shares: bigint; liquidity?: bigint } {
+    let holding = this.vaultHoldings.get(market);
+    if (!holding) {
+      holding = { shares: 0n };
+      this.vaultHoldings.set(market, holding);
+    }
+    return holding;
+  }
+
+  private vaultPositionNow(market: VaultMarket): VaultPosition {
+    const { shares, liquidity } = this.vaultHolding(market);
+    const assets = demoVaultAssets(shares);
+    const redeemable = liquidity !== undefined && liquidity < assets ? liquidity : assets;
+    return Object.freeze({ token: market.token, shares, assets, redeemable });
   }
 
   /** Capability, then the commitment (asked once), then the address: the adapter's order. */
@@ -711,15 +789,28 @@ export class FakePrivacyOperations implements PrivacyOperations {
     emitVaultStage(onStage, { stage: 'address', resolved: true, deployed: this.vaultDeployed });
   }
 
-  /** The shielded STRK must cover `amount` and the pool fee, as the wallet checks at proof time. */
-  private assertVaultFunds(amount: bigint): void {
-    const have = this.spendable.get(VESU_VSTRK_ASSET) ?? this.lookupLoose(VESU_VSTRK_ASSET);
-    const required = amount + this.pool.feeAmount;
-    if (have < required) {
-      throw new PrivacyError(
-        'insufficient-balance',
-        `Needs ${required}, has ${have}. Remember the pool fee is paid in ${this.pool.feeToken}.`,
-      );
+  /**
+   * The shielded balance must cover `amount` of the market's token and the
+   * pool fee, as the wallet checks at proof time. The fake takes the fee in
+   * the pool's fee token (STRK) whatever the Vault moves: the conservative
+   * case of D-079, since a real wallet chooses the token that pays it and may
+   * take it in the moved token instead.
+   */
+  private assertVaultFunds(market: VaultMarket, amount: bigint): void {
+    const have = (token: Address) => this.spendable.get(token) ?? this.lookupLoose(token);
+    const feeToken = this.pool.feeToken;
+    const sameToken = sameAddress(market.token, feeToken);
+    const needed: Array<[Address, bigint]> = sameToken
+      ? [[market.token, amount + this.pool.feeAmount]]
+      : [[market.token, amount], [feeToken, this.pool.feeAmount]];
+    for (const [token, required] of needed) {
+      const held = have(token);
+      if (held < required) {
+        throw new PrivacyError(
+          'insufficient-balance',
+          `Needs ${required}, has ${held}. Remember the pool fee is paid in ${feeToken}.`,
+        );
+      }
     }
   }
 
@@ -1021,6 +1112,30 @@ function emitVaultStage(callback: VaultStageCallback | undefined, stage: VaultSt
   } catch {
     /* Observers cannot alter a financial operation. */
   }
+}
+
+/**
+ * A config record's own data entries, keys and values, or `[]` when absent:
+ * an accessor, a symbol key or a non-object record is refused (D-079).
+ */
+function ownRecordEntries(record: unknown, invalid: () => Error): Array<[string, unknown]> {
+  if (record === undefined) return [];
+  if (!record || typeof record !== 'object' || Array.isArray(record)) throw invalid();
+  const entries: Array<[string, unknown]> = [];
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== 'string') throw invalid();
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (!descriptor || !('value' in descriptor)) throw invalid();
+    entries.push([key, descriptor.value]);
+  }
+  return entries;
+}
+
+/** An own data field, or undefined; an accessor is never run. */
+function ownField(value: unknown, key: string): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
 function ownVaultOptions(options: VaultCallOptions | undefined): {

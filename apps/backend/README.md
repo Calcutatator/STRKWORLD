@@ -87,8 +87,8 @@ counted. The route has its own rate window (`POOL_STATS_RATE_LIMIT`, 600 a
 minute), apart from the one the private routes share, answers the kill
 switch like every other, and logs nothing.
 
-The Vault's two public reads (D-077, `vault.ts`) are pinned to one contract
-each, and a request names only the value to look up.
+The Vault's public reads (D-077, D-079, `vault.ts`) are pinned, and a
+request names only the value to look up.
 `POST /v1/rpc/shadow-account` with `{ "v": 1, "partialCommitment" }` reads
 `get_shadow_accounts(partial, 0, 1, false)` on the canonical
 `ShadowAccountAnonymizer` and answers `{ address, deployed }`, refusing
@@ -96,12 +96,19 @@ anything but one well-formed row for nonce 0; the browser checks that
 address against the anonymizer's own derivation before sending anything
 there. `POST /v1/rpc/vault-position` with `{ "v": 1, "account" }` reads
 `balance_of`, and with shares `preview_redeem`, `max_withdraw` and
-`max_redeem`, on Vesu's vSTRK, answering decimal base units. They come
-through here for D-014's reason: the player's IP next to a partial
-commitment or a stand-in address is the link a shadow account exists to
-hide. Both share the private routes' rate window, answer the kill switch,
-answer 503 on a service composed without them, and log nothing. The Vault's
-transactions never reach this service: the wallet submits them.
+`max_redeem`, on every Vesu Prime vault in `VESU_VAULTS` (STRK, ETH, USDC,
+USDT, WBTC), answering `{ positions: [...] }`, one row per vault in decimal
+base units, or `ok: false` for a vault whose read failed, so one vault never
+blocks another. `POST /v1/vault-rates` with `{ "v": 1 }` answers each pinned
+vault's supply APY as Vesu states it (`{ value, decimals }`), from Vesu's
+keyless public pool endpoint, which this service alone fetches, at most once
+every five minutes (`vesu-rates.ts`); a failed fetch answers no rates for a
+minute. They come through here for D-014's reason: the player's IP next to a
+partial commitment or a stand-in address is the link a shadow account exists
+to hide, and Vesu need not see players at all. All three share the private
+routes' rate window, answer the kill switch, answer 503 on a service
+composed without them, and log nothing. The Vault's transactions never
+reach this service: the wallet submits them.
 
 The degen floor's catalog (D-067) is optional and off by default: with no
 `BACKEND_DEGEN_ENABLED` it is absent, and any other `BACKEND_DEGEN_*`

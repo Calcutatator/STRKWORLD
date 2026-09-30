@@ -212,7 +212,7 @@ describe('the entry gate deposit register entry (D-072)', () => {
   });
 });
 
-describe('the Vault register entries (D-077)', () => {
+describe('the Vault register entries (D-077, D-079)', () => {
   const VAULT_ROUTES = ['vault.supply', 'vault.redeem'] as const;
 
   it.each(VAULT_ROUTES)('grades %s anonymous under the Vault, like Endur staking', (route) => {
@@ -254,6 +254,20 @@ describe('the Vault register entries (D-077)', () => {
       expect(observable).toMatch(/Only the link from that address to the wallet is hidden/);
     }
     expect(registered('vault.supply').observable).toMatch(/strkworld-vault, nonce 0/);
+  });
+
+  it('records what an observer sees in every token the Vault lends, under the same grade and disclosure (D-079)', () => {
+    for (const route of VAULT_ROUTES) {
+      const entry = registered(route);
+      expect(entry.observable).toMatch(/Vesu Prime vault/);
+      expect(entry.observable).toMatch(/in any token/);
+      expect(entry.observable).toMatch(/in whichever token the wallet pays it with/);
+      // The player-facing words name no token, so they hold for every one of them.
+      expect(entry.disclosure).not.toMatch(/\b(?:STRK|ETH|USDC|USDT|WBTC|vSTRK)\b/);
+      expect(entry.grade).toBe('anonymous');
+    }
+    expect(registered('vault.supply').observable).toMatch(/\(STRK, ETH, USDC, USDT or WBTC\)/);
+    expect(registered('vault.redeem').observable).toMatch(/whose token and amount are plaintext/);
   });
 
   it('keeps braces out of their copy so the CI register parser cannot lose them', () => {

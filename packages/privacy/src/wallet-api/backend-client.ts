@@ -5,12 +5,18 @@ import type {
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
   RelayFeeQuote,
+  VaultPositionRow,
+  VaultRateRow,
   VaultReadClient,
 } from './types.js';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
+/** D-079: more vault rows than this is a malformed answer, not a longer list. */
+const MAX_VAULT_ROWS = 16;
+/** D-079: a rate's decimal places; Vesu states 18. */
+const MAX_RATE_DECIMALS = 36;
 /** The relay's answer when it has no avnu key, or avnu rejected it (D-070). */
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
@@ -94,28 +100,79 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     return Object.freeze({ address, deployed });
   }
 
-  /** D-077: a stand-in address's vSTRK position, in base units. */
-  async vaultPosition(account: string, signal?: AbortSignal): Promise<{
-    shares: bigint;
-    assets: bigint;
-    maxWithdraw: bigint;
-    maxRedeem: bigint;
-  }> {
+  /**
+   * D-077, D-079: a stand-in address's position in every vault the backend
+   * pins, in base units, one row per vault. The request names the address
+   * alone; which vault a row belongs to is the caller's to check.
+   */
+  async vaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRow[]> {
     if (typeof account !== 'string' || !isNonzeroFelt(account)) {
       throw new PrivacyError('unknown', 'The Vault account is invalid.');
     }
     const raw = await this.post('/v1/rpc/vault-position', { v: 1, account }, signal);
     throwIfAborted(signal);
     const value = asRecord(raw);
-    if (Reflect.ownKeys(value).length !== 4) {
+    if (Reflect.ownKeys(value).length !== 1) {
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
-    return Object.freeze({
-      shares: asUint256(ownField(value, 'shares')),
-      assets: asUint256(ownField(value, 'assets')),
-      maxWithdraw: asUint256(ownField(value, 'maxWithdraw')),
-      maxRedeem: asUint256(ownField(value, 'maxRedeem')),
-    });
+    const rows = asArray(ownField(value, 'positions'));
+    if (rows.length > MAX_VAULT_ROWS) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze(rows.map((item): VaultPositionRow => {
+      const row = asRecord(item);
+      const vault = asFelt(ownField(row, 'vault'));
+      const ok = ownField(row, 'ok');
+      if (BigInt(vault) === 0n || typeof ok !== 'boolean' || Reflect.ownKeys(row).length !== (ok ? 6 : 2)) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      if (!ok) return Object.freeze({ vault, ok: false as const });
+      return Object.freeze({
+        vault,
+        ok: true as const,
+        shares: asUint256(ownField(row, 'shares')),
+        assets: asUint256(ownField(row, 'assets')),
+        maxWithdraw: asUint256(ownField(row, 'maxWithdraw')),
+        maxRedeem: asUint256(ownField(row, 'maxRedeem')),
+      });
+    }));
+  }
+
+  /**
+   * D-079: Vesu's supply APY for each vault the backend pins, as the backend
+   * last read Vesu's public API. The request carries nothing but a version.
+   */
+  async vaultRates(signal?: AbortSignal): Promise<readonly VaultRateRow[]> {
+    const raw = await this.post('/v1/vault-rates', { v: 1 }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 1) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const rows = asArray(ownField(value, 'rates'));
+    if (rows.length > MAX_VAULT_ROWS) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze(rows.map((item) => {
+      const row = asRecord(item);
+      const vault = asFelt(ownField(row, 'vault'));
+      const apy = asRecord(ownField(row, 'supplyApy'));
+      const decimals = ownField(apy, 'decimals');
+      if (
+        BigInt(vault) === 0n
+        || Reflect.ownKeys(row).length !== 2
+        || Reflect.ownKeys(apy).length !== 2
+        || !Number.isSafeInteger(decimals)
+        || (decimals as number) < 0
+        || (decimals as number) > MAX_RATE_DECIMALS
+      ) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      return Object.freeze({
+        vault,
+        supplyApy: Object.freeze({ value: asUint256(ownField(apy, 'value')), decimals: decimals as number }),
+      });
+    }));
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {

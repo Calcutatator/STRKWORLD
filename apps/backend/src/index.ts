@@ -71,9 +71,15 @@ export {
   PREVIEW_REDEEM_SELECTOR,
   SHADOW_ACCOUNT_ANONYMIZER,
   VAULT_POSITION_PATH,
+  VAULT_RATES_PATH,
   VAULT_SHADOW_ACCOUNT_PATH,
+  VESU_PRIME_POOL,
+  VESU_PRIME_POOL_API_URL,
+  VESU_VAULTS,
   VESU_VSTRK,
+  type PinnedVault,
 } from './vault.js';
+export { VesuVaultRates, parseVesuPoolRates, type VesuVaultRatesOptions } from './vesu-rates.js';
 export type {
   ApiRequest,
   ApiResponse,
@@ -102,6 +108,9 @@ export type {
   SwapAuthorizationBinding,
   SwapPlan,
   SwapPlannerPort,
+  VaultPositionFigures,
   VaultPositionRead,
+  VaultRateRead,
+  VaultRatesPort,
   VaultRpcPort,
 } from './types.js';
