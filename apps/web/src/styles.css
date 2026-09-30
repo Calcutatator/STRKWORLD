@@ -2269,6 +2269,11 @@ button[data-locked="true"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* The agreed total at Vesu's bold, not the base theme's heavy 800. */
+.panel[data-building="vault"] .review-costs :is(dt, dd):last-of-type {
+  font-weight: 700;
+}
+
 .panel[data-building="vault"] .vault-review-note {
   margin: 0 0 0.9rem;
   color: var(--ui-text-dim);
