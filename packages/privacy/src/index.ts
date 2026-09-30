@@ -51,8 +51,10 @@ export {
 } from './endur.js';
 
 // The Vault on shadow accounts (D-077): the pinned anonymizer and dapp name,
-// and the token -> vault map it lends through (D-079).
+// and the token -> vault map it lends through (D-079), across Vesu's Prime
+// and curated pools (D-081).
 export {
+  MAX_VAULT_MARKETS,
   SHADOW_ACCOUNT_ANONYMIZER,
   SHADOW_ACCOUNT_PRIMER_CLASS_HASH,
   SHADOW_ACCOUNTS_WALLET_API,
@@ -66,6 +68,7 @@ export {
   VESU_VTOKEN_CLASS_HASH,
   vaultMarket,
   type VaultMarket,
+  type VaultPoolCuration,
 } from './vault.js';
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.

@@ -79,10 +79,11 @@ export {
   VAULT_POSITION_PATH,
   VAULT_RATES_PATH,
   VAULT_SHADOW_ACCOUNT_PATH,
+  VESU_POOLS,
   VESU_PRIME_POOL,
-  VESU_PRIME_POOL_API_URL,
   VESU_VAULTS,
   VESU_VSTRK,
+  vesuPoolApiUrl,
   type PinnedVault,
 } from './vault.js';
 export { VesuVaultRates, parseVesuPoolRates, type VesuVaultRatesOptions } from './vesu-rates.js';

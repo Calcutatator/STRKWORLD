@@ -11,6 +11,7 @@ import {
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { STRK_TOKEN } from '../../production/config.js';
+import { VAULT_MARKET_GROUPS, type VaultMarketGroup } from '../../production/vesu-markets.js';
 import { useStore } from '../../store/use-store.js';
 import { WalletAttentionCue } from '../../wallet/WalletAttentionCue.js';
 import { ConfirmGate } from '../ConfirmGate.js';
@@ -22,6 +23,7 @@ import { routeDoor } from '../routes.js';
 import {
   ROUTE_BY_VAULT_MODE,
   createVaultPanel,
+  noneInPoolLine,
   voyagerContractUrl,
   type VaultMode,
   type VaultPanel as VaultPanelMachine,
@@ -42,8 +44,24 @@ function formatExact(amount: bigint, token: VaultTokenView): string {
 }
 
 /**
+ * The offered tokens by picker group (D-081), in the groups' fixed order and
+ * the build's order within each; a group with nothing offered is left out.
+ */
+function groupsOf(tokens: readonly VaultTokenView[]): Array<{ group: VaultMarketGroup; tokens: VaultTokenView[] }> {
+  return VAULT_MARKET_GROUPS
+    .map((group) => ({ group, tokens: tokens.filter((entry) => entry.group === group) }))
+    .filter((entry) => entry.tokens.length > 0);
+}
+
+/** A market's pool as the counter names it: "Prime", or "Re7 xBTC, curated" (D-081). */
+function poolLabel(token: VaultTokenView): string {
+  return token.curation === 'prime' ? token.poolName : `${token.poolName}, ${COPY.vault.pools.curated}`;
+}
+
+/**
  * The Vault (D-077): lending with Vesu, from the player's STRK20 shadow
- * account, in Vesu's look, in every token this build admits (D-079).
+ * account, in Vesu's look, in every token this build admits (D-079), across
+ * Vesu's Prime pool and the curated pools the pinned markets name (D-081).
  *
  * A thin view over `vault-machine.ts`, like the Bank over its machine. It
  * enforces what is purely about rendering: a route this build has not
@@ -220,46 +238,64 @@ function ModeTabs({
 }
 
 /**
- * Every offered token, with Vesu's supply APY where Vesu states one (read
- * when the counter opens, no prompt) and the position once the player asks
- * for it: a public read, after the wallet's commitment. The figures are one
- * read, and say so; the stand-in address they sit on is public, and the line
- * under them says that too, with a link the player may open.
+ * Every offered market, grouped as the picker groups them (D-081), each with
+ * its pool, Vesu's supply APY where Vesu states one (read when the counter
+ * opens, no prompt) and the position once the player asks for it: a public
+ * read, after the wallet's commitment. The figures are one read, and say so;
+ * the stand-in address they sit on is public, and the line under them says
+ * that too, with a link the player may open.
  */
 function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () => void }) {
   const { position, rates } = state;
   const loaded = position.status === 'loaded' ? position : null;
+  const anyCurated = state.tokens.some((entry) => entry.curation === 'curated');
   return (
     <div className="panel-balance vault-position">
       <h3>{COPY.vault.position.title}</h3>
-      <ul className="vault-markets">
-        {state.tokens.map((entry) => {
-          const rate = rates.status === 'loaded' ? rates.rates.find((candidate) => sameAddress(candidate.token, entry.token)) : undefined;
-          const held = loaded?.positions.find((candidate) => sameAddress(candidate.token, entry.token));
-          return (
-            <li key={entry.token} className="vault-market" data-token={entry.symbol}>
-              <p className="vault-market-head">
-                <strong className="vault-market-symbol">{entry.symbol}</strong>
-                {rate ? (
-                  <span className="vault-apy">
-                    {`${COPY.vault.rates.label} ${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}`}
-                  </span>
-                ) : null}
-              </p>
-              {held === undefined ? null : held.shares === 0n ? (
-                <p className="vault-market-none">{COPY.vault.position.none}</p>
-              ) : (
-                <dl className="vault-figures">
-                  <dt>{COPY.vault.position.worth}</dt>
-                  <dd className="balance-total">{formatHolding(held.assets, entry)}</dd>
-                  <dt>{COPY.vault.position.redeemable}</dt>
-                  <dd>{formatHolding(held.redeemable, entry)}</dd>
-                </dl>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="vault-market-groups">
+        {groupsOf(state.tokens).map(({ group, tokens }) => (
+          <section key={group} className="vault-market-group" data-group={group}>
+            <h4 className="vault-group-title">{COPY.vault.groups[group]}</h4>
+            <ul className="vault-markets">
+              {tokens.map((entry) => {
+                const rate = rates.status === 'loaded' ? rates.rates.find((candidate) => sameAddress(candidate.token, entry.token)) : undefined;
+                const held = loaded?.positions.find((candidate) => sameAddress(candidate.token, entry.token));
+                const chosen = state.token !== null && sameAddress(state.token, entry.token);
+                return (
+                  <li
+                    key={entry.token}
+                    className="vault-market"
+                    data-token={entry.symbol}
+                    data-curation={entry.curation}
+                    aria-current={chosen ? 'true' : undefined}
+                  >
+                    <p className="vault-market-head">
+                      <strong className="vault-market-symbol">{entry.symbol}</strong>
+                      <span className="vault-market-pool">{poolLabel(entry)}</span>
+                      {rate ? (
+                        <span className="vault-apy">
+                          {`${COPY.vault.rates.label} ${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}`}
+                        </span>
+                      ) : null}
+                    </p>
+                    {held === undefined ? null : held.shares === 0n ? (
+                      <p className="vault-market-none">{COPY.vault.position.none}</p>
+                    ) : (
+                      <dl className="vault-figures">
+                        <dt>{COPY.vault.position.worth}</dt>
+                        <dd className="balance-total">{formatHolding(held.assets, entry)}</dd>
+                        <dt>{COPY.vault.position.redeemable}</dt>
+                        <dd>{formatHolding(held.redeemable, entry)}</dd>
+                      </dl>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {anyCurated ? <p className="vault-curated-note">{COPY.vault.pools.curatedNote}</p> : null}
       {rates.status === 'failed' ? <p className="vault-rates-note">{COPY.vault.rates.unavailable}</p> : null}
       {position.status === 'unrequested' ? (
         <>
@@ -306,9 +342,16 @@ function StandInLine({ address }: { address: string }) {
   );
 }
 
+/**
+ * The form: a grouped token picker (D-081) when there is more than one token,
+ * the chosen market's pool, and for a supply the line saying it comes from the
+ * pool balance, or, once a review found none of the token there, that there is
+ * nothing to supply.
+ */
 function ComposeBlock({ state, token, panel }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine }) {
   const preparing = state.flow.name === 'preparing';
   const all = state.mode === 'redeem' && state.redeemAll;
+  const noneHeld = state.holding.status === 'none' && sameAddress(state.holding.token, token.token);
   return (
     <form
       className="panel-compose"
@@ -326,13 +369,27 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
             disabled={preparing}
             onChange={(event) => panel.setToken(event.target.value)}
           >
-            {state.tokens.map((entry) => (
-              <option key={entry.token} value={entry.token}>
-                {entry.symbol}
-              </option>
+            {groupsOf(state.tokens).map(({ group, tokens }) => (
+              <optgroup key={group} label={COPY.vault.groups[group]}>
+                {tokens.map((entry) => (
+                  <option key={entry.token} value={entry.token}>
+                    {entry.curation === 'prime' ? entry.symbol : `${entry.symbol} (${entry.poolName})`}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
+      ) : null}
+      <p className="vault-pool" data-curation={token.curation}>
+        {`${COPY.vault.pools.label}: ${poolLabel(token)}`}
+      </p>
+      {state.mode === 'supply' ? (
+        noneHeld ? (
+          <p className="vault-holding vault-holding-none" role="status">{noneInPoolLine(token)}</p>
+        ) : (
+          <p className="vault-holding">{`${COPY.vault.holding.neededLead} ${token.symbol} ${COPY.vault.holding.neededTail}`}</p>
+        )
       ) : null}
       {state.mode === 'redeem' ? (
         <label className="vault-all">

@@ -5,12 +5,13 @@ import { attachDebugTap, type DebugTap, type VaultDebugStep } from '../../debug/
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import type { ShellFailure } from '../../privacy/errors.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
-import { createVaultPanel, vaultTokenChoices, voyagerContractUrl, type VaultTokenView } from './vault-machine.js';
+import { VAULT_MARKET_METADATA } from '../../production/vesu-markets.js';
+import { createVaultPanel, noneInPoolLine, vaultTokenChoices, voyagerContractUrl, type VaultTokenView } from './vault-machine.js';
 
 /**
- * The Vault's counter machine (D-077, D-079), against the deterministic fake:
- * what the player reads, what reaches the seam, and what the probe log is
- * told.
+ * The Vault's counter machine (D-077, D-079, D-081), against the
+ * deterministic fake: what the player reads, what reaches the seam, and what
+ * the probe log is told.
  */
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -19,6 +20,10 @@ const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb
 const USDT = '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8';
 const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
 const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+/** Vesu lists sUSN, but the STRK20 pool has never held it, so no vault is pinned (D-081). */
+const SUSN = '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17';
+/** Every pinned market's symbol, in pinned order (D-081). */
+const PINNED_SYMBOLS = ['STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'EKUBO'];
 const ONE = 10n ** 18n;
 const USDC_ONE = 10n ** 6n;
 const POOL_FEE = 6n * ONE;
@@ -26,6 +31,19 @@ const POOL_FEE = 6n * ONE;
 afterEach(() => {
   attachDebugTap(null);
 });
+
+/** The counter's view of a pinned token, from the generated market metadata. */
+function view(token: string): VaultTokenView {
+  const market = VAULT_MARKET_METADATA.find((entry) => BigInt(entry.token) === BigInt(token))!;
+  return {
+    token: market.token,
+    symbol: market.symbol,
+    decimals: market.decimals,
+    group: market.group,
+    poolName: market.poolName,
+    curation: market.curation,
+  };
+}
 
 function fake(options: {
   balance?: bigint;
@@ -101,18 +119,45 @@ describe('the Vault counter (D-077)', () => {
     expect(rates).toHaveBeenCalledTimes(1);
   });
 
-  it('offers every pinned token in demo, STRK first, with the catalog’s symbols and decimals (D-079)', async () => {
+  it('offers every pinned token in demo, STRK first, with the chain’s symbols and decimals and its pool (D-079, D-081)', async () => {
     const { panel } = machine(fake());
     await panel.open();
     const { tokens, token } = panel.store.getState();
-    expect(tokens).toEqual([
-      { token: STRK, symbol: 'STRK', decimals: 18 },
-      { token: ETH, symbol: 'ETH', decimals: 18 },
-      { token: USDC, symbol: 'USDC', decimals: 6 },
-      { token: USDT, symbol: 'USDT', decimals: 6 },
-      { token: WBTC, symbol: 'WBTC', decimals: 8 },
+    expect(tokens.map((entry) => entry.symbol)).toEqual(PINNED_SYMBOLS);
+    expect(tokens.slice(0, 4)).toEqual([
+      { token: STRK, symbol: 'STRK', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime' },
+      { token: ETH, symbol: 'ETH', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime' },
+      { token: USDC, symbol: 'USDC', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime' },
+      { token: USDT, symbol: 'USDT', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime' },
     ]);
     expect(token).toBe(STRK);
+  });
+
+  it('offers strkBTC through the curated Re7 xBTC pool, and places every token in a picker group (D-081)', async () => {
+    const { panel } = machine(fake());
+    await panel.open();
+    const { tokens } = panel.store.getState();
+    expect(tokens.find((entry) => entry.symbol === 'strkBTC')).toEqual({
+      token: STRKBTC,
+      symbol: 'strkBTC',
+      decimals: 8,
+      group: 'btc',
+      poolName: 'Re7 xBTC',
+      curation: 'curated',
+    });
+    const groups = new Map<string, string[]>();
+    for (const entry of tokens) groups.set(entry.group, [...(groups.get(entry.group) ?? []), entry.symbol]);
+    expect(Object.fromEntries(groups)).toEqual({
+      majors: ['STRK', 'ETH'],
+      stables: ['USDC', 'USDT', 'USDC.e'],
+      btc: ['WBTC', 'strkBTC', 'tBTC', 'SolvBTC'],
+      staking: ['xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC'],
+      ecosystem: ['EKUBO'],
+    });
+    expect(tokens.filter((entry) => entry.curation === 'curated').map((entry) => `${entry.symbol} ${entry.poolName}`)).toEqual([
+      'strkBTC Re7 xBTC', 'tBTC Re7 xBTC', 'SolvBTC Re7 xBTC', 'xstrkBTC Re7 xBTC', 'xtBTC Re7 xBTC', 'LBTC Re7 xBTC',
+      'EKUBO Re7 Labs Starknet Ecosystem',
+    ]);
   });
 
   it('reads every offered token’s position and the stand-in address only when asked', async () => {
@@ -122,14 +167,16 @@ describe('the Vault counter (D-077)', () => {
     const { position } = panel.store.getState();
     expect(position).toMatchObject({ status: 'loaded', standIn: DEMO_VAULT_STAND_IN });
     if (position.status !== 'loaded') return;
-    expect(position.positions).toEqual([
+    expect(position.positions).toHaveLength(PINNED_SYMBOLS.length);
+    expect(position.positions.slice(0, 4)).toEqual([
       { token: STRK, shares: 50n * ONE, assets: 51n * ONE, redeemable: 51n * ONE },
       { token: ETH, shares: 0n, assets: 0n, redeemable: 0n },
       // In USDC's own base units.
       { token: USDC, shares: 50n * USDC_ONE, assets: 51n * USDC_ONE, redeemable: 51n * USDC_ONE },
       { token: USDT, shares: 0n, assets: 0n, redeemable: 0n },
-      { token: WBTC, shares: 0n, assets: 0n, redeemable: 0n },
     ]);
+    // Every other pinned market, curated ones included, reads as empty.
+    expect(position.positions.slice(4).every((entry) => entry.shares === 0n && entry.assets === 0n)).toBe(true);
   });
 
   it('supplies: reviews the exact amount and the approved disclosure, then records the receipt', async () => {
@@ -176,7 +223,7 @@ describe('the Vault counter (D-077)', () => {
     expect(review.name).toBe('review');
     if (review.name !== 'review') return;
     expect(review.summary.action).toEqual({ kind: 'supply', token: USDC, amount: 12_500_000n });
-    expect(review.summary.token).toEqual({ token: USDC, symbol: 'USDC', decimals: 6 });
+    expect(review.summary.token).toEqual(view(USDC));
     // The pool fee is the pool's, in STRK.
     expect(review.summary.poolFee).toBe(POOL_FEE);
     await panel.confirm();
@@ -213,7 +260,7 @@ describe('the Vault counter (D-077)', () => {
   });
 
   it('ignores a token it does not offer, and a change while the wallet works', async () => {
-    const { panel } = machine(fake(), { tokens: [{ token: STRK, symbol: 'STRK', decimals: 18 }, { token: USDC, symbol: 'USDC', decimals: 6 }] });
+    const { panel } = machine(fake(), { tokens: [view(STRK), view(USDC)] });
     await panel.open();
     panel.setToken(STRKBTC);
     panel.setToken(WBTC);
@@ -224,7 +271,7 @@ describe('the Vault counter (D-077)', () => {
 
   it('shows Vesu’s rates for the offered tokens it has, and a failed read as unavailable, reporting nothing', async () => {
     const rated = fake({ vault: { rates: { [USDC]: { value: 30925508207480051n, decimals: 18 }, [WBTC]: { value: 3n, decimals: 3 } } } });
-    const { panel } = machine(rated, { tokens: [{ token: STRK, symbol: 'STRK', decimals: 18 }, { token: USDC, symbol: 'USDC', decimals: 6 }] });
+    const { panel } = machine(rated, { tokens: [view(STRK), view(USDC)] });
     await panel.open();
     expect(panel.store.getState().rates).toEqual({
       status: 'loaded',
@@ -470,10 +517,78 @@ describe('the Vault counter (D-077)', () => {
 
   it('offers the build’s Vault list, in its order, and nothing unpinned or undescribed', () => {
     expect(vaultTokenChoices(vaultPolicy([USDC, STRK])).map((entry) => entry.symbol)).toEqual(['USDC', 'STRK']);
-    // strkBTC is in the catalog but has no pinned vault; a repeat is offered once.
-    expect(vaultTokenChoices(vaultPolicy([STRKBTC, WBTC, `0x${WBTC.slice(3)}`])).map((entry) => entry.symbol)).toEqual(['WBTC']);
+    // sUSN is a Vesu token with no pinned vault; a repeat is offered once.
+    expect(vaultTokenChoices(vaultPolicy([SUSN, WBTC, `0x${WBTC.slice(3)}`])).map((entry) => entry.symbol)).toEqual(['WBTC']);
+    expect(vaultTokenChoices(vaultPolicy([STRKBTC, USDC])).map((entry) => entry.symbol)).toEqual(['strkBTC', 'USDC']);
     expect(vaultTokenChoices({ ...vaultPolicy([]), allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] } })).toEqual([]);
-    expect(vaultTokenChoices(null).map((entry) => entry.symbol)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']);
+    expect(vaultTokenChoices(null).map((entry) => entry.symbol)).toEqual(PINNED_SYMBOLS);
+  });
+
+  it('says plainly when the pool balance holds none of the token, asks the wallet nothing more, and never blocks reading (D-081)', async () => {
+    // STRK in the pool balance, no USDC.
+    const operations = fake();
+    const balances = vi.spyOn(operations, 'balances');
+    const supply = vi.spyOn(operations, 'prepareVaultSupply');
+    const { panel, failures } = machine(operations);
+    await panel.open();
+    expect(balances).not.toHaveBeenCalled();
+    panel.setToken(USDC);
+    panel.setAmount('5');
+    await panel.prepare();
+    expect(balances).toHaveBeenCalledWith([USDC], undefined);
+    expect(supply).not.toHaveBeenCalled();
+    expect(panel.store.getState()).toMatchObject({ flow: { name: 'composing' }, holding: { status: 'none', token: USDC }, amountText: '5' });
+    expect(noneInPoolLine(view(USDC))).toBe(
+      'You have no USDC in your pool balance, so there is nothing to supply. Shield some first, or choose another token.',
+    );
+    expect(failures).toEqual([]);
+    expect(operations.vaultSubmitted).toEqual([]);
+
+    // Reading never depends on it.
+    await panel.refreshPosition();
+    expect(panel.store.getState().position).toMatchObject({ status: 'loaded' });
+    expect(panel.store.getState().rates).toMatchObject({ status: 'loaded' });
+
+    // Another token forgets it, and a token that is there goes ahead to the review.
+    panel.setToken(STRK);
+    expect(panel.store.getState().holding).toEqual({ status: 'unknown' });
+    panel.setAmount('5');
+    await panel.prepare();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'review', summary: { action: { kind: 'supply', token: STRK } } });
+  });
+
+  it('goes ahead when the balance read cannot be made, and stops quietly when the player declines it (D-081)', async () => {
+    const operations = fake({ balances: { [USDC]: 100n * USDC_ONE } });
+    const supply = vi.spyOn(operations, 'prepareVaultSupply');
+    const { panel, failures } = machine(operations);
+    await panel.open();
+    panel.setToken(USDC);
+    panel.setAmount('5');
+
+    vi.spyOn(operations, 'balances').mockRejectedValueOnce(Object.assign(new Error('no'), { kind: 'user-rejected' }));
+    await panel.prepare();
+    expect(panel.store.getState()).toMatchObject({ flow: { name: 'composing' }, holding: { status: 'unknown' }, notice: null });
+    expect(supply).not.toHaveBeenCalled();
+
+    vi.spyOn(operations, 'balances').mockRejectedValueOnce(Object.assign(new Error('socket'), { kind: 'unreachable' }));
+    await panel.prepare();
+    // The read decided nothing; the wallet still checks the funds.
+    expect(supply).toHaveBeenCalledWith(USDC, 5_000_000n, expect.anything());
+    expect(panel.store.getState().flow.name).toBe('review');
+    expect(failures).toEqual([]);
+  });
+
+  it('never reads the pool balance for a redeem', async () => {
+    const operations = fake({ balance: 20n * ONE, vault: { markets: { [USDC]: { shares: 50n * USDC_ONE } } } });
+    const balances = vi.spyOn(operations, 'balances');
+    const { panel } = machine(operations);
+    await panel.open();
+    panel.setMode('redeem');
+    panel.setToken(USDC);
+    panel.setRedeemAll(true);
+    await panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('review');
+    expect(balances).not.toHaveBeenCalled();
   });
 
   it('locks every control when the build policy leaves the Vault off', async () => {

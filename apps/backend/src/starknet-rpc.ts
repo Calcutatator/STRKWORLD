@@ -25,6 +25,15 @@ const PROOF_VALIDITY_SELECTOR = '0x11d6d65b366023adbdaeaa04008285431f4509d78e78c
 export const BALANCE_OF_SELECTOR = '0x35a73cd311a05d46deda634c5ee045db92f811b4e74bca4437fcb5302b7af33';
 /** Events asked for per page; nodes accept up to about a thousand. */
 export const POOL_EVENTS_CHUNK_SIZE = 1_000;
+/**
+ * D-081: the most `starknet_call`s one JSON-RPC batch request carries. A
+ * position read sends its balance reads in one batch and the follow-ups for
+ * held positions in one more, so it is a few HTTP requests to the node however
+ * many vaults are pinned (48 at most: at most four requests).
+ */
+export const VAULT_RPC_BATCH_SIZE = 50;
+/** D-081: a node that refuses batch requests is read one call at a time, this many at once. */
+export const VAULT_RPC_FALLBACK_CONCURRENCY = 4;
 const MAX_CONTINUATION_TOKEN_LENGTH = 512;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -35,6 +44,16 @@ const MAX_RPC_ID = Number.MAX_SAFE_INTEGER;
 const TXN_HASH_NOT_FOUND = 29;
 
 type RpcEnvelope = { kind: 'result'; result: unknown } | { kind: 'error'; code: number | null };
+
+/** D-081: one pinned vault read: its contract, selector and calldata, never a request's. */
+interface PinnedCall {
+  readonly contract: string;
+  readonly selector: string;
+  readonly calldata: readonly string[];
+}
+
+/** A call's felts, or null when that one call failed. */
+type CallOutcome = readonly string[] | null;
 
 export interface StarknetRpcOptions {
   rpcUrl: string;
@@ -208,42 +227,126 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
   }
 
   /**
-   * D-077, D-079: `account`'s position in every pinned vault, one row each in
-   * `VESU_VAULTS` order, read together. A vault holding no shares has
-   * nothing to preview, so one read answers it; otherwise the preview and
-   * both limits are read too. Every value is a u256 as two u128 felts. A
-   * vault whose read fails or is malformed answers `ok: false`, so one
-   * vault's trouble never blocks another token: the browser needs only the
-   * rows of the vaults it lends through. A cancelled request still rejects.
+   * D-077, D-079, D-081: `account`'s position in every pinned vault, one row
+   * each in `VESU_VAULTS` order. Bounded however many vaults are pinned: one
+   * JSON-RPC batch of `balance_of` for every vault, then one batch of the
+   * preview and both limits for the vaults that hold shares (a vault holding
+   * none has nothing to preview), each batch at most `VAULT_RPC_BATCH_SIZE`
+   * calls. Every value is a u256 as two u128 felts. A vault whose call fails
+   * or answers malformed is `ok: false`, so one vault's trouble never blocks
+   * another token: the browser needs only the rows of the vaults it lends
+   * through. A cancelled request still rejects.
    */
   async getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]> {
     if (!isFelt(account) || BigInt(account) === 0n) throw new Error('Vault account is invalid.');
-    return Promise.all(VESU_VAULTS.map(async ({ vault }): Promise<VaultPositionRead> => {
-      try {
-        return await this.readVaultPosition(vault, account, signal);
-      } catch (error) {
-        if (signal?.aborted) throw error;
-        return { vault, ok: false };
-      }
-    }));
+    const balances = await this.callPinned(
+      VESU_VAULTS.map(({ vault }) => ({ contract: vault, selector: BALANCE_OF_SELECTOR, calldata: [account] })),
+      signal,
+    );
+    const shares = balances.map((felts) => readU256(felts, 'vault shares'));
+    const held = VESU_VAULTS.flatMap((_vault, index) => ((shares[index] ?? 0n) > 0n ? [index] : []));
+    const details = held.length === 0 ? [] : await this.callPinned(held.flatMap((index) => {
+      const { vault } = VESU_VAULTS[index]!;
+      return [
+        { contract: vault, selector: PREVIEW_REDEEM_SELECTOR, calldata: u256Felts(shares[index]!) },
+        { contract: vault, selector: MAX_WITHDRAW_SELECTOR, calldata: [account] },
+        { contract: vault, selector: MAX_REDEEM_SELECTOR, calldata: [account] },
+      ];
+    }), signal);
+    return VESU_VAULTS.map(({ vault }, index): VaultPositionRead => {
+      const owned = shares[index];
+      if (owned === null || owned === undefined) return { vault, ok: false };
+      if (owned === 0n) return { vault, ok: true, shares: 0n, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+      const at = held.indexOf(index) * 3;
+      const assets = readU256(details[at], 'vault preview');
+      const maxWithdraw = readU256(details[at + 1], 'vault withdraw limit');
+      const maxRedeem = readU256(details[at + 2], 'vault redeem limit');
+      if (assets === null || maxWithdraw === null || maxRedeem === null) return { vault, ok: false };
+      return { vault, ok: true, shares: owned, assets, maxWithdraw, maxRedeem };
+    });
   }
 
-  private async readVaultPosition(vault: string, account: string, signal?: AbortSignal): Promise<VaultPositionRead> {
-    const shares = u256Of(await this.callContract(vault, BALANCE_OF_SELECTOR, [account], signal), 'vault shares');
-    if (shares === 0n) return { vault, ok: true, shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
-    const [assets, maxWithdraw, maxRedeem] = await Promise.all([
-      this.callContract(vault, PREVIEW_REDEEM_SELECTOR, u256Felts(shares), signal),
-      this.callContract(vault, MAX_WITHDRAW_SELECTOR, [account], signal),
-      this.callContract(vault, MAX_REDEEM_SELECTOR, [account], signal),
-    ]);
-    return {
-      vault,
-      ok: true,
-      shares,
-      assets: u256Of(assets, 'vault preview'),
-      maxWithdraw: u256Of(maxWithdraw, 'vault withdraw limit'),
-      maxRedeem: u256Of(maxRedeem, 'vault redeem limit'),
+  /**
+   * D-081: pinned vault calls, in batches of at most `VAULT_RPC_BATCH_SIZE`,
+   * each answered by position. A call the node failed or answered malformed
+   * is null; so is every call of a batch the node could not take at all (down,
+   * rate-limited, erroring), which is never retried call by call. A node that
+   * refuses JSON-RPC batches (a client error, or one error object instead of a
+   * list) is read one call at a time instead, `VAULT_RPC_FALLBACK_CONCURRENCY`
+   * at once. A cancelled request rejects.
+   */
+  private async callPinned(calls: readonly PinnedCall[], signal?: AbortSignal): Promise<CallOutcome[]> {
+    const outcomes: CallOutcome[] = [];
+    for (let start = 0; start < calls.length; start += VAULT_RPC_BATCH_SIZE) {
+      outcomes.push(...await this.callBatch(calls.slice(start, start + VAULT_RPC_BATCH_SIZE), signal));
+    }
+    return outcomes;
+  }
+
+  private async callBatch(calls: readonly PinnedCall[], signal?: AbortSignal): Promise<CallOutcome[]> {
+    const ids = calls.map(() => this.allocateId());
+    let batchRefused = false;
+    try {
+      let response: Response;
+      try {
+        response = await this.fetcher(this.options.rpcUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(calls.map((call, index) => ({
+            jsonrpc: '2.0',
+            id: ids[index],
+            method: 'starknet_call',
+            params: [{ contract_address: call.contract, entry_point_selector: call.selector, calldata: call.calldata }, 'latest'],
+          }))),
+          signal,
+        });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return calls.map(() => null);
+      }
+      if (!response.ok) {
+        // Nothing in an error body is read; free the connection.
+        await response.body?.cancel().catch(() => undefined);
+        if (response.status === 429 || response.status >= 500) return calls.map(() => null);
+      }
+      let payload: unknown;
+      try {
+        payload = response.ok ? await response.json() : undefined;
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        payload = undefined;
+      }
+      if (!Array.isArray(payload)) {
+        batchRefused = true;
+      } else {
+        return ids.map((id) => batchOutcome(payload as unknown[], id));
+      }
+    } finally {
+      for (const id of ids) this.activeIds.delete(id);
+    }
+    if (batchRefused) return this.callEach(calls, signal);
+    return calls.map(() => null);
+  }
+
+  /** D-081: the fallback for a node without batches: single calls, a few at once. */
+  private async callEach(calls: readonly PinnedCall[], signal?: AbortSignal): Promise<CallOutcome[]> {
+    const outcomes: CallOutcome[] = calls.map(() => null);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < calls.length) {
+        const index = next;
+        next += 1;
+        const call = calls[index]!;
+        try {
+          outcomes[index] = await this.callContract(call.contract, call.selector, [...call.calldata], signal);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          outcomes[index] = null;
+        }
+      }
     };
+    await Promise.all(Array.from({ length: Math.min(VAULT_RPC_FALLBACK_CONCURRENCY, calls.length) }, worker));
+    return outcomes;
   }
 
   async getBlockNumber(signal?: AbortSignal): Promise<number> {
@@ -399,6 +502,36 @@ const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 function u256Of(value: readonly string[], label: string): bigint {
   if (value.length !== 2) throw new Error(`Starknet RPC returned an invalid ${label}.`);
   return feltToU128(value[0], label) + (feltToU128(value[1], label) << 128n);
+}
+
+/** D-081: a batched call's u256, or null for a failed call or a malformed answer. */
+function readU256(value: CallOutcome | undefined, label: string): bigint | null {
+  if (!value) return null;
+  try {
+    return u256Of(value, label);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * D-081: the answer with this id in a batch response, as felts, or null: no
+ * such answer, two of them, an error, or anything malformed. Only the envelope
+ * fields and the result are read, never an error's text.
+ */
+function batchOutcome(payload: readonly unknown[], id: number): CallOutcome {
+  const matching = payload.filter((item) => ownData(item, 'id') === id);
+  if (matching.length !== 1) return null;
+  let envelope: RpcEnvelope;
+  try {
+    envelope = parseRpcEnvelope(matching[0], id);
+  } catch {
+    return null;
+  }
+  if (envelope.kind === 'error') return null;
+  const { result } = envelope;
+  if (!Array.isArray(result) || result.some((item) => typeof item !== 'string' || !isFelt(item))) return null;
+  return Object.freeze([...result as string[]]);
 }
 
 /** A u256 argument as Cairo serializes it: low 128 bits, then high. */

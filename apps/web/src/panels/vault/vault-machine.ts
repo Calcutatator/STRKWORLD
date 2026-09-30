@@ -13,11 +13,11 @@ import { COPY } from '../../copy.js';
 import { debugVault } from '../../debug/debug-tap.js';
 import { parseTokenAmount, sameAddress } from '../../format.js';
 import { VAULT_TOKENS, detectRoutePolicy } from '../../production/config.js';
+import { VAULT_MARKET_METADATA, type VaultMarketGroup } from '../../production/vesu-markets.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createStore, type ReadableStore } from '../../store/store.js';
-import { catalogAsset } from '../exchange/catalog.js';
 import {
   VAULT_REDEEM_ROUTE,
   VAULT_SUPPLY_ROUTE,
@@ -31,7 +31,8 @@ import { stageCopy } from '../bank/bank-machine.js';
 /**
  * The Vault's counter, as a state machine (D-077): Vesu lending from the
  * player's STRK20 shadow account, in every token this build admits that the
- * Vault pins a vault for (D-079).
+ * Vault pins a vault for (D-079), in Vesu's Prime pool or a curated one
+ * (D-081).
  *
  * The seam owns everything protocol-shaped: the commitment, the stand-in
  * address and its cross-check, the vaults, the Vesu calls and the collect
@@ -51,9 +52,14 @@ import { stageCopy } from '../bank/bank-machine.js';
  *   run the Vault yet; so is one that then refuses the request as
  *   unsupported. That is a fact about the wallet's release, not the account:
  *   it stays in this window and never moves the connect flow.
- * - **Figures in each token's own units** (D-079), from the Exchange catalog,
- *   the shell's one token metadata source: a position is what its shares
- *   redeem for by the vault's own preview, never the shares themselves.
+ * - **Figures in each token's own units** (D-079), from the pinned market
+ *   metadata (`production/vesu-markets.ts`, D-081): a position is what its
+ *   shares redeem for by the vault's own preview, never the shares
+ *   themselves.
+ * - **A supply needs the token in the pool balance** (D-081). Reviewing a
+ *   supply first reads that one balance (a player action, so the wallet may
+ *   ask); with none of the token there it stops and says so plainly, and asks
+ *   the wallet nothing more. Reading positions and rates never depends on it.
  * - **The stand-in address stays in memory.** A position read hands it over
  *   so the counter can say it is public and link to it; it is never stored,
  *   logged, or sent anywhere by this machine.
@@ -82,18 +88,27 @@ export const ROUTE_BY_VAULT_MODE: Readonly<Record<VaultMode, string>> = Object.f
 
 const ALL_VAULT_MODES: readonly VaultMode[] = Object.freeze(['supply', 'redeem']);
 
-/** A token the counter offers, with the display metadata its figures need (D-079). */
+/**
+ * A token the counter offers, with the display metadata its figures need
+ * (D-079), and where its vault lends (D-081): its picker group, and its
+ * pool's name and kind.
+ */
 export interface VaultTokenView {
   readonly token: Address;
   readonly symbol: string;
   readonly decimals: number;
+  readonly group: VaultMarketGroup;
+  /** The Vesu pool the vault supplies into, by its own name. */
+  readonly poolName: string;
+  /** Vesu's own Prime pool, or a curated pool with its curator's risk settings. */
+  readonly curation: 'prime' | 'curated';
 }
 
 /**
  * The tokens the counter offers (D-079): this build's Vault allowlist, in its
- * order, keeping only tokens the Vault pins a vault for and the Exchange
- * catalog describes. With no policy (the demo, tests) every pinned token,
- * which the demo's fake lends.
+ * order, keeping only tokens the Vault pins a vault for, described by the
+ * pinned market metadata (D-081). With no policy (the demo, tests) every
+ * pinned token, which the demo's fake lends.
  */
 export function vaultTokenChoices(policy: WalletRoutePolicy | null): readonly VaultTokenView[] {
   let listed: readonly unknown[];
@@ -106,9 +121,16 @@ export function vaultTokenChoices(policy: WalletRoutePolicy | null): readonly Va
   const offered: VaultTokenView[] = [];
   for (const token of listed) {
     if (typeof token !== 'string' || !VAULT_TOKENS.some((pinned) => sameAddress(pinned, token))) continue;
-    const asset = catalogAsset(token);
-    if (!asset || offered.some((entry) => sameAddress(entry.token, asset.token))) continue;
-    offered.push(Object.freeze({ token: asset.token, symbol: asset.symbol, decimals: asset.decimals }));
+    const market = VAULT_MARKET_METADATA.find((entry) => sameAddress(entry.token, token));
+    if (!market || offered.some((entry) => sameAddress(entry.token, market.token))) continue;
+    offered.push(Object.freeze({
+      token: market.token,
+      symbol: market.symbol,
+      decimals: market.decimals,
+      group: market.group,
+      poolName: market.poolName,
+      curation: market.curation,
+    }));
   }
   return Object.freeze(offered);
 }
@@ -166,6 +188,16 @@ export type VaultRatesView =
   /** Only offered tokens Vesu states a rate for; the rest show none. */
   | { readonly status: 'loaded'; readonly rates: readonly VaultRateView[] }
   | { readonly status: 'failed' };
+
+/**
+ * Whether the chosen token is in the pool balance, as far as this window
+ * knows (D-081). Read when a supply is reviewed; only "none" changes what the
+ * counter says. The amount is never kept.
+ */
+export type VaultHoldingView =
+  | { readonly status: 'unknown' }
+  /** The last read found none of `token` in the pool balance. */
+  | { readonly status: 'none'; readonly token: Address };
 
 /** What the player agrees to, from the prepared batch rather than from a constant. */
 export interface VaultSummary {
@@ -226,6 +258,8 @@ export interface VaultState {
   readonly token: Address | null;
   readonly position: VaultPositionView;
   readonly rates: VaultRatesView;
+  /** The chosen token in the pool balance, for a supply (D-081). */
+  readonly holding: VaultHoldingView;
   readonly amountText: string;
   /** Redeem only: every share, by the vault's `redeem`, rather than an amount. */
   readonly redeemAll: boolean;
@@ -412,6 +446,22 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
     return amount !== null && amount > 0n ? amount : null;
   }
 
+  /**
+   * D-081: whether the pool balance holds any of `token`, read for the
+   * supply the player is reviewing. `declined` when the player said no to the
+   * read; `unknown` when it could not be made, which blocks nothing. The
+   * figure itself never leaves this function.
+   */
+  async function heldInPool(token: Address, signal?: AbortSignal): Promise<'some' | 'none' | 'declined' | 'unknown'> {
+    try {
+      const balances = await operations.balances([token], signal);
+      const entry = balances.find((candidate) => sameAddress(candidate.token, token));
+      return (entry?.total ?? 0n) > 0n ? 'some' : 'none';
+    } catch (error) {
+      return toFailure(error).kind === 'user-rejected' ? 'declined' : 'unknown';
+    }
+  }
+
   return Object.freeze<VaultPanel>({
     store,
 
@@ -468,6 +518,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
         disclosure: routeDisclosure(routeId, register),
         amountText: '',
         redeemAll: false,
+        holding: { status: 'unknown' },
         notice: null,
         flow: state.flow.name === 'submitted' ? state.flow : { name: 'composing' },
       });
@@ -484,6 +535,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
         token: choice.token,
         amountText: '',
         redeemAll: false,
+        holding: { status: 'unknown' },
         notice: null,
         flow: state.flow.name === 'submitted' ? state.flow : { name: 'composing' },
       });
@@ -557,6 +609,22 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       discardPrepared();
       debugVault({ step: 'prepare', kind: state.mode, all });
       patch({ flow: { name: 'preparing' }, notice: null });
+      // D-081: a supply takes the token from the pool balance. With none of it
+      // there, say so and ask the wallet nothing more. A read that fails for
+      // any other reason decides nothing: the wallet still checks the funds.
+      if (state.mode === 'supply') {
+        const held = await heldInPool(token.token, signal);
+        if (!current(id)) return;
+        if (held === 'declined') {
+          patch({ flow: { name: 'composing' } });
+          return;
+        }
+        if (held === 'none') {
+          patch({ flow: { name: 'composing' }, holding: { status: 'none', token: token.token } });
+          return;
+        }
+        patch({ holding: { status: 'unknown' } });
+      }
       try {
         const batch = state.mode === 'supply'
           ? await operations.prepareVaultSupply(token.token, amount!, { signal, onStage: forwardStage })
@@ -715,11 +783,17 @@ function initialState(
     token: chosen?.token ?? tokens[0]?.token ?? null,
     position: { status: 'unrequested' },
     rates: { status: 'unrequested' },
+    holding: { status: 'unknown' },
     amountText: '',
     redeemAll: false,
     notice: null,
     flow: { name: 'idle' },
   };
+}
+
+/** D-081: the plain line for a supply with none of its token in the pool balance. */
+export function noneInPoolLine(token: Pick<VaultTokenView, 'symbol'>): string {
+  return `${COPY.vault.holding.noneLead} ${token.symbol} ${COPY.vault.holding.noneTail}`;
 }
 
 function freezeVaultState(state: VaultState): VaultState {
@@ -750,6 +824,7 @@ function freezeVaultState(state: VaultState): VaultState {
     tokens: Object.isFrozen(state.tokens) ? state.tokens : Object.freeze([...state.tokens]),
     position: position as VaultPositionView,
     rates: rates as VaultRatesView,
+    holding: Object.freeze({ ...state.holding }) as VaultHoldingView,
     notice: state.notice === null ? null : Object.freeze({ ...state.notice }),
     flow,
   });

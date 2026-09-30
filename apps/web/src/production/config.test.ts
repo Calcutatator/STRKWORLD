@@ -7,7 +7,8 @@ import {
   parseRoutePolicy,
   usesProductionWallet,
 } from './config.js';
-import { catalogAsset } from '../panels/exchange/catalog.js';
+import { VAULT_MARKET_GROUPS, VAULT_MARKET_METADATA } from './vesu-markets.js';
+import { EXCHANGE_CATALOG } from '../panels/exchange/catalog.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -648,15 +649,16 @@ describe('production shield admission for any token (D-072)', () => {
   });
 });
 
-describe('production Vault admission (D-077, D-079)', () => {
+describe('production Vault admission (D-077, D-079, D-081)', () => {
   const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
   const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
-  const USDT = '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8';
   const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
   const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
   const USDC_E = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
-  /** The list the Railway test deployment sets (D-079): every token with a pinned vault. */
-  const RAILWAY = [STRK_TOKEN, ETH, USDC, USDT, WBTC];
+  /** Vesu lists sUSN, but the STRK20 pool has never held it, so no vault is pinned (D-081). */
+  const SUSN = '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17';
+  /** The list the Railway test deployment sets (D-081): every pinned market, in pinned order. */
+  const RAILWAY = [...VAULT_TOKENS];
   const base = {
     VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
     VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
@@ -678,16 +680,27 @@ describe('production Vault admission (D-077, D-079)', () => {
     expect(BigInt(STRK_TOKEN)).toBe(BigInt(VESU_VSTRK_ASSET));
   }, 30_000);
 
-  it('pins the inlined Vault tokens to the privacy package’s token → vault map, in its order', async () => {
-    const { VAULT_MARKETS } = await import('@strkworld/privacy');
+  it('pins the generated Vault tokens and their metadata to the privacy package’s token → vault map, in its order', async () => {
+    const { MAX_VAULT_MARKETS, VAULT_MARKETS } = await import('@strkworld/privacy');
     expect(VAULT_TOKENS).toEqual(VAULT_MARKETS.map((market) => market.token));
-    expect(MAX_VAULT_TOKENS).toBe(5);
+    expect(MAX_VAULT_TOKENS).toBe(16);
+    expect(MAX_VAULT_TOKENS).toBe(VAULT_MARKETS.length);
+    expect(MAX_VAULT_TOKENS).toBeLessThanOrEqual(MAX_VAULT_MARKETS);
     expect(Object.isFrozen(VAULT_TOKENS)).toBe(true);
-    // The catalog the counter reads symbols and decimals from agrees with the chain.
-    for (const market of VAULT_MARKETS) {
-      expect(catalogAsset(market.token), market.symbol).toMatchObject({ symbol: market.symbol, decimals: market.decimals });
-    }
+    // What the counter shows agrees with what the chain reported, token for token.
+    expect(VAULT_MARKET_METADATA.map(({ token, symbol, decimals, poolName, curation }) => ({ token, symbol, decimals, poolName, curation })))
+      .toEqual(VAULT_MARKETS.map(({ token, symbol, decimals, poolName, curation }) => ({ token, symbol, decimals, poolName, curation })));
+    for (const market of VAULT_MARKET_METADATA) expect(VAULT_MARKET_GROUPS, market.symbol).toContain(market.group);
   }, 30_000);
+
+  it('agrees with the Exchange catalog on every token both describe', () => {
+    const shared = EXCHANGE_CATALOG.filter((asset) => VAULT_MARKET_METADATA.some((market) => BigInt(market.token) === BigInt(asset.token)));
+    expect(shared.map((asset) => asset.symbol)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC', 'strkBTC']);
+    for (const asset of shared) {
+      expect(VAULT_MARKET_METADATA.find((market) => BigInt(market.token) === BigInt(asset.token)), asset.symbol)
+        .toMatchObject({ symbol: asset.symbol, decimals: asset.decimals });
+    }
+  });
 
   it('stays denied by default: no Vault route and no Vault list at all', () => {
     const { policy } = parseProductionWalletConfig(base);
@@ -705,30 +718,36 @@ describe('production Vault admission (D-077, D-079)', () => {
     expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
   });
 
-  it('admits exactly the Railway list, in the order given, frozen', () => {
+  it('admits exactly the Railway list, all sixteen, in the order given, frozen', () => {
     const { policy } = parseProductionWalletConfig({ ...base, ...vault(RAILWAY.join(',')) });
     expect(policy.enabledRoutes).toEqual(['vault']);
     expect(policy.allowedTokens.vault).toEqual(RAILWAY);
+    expect(RAILWAY).toHaveLength(16);
     expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
     // A space after each comma is the same list; another order is kept as given.
     expect(parseRoutePolicy(vault(RAILWAY.join(', '))).allowedTokens.vault).toEqual(RAILWAY);
     expect(parseRoutePolicy(vault(`${WBTC},${USDC}`)).allowedTokens.vault).toEqual([WBTC, USDC]);
+    expect(parseRoutePolicy(vault([...RAILWAY].reverse().join(','))).allowedTokens.vault).toEqual([...RAILWAY].reverse());
   });
 
-  it('documents a Railway value that parses to exactly those five tokens', () => {
-    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
-    const lines = example.split('\n').map((line) => line.trim());
-    const at = lines.findIndex((line) => line.startsWith('# --- Browser Vault admission'));
-    const documented = lines.slice(at).find((line) => /^# 0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+$/.test(line));
-    expect(at).toBeGreaterThanOrEqual(0);
+  it.each([
+    ['the example environment', '../../../../.env.production.example', /^# (0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+)$/m],
+    ['RAILWAY.md', '../../../../deploy/RAILWAY.md', /\| `VITE_STRK20_VAULT_ALLOWED_TOKENS` \| `(0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+)`/],
+  ])('documents a Railway value in %s that parses to exactly every pinned market', (_label, path, pattern) => {
+    const text = readFileSync(new URL(path, import.meta.url), 'utf8');
+    const from = path.endsWith('.example') ? text.indexOf('# --- Browser Vault admission') : text.indexOf('## The Vault probe');
+    expect(from).toBeGreaterThanOrEqual(0);
+    const documented = pattern.exec(text.slice(from))?.[1];
     expect(documented).toBeDefined();
-    expect(parseRoutePolicy(vault(documented!.slice(2))).allowedTokens.vault).toEqual(RAILWAY);
+    expect(parseRoutePolicy(vault(documented!)).allowedTokens.vault).toEqual(RAILWAY);
   });
 
   it('needs no STRK on the list: any single pinned token opens the Vault', () => {
-    for (const token of [USDC, ETH, WBTC, USDT]) {
+    for (const token of VAULT_TOKENS.filter((pinned) => pinned !== STRK_TOKEN)) {
       expect(parseRoutePolicy(vault(token)).allowedTokens.vault, token).toEqual([token]);
     }
+    // strkBTC through its curated pool, and the bridged USDC.e beside Circle's USDC (D-081).
+    expect(parseRoutePolicy(vault(`${STRKBTC},${USDC_E},${USDC}`)).allowedTokens.vault).toEqual([STRKBTC, USDC_E, USDC]);
   });
 
   it('never narrows another route', () => {
@@ -758,9 +777,10 @@ describe('production Vault admission (D-077, D-079)', () => {
     ['one token padded and unpadded', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${USDC},0x${USDC.slice(3)}` }],
     ['one token in two cases', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${ETH},0x${ETH.slice(2).toUpperCase()}` }],
     ['a repeat at the end of the full list', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, WBTC].join(',') }],
-    ['strkBTC, which has no pinned vault', { VITE_STRK20_VAULT_ALLOWED_TOKENS: STRKBTC }],
-    ['an unpinned token beside pinned ones', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${USDC},${STRKBTC}` }],
-    ['the bridged USDC.e', { VITE_STRK20_VAULT_ALLOWED_TOKENS: USDC_E }],
+    ['strkBTC twice, padded and unpadded', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRKBTC},0x${STRKBTC.slice(3)}` }],
+    ['sUSN, which the pool has never held', { VITE_STRK20_VAULT_ALLOWED_TOKENS: SUSN }],
+    ['an unpinned token beside pinned ones', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${USDC},${SUSN}` }],
+    ['a pinned vault in place of its token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d' }],
     ['a token nobody lends', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x1234' }],
     ['a list longer than the pinned vaults', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, '0x1234'].join(',') }],
   ])('keeps the whole Vault denied on %s, and touches no other route', (_label, override) => {

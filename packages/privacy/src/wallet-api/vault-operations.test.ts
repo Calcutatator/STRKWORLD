@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import {
+  MAX_VAULT_MARKETS,
   PrivacyError,
   VAULT_MARKETS,
   VESU_VSTRK,
@@ -19,7 +20,7 @@ import { shadowAccountAddress, vaultRedeemActions, vaultSupplyActions } from '..
 import { VAULT_RECEIPT_WAITS_MS } from './vault-operations.js';
 
 /**
- * The Vault on the Wallet API adapter (D-077, D-079): capability, the
+ * The Vault on the Wallet API adapter (D-077, D-079, D-081): capability, the
  * commitment, the cross-checked stand-in address, the position read for every
  * admitted token, the rates read, and the two wallet-submitted batches. The
  * wallet here answers like `WalletAccountV6`: it takes starknet.js `Call`
@@ -27,7 +28,8 @@ import { VAULT_RECEIPT_WAITS_MS } from './vault-operations.js';
  */
 
 const STRK = VESU_VSTRK_ASSET;
-const [STRK_MARKET, ETH_MARKET, USDC_MARKET, USDT_MARKET, WBTC_MARKET] = VAULT_MARKETS as [
+const marketOf = (symbol: string) => VAULT_MARKETS.find((market) => market.symbol === symbol)!;
+const [STRK_MARKET, ETH_MARKET, USDC_MARKET, USDT_MARKET, WBTC_MARKET] = ['STRK', 'ETH', 'USDC', 'USDT', 'WBTC'].map(marketOf) as [
   (typeof VAULT_MARKETS)[number],
   (typeof VAULT_MARKETS)[number],
   (typeof VAULT_MARKETS)[number],
@@ -376,7 +378,8 @@ describe('Vault refusals: fail closed before the wallet is asked', () => {
       // D-079: one unpinned token or a repeat shuts the whole Vault, as the build's parser does.
       vaultTokens(STRK, '0x123'),
       vaultTokens(STRK, USDC, `0x${STRK.slice(3)}`),
-      vaultTokens('0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135'),
+      // D-081: sUSN, a Vesu token the pool has never held, has no pinned vault.
+      vaultTokens('0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17'),
     ]) {
       const f = fixture({ policy });
       await expect(f.operations.vaultPositions()).rejects.toMatchObject({ kind: 'unknown', message: 'The vault route is disabled.' });
@@ -474,7 +477,7 @@ describe('Vault refusals: fail closed before the wallet is asked', () => {
     ['a row that says neither ok nor not', rows({ STRK: { ok: 'yes' } })],
     ['a row with figures but no ok', rows().map((row, index) => (index === 0 ? { ...row, ok: undefined } : row))],
     ['an object, not a list', { ...rows() }],
-    ['more rows than any backend pins', Array.from({ length: 17 }, () => rows()[1]!)],
+    ['more rows than any backend pins', Array.from({ length: MAX_VAULT_MARKETS + 1 }, () => rows()[1]!)],
   ])('refuses a position read with %s', async (_label, answer) => {
     const f = fixture();
     f.state.rows = answer;

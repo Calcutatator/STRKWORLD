@@ -1,4 +1,5 @@
 import type { WalletSessionOptions } from '@strkworld/privacy';
+import { VAULT_MARKET_METADATA } from './vesu-markets.js';
 
 const MAINNET_NAME = 'SN_MAIN';
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
@@ -14,21 +15,16 @@ export const XSTRK_TOKEN = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084
 /** D-072: the most tokens a shield allowlist may name. A longer list is a mistake, not a policy. */
 export const MAX_SHIELD_TOKENS = 16;
 /**
- * D-079: the tokens the Vault can lend, in order, each with a Vesu Prime
- * vault pinned in `packages/privacy/src/vault.ts` (`VAULT_MARKETS`): STRK,
- * ETH, Circle's USDC, USDT and WBTC. Inlined like STRK so this file keeps
- * type-only privacy imports; `config.test.ts` pins it to that map, token for
- * token. A Vault allowlist may name only these, each at most once, so this
- * list's length is also its bound.
+ * D-079, D-081: the tokens the Vault can lend, in order, each with a Vesu
+ * vault pinned in `packages/privacy/src/vault.ts` (`VAULT_MARKETS`), in
+ * Vesu's Prime pool or a curated one. Taken from `vesu-markets.ts`, which
+ * `scripts/vesu-markets.mjs` generates from the same list as that map, so this
+ * file keeps type-only privacy imports; `config.test.ts` pins it to the map,
+ * token for token. A Vault allowlist may name only these, each at most once,
+ * so this list's length is also its bound.
  */
-export const VAULT_TOKENS: readonly string[] = Object.freeze([
-  STRK_TOKEN,
-  '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
-  '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
-  '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
-  '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
-]);
-/** D-079: the most tokens a Vault allowlist may name: one per pinned vault. */
+export const VAULT_TOKENS: readonly string[] = Object.freeze(VAULT_MARKET_METADATA.map(({ token }) => token));
+/** D-079, D-081: the most tokens a Vault allowlist may name: one per pinned vault, never more than 48. */
 export const MAX_VAULT_TOKENS = VAULT_TOKENS.length;
 /** Starknet contract addresses lie below 2^251, inside the field. */
 const CONTRACT_ADDRESS_BOUND = 1n << 251n;
@@ -220,12 +216,12 @@ function parseStakeRoute(environment: WalletEnvironment): { maxRelayFee: bigint;
  * wallet proves and submits it (no relay, so no relay-fee ceiling and no
  * backend route group). It needs `VITE_STRK20_VAULT_ENABLED=true` and a
  * `VITE_STRK20_VAULT_ALLOWED_TOKENS` list, widened by D-079 from STRK alone
- * the way D-072 widened shield's: one to `MAX_VAULT_TOKENS` canonical token
- * addresses (`0x` and 1 to 64 hex digits), no two with the same field value,
- * every one in `VAULT_TOKENS`, in the order given. A missing, zero,
- * malformed, repeated, oversized, unpinned, partial or disabled value keeps
- * the whole Vault locked, as D-007's facade, without touching any other
- * route; enabling it enables nothing else.
+ * the way D-072 widened shield's, and by D-081 to every pinned market: one to
+ * `MAX_VAULT_TOKENS` canonical token addresses (`0x` and 1 to 64 hex digits),
+ * no two with the same field value, every one in `VAULT_TOKENS`, in the order
+ * given. A missing, zero, malformed, repeated, oversized, unpinned, partial or
+ * disabled value keeps the whole Vault locked, as D-007's facade, without
+ * touching any other route; enabling it enables nothing else.
  */
 function parseVaultRoute(environment: WalletEnvironment): { allowedTokens: string[] } | null {
   if (environment.VITE_STRK20_VAULT_ENABLED !== 'true') return null;

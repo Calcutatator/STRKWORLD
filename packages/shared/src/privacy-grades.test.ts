@@ -212,7 +212,7 @@ describe('the entry gate deposit register entry (D-072)', () => {
   });
 });
 
-describe('the Vault register entries (D-077, D-079)', () => {
+describe('the Vault register entries (D-077, D-079, D-081)', () => {
   const VAULT_ROUTES = ['vault.supply', 'vault.redeem'] as const;
 
   it.each(VAULT_ROUTES)('grades %s anonymous under the Vault, like Endur staking', (route) => {
@@ -256,17 +256,18 @@ describe('the Vault register entries (D-077, D-079)', () => {
     expect(registered('vault.supply').observable).toMatch(/strkworld-vault, nonce 0/);
   });
 
-  it('records what an observer sees in every token the Vault lends, under the same grade and disclosure (D-079)', () => {
+  it('records what an observer sees in every token and pool the Vault lends in, under the same grade and disclosure (D-079, D-081)', () => {
     for (const route of VAULT_ROUTES) {
       const entry = registered(route);
-      expect(entry.observable).toMatch(/Vesu Prime vault/);
-      expect(entry.observable).toMatch(/in any token/);
+      expect(entry.observable).toMatch(/pinned Vesu vault for (?:that|the) token, in the Vesu Prime pool or a curated pool/);
+      expect(entry.observable).toMatch(/in any token and any pool/);
       expect(entry.observable).toMatch(/in whichever token the wallet pays it with/);
-      // The player-facing words name no token, so they hold for every one of them.
-      expect(entry.disclosure).not.toMatch(/\b(?:STRK|ETH|USDC|USDT|WBTC|vSTRK)\b/);
+      // Generic since D-081: the observable names no token list, so a new
+      // pinned market needs no register edit, and neither do the player's words.
+      expect(entry.observable).not.toMatch(/\b(?:ETH|USDC|USDT|WBTC|strkBTC|Re7)\b/);
+      expect(entry.disclosure).not.toMatch(/\b(?:STRK|ETH|USDC|USDT|WBTC|vSTRK|strkBTC|Prime|curated|Re7)\b/);
       expect(entry.grade).toBe('anonymous');
     }
-    expect(registered('vault.supply').observable).toMatch(/\(STRK, ETH, USDC, USDT or WBTC\)/);
     expect(registered('vault.redeem').observable).toMatch(/whose token and amount are plaintext/);
   });
 

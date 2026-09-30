@@ -217,15 +217,16 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
   // shadow account, through the canonical ShadowAccountAnonymizer, behind a
   // fail-closed build switch. Graded like Endur staking (D-063): who acted is
   // hidden, what the chain shows is not. Both routes show one disclosure.
-  // D-079 extends both to every token with a pinned Vesu Prime vault. The
-  // grade and the disclosure name no token, so they hold unchanged; the
-  // observable now says what an observer sees for any of them.
+  // D-079 extends both to every token with a pinned Vesu Prime vault, and
+  // D-081 to every pinned Vesu market, in the Prime pool or a curated one.
+  // The grade and the disclosure name no token and no pool, so they hold
+  // unchanged; the observable says what an observer sees for any of them.
   {
     building: 'vault',
     route: 'vault.supply',
     grade: 'anonymous',
     observable:
-      'Unlinkable to the wallet, but public and persistent. The pool withdraws the token supplied (STRK, ETH, USDC, USDT or WBTC) to the player shadow account as a public transfer with a visible token and amount, and the canonical ShadowAccountAnonymizer then has that address approve the Vesu Prime vault for that token and deposit into it, so the vault shares sit on the shadow account. Its address, deployment, balances in every token, calls and positions are public, and every Vault action by the same player, in any token, uses the same address (dapp name strkworld-vault, nonce 0), so they are linked to each other. Only the link from that address to the wallet is hidden: the wallet is not the sender and never appears in the calls. The wallet fee withdrawal leaves the pool publicly, in whichever token the wallet pays it with, and the proof publishes the block it was built against. Matching amounts or timing around a public deposit can still link the two.',
+      'Unlinkable to the wallet, but public and persistent. The pool withdraws the token supplied to the player shadow account as a public transfer with a visible token and amount, and the canonical ShadowAccountAnonymizer then has that address approve the pinned Vesu vault for that token, in the Vesu Prime pool or a curated pool, and deposit into it, so the vault shares sit on the shadow account. Its address, deployment, balances in every token, calls and positions are public, and every Vault action by the same player, in any token and any pool, uses the same address (dapp name strkworld-vault, nonce 0), so they are linked to each other. Only the link from that address to the wallet is hidden: the wallet is not the sender and never appears in the calls. The wallet fee withdrawal leaves the pool publicly, in whichever token the wallet pays it with, and the proof publishes the block it was built against. Matching amounts or timing around a public deposit can still link the two.',
     disclosure:
       'Your Vault position sits on a stand-in address, not your wallet. That address, its balance and every supply and redeem you make through it, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away.',
     approvedBy: 'calc',
@@ -239,7 +240,7 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     route: 'vault.redeem',
     grade: 'anonymous',
     observable:
-      'Unlinkable to the wallet, but public and persistent. The canonical ShadowAccountAnonymizer has the player shadow account withdraw or redeem from the Vesu Prime vault for the token, a public call with visible amounts, and the pool collects only the token that call gained into an open note for the wallet, whose token and amount are plaintext. The shadow account keeps its address, history and any other public balance, and every Vault action by the same player, in any token, uses that one address, so they are linked to each other. Only the link from that address to the wallet is hidden. The wallet fee withdrawal leaves the pool publicly, in whichever token the wallet pays it with, and the proof publishes the block it was built against.',
+      'Unlinkable to the wallet, but public and persistent. The canonical ShadowAccountAnonymizer has the player shadow account withdraw or redeem from the pinned Vesu vault for the token, in the Vesu Prime pool or a curated pool, a public call with visible amounts, and the pool collects only the token that call gained into an open note for the wallet, whose token and amount are plaintext. The shadow account keeps its address, history and any other public balance, and every Vault action by the same player, in any token and any pool, uses that one address, so they are linked to each other. Only the link from that address to the wallet is hidden. The wallet fee withdrawal leaves the pool publicly, in whichever token the wallet pays it with, and the proof publishes the block it was built against.',
     disclosure:
       'Your Vault position sits on a stand-in address, not your wallet. That address, its balance and every supply and redeem you make through it, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away.',
     approvedBy: 'calc',

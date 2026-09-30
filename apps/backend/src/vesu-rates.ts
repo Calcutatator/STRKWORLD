@@ -1,26 +1,29 @@
 import type { VaultRateRead, VaultRatesPort } from './types.js';
-import { VESU_PRIME_POOL, VESU_PRIME_POOL_API_URL, VESU_VAULTS, type PinnedVault } from './vault.js';
+import { VESU_VAULTS, vesuPoolApiUrl, type PinnedVault } from './vault.js';
 
 /**
  * Vesu's supply APY for the Vault's pinned vaults (D-079), read from Vesu's
  * public API by this service itself, so Vesu never sees a player's IP (the
- * reason D-067 gives for avnu's token list). The endpoint is pinned and needs
- * no key; nothing from a request reaches it, and the answer names only
- * pinned vaults and their rates.
+ * reason D-067 gives for avnu's token list). The endpoints are pinned, one per
+ * Vesu pool a pinned vault supplies into (D-081), and need no key; nothing from
+ * a request reaches them, and the answer names only pinned vaults and their
+ * rates.
  *
- * One upstream read serves every player for `ttlMs`. Refreshes are
- * single-flight and run on their own timeout, so a player who stops waiting
- * never cancels a refresh another request shares. A failed refresh (down,
- * slow, refused, oversized or malformed) answers no rates and is cached for a
- * shorter retry window, so a down API is not hammered; the Vault then shows
- * no rate, never an old one presented as current.
+ * One refresh serves every player for `ttlMs`: one GET per pinned pool, all at
+ * once, on one timeout. Refreshes are single-flight and run on their own
+ * timeout, so a player who stops waiting never cancels a refresh another
+ * request shares. A pool whose read fails (down, slow, refused, oversized or
+ * malformed) answers no rates for its vaults, and never touches another
+ * pool's; a refresh with any such failure is kept only for the shorter retry
+ * window, so a down API is not hammered and a recovered pool is asked again
+ * soon. The Vault then shows no rate, never an old one presented as current.
  *
  * Vesu's pool answer lists each token as an asset with its `vToken` and
  * `stats.supplyApy` (`{ value, decimals }`, an integer and its decimal
  * places: 27351899613523568 with 18 is 2.735%). A pinned vault's rate counts
- * only when exactly one asset names both its token and its vault, the pool is
- * the Prime pool and not deprecated, and the value is a plain integer below
- * 100 (10,000%).
+ * only when its own pool's answer names that pool, is not deprecated, and has
+ * exactly one asset naming both its token and its vault, and the value is a
+ * plain integer below 100 (10,000%).
  */
 
 /** How long one good read is served (5 minutes). */
@@ -28,7 +31,7 @@ export const VESU_RATES_TTL_MS = 300_000;
 /** After a failed read, how long "no rates" stands before Vesu is asked again. */
 export const VESU_RATES_FAILURE_RETRY_MS = 60_000;
 const DEFAULT_FETCH_TIMEOUT_MS = 5_000;
-/** Vesu's Prime answer is about 40 kB; far more is not a pool answer, and reading stops there. */
+/** Vesu's largest pool answer is about 40 kB; far more is not a pool answer, and reading stops there. */
 export const VESU_RATES_MAX_BODY_BYTES = 1_000_000;
 const MAX_ASSETS = 128;
 const MAX_DECIMALS = 36;
@@ -51,6 +54,8 @@ export class VesuVaultRates implements VaultRatesPort {
   private readonly failureRetryMs: number;
   private readonly fetchTimeoutMs: number;
   private readonly vaults: readonly PinnedVault[];
+  /** Each pool the vaults name, once, in first-use order: the only endpoints ever read. */
+  private readonly pools: readonly string[];
   private cached: { rates: readonly VaultRateRead[]; expiresAt: number } | null = null;
   private refreshing: Promise<readonly VaultRateRead[]> | null = null;
 
@@ -65,6 +70,9 @@ export class VesuVaultRates implements VaultRatesPort {
     this.failureRetryMs = positiveInteger(options.failureRetryMs ?? VESU_RATES_FAILURE_RETRY_MS, 'retry window');
     this.fetchTimeoutMs = positiveInteger(options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS, 'fetch timeout');
     this.vaults = Object.freeze([...(options.vaults ?? VESU_VAULTS)]);
+    this.pools = Object.freeze(this.vaults.map(({ pool }) => pool).filter((pool, index, pools) => (
+      pools.findIndex((other) => sameFelt(other, pool)) === index
+    )));
   }
 
   async rates(signal?: AbortSignal): Promise<readonly VaultRateRead[]> {
@@ -82,23 +90,28 @@ export class VesuVaultRates implements VaultRatesPort {
     const timer = setTimeout(() => {
       controller.abort(new DOMException("Vesu's rates timed out.", 'TimeoutError'));
     }, this.fetchTimeoutMs);
-    let rates: readonly VaultRateRead[];
-    let lifetime: number;
+    let reads: Array<readonly VaultRateRead[] | null>;
     try {
-      rates = parseVesuPoolRates(await this.fetchPool(controller.signal), this.vaults);
-      lifetime = this.ttlMs;
-    } catch {
-      rates = Object.freeze([]);
-      lifetime = Math.min(this.ttlMs, this.failureRetryMs);
+      reads = await Promise.all(this.pools.map(async (pool) => {
+        try {
+          return parseVesuPoolRates(await this.fetchPool(pool, controller.signal), pool, this.vaults);
+        } catch {
+          return null;
+        }
+      }));
     } finally {
       clearTimeout(timer);
     }
+    const found = reads.flatMap((read) => read ?? []);
+    // Pinned order, whichever pool answered first.
+    const rates = Object.freeze(this.vaults.flatMap(({ vault }) => found.filter((rate) => sameFelt(rate.vault, vault))));
+    const lifetime = reads.includes(null) ? Math.min(this.ttlMs, this.failureRetryMs) : this.ttlMs;
     this.cached = { rates, expiresAt: this.now() + lifetime };
     return rates;
   }
 
-  private async fetchPool(signal: AbortSignal): Promise<unknown> {
-    const response = await this.fetcher(VESU_PRIME_POOL_API_URL, {
+  private async fetchPool(pool: string, signal: AbortSignal): Promise<unknown> {
+    const response = await this.fetcher(vesuPoolApiUrl(pool), {
       method: 'GET',
       headers: { accept: 'application/json' },
       redirect: 'error',
@@ -151,18 +164,23 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
 }
 
 /**
- * The pinned vaults' rates out of Vesu's pool answer, in pinned order. A
- * malformed answer throws; a vault with no clean rate is left out.
+ * The rates of the pinned vaults that supply into `pool`, out of Vesu's answer
+ * for that pool, in pinned order. A malformed answer, or one about another
+ * pool, throws; a vault with no clean rate is left out.
  */
-export function parseVesuPoolRates(payload: unknown, vaults: readonly PinnedVault[] = VESU_VAULTS): readonly VaultRateRead[] {
+export function parseVesuPoolRates(
+  payload: unknown,
+  pool: string,
+  vaults: readonly PinnedVault[] = VESU_VAULTS,
+): readonly VaultRateRead[] {
   const data = ownValue(payload, 'data');
   const id = ownValue(data, 'id');
-  if (typeof id !== 'string' || !sameFelt(id, VESU_PRIME_POOL)) throw new Error('Not the Prime pool.');
-  if (ownValue(data, 'isDeprecated') !== false) throw new Error('The Prime pool is deprecated.');
+  if (typeof id !== 'string' || !sameFelt(id, pool)) throw new Error('Not the pinned pool.');
+  if (ownValue(data, 'isDeprecated') !== false) throw new Error('The pool is deprecated.');
   const assets = ownValue(data, 'assets');
   if (!Array.isArray(assets) || assets.length > MAX_ASSETS) throw new Error('Malformed pool assets.');
   const rates: VaultRateRead[] = [];
-  for (const { token, vault } of vaults) {
+  for (const { token, vault } of vaults.filter((entry) => sameFelt(entry.pool, pool))) {
     const matching = assets.filter((asset) => {
       const address = ownValue(asset, 'address');
       const vToken = ownValue(ownValue(asset, 'vToken'), 'address');

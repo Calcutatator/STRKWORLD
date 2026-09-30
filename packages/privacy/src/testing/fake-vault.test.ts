@@ -13,8 +13,8 @@ import type { VaultPosition, VaultStage } from '../operations.js';
  */
 
 const STRK = VESU_VSTRK_ASSET;
-const USDC = VAULT_MARKETS[2]!.token;
-const WBTC = VAULT_MARKETS[4]!.token;
+const USDC = VAULT_MARKETS.find((market) => market.symbol === 'USDC')!.token;
+const WBTC = VAULT_MARKETS.find((market) => market.symbol === 'WBTC')!.token;
 const ONE = 10n ** 18n;
 const USDC_ONE = 10n ** 6n;
 const POOL_FEE = 6n * ONE;
@@ -164,8 +164,8 @@ describe('the demo Vault', () => {
   it('lends only the pinned tokens, and refuses a spent or discarded batch', async () => {
     const fake = fresh();
     await expect(fake.prepareVaultSupply('0x123', ONE)).rejects.toMatchObject({ kind: 'unknown' });
-    // strkBTC has no pinned vault (D-079).
-    await expect(fake.prepareVaultRedeem('0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135', 'all'))
+    // sUSN has no pinned vault: the pool has never held it (D-081).
+    await expect(fake.prepareVaultRedeem('0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17', 'all'))
       .rejects.toMatchObject({ kind: 'unknown' });
     const batch = await fake.prepareVaultSupply(STRK, ONE);
     await batch.confirm({ feeCeiling: POOL_FEE });

@@ -24,6 +24,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
 const DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'vault.supply')!.disclosure!;
 const CONNECTED: ConnectState = {
   name: 'connected',
@@ -113,7 +114,7 @@ function vault(): Element {
   return panel;
 }
 
-describe('the Vault counter, driven through the screen in demo (D-077)', () => {
+describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-081)', () => {
   it('supplies STRK and redeems it all, with the approved disclosure at every commit point', async () => {
     const operations = createDemoOperations({ funded: true });
     const { stations } = await openCounter(operations);
@@ -137,8 +138,11 @@ describe('the Vault counter, driven through the screen in demo (D-077)', () => {
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.empty);
 
-    // Every pinned token has a row; the demo states no rate, so none shows.
-    expect([...panel.querySelectorAll('.vault-market-symbol')].map((node) => node.textContent)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']);
+    // Every pinned token has a row, in its group; the demo states no rate, so none shows.
+    expect([...panel.querySelectorAll('.vault-market-symbol')].map((node) => node.textContent)).toEqual([
+      'STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC',
+      'xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'EKUBO',
+    ]);
     expect(panel.querySelector('.vault-apy')).toBeNull();
     // STRK is chosen first, so no note about the fee's token.
     expect(panel.querySelector('.vault-fee-token')).toBeNull();
@@ -264,6 +268,72 @@ describe('the Vault counter, driven through the screen in demo (D-077)', () => {
     // Half an ETH of shares is worth 0.51 ETH; the demo vault pays out 0.1 now.
     expect(figures('ETH')).toEqual(['0.51 ETH', '0.1 ETH']);
     expect(vault().textContent).not.toContain(COPY.vault.position.empty);
+  });
+
+  it('groups the markets and the picker, names each pool, and lends strkBTC through its curated pool (D-081)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      poolConfig: { noteMaturityBlocks: 0 },
+      vault: { rates: { [STRKBTC]: { value: 5981411732929n, decimals: 18 } } },
+    });
+    await openCounter(operations);
+
+    // The market list, by group, each row naming its pool; one line says what curated means.
+    const groups = [...vault().querySelectorAll('.vault-market-group')];
+    expect(groups.map((group) => group.querySelector('.vault-group-title')?.textContent)).toEqual([
+      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking, COPY.vault.groups.ecosystem,
+    ]);
+    expect(groups.map((group) => group.getAttribute('data-group'))).toEqual(['majors', 'stables', 'btc', 'staking', 'ecosystem']);
+    const row = (symbol: string) => vault().querySelector(`.vault-market[data-token="${symbol}"]`)!;
+    expect(row('STRK').querySelector('.vault-market-pool')?.textContent).toBe('Prime');
+    expect(row('STRK').getAttribute('aria-current')).toBe('true');
+    expect(row('strkBTC').querySelector('.vault-market-pool')?.textContent).toBe(`Re7 xBTC, ${COPY.vault.pools.curated}`);
+    expect(row('strkBTC').getAttribute('data-curation')).toBe('curated');
+    // Vesu's 0.0006% reads as under a hundredth of a percent, never as zero.
+    expect(row('strkBTC').querySelector('.vault-apy')?.textContent).toBe("Supply APY <0.01%, Vesu's figure");
+    expect(row('EKUBO').querySelector('.vault-market-pool')?.textContent).toBe(`Re7 Labs Starknet Ecosystem, ${COPY.vault.pools.curated}`);
+    expect(vault().querySelector('.vault-curated-note')?.textContent).toBe(COPY.vault.pools.curatedNote);
+
+    // The picker, grouped the same way; a curated market names its pool.
+    const select = vault().querySelector<HTMLSelectElement>('select[name="token"]')!;
+    expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
+      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking, COPY.vault.groups.ecosystem,
+    ]);
+    expect([...select.querySelectorAll('optgroup')][2]!.textContent).toContain('strkBTC (Re7 xBTC)');
+    expect(select.options).toHaveLength(16);
+    expect(vault().querySelector('.vault-pool')?.textContent).toBe(`${COPY.vault.pools.label}: Prime`);
+    expect(vault().querySelector('.vault-holding')?.textContent).toBe(`${COPY.vault.holding.neededLead} STRK ${COPY.vault.holding.neededTail}`);
+
+    // strkBTC, with none of it in the pool balance: said plainly, and nothing asked of the wallet.
+    await choose(STRKBTC);
+    expect(vault().querySelector('.vault-pool')?.textContent).toBe(`${COPY.vault.pools.label}: Re7 xBTC, ${COPY.vault.pools.curated}`);
+    expect(vault().querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.feeInStrk);
+    await type('0.001');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(vault().querySelector('.vault-holding-none')?.textContent).toBe(
+      'You have no strkBTC in your pool balance, so there is nothing to supply. Shield some first, or choose another token.',
+    );
+    expect(vault().querySelector('.panel-review')).toBeNull();
+    expect(operations.vaultSubmitted).toEqual([]);
+    // Reading is never blocked by it.
+    await click(button(COPY.vault.position.show));
+    expect(vault().textContent).toContain(COPY.vault.position.empty);
+  });
+
+  it('supplies strkBTC through Re7 xBTC in its own units once the pool balance holds some (D-081)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, [STRKBTC]: 10n ** 8n },
+      poolConfig: { noteMaturityBlocks: 0 },
+    });
+    await openCounter(operations);
+    await choose(STRKBTC);
+    await type('0.001');
+    await click(button(COPY.gameMode.reviewAction));
+    const review = vault().querySelector('.panel-review')!;
+    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['0.001 strkBTC']);
+    expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
+    await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: STRKBTC, amount: 100_000n }]);
   });
 
   it('tells a wallet without shadow accounts so plainly, offers no form, and keeps the city open', async () => {

@@ -2285,6 +2285,42 @@ button[data-locked="true"] {
   margin: 0 0 0.6rem;
 }
 
+/* ------------------------------------------------------------------------
+ * D-081 structure: the grouped market list, the pool lines and the
+ * pool-balance line. Layout, grouping and spacing only: no colours, fonts or
+ * type sizes, so the Vault's theme can restyle these without touching this
+ * block. Hooks for that theme: `.vault-market[aria-current="true"]` is the
+ * chosen market, and `[data-curation="prime" | "curated"]` marks a market's
+ * pool, on each row and on `.vault-pool`.
+ * --------------------------------------------------------------------- */
+.panel[data-building="vault"] .vault-market-groups {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.panel[data-building="vault"] .vault-market-group {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-group > .vault-group-title {
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-group > .vault-markets {
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-head > .vault-market-pool {
+  flex: 1 1 auto;
+}
+
+.panel[data-building="vault"] :is(.vault-curated-note, .vault-pool, .vault-holding) {
+  margin: 0 0 0.6rem;
+}
+
 /* The stand-in address is public, and this line says so (D-079): quiet
  * product information, never styled as the register's disclosure. */
 .panel[data-building="vault"] .vault-stand-in {

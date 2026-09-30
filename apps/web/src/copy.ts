@@ -304,6 +304,36 @@ export const COPY = freezeCopy({
     redeemAll: 'Redeem everything',
     /** D-079: a build whose Vault list names no token the counter can describe. */
     noToken: 'No token can be lent in this build yet.',
+    /** D-081: the picker's groups, and the headings of the market list. */
+    groups: {
+      majors: 'Majors',
+      stables: 'Stables',
+      btc: 'Bitcoin',
+      staking: 'Staking tokens',
+      ecosystem: 'Ecosystem',
+    },
+    /**
+     * D-081: where a market lends. Prime is named as it is; a curated pool
+     * reads "Re7 xBTC, curated", and one line says what curated means.
+     */
+    pools: {
+      label: 'Pool',
+      curated: 'curated',
+      curatedNote: 'Curated pools are run by their own curators, with their own risk settings.',
+    },
+    /**
+     * D-081: a supply takes the token from the pool balance. Written around
+     * the token's symbol: "Supplying USDC takes it from your pool balance."
+     * and, once a review found none there, "You have no USDC in your pool
+     * balance, so there is nothing to supply. Shield some first, or choose
+     * another token."
+     */
+    holding: {
+      neededLead: 'Supplying',
+      neededTail: 'takes it from your pool balance.',
+      noneLead: 'You have no',
+      noneTail: 'in your pool balance, so there is nothing to supply. Shield some first, or choose another token.',
+    },
     position: {
       title: 'Your Vault positions',
       unrequested: 'STRKWORLD reads your positions from the chain only when you ask. Your wallet may ask you first.',
