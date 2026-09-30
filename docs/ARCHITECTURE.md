@@ -96,8 +96,9 @@ open-note amount may remain public. AVNU already supplies its own private
 executor, so the Exchange does not need project-owned Cairo.
 
 The Vault (D-077, D-079, D-081) needs none either. It holds Vesu positions,
-in every pinned market (sixteen tokens, in Vesu's Prime pool and two curated
-pools), on the player's STRK20 shadow account: a
+in every pinned market (twenty-three tokens, in Vesu's Prime pool and five
+curated pools, supplied only where Vesu lends the token out), on the
+player's STRK20 shadow account: a
 keyless, persistent address for the player and the
 dapp name `strkworld-vault` that only StarkWare's canonical
 `ShadowAccountAnonymizer` can execute through. The wallet derives the

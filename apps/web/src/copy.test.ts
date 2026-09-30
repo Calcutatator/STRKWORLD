@@ -380,6 +380,15 @@ describe('shell copy', () => {
       expect(COPY.vault.review.networkByWallet).not.toMatch(/\d/);
     });
 
+    it('says a collateral-only market earns nothing and is redeemable, not suppliable, with no figure (D-081)', () => {
+      expect(COPY.vault.collateralOnly).toBe(
+        'Collateral only: Vesu lends none of it out here, so it earns nothing, and it is not offered for supply. You can still redeem it.',
+      );
+      for (const line of [COPY.vault.collateralOnly, COPY.vault.noSupply, COPY.vault.noRedeem]) expect(line).not.toMatch(/\d/);
+      // Nothing about borrowing is promised to the player.
+      expect(`${COPY.vault.collateralOnly} ${COPY.vault.noSupply}`).not.toMatch(/borrow/i);
+    });
+
     it('treats an unconfirmed transaction as not confirmed yet, never as failed', () => {
       expect(COPY.vault.submitted.pending).toMatch(/has not confirmed it yet/);
       expect(COPY.vault.submitted.pending).not.toMatch(/fail|did not go through/i);

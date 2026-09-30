@@ -24,6 +24,8 @@ import {
   ROUTE_BY_VAULT_MODE,
   createVaultPanel,
   noneInPoolLine,
+  vaultChoices,
+  vaultListedMarkets,
   voyagerContractUrl,
   type VaultMode,
   type VaultPanel as VaultPanelMachine,
@@ -127,7 +129,8 @@ export function VaultPanel({
     : state.flow.name === 'submitting' && state.flow.stage === 'awaiting-approval'
       ? 'confirm'
       : null;
-  const token = state.token === null ? undefined : state.tokens.find((entry) => sameAddress(entry.token, state.token!));
+  // D-081: the mode's own choices: a supply never offers a collateral-only market.
+  const token = state.token === null ? undefined : vaultChoices(state, state.mode).find((entry) => sameAddress(entry.token, state.token!));
 
   return (
     <div className="vault-experience" data-experience={experience}>
@@ -145,7 +148,7 @@ export function VaultPanel({
 
         {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
-        ) : !token ? (
+        ) : state.tokens.length === 0 ? (
           <LockedNotice reason="not-enabled" message={COPY.vault.noToken} />
         ) : state.capability.status === 'checking' ? (
           <p className="vault-checking" aria-busy="true">{COPY.vault.checking}</p>
@@ -163,8 +166,10 @@ export function VaultPanel({
               <CommitBlock state={state} onConfirm={() => void panel.confirm()} onCancel={() => panel.cancelPrepared()} />
             ) : state.flow.name === 'submitted' ? (
               <SubmittedBlock state={state} onBack={() => panel.acknowledge()} />
-            ) : gateBlocked || (state.flow.name === 'failed' && state.flow.recovery === 'close') ? null : (
+            ) : gateBlocked || (state.flow.name === 'failed' && state.flow.recovery === 'close') ? null : token ? (
               <ComposeBlock state={state} token={token} panel={panel} />
+            ) : (
+              <p className="vault-no-choice">{state.mode === 'supply' ? COPY.vault.noSupply : COPY.vault.noRedeem}</p>
             )}
             {state.flow.name === 'failed' ? (
               <div className="flow-failed" role="alert">
@@ -248,12 +253,14 @@ function ModeTabs({
 function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () => void }) {
   const { position, rates } = state;
   const loaded = position.status === 'loaded' ? position : null;
-  const anyCurated = state.tokens.some((entry) => entry.curation === 'curated');
+  // D-081: markets Vesu lends out, and collateral-only ones a read found a position in.
+  const listed = vaultListedMarkets(state);
+  const anyCurated = listed.some((entry) => entry.curation === 'curated');
   return (
     <div className="panel-balance vault-position">
       <h3>{COPY.vault.position.title}</h3>
       <div className="vault-market-groups">
-        {groupsOf(state.tokens).map(({ group, tokens }) => (
+        {groupsOf(listed).map(({ group, tokens }) => (
           <section key={group} className="vault-market-group" data-group={group}>
             <h4 className="vault-group-title">{COPY.vault.groups[group]}</h4>
             <ul className="vault-markets">
@@ -267,6 +274,7 @@ function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () 
                     className="vault-market"
                     data-token={entry.symbol}
                     data-curation={entry.curation}
+                    data-lendable={entry.lendable ? 'true' : 'false'}
                     aria-current={chosen ? 'true' : undefined}
                   >
                     <p className="vault-market-head">
@@ -278,6 +286,7 @@ function PositionBlock({ state, onRefresh }: { state: VaultState; onRefresh: () 
                         </span>
                       ) : null}
                     </p>
+                    {entry.lendable ? null : <p className="vault-market-note">{COPY.vault.collateralOnly}</p>}
                     {held === undefined ? null : held.shares === 0n ? (
                       <p className="vault-market-none">{COPY.vault.position.none}</p>
                     ) : (
@@ -343,15 +352,17 @@ function StandInLine({ address }: { address: string }) {
 }
 
 /**
- * The form: a grouped token picker (D-081) when there is more than one token,
- * the chosen market's pool, and for a supply the line saying it comes from the
- * pool balance, or, once a review found none of the token there, that there is
- * nothing to supply.
+ * The form: a grouped token picker (D-081) when the mode offers more than one
+ * token (a supply offers only markets Vesu lends out; a redeem adds any
+ * collateral-only one holding a position), the chosen market's pool, and for
+ * a supply the line saying it comes from the pool balance, or, once a review
+ * found none of the token there, that there is nothing to supply.
  */
 function ComposeBlock({ state, token, panel }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine }) {
   const preparing = state.flow.name === 'preparing';
   const all = state.mode === 'redeem' && state.redeemAll;
   const noneHeld = state.holding.status === 'none' && sameAddress(state.holding.token, token.token);
+  const choices = vaultChoices(state, state.mode);
   return (
     <form
       className="panel-compose"
@@ -360,7 +371,7 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
         void panel.prepare();
       }}
     >
-      {state.tokens.length > 1 ? (
+      {choices.length > 1 ? (
         <label>
           {COPY.vault.token}
           <select
@@ -369,7 +380,7 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
             disabled={preparing}
             onChange={(event) => panel.setToken(event.target.value)}
           >
-            {groupsOf(state.tokens).map(({ group, tokens }) => (
+            {groupsOf(choices).map(({ group, tokens }) => (
               <optgroup key={group} label={COPY.vault.groups[group]}>
                 {tokens.map((entry) => (
                   <option key={entry.token} value={entry.token}>
@@ -384,6 +395,7 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
       <p className="vault-pool" data-curation={token.curation}>
         {`${COPY.vault.pools.label}: ${poolLabel(token)}`}
       </p>
+      {token.lendable ? null : <p className="vault-market-note">{COPY.vault.collateralOnly}</p>}
       {state.mode === 'supply' ? (
         noneHeld ? (
           <p className="vault-holding vault-holding-none" role="status">{noneInPoolLine(token)}</p>

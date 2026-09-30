@@ -101,6 +101,14 @@ export interface VaultMarket {
   readonly poolName: string;
   /** Prime, or a curated pool with its curator's own risk settings. */
   readonly curation: VaultPoolCuration;
+  /**
+   * Whether the pool lends this token out: Vesu's `canBeBorrowed`, the debt
+   * asset of one of the pool's pairs, and a pair configured on the pool
+   * contract, all three checked at generation (D-081). A collateral-only
+   * market (`false`) pays no supply interest, so the Vault does not supply it
+   * until borrowing ships; a position already in one still reads and redeems.
+   */
+  readonly lendable: boolean;
   /** The token's symbol and `decimals()`, as its contract reports them (USDC.e's symbol is Vesu's). */
   readonly symbol: string;
   readonly decimals: number;
@@ -114,12 +122,14 @@ export interface VaultMarket {
  * for its pool and token both ways, its `asset()` is the token, its
  * `pool_contract()` the pool, its class `VESU_VTOKEN_CLASS_HASH` (or an ABI
  * with every entry point the builders call, in their shapes), the pool's
- * `pool_name()` its name and not paused, the token an ordinary ERC-20 whose
- * `decimals()` and `symbol()` match, and the STRK20 pool has credited the
- * token to a note at least once. Each token uses Prime's vault when Prime
- * lists it, and otherwise a curated pool the generator's policy approves by
- * address (Re7 xBTC for every BTC token it lists, as the lead chose for
- * strkBTC). vTokens report 18 decimals whatever the token's own, so shares
+ * `pool_name()` its name and not paused, and the token an ordinary ERC-20
+ * whose `decimals()` and `symbol()` match: any such token can sit in a STRK20
+ * private balance, since the pool keeps no token list. Each token uses
+ * Prime's vault when Prime lists it, and otherwise a curated pool the
+ * generator's policy approves by address (Re7 xBTC for every BTC token it
+ * lists, as the lead chose for strkBTC). `lendable` marks the markets whose
+ * pool lends the token out; the rest are collateral only. vTokens report 18
+ * decimals whatever the token's own, so shares
  * are never shown: a position is its shares converted to the token by the
  * vault's own `preview_redeem`.
  *
@@ -135,6 +145,7 @@ export const VAULT_MARKETS: readonly VaultMarket[] = Object.freeze(
     pool: row.pool,
     poolName: row.poolName,
     curation: row.curation,
+    lendable: row.lendable,
     symbol: row.symbol,
     decimals: row.decimals,
   })),

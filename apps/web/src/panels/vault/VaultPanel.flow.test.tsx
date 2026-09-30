@@ -25,6 +25,9 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
 const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+/** The markets Vesu lends out: the ones listed and offered before any read (D-081). */
+const LENDABLE = ['STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'wstETH', 'LBTC'];
 const DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'vault.supply')!.disclosure!;
 const CONNECTED: ConnectState = {
   name: 'connected',
@@ -138,11 +141,9 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.empty);
 
-    // Every pinned token has a row, in its group; the demo states no rate, so none shows.
-    expect([...panel.querySelectorAll('.vault-market-symbol')].map((node) => node.textContent)).toEqual([
-      'STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC',
-      'xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'EKUBO',
-    ]);
+    // Every market Vesu lends out has a row, in its group; the demo states no rate, so none shows.
+    // Collateral-only markets are not listed while nothing is held in them (D-081).
+    expect([...panel.querySelectorAll('.vault-market-symbol')].map((node) => node.textContent)).toEqual(LENDABLE);
     expect(panel.querySelector('.vault-apy')).toBeNull();
     // STRK is chosen first, so no note about the fee's token.
     expect(panel.querySelector('.vault-fee-token')).toBeNull();
@@ -279,11 +280,12 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await openCounter(operations);
 
     // The market list, by group, each row naming its pool; one line says what curated means.
+    // Ecosystem's one market, EKUBO, is collateral only, so the group is left out (D-081).
     const groups = [...vault().querySelectorAll('.vault-market-group')];
     expect(groups.map((group) => group.querySelector('.vault-group-title')?.textContent)).toEqual([
-      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking, COPY.vault.groups.ecosystem,
+      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking,
     ]);
-    expect(groups.map((group) => group.getAttribute('data-group'))).toEqual(['majors', 'stables', 'btc', 'staking', 'ecosystem']);
+    expect(groups.map((group) => group.getAttribute('data-group'))).toEqual(['majors', 'stables', 'btc', 'staking']);
     const row = (symbol: string) => vault().querySelector(`.vault-market[data-token="${symbol}"]`)!;
     expect(row('STRK').querySelector('.vault-market-pool')?.textContent).toBe('Prime');
     expect(row('STRK').getAttribute('aria-current')).toBe('true');
@@ -291,16 +293,18 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     expect(row('strkBTC').getAttribute('data-curation')).toBe('curated');
     // Vesu's 0.0006% reads as under a hundredth of a percent, never as zero.
     expect(row('strkBTC').querySelector('.vault-apy')?.textContent).toBe("Supply APY <0.01%, Vesu's figure");
-    expect(row('EKUBO').querySelector('.vault-market-pool')?.textContent).toBe(`Re7 Labs Starknet Ecosystem, ${COPY.vault.pools.curated}`);
+    expect(row('strkBTC').getAttribute('data-lendable')).toBe('true');
+    expect(vault().querySelector('.vault-market[data-token="EKUBO"]')).toBeNull();
     expect(vault().querySelector('.vault-curated-note')?.textContent).toBe(COPY.vault.pools.curatedNote);
 
     // The picker, grouped the same way; a curated market names its pool.
     const select = vault().querySelector<HTMLSelectElement>('select[name="token"]')!;
     expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
-      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking, COPY.vault.groups.ecosystem,
+      COPY.vault.groups.majors, COPY.vault.groups.stables, COPY.vault.groups.btc, COPY.vault.groups.staking,
     ]);
     expect([...select.querySelectorAll('optgroup')][2]!.textContent).toContain('strkBTC (Re7 xBTC)');
-    expect(select.options).toHaveLength(16);
+    // Only the eleven markets Vesu lends out: never a collateral-only one (D-081).
+    expect([...select.options].map((option) => option.textContent?.replace(/ \(.*\)$/, ''))).toEqual(LENDABLE);
     expect(vault().querySelector('.vault-pool')?.textContent).toBe(`${COPY.vault.pools.label}: Prime`);
     expect(vault().querySelector('.vault-holding')?.textContent).toBe(`${COPY.vault.holding.neededLead} STRK ${COPY.vault.holding.neededTail}`);
 
@@ -334,6 +338,38 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: STRKBTC, amount: 100_000n }]);
+  });
+
+  it('lists a collateral-only position once read, says it earns nothing, and redeems it, never offering it for supply (D-081)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      poolConfig: { noteMaturityBlocks: 0 },
+      vault: { markets: { [XSTRK]: { shares: 20n * 10n ** 18n } } },
+    });
+    await openCounter(operations);
+    const options = () => [...vault().querySelectorAll<HTMLOptionElement>('select[name="token"] option')].map((option) => option.value);
+    expect(vault().querySelector('.vault-market[data-token="xSTRK"]')).toBeNull();
+    expect(options()).not.toContain(XSTRK);
+
+    await click(button(COPY.vault.position.show));
+    const row = vault().querySelector('.vault-market[data-token="xSTRK"]')!;
+    expect(row.getAttribute('data-lendable')).toBe('false');
+    expect(row.querySelector('.vault-market-note')?.textContent).toBe(COPY.vault.collateralOnly);
+    expect([...row.querySelectorAll('.vault-figures dd')].map((dd) => dd.textContent)).toEqual(['20.4 xSTRK', '20.4 xSTRK']);
+    // Still never offered for supply.
+    expect(options()).not.toContain(XSTRK);
+
+    // Redeem offers it, with the same note, and redeems it all.
+    await click(button(COPY.vault.redeem));
+    expect(options()).toContain(XSTRK);
+    await choose(XSTRK);
+    expect(vault().querySelector('.panel-compose .vault-market-note')?.textContent).toBe(COPY.vault.collateralOnly);
+    await click(vault().querySelector<HTMLInputElement>('input[name="redeem-all"]')!);
+    await click(button(COPY.gameMode.reviewAction));
+    const review = vault().querySelector('.panel-review')!;
+    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['20.4 xSTRK']);
+    await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'redeem', token: XSTRK, amount: 20_400_000_000_000_000_000n, all: true }]);
   });
 
   it('tells a wallet without shadow accounts so plainly, offers no form, and keeps the city open', async () => {

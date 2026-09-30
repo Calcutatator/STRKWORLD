@@ -197,18 +197,27 @@ describe('the position read across every pinned vault (D-077, D-079, D-081)', ()
     expect(posts).toEqual([{ batch: true, size: VESU_VAULTS.length }, { batch: true, size: 3 }]);
   });
 
-  it('stays two batched requests with every vault held, and never calls a contract outside the pinned vaults', async () => {
+  it('stays three batched requests with every vault held, and never calls a contract outside the pinned vaults', async () => {
     const { rpc, requests, posts } = port(() => ['0x1', '0x0']);
     await rpc.getVaultPositions(SHADOW);
     const pinned = new Set(VESU_VAULTS.map(({ vault }) => vault));
     expect(requests.map(callOf).every((call) => pinned.has(call.contract_address))).toBe(true);
     expect(requests).toHaveLength(VESU_VAULTS.length * 4);
-    expect(posts).toEqual([{ batch: true, size: VESU_VAULTS.length }, { batch: true, size: VESU_VAULTS.length * 3 }]);
+    // Twenty-three balances in one batch; their sixty-nine follow-ups in two.
+    expect(posts).toEqual([
+      { batch: true, size: VESU_VAULTS.length },
+      { batch: true, size: VAULT_RPC_BATCH_SIZE },
+      { batch: true, size: VESU_VAULTS.length * 3 - VAULT_RPC_BATCH_SIZE },
+    ]);
+    expect(posts.every(({ size }) => size <= VAULT_RPC_BATCH_SIZE)).toBe(true);
   });
 
   it('is bounded for the longest list the Vault may pin: at most four requests of at most a batch each', () => {
     const requestsFor = (vaults: number) => Math.ceil(vaults / VAULT_RPC_BATCH_SIZE) + Math.ceil((vaults * 3) / VAULT_RPC_BATCH_SIZE);
-    expect(requestsFor(VESU_VAULTS.length)).toBe(2);
+    expect(VESU_VAULTS).toHaveLength(23);
+    expect(requestsFor(VESU_VAULTS.length)).toBe(3);
+    // Two while at most sixteen vaults hold shares, as a player's usually do.
+    expect(requestsFor(16) - Math.ceil(16 / VAULT_RPC_BATCH_SIZE) + 1).toBe(2);
     expect(requestsFor(MAX_VAULT_MARKETS)).toBe(4);
     expect(VAULT_RPC_FALLBACK_CONCURRENCY).toBeLessThanOrEqual(4);
   });

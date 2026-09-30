@@ -229,12 +229,14 @@ note atomically, so it is already part of the game's private balance.
 
 ### The Vault — Vesu lending · no Cairo (D-077, D-079, D-081)
 
-The Vault lends in every Vesu market whose token has been held in the STRK20
-pool: sixteen tokens, each to one Vesu vault (`VAULT_MARKETS` in
-`packages/privacy/src/vault.ts`, generated and re-verified by
-`scripts/vesu-markets.mjs`). Nine lend through Vesu's Prime pool; strkBTC and
-five other BTC tokens through the curated Re7 xBTC pool, and EKUBO through
-Re7 Labs Starknet Ecosystem (D-081). The player's STRK20 shadow account
+The Vault lends in every Vesu market, since the STRK20 pool can hold any
+ordinary ERC-20: twenty-three tokens, each to one Vesu vault (`VAULT_MARKETS`
+in `packages/privacy/src/vault.ts`, generated and re-verified by
+`scripts/vesu-markets.mjs`). Nine lend through Vesu's Prime pool and fourteen
+through five curated pools, strkBTC through Re7 xBTC (D-081). Supply offers
+the eleven markets Vesu lends the token out in; the twelve collateral-only
+markets pay nothing to a supplier, so they wait for borrowing, and a position
+already in one still redeems. The player's STRK20 shadow account
 holds every position: a keyless address per
 (player, `dapp_name` `strkworld-vault`, nonce 0) that only the canonical
 `ShadowAccountAnonymizer` can execute through. The wallet derives the partial
@@ -489,7 +491,7 @@ Multiplayer resilience, mainnet regression suite, dependency and security harden
 
 ### The Vault · Vesu — on shadow accounts (D-077)
 
-**No longer blocked on Cairo.** D-007 cut it from v1 as the only building needing new Cairo; shadow accounts removed that need. Supply and redeem ship behind a fail-closed build switch (`VITE_STRK20_VAULT_ENABLED` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`), locked by default. The first live use, in STRK, showed that the wallet runs shadow accounts end to end, and D-079 widened the list to STRK, ETH, USDC, USDT and WBTC. D-081 widened it to every Vesu market the pool can hold, sixteen tokens, strkBTC through the curated Re7 xBTC pool. Borrowing and collateral remain a separate, larger piece of work; a market already names its pool and token for it.
+**No longer blocked on Cairo.** D-007 cut it from v1 as the only building needing new Cairo; shadow accounts removed that need. Supply and redeem ship behind a fail-closed build switch (`VITE_STRK20_VAULT_ENABLED` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`), locked by default. The first live use, in STRK, showed that the wallet runs shadow accounts end to end, and D-079 widened the list to STRK, ETH, USDC, USDT and WBTC. D-081 widened it to every Vesu market, twenty-three tokens, strkBTC through the curated Re7 xBTC pool, with the twelve collateral-only markets kept out of Supply. Borrowing and collateral remain a separate, larger piece of work; a market already names its pool, its token and whether the pool lends it out.
 
 The Cairo toolchain note that stood here (Scarb `2.17.0`, Starknet Foundry `0.59.0`, the seven Vesu anonymizer unit tests) applied to the superseded adapter plan.
 

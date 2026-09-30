@@ -24,9 +24,10 @@ import {
 /**
  * D-081: the Vault's pinned Vesu markets. The committed list is pinned here
  * entry by entry, the three package copies must be exactly what the generator
- * renders from it, and the policy and the on-chain checks are exercised
- * against a fake Vesu and a fake chain, so nothing here touches the network.
- * The live re-derivation is `node scripts/vesu-markets.mjs`.
+ * renders from it, and the policy and the on-chain checks (the collateral-only
+ * derivation among them) are exercised against a fake Vesu and a fake chain,
+ * so nothing here touches the network. The live re-derivation is
+ * `node scripts/vesu-markets.mjs`.
  */
 
 const repo = new URL('../', import.meta.url);
@@ -37,27 +38,36 @@ const PRIME = '0x0451fe483d5921a2919ddd81d0de6696669bccdacd859f72a4fba7656b97c3b
 const RE7_XBTC = '0x03a8416bf20d036df5b1cf3447630a2e1cb04685f6b0c3a70ed7fb1473548ecf';
 const RE7_ECOSYSTEM = '0x0486294fe74daf3d964523e7a1f4e5d686f153934b2c183ececa0cab9dd2f3e6';
 const RE7_USDC_STABLE_CORE = '0x073702fce24aba36da1eac539bd4bae62d4d6a76747b7cdd3e016da754d7a135';
+const RE7_USDC_CORE = '0x03976cac265a12609934089004df458ea29c776d77da423c96dc761d09d24124';
+const RE7_USDC_FRONTIER = '0x05c03e7e0ccfe79c634782388eb1e6ed4e8e2a013ab0fcc055140805e46261bd';
 const CLEARSTAR = '0x01bc5de51365ed7fbb11ebc81cef9fd66b70050ec10fd898f0c4698765bf5803';
 
 describe('the pinned list (D-081)', () => {
-  it('pins exactly these sixteen markets, in the counter’s order', () => {
-    expect(LIST.markets.map(({ symbol, group, poolName, curation }) => `${symbol} ${group} ${poolName} ${curation}`)).toEqual([
-      'STRK majors Prime prime',
-      'ETH majors Prime prime',
-      'USDC stables Prime prime',
-      'USDT stables Prime prime',
-      'USDC.e stables Prime prime',
-      'WBTC btc Prime prime',
-      'strkBTC btc Re7 xBTC curated',
-      'tBTC btc Re7 xBTC curated',
-      'SolvBTC btc Re7 xBTC curated',
-      'xSTRK staking Prime prime',
-      'wstETH staking Prime prime',
-      'xWBTC staking Prime prime',
-      'xstrkBTC staking Re7 xBTC curated',
-      'xtBTC staking Re7 xBTC curated',
-      'LBTC staking Re7 xBTC curated',
-      'EKUBO ecosystem Re7 Labs Starknet Ecosystem curated',
+  it('pins every one of Vesu’s twenty-three tokens, in the counter’s order, with its pool and whether it is lent out', () => {
+    expect(LIST.markets.map(({ symbol, group, poolName, curation, lendable }) => `${symbol} ${group} ${poolName} ${curation} ${lendable ? 'lends' : 'collateral'}`)).toEqual([
+      'STRK majors Prime prime lends',
+      'ETH majors Prime prime lends',
+      'USDC stables Prime prime lends',
+      'USDT stables Prime prime lends',
+      'USDC.e stables Prime prime lends',
+      'sUSN stables Re7 USDC Stable Core curated collateral',
+      'mRe7YIELD stables Re7 USDC Stable Core curated collateral',
+      'WBTC btc Prime prime lends',
+      'strkBTC btc Re7 xBTC curated lends',
+      'tBTC btc Re7 xBTC curated lends',
+      'SolvBTC btc Re7 xBTC curated lends',
+      'uniBTC btc Re7 USDC Core curated collateral',
+      'YBTC.B btc Re7 USDC Frontier curated collateral',
+      'mRe7BTC btc Re7 xBTC curated collateral',
+      'xSTRK staking Prime prime collateral',
+      'wstETH staking Prime prime lends',
+      'xWBTC staking Prime prime collateral',
+      'xstrkBTC staking Re7 xBTC curated collateral',
+      'xtBTC staking Re7 xBTC curated collateral',
+      'LBTC staking Re7 xBTC curated lends',
+      'xLBTC staking Re7 xBTC curated collateral',
+      'xsBTC staking Re7 xBTC curated collateral',
+      'EKUBO ecosystem Re7 Labs Starknet Ecosystem curated collateral',
     ]);
     expect(LIST.markets.map(({ symbol, token, vault, decimals }) => [symbol, token, vault, decimals])).toEqual([
       ['STRK', '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d', '0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d', 18],
@@ -65,19 +75,33 @@ describe('the pinned list (D-081)', () => {
       ['USDC', '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb', '0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65', 6],
       ['USDT', '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8', '0x06be9f8980779930045b93c295105c6810d38191ec522b5175ddf7dbf9b22f9d', 6],
       ['USDC.e', '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8', '0x00079c83c3eb20df05d9e3ebdd45990060101bd126666181de622e432948f3e9', 6],
+      ['sUSN', '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17', '0x07d618b6204decead493a37f6779ee4ffee76803e8c5f3384603ce6c15e2f336', 18],
+      ['mRe7YIELD', '0x04be8945e61dc3e19ebadd1579a6bd53b262f51ba89e6f8b0c4bc9a7e3c633fc', '0x0133269be4c0a147ebe2bb28b1b0dd203ea1cd43357caf5cf48bc424ccb5e7f9', 18],
       ['WBTC', '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac', '0x04ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', 8],
       ['strkBTC', '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135', '0x04269987e8971bc613be4f8161e04a4d2652f5e6ade9aa3f2820b1fc3f7ef848', 8],
       ['tBTC', '0x04daa17763b286d1e59b97c283c0b8c949994c361e426a28f743c67bdfe9a32f', '0x04cbe8b13ebadd744254b09a40f4395f580e8a4a30acb2653849f61d12bfa039', 18],
       ['SolvBTC', '0x0593e034dda23eea82d2ba9a30960ed42cf4a01502cc2351dc9b9881f9931a68', '0x0590117befc944f23b39ca5b0401e6aaa7834e90f2eb284baa2bfc475bd66190', 18],
+      ['uniBTC', '0x023a312ece4a275e38c9fc169e3be7b5613a0cb55fe1bece4422b09a88434573', '0x06d656d23f38ca239877ea261ce265129cc3fae66f8e9d8948cf19a146c736c5', 8],
+      ['YBTC.B', '0x02cab84694e1be6af2ce65b1ae28a76009e8ec99ec4bc17047386abf20cbb688', '0x0537429e69dffba420ee66f725c685b45d540e108bc67d12721cae50bafe9568', 8],
+      ['mRe7BTC', '0x04e4fb1a9ca7e84bae609b9dc0078ad7719e49187ae7e425bb47d131710eddac', '0x013448c4404424a534d22a46330432bd2ef5d884740e8b9fba7f4c273f85ada3', 18],
       ['xSTRK', '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a', '0x073f369a935c8d8c9c793b371c5d384988060a96e7b11fb1dd2e5718d34639ad', 18],
       ['wstETH', '0x0057912720381af14b0e5c87aa4718ed5e527eab60b3801ebf702ab09139e38b', '0x07d231447ac838f45740ed823c3ae0982d94377bc9f165f751a371a41e9c1740', 18],
       ['xWBTC', '0x06a567e68c805323525fe1649adb80b03cddf92c23d2629a6779f54192dffc13', '0x00beb129889ac800bb84a8d31dfaa39c8710ee8f6310386ee03a37e79e6d7e1f', 8],
       ['xstrkBTC', '0x047751b3532fabca89b0f2e35ca1cb45e5a7b11d5e3d3663dfa1f4406b45fd88', '0x01196b589bbc3379aa43bbba6ac40e89766d7e5242b098f47e587f2afc577c7a', 8],
       ['xtBTC', '0x043a35c1425a0125ef8c171f1a75c6f31ef8648edcc8324b55ce1917db3f9b91', '0x03d90538d9b66c7fa3e582e7af5e96018a4f8f1e43d5eace23ba820fbe06ff70', 18],
       ['LBTC', '0x036834a40984312f7f7de8d31e3f6305b325389eaeea5b1c0664b2fb936461a4', '0x073476ed5b0d781182ede4c806241a93cb47cb00b6de354855a1fc6233a13b35', 8],
+      ['xLBTC', '0x07dd3c80de9fcc5545f0cb83678826819c79619ed7992cc06ff81fc67cd2efe0', '0x031e5609fee92e0bc200436449ee2cc07a141fe77859c474427fc9490f87e637', 8],
+      ['xsBTC', '0x0580f3dc564a7b82f21d40d404b3842d490ae7205e6ac07b1b7af2b4a5183dc9', '0x076ea5335932dafb727f31dec684e75169e7a582478d681fe3a73494669940fb', 18],
       ['EKUBO', '0x075afe6402ad5a5c20dd25e10ec3b3986acaa647b77e4ae24b0cbc9a54a27a87', '0x04fcf9064c23d146f6921b3fd9301bbec6384b37b87c173809a79f91b4d46fc4', 18],
     ]);
-    const pools = { Prime: PRIME, 'Re7 xBTC': RE7_XBTC, 'Re7 Labs Starknet Ecosystem': RE7_ECOSYSTEM };
+    const pools = {
+      Prime: PRIME,
+      'Re7 xBTC': RE7_XBTC,
+      'Re7 Labs Starknet Ecosystem': RE7_ECOSYSTEM,
+      'Re7 USDC Stable Core': RE7_USDC_STABLE_CORE,
+      'Re7 USDC Core': RE7_USDC_CORE,
+      'Re7 USDC Frontier': RE7_USDC_FRONTIER,
+    };
     for (const market of LIST.markets) {
       expect(market.pool, market.symbol).toBe(pools[market.poolName]);
       // Every pinned vault runs vSTRK's class, the PoolFactory's own vToken class.
@@ -90,20 +114,18 @@ describe('the pinned list (D-081)', () => {
   it('keeps D-079’s five vaults, and adds strkBTC through Re7 xBTC as the lead chose', () => {
     const bySymbol = Object.fromEntries(LIST.markets.map((market) => [market.symbol, market]));
     expect(bySymbol.STRK.vault).toBe('0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d');
-    for (const symbol of ['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']) expect(bySymbol[symbol].pool, symbol).toBe(PRIME);
-    expect(bySymbol.strkBTC).toMatchObject({ pool: RE7_XBTC, curation: 'curated' });
+    for (const symbol of ['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']) expect(bySymbol[symbol], symbol).toMatchObject({ pool: PRIME, lendable: true });
+    expect(bySymbol.strkBTC).toMatchObject({ pool: RE7_XBTC, curation: 'curated', lendable: true });
   });
 
-  it('reports every Vesu token it leaves out, and why', () => {
-    expect(LIST.skipped.map(({ symbol, reason }) => `${symbol} ${reason}`)).toEqual([
-      'sUSN never-held',
-      'mRe7YIELD never-held',
-      'uniBTC never-held',
-      'YBTC.B never-held',
-      'mRe7BTC never-held',
-      'xLBTC never-held',
-      'xsBTC never-held',
+  it('marks exactly the twelve markets Vesu lends none of out as collateral only', () => {
+    expect(LIST.markets.filter((market) => !market.lendable).map(({ symbol }) => symbol)).toEqual([
+      'sUSN', 'mRe7YIELD', 'uniBTC', 'YBTC.B', 'mRe7BTC', 'xSTRK', 'xWBTC', 'xstrkBTC', 'xtBTC', 'xLBTC', 'xsBTC', 'EKUBO',
     ]);
+  });
+
+  it('leaves no Vesu token out: all twenty-three pass', () => {
+    expect(LIST.skipped).toEqual([]);
   });
 
   it.each(Object.entries(OUTPUTS))('renders %s exactly as committed, from the one list', (key, path) => {
@@ -168,12 +190,27 @@ const TOKENS = {
 const SYMBOLS = { STRK: 'STRK', STRKBTC: 'strkBTC', USDC_E: 'USDC.e', SUSN: 'sUSN', EKUBO: 'EKUBO', UNKNOWN: 'NEW' };
 const vaultOf = (pool, token) => `0x${((BigInt(pool) * 7n + BigInt(token)) % (1n << 250n)).toString(16).padStart(64, '0')}`;
 
+/** Which fake pools lend which tokens out: each lent token is the debt asset of one pair. */
+const LENDS = { [PRIME]: ['STRK', 'USDC_E'], [RE7_XBTC]: ['STRKBTC'], [CLEARSTAR]: ['STRKBTC'] };
+const lends = (pool, key) => (LENDS[pool] ?? []).includes(key);
+
 function asset(key, pool) {
-  return { address: TOKENS[key], symbol: SYMBOLS[key], decimals: key === 'STRKBTC' ? 8 : key === 'USDC_E' ? 6 : 18, vToken: { address: vaultOf(pool, TOKENS[key]) } };
+  return {
+    address: TOKENS[key],
+    symbol: SYMBOLS[key],
+    decimals: key === 'STRKBTC' ? 8 : key === 'USDC_E' ? 6 : 18,
+    vToken: { address: vaultOf(pool, TOKENS[key]) },
+    stats: { canBeBorrowed: lends(pool, key) },
+  };
 }
 
 function vesuPool(id, name, keys, fields = {}) {
-  return { id, name, protocolVersion: 'v2', isDeprecated: false, isVerified: true, isPaused: false, shutdownConfig: null, assets: keys.map((key) => asset(key, id)), ...fields };
+  // Each lent token is borrowed against the pool's first other token.
+  const pairs = keys.filter((key) => lends(id, key)).map((key) => ({
+    collateralAssetAddress: TOKENS[keys.find((other) => other !== key) ?? key],
+    debtAssetAddress: TOKENS[key],
+  }));
+  return { id, name, protocolVersion: 'v2', isDeprecated: false, isVerified: true, isPaused: false, shutdownConfig: null, assets: keys.map((key) => asset(key, id)), pairs, ...fields };
 }
 
 /** Vesu's pool list, in the shape its API answers, cut to what the generator reads. */
@@ -212,7 +249,7 @@ const felt = (text) => `0x${Buffer.from(text, 'latin1').toString('hex')}`;
  * says otherwise: `lie(contract, selector, calldata, answer)` returns the
  * answer to give instead.
  */
-function chain({ lie = (_contract, _selector, _calldata, answer) => answer, held = new Set(Object.values(TOKENS)), classes = {}, abis = {} } = {}) {
+function chain({ lie = (_contract, _selector, _calldata, answer) => answer, classes = {}, abis = {} } = {}) {
   const pools = vesuPools();
   const vaults = new Map();
   for (const pool of pools) for (const entry of pool.assets) vaults.set(canonical(entry.vToken.address), { pool: canonical(pool.id), token: canonical(entry.address), entry, poolName: pool.name });
@@ -232,6 +269,12 @@ function chain({ lie = (_contract, _selector, _calldata, answer) => answer, held
     if (pool) {
       if (selector === SELECTORS.pool_name) return [felt(pool.name)];
       if (selector === SELECTORS.is_paused) return ['0x0'];
+      if (selector === SELECTORS.pair_config) {
+        // [max_ltv, liquidation_factor, debt_cap]; zeros for a pair the pool never configured.
+        const configured = pool.pairs.some((pair) => canonical(pair.collateralAssetAddress) === canonical(calldata[0])
+          && canonical(pair.debtAssetAddress) === canonical(calldata[1]));
+        return configured ? ['0xcb2bba6f17b8000', '0xd2f13f7789f0000', '0x0'] : ['0x0', '0x0', '0x0'];
+      }
     }
     const key = tokens.get(address);
     if (key) {
@@ -251,9 +294,6 @@ function chain({ lie = (_contract, _selector, _calldata, answer) => answer, held
     },
     async call(contract, selector, calldata) {
       return lie(canonical(contract), selector, calldata, answer(contract, selector, calldata));
-    },
-    async poolCreditsToken(token) {
-      return held.has(token) || [...held].some((entry) => BigInt(entry) === BigInt(token)) ? { block: 9_000_000 } : null;
     },
   };
 }
@@ -322,8 +362,17 @@ describe('verifying a market on mainnet', () => {
         pool: PRIME,
         poolName: 'Prime',
         curation: 'prime',
+        lendable: true,
       },
     });
+  });
+
+  it('pins a collateral-only market as such: no pair lends it, on Vesu’s word or the pool contract’s', async () => {
+    await expect(verifyCandidate(chain(), candidateFor('EKUBO'), policy)).resolves.toMatchObject({
+      ok: true,
+      market: { symbol: 'EKUBO', lendable: false },
+    });
+    await expect(verifyCandidate(chain(), candidateFor('sUSN'), policy)).resolves.toMatchObject({ ok: true, market: { lendable: false } });
   });
 
   it.each([
@@ -362,12 +411,44 @@ describe('verifying a market on mainnet', () => {
     await expect(verifyCandidate(reader, candidateFor('strkBTC'), policy)).resolves.toMatchObject({ skip: { reason: 'failed: token entry points' } });
   });
 
-  it('skips a token the STRK20 pool has never credited to a note', async () => {
-    const reader = chain({ held: new Set([TOKENS.STRK]) });
-    await expect(verifyCandidate(reader, candidateFor('EKUBO'), policy)).resolves.toEqual({
-      ok: false,
-      skip: { symbol: 'EKUBO', token: canonical(TOKENS.EKUBO), reason: 'never-held' },
-    });
+  it('pins a token whatever the STRK20 pool has held: it has no token list', async () => {
+    // Nothing here asks the pool about the token at all.
+    const reader = chain();
+    await expect(verifyCandidate(reader, candidateFor('EKUBO'), policy)).resolves.toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['Vesu’s flag says lent, but no pair lends it', (pools) => pools.map((pool) => (pool.id === RE7_ECOSYSTEM
+      ? { ...pool, assets: pool.assets.map((entry) => ({ ...entry, stats: { canBeBorrowed: true } })) }
+      : pool))],
+    ['a pair lends it, but Vesu’s flag says not', (pools) => pools.map((pool) => (pool.id === RE7_ECOSYSTEM
+      ? { ...pool, pairs: [{ collateralAssetAddress: TOKENS.STRK, debtAssetAddress: TOKENS.EKUBO }] }
+      : pool))],
+    ['no flag at all', (pools) => pools.map((pool) => (pool.id === RE7_ECOSYSTEM
+      ? { ...pool, assets: pool.assets.map((entry) => ({ ...entry, stats: {} })) }
+      : pool))],
+    ['no readable pairs', (pools) => pools.map((pool) => (pool.id === RE7_ECOSYSTEM ? { ...pool, pairs: undefined } : pool))],
+  ])('skips a market when %s', async (_label, edit) => {
+    const pools = edit(vesuPools());
+    const candidate = selectCandidates(pools, policy).candidates.find((entry) => entry.symbol === 'EKUBO');
+    await expect(verifyCandidate(chain(), candidate, policy)).resolves.toMatchObject({ ok: false, skip: { reason: 'failed: lendable' } });
+  });
+
+  it('skips a market when the pool contract disagrees with Vesu about lending it', async () => {
+    // Vesu and its pairs say strkBTC is lent in Re7 xBTC; the contract has no such pair configured.
+    const unconfigured = (contract, selector, _calldata, answer) => (
+      contract === canonical(RE7_XBTC) && selector === SELECTORS.pair_config ? ['0x0', '0x0', '0x0'] : answer
+    );
+    await expect(verifyCandidate(chain({ lie: unconfigured }), candidateFor('strkBTC'), policy))
+      .resolves.toMatchObject({ skip: { reason: 'failed: lendable' } });
+    // Vesu says EKUBO is collateral only; the contract lends it against STRK.
+    const configured = (contract, selector, calldata, answer) => (
+      contract === canonical(RE7_ECOSYSTEM) && selector === SELECTORS.pair_config && canonical(calldata[1]) === canonical(TOKENS.EKUBO)
+        ? ['0x1', '0x1', '0x0']
+        : answer
+    );
+    await expect(verifyCandidate(chain({ lie: configured }), candidateFor('EKUBO'), policy))
+      .resolves.toMatchObject({ skip: { reason: 'failed: lendable' } });
   });
 
   it('aborts on a node that cannot answer, so a flaky RPC never shrinks the list', async () => {
@@ -377,13 +458,21 @@ describe('verifying a market on mainnet', () => {
 });
 
 describe('the whole derivation', () => {
-  it('pins what the policy chooses and mainnet agrees with, and reports the rest in the policy’s order', async () => {
-    const list = await deriveMarkets(vesuPools(), chain({ held: new Set([TOKENS.STRK, TOKENS.USDC_E, TOKENS.STRKBTC, TOKENS.EKUBO]) }), policy);
-    expect(list.markets.map(({ symbol, poolName }) => `${symbol} ${poolName}`)).toEqual([
-      'STRK Prime', 'USDC.e Prime', 'strkBTC Re7 xBTC', 'EKUBO Re7 Labs Starknet Ecosystem',
+  it('pins what the policy chooses and mainnet agrees with, in the policy’s order, the same every run', async () => {
+    const list = await deriveMarkets(vesuPools(), chain(), policy);
+    expect(list.markets.map(({ symbol, poolName, lendable }) => `${symbol} ${poolName} ${lendable}`)).toEqual([
+      'STRK Prime true', 'USDC.e Prime true', 'sUSN Re7 USDC Stable Core false', 'strkBTC Re7 xBTC true', 'EKUBO Re7 Labs Starknet Ecosystem false',
     ]);
-    expect(list.skipped).toEqual([{ symbol: 'sUSN', token: canonical(TOKENS.SUSN), reason: 'never-held' }]);
-    expect(renderJson(list)).toBe(renderJson(await deriveMarkets(vesuPools(), chain({ held: new Set([TOKENS.STRK, TOKENS.USDC_E, TOKENS.STRKBTC, TOKENS.EKUBO]) }), policy)));
+    expect(list.skipped).toEqual([]);
+    expect(renderJson(list)).toBe(renderJson(await deriveMarkets(vesuPools(), chain(), policy)));
+  });
+
+  it('reports a skipped market in the policy’s order', async () => {
+    const lie = (contract, selector, _calldata, answer) => (
+      contract === canonical(TOKENS.SUSN) && selector === SELECTORS.decimals ? ['0x6'] : answer
+    );
+    const list = await deriveMarkets(vesuPools(), chain({ lie }), policy);
+    expect(list.skipped).toEqual([{ symbol: 'sUSN', token: canonical(TOKENS.SUSN), reason: 'failed: token decimals()' }]);
   });
 
   it('refuses a list with two markets showing one symbol', async () => {
@@ -405,6 +494,7 @@ describe('the whole derivation', () => {
   });
 
   it('refuses a list with no market at all', async () => {
-    await expect(deriveMarkets(vesuPools(), chain({ held: new Set() }), policy)).rejects.toThrow(/1 to 48 markets/);
+    const lie = (contract, selector, _calldata, answer) => (selector === SELECTORS.is_paused ? ['0x1'] : answer);
+    await expect(deriveMarkets(vesuPools(), chain({ lie }), policy)).rejects.toThrow(/1 to 48 markets/);
   });
 });

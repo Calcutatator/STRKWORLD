@@ -161,12 +161,29 @@ describe('the demo Vault', () => {
     expect(stages.at(-1)).toEqual({ stage: 'commitment', ok: false, code: 118 });
   });
 
+  it('reads and redeems a position in a collateral-only market it will not supply (D-081)', async () => {
+    const xstrk = VAULT_MARKETS.find((market) => market.symbol === 'xSTRK')!;
+    const fake = fresh(100n * ONE, { markets: { [xstrk.token]: { shares: 50n * ONE } } });
+    const read = await fake.vaultPositions();
+    expect(read.positions.find((entry) => entry.token === xstrk.token)).toEqual({ token: xstrk.token, shares: 50n * ONE, assets: 51n * ONE, redeemable: 51n * ONE });
+    const batch = await fake.prepareVaultRedeem(xstrk.token, 'all');
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    expect(fake.vaultSubmitted).toEqual([{ kind: 'redeem', token: xstrk.token, amount: 51n * ONE, all: true }]);
+    expect((await fake.vaultPositions()).positions.find((entry) => entry.token === xstrk.token)?.shares).toBe(0n);
+  });
+
   it('lends only the pinned tokens, and refuses a spent or discarded batch', async () => {
     const fake = fresh();
     await expect(fake.prepareVaultSupply('0x123', ONE)).rejects.toMatchObject({ kind: 'unknown' });
-    // sUSN has no pinned vault: the pool has never held it (D-081).
-    await expect(fake.prepareVaultRedeem('0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17', 'all'))
+    // A token Vesu does not list (LORDS) has no pinned vault.
+    await expect(fake.prepareVaultRedeem('0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49', 'all'))
       .rejects.toMatchObject({ kind: 'unknown' });
+    // D-081: a collateral-only market is never supplied, as the adapter refuses it.
+    const xstrk = VAULT_MARKETS.find((market) => market.symbol === 'xSTRK')!;
+    await expect(fake.prepareVaultSupply(xstrk.token, ONE)).rejects.toMatchObject({
+      kind: 'unknown',
+      message: 'Vesu lends none of that token out, so the Vault does not supply it.',
+    });
     const batch = await fake.prepareVaultSupply(STRK, ONE);
     await batch.confirm({ feeCeiling: POOL_FEE });
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toMatchObject({ kind: 'unknown' });

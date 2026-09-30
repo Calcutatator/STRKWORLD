@@ -686,6 +686,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
     await this.tick('vaultPrepare', signal);
     const market = vaultMarket(token);
     if (!market) throw new PrivacyError('unknown', 'The Vault does not lend that token in this build.');
+    // D-081: as the adapter, nothing is supplied into a collateral-only market.
+    if (!market.lendable) throw new PrivacyError('unknown', 'Vesu lends none of that token out, so the Vault does not supply it.');
     if (typeof amount !== 'bigint' || amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
     this.vaultIdentity(onStage);
     this.assertVaultFunds(market, amount);

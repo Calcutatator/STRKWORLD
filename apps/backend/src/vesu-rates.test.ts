@@ -42,8 +42,8 @@ function asset(address: string, vToken: string, value: unknown, decimals: unknow
 function poolAnswer(pool: string, assets?: unknown[], data: Record<string, unknown> = {}) {
   const listed = assets ?? [
     ...VESU_VAULTS.filter((entry) => BigInt(entry.pool) === BigInt(pool)).map((entry) => asset(entry.token, entry.vault, figureOf(entry))),
-    // mRe7BTC-like: a token Vesu lists that the Vault does not pin.
-    asset('0x04e4fb1a9ca7e84bae609b9dc0078ad7719e49187ae7e425bb47d131710eddac', '0x013448c4404424a534d22a46330432bd2ef5d884740e8b9fba7f4c273f85ada3', '0'),
+    // A token Vesu might list later, which the Vault does not pin.
+    asset('0x0777777777777777777777777777777777777777777777777777777777777777', '0x0666666666666666666666666666666666666666666666666666666666666666', '5'),
   ];
   return { data: { id: pool, isDeprecated: false, name: 'A pool', assets: listed, ...data } };
 }
@@ -63,8 +63,15 @@ function vesu(override: Partial<Record<string, () => Response>> = {}) {
 }
 
 describe('the pinned pools (D-081)', () => {
-  it('reads each pool a pinned vault supplies into, once, Prime first', () => {
-    expect(VESU_POOLS).toEqual([VESU_PRIME_POOL, RE7_XBTC, RE7_ECOSYSTEM]);
+  it('reads each pool a pinned vault supplies into, once, in the order the vaults first name them, Prime first', () => {
+    expect(VESU_POOLS).toEqual([
+      VESU_PRIME_POOL,
+      '0x073702fce24aba36da1eac539bd4bae62d4d6a76747b7cdd3e016da754d7a135', // Re7 USDC Stable Core (sUSN)
+      RE7_XBTC,
+      '0x03976cac265a12609934089004df458ea29c776d77da423c96dc761d09d24124', // Re7 USDC Core (uniBTC)
+      '0x05c03e7e0ccfe79c634782388eb1e6ed4e8e2a013ab0fcc055140805e46261bd', // Re7 USDC Frontier (YBTC.B)
+      RE7_ECOSYSTEM,
+    ]);
     expect(vesuPoolApiUrl(RE7_XBTC)).toBe(`https://api.vesu.xyz/pools/${RE7_XBTC}`);
     expect(Object.isFrozen(VESU_POOLS)).toBe(true);
   });

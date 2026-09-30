@@ -163,6 +163,12 @@ export class ShadowVault {
     const { signal, onStage } = ownCallOptions(options);
     throwIfAborted(signal);
     const market = this.admittedMarket(token);
+    // D-081: a collateral-only market pays no supply interest, so nothing is
+    // supplied into it until borrowing ships. A position already there still
+    // reads and redeems.
+    if (!market.lendable) {
+      throw new PrivacyError('unknown', 'Vesu lends none of that token out, so the Vault does not supply it.');
+    }
     assertAmount(amount);
     const identity = await this.resolve(signal, onStage);
     const config = await this.poolConfig(signal);

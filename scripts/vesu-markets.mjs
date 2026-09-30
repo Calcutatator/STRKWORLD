@@ -31,12 +31,17 @@
  *      names, with its reason. The chosen pool must be one `POLICY.pools`
  *      approves by address, or the asset is skipped as `no-pool`.
  *   3. Verify it on mainnet. A failed check skips the asset with the check's
- *      name, so a broken market is reported, never pinned.
- *   4. Admit it only if the STRK20 pool has ever credited the token to a note
- *      (a `Deposit` or `OpenNoteDeposited` event naming it): the evidence that
- *      it can sit in a private balance. The pool is token-agnostic, so the rest
- *      are skipped as `never-held`, and a later run admits each one once
- *      someone has held it privately.
+ *      name, so a broken market is reported, never pinned. Any ordinary ERC-20
+ *      that passes can sit in a STRK20 private balance: the pool has no token
+ *      list, so no market waits on someone having shielded its token first.
+ *   4. Mark whether Vesu lends it out in that pool (`lendable`). It is when
+ *      Vesu's `stats.canBeBorrowed` says so, the pool's `pairs` name it as the
+ *      debt asset of at least one pair, and that pair is configured on the pool
+ *      contract (`pair_config(collateral, token).max_ltv > 0`). It is
+ *      collateral only when all three say no, the contract for every other
+ *      asset the pool lists. Any disagreement skips the market. Supplying a
+ *      collateral-only market earns nothing, so the Vault pins it (borrowing
+ *      will need it) but does not offer it for supply.
  *
  * The output is deterministic for a given API answer and chain state, and
  * holds nothing that moves between runs (no rates, no block numbers), so a
@@ -51,10 +56,6 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export const DEFAULT_RPC_URL = 'https://api.cartridge.gg/x/starknet/mainnet';
 export const DEFAULT_VESU_API_URL = 'https://api.vesu.xyz';
-
-/** The canonical STRK20 pool on mainnet, and the first block it exists at. */
-export const STRK20_POOL = '0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a';
-export const STRK20_POOL_FIRST_BLOCK = 8_978_970;
 
 /**
  * Vesu V2's official PoolFactory (docs.vesu.xyz/developers/contract-addresses).
@@ -76,7 +77,7 @@ export const DECISION = 'D-081';
 /** A Vault allowlist's ceiling (D-081): more markets than this is a mistake, not a policy. */
 export const MAX_MARKETS = 48;
 
-/** `sn_keccak` of each entry point and event read here; scripts/vesu-markets.test.mjs pins every one. */
+/** `sn_keccak` of each entry point read here; scripts/vesu-markets.test.mjs pins every one. */
 export const SELECTORS = Object.freeze({
   asset: '0x3d4060688a1800ae986e4840aebc924bb40b5bf44de4583df2257220b54b77c',
   pool_contract: '0x34044f090cf33c19084c37ddd543c545514cfdce73d9c2b6a2347a8b8e1a22c',
@@ -86,8 +87,7 @@ export const SELECTORS = Object.freeze({
   asset_for_v_token: '0x1464e0fda425108d477d517c97c3c862de1f58a66c67fe10d908f80470eb792',
   pool_name: '0x370b5b871d074a164a9ae326d3e13e8721ff31af01f4148f6b3073c19f33ede',
   is_paused: '0x238d7ea31550fece8f0a8a601e3ae1a7c59cb3b6cc976ceb721e31ebd9c36f9',
-  Deposit: '0x9149d2123147c5f43d258257fef0b7b969db78269369ebcf5ebb9eef8592f2',
-  OpenNoteDeposited: '0x25b6da03c4858d11cb0708d5cb6be79b190fb32eb7a7ce83804e07cbbb9bead',
+  pair_config: '0x171c2fae45c0df09f8253d0a3bdf9756051f8fa442f4349827736d3e3135c06',
 });
 
 const T = Object.freeze({
@@ -214,10 +214,21 @@ export function selectCandidates(pools, policy = POLICY) {
   const eligible = eligiblePools(pools);
   const listings = new Map();
   for (const pool of eligible) {
+    const poolAssets = [];
     for (const asset of pool.assets) {
       if (!asset || !isAddress(asset.address) || !isAddress(asset.vToken?.address)) {
         throw new Error(`Vesu lists a malformed asset in pool ${pool.id}.`);
       }
+      poolAssets.push(canonical(asset.address));
+    }
+    // Each pair lends its debt asset against its collateral: the pool's own
+    // record of which assets it lends out. A pool with no readable pairs
+    // leaves `lendingCollaterals` null, and its markets fail `lendable`.
+    const pairs = Array.isArray(pool.pairs)
+      && pool.pairs.every((pair) => isAddress(pair?.collateralAssetAddress) && isAddress(pair?.debtAssetAddress))
+      ? pool.pairs
+      : null;
+    for (const asset of pool.assets) {
       const key = canonical(asset.address);
       if (!listings.has(key)) listings.set(key, []);
       listings.get(key).push({
@@ -226,6 +237,11 @@ export function selectCandidates(pools, policy = POLICY) {
         vault: canonical(asset.vToken.address),
         symbol: String(asset.symbol ?? ''),
         decimals: asset.decimals,
+        canBeBorrowed: asset.stats?.canBeBorrowed,
+        lendingCollaterals: pairs === null
+          ? null
+          : pairs.filter((pair) => canonical(pair.debtAssetAddress) === key).map((pair) => canonical(pair.collateralAssetAddress)),
+        poolAssets: Object.freeze(poolAssets),
       });
     }
   }
@@ -356,6 +372,20 @@ export async function verifyCandidate(reader, candidate, policy = POLICY) {
       const onChain = decodeString(await reader.call(token, SELECTORS.symbol, []));
       return override ? onChain === override.onChain && candidate.symbol === override.symbol : onChain === candidate.symbol;
     }],
+    ['lendable', async () => {
+      // Vesu's flag, Vesu's pairs and the pool contract must all agree on
+      // whether the pool lends this token out.
+      const { canBeBorrowed, lendingCollaterals, poolAssets } = candidate;
+      if (typeof canBeBorrowed !== 'boolean' || lendingCollaterals === null) return false;
+      if (canBeBorrowed !== lendingCollaterals.length > 0) return false;
+      const configured = async (collateral) => BigInt(first(await reader.call(pool, SELECTORS.pair_config, [collateral, token]), 3)) > 0n;
+      if (canBeBorrowed) {
+        for (const collateral of lendingCollaterals) if (await configured(collateral)) return true;
+        return false;
+      }
+      for (const collateral of poolAssets) if (collateral !== token && await configured(collateral)) return false;
+      return true;
+    }],
   ];
   let vaultClass = null;
   for (const [name, check] of checks) {
@@ -369,7 +399,6 @@ export async function verifyCandidate(reader, candidate, policy = POLICY) {
     if (!passed) return skip(`failed: ${name}`);
     if (name === 'vault entry points') vaultClass = passed;
   }
-  if (!(await reader.poolCreditsToken(token))) return skip('never-held');
   return {
     ok: true,
     market: {
@@ -382,6 +411,7 @@ export async function verifyCandidate(reader, candidate, policy = POLICY) {
       pool,
       poolName: candidate.poolName,
       curation: candidate.curation,
+      lendable: candidate.canBeBorrowed,
     },
   };
 }
@@ -457,16 +487,18 @@ const GENERATED_NOTE = [
 ];
 
 export function renderJson({ markets, skipped }) {
-  const rows = (items, fields) => items.map((item, index) => `    ${jsonObject(item, fields)}${index < items.length - 1 ? ',' : ''}`);
+  const list = (name, items, fields, last) => (items.length === 0
+    ? [`  "${name}": []${last ? '' : ','}`]
+    : [
+        `  "${name}": [`,
+        ...items.map((item, index) => `    ${jsonObject(item, fields)}${index < items.length - 1 ? ',' : ''}`),
+        `  ]${last ? '' : ','}`,
+      ]);
   return [
     '{',
     `  "about": ${JSON.stringify(`The Vault's pinned Vesu markets (${DECISION}). Generated by scripts/vesu-markets.mjs; do not edit by hand.`)},`,
-    '  "markets": [',
-    ...rows(markets, MARKET_FIELDS),
-    '  ],',
-    '  "skipped": [',
-    ...rows(skipped, ['symbol', 'token', 'reason']),
-    '  ]',
+    ...list('markets', markets, MARKET_FIELDS, false),
+    ...list('skipped', skipped, ['symbol', 'token', 'reason'], true),
     '}',
     '',
   ].join('\n');
@@ -477,7 +509,7 @@ function jsonObject(value, fields) {
   return `{ ${fields.map((field) => `${JSON.stringify(field)}: ${JSON.stringify(value[field])}`).join(', ')} }`;
 }
 
-const MARKET_FIELDS = ['symbol', 'token', 'decimals', 'group', 'vault', 'vaultClass', 'pool', 'poolName', 'curation'];
+const MARKET_FIELDS = ['symbol', 'token', 'decimals', 'group', 'vault', 'vaultClass', 'pool', 'poolName', 'curation', 'lendable'];
 
 export function renderPrivacy({ markets }) {
   return [
@@ -495,12 +527,13 @@ export function renderPrivacy({ markets }) {
     '  readonly pool: string;',
     '  readonly poolName: string;',
     '  readonly curation: \'prime\' | \'curated\';',
+    '  readonly lendable: boolean;',
     '  readonly symbol: string;',
     '  readonly decimals: number;',
     '}',
     '',
     'export const VESU_MARKET_ROWS: readonly VesuMarketRow[] = [',
-    ...markets.map((market) => `  ${tsObject(market, ['token', 'vault', 'pool', 'poolName', 'curation', 'symbol', 'decimals'])},`),
+    ...markets.map((market) => `  ${tsObject(market, ['token', 'vault', 'pool', 'poolName', 'curation', 'lendable', 'symbol', 'decimals'])},`),
     '];',
     '',
   ].join('\n');
@@ -535,8 +568,8 @@ export function renderWeb({ markets }, policy = POLICY) {
     '/**',
     ' * The tokens the Vault can lend, in order, with the display metadata the',
     ` * counter shows (D-079, ${DECISION}): each token's symbol and decimals as its`,
-    ' * contract reported them at generation, its group in the picker, and the',
-    ' * Vesu pool its vault supplies into.',
+    ' * contract reported them at generation, its group in the picker, the Vesu',
+    ' * pool its vault supplies into, and whether that pool lends it out.',
     ' *',
     ...GENERATED_NOTE,
     ' */',
@@ -554,10 +587,12 @@ export function renderWeb({ markets }, policy = POLICY) {
     '  readonly group: VaultMarketGroup;',
     '  readonly poolName: string;',
     '  readonly curation: \'prime\' | \'curated\';',
+    '  /** Whether Vesu lends the token out in that pool; a collateral-only market is not offered for supply. */',
+    '  readonly lendable: boolean;',
     '}',
     '',
     'export const VAULT_MARKET_METADATA: readonly VaultMarketMetadata[] = [',
-    ...markets.map((market) => `  ${tsObject(market, ['token', 'symbol', 'decimals', 'group', 'poolName', 'curation'])},`),
+    ...markets.map((market) => `  ${tsObject(market, ['token', 'symbol', 'decimals', 'group', 'poolName', 'curation', 'lendable'])},`),
     '];',
     '',
   ].join('\n');
@@ -576,7 +611,7 @@ export function renderAll(list, policy = POLICY) {
 function tsObject(value, fields) {
   const parts = fields.map((field) => {
     const item = value[field];
-    if (typeof item === 'number') return `${field}: ${item}`;
+    if (typeof item === 'number' || typeof item === 'boolean') return `${field}: ${item}`;
     if (typeof item !== 'string' || /['\\\n]/.test(item)) throw new Error(`Cannot render ${field}.`);
     return `${field}: '${item}'`;
   });
@@ -609,6 +644,14 @@ function sameAddress(a, b) {
   } catch {
     return false;
   }
+}
+
+/** The first of exactly `length` felts: a struct answer's first member. */
+function first(result, length) {
+  if (!Array.isArray(result) || result.length !== length || result.some((item) => typeof item !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(item))) {
+    throw new AnswerError(`A call answered something other than ${length} felts.`);
+  }
+  return result[0];
 }
 
 function single(result) {
@@ -742,25 +785,6 @@ export function liveReader({ rpcUrl = DEFAULT_RPC_URL, fetcher = globalThis.fetc
       { contract_address: address, entry_point_selector: selector, calldata },
       'latest',
     ]),
-    /** The first pool event crediting `token` to a note, or null: `Deposit` and `OpenNoteDeposited` both key the token third. */
-    async poolCreditsToken(token) {
-      let continuation;
-      for (let page = 0; page < 5_000; page += 1) {
-        const answer = await rpc('starknet_getEvents', [{
-          address: STRK20_POOL,
-          from_block: { block_number: STRK20_POOL_FIRST_BLOCK },
-          to_block: 'latest',
-          keys: [[SELECTORS.Deposit, SELECTORS.OpenNoteDeposited], [], [token]],
-          chunk_size: 1_000,
-          ...(continuation ? { continuation_token: continuation } : {}),
-        }]);
-        const event = answer.events?.find((item) => sameAddress(item.keys?.[2], token));
-        if (event) return { block: event.block_number };
-        continuation = answer.continuation_token;
-        if (!continuation) return null;
-      }
-      throw new Error(`The event scan for ${token} did not end.`);
-    },
   };
 }
 
@@ -792,7 +816,7 @@ async function main(argv) {
 
   console.log(`Vesu markets, verified on mainnet at block ${head} (${rpcUrl})`);
   for (const market of list.markets) {
-    console.log(`  ${market.symbol.padEnd(9)} ${market.group.padEnd(9)} ${market.curation.padEnd(7)} ${market.poolName.padEnd(28)} vault ${market.vault}  APY ${rateOf(pools, market)}`);
+    console.log(`  ${market.symbol.padEnd(9)} ${market.group.padEnd(9)} ${market.curation.padEnd(7)} ${(market.lendable ? 'lends' : 'collateral').padEnd(10)} ${market.poolName.padEnd(28)} vault ${market.vault}  APY ${rateOf(pools, market)}`);
   }
   for (const skip of list.skipped) console.log(`  skipped ${skip.symbol.padEnd(9)} ${skip.reason}`);
 

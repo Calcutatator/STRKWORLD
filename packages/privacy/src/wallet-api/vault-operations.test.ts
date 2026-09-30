@@ -378,8 +378,8 @@ describe('Vault refusals: fail closed before the wallet is asked', () => {
       // D-079: one unpinned token or a repeat shuts the whole Vault, as the build's parser does.
       vaultTokens(STRK, '0x123'),
       vaultTokens(STRK, USDC, `0x${STRK.slice(3)}`),
-      // D-081: sUSN, a Vesu token the pool has never held, has no pinned vault.
-      vaultTokens('0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17'),
+      // A token Vesu does not list (LORDS) has no pinned vault.
+      vaultTokens('0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49'),
     ]) {
       const f = fixture({ policy });
       await expect(f.operations.vaultPositions()).rejects.toMatchObject({ kind: 'unknown', message: 'The vault route is disabled.' });
@@ -390,6 +390,29 @@ describe('Vault refusals: fail closed before the wallet is asked', () => {
       expect(f.invoked).toEqual([]);
       expect(f.rateReads).toBe(0);
     }
+  });
+
+  it('refuses a supply into a collateral-only market before the wallet is asked, and still reads and redeems it (D-081)', async () => {
+    const xstrk = marketOf('xSTRK');
+    expect(xstrk.lendable).toBe(false);
+    const f = fixture({ policy: vaultTokens(STRK, xstrk.token) });
+    await expect(f.operations.prepareVaultSupply(xstrk.token, ONE)).rejects.toMatchObject({
+      kind: 'unknown',
+      message: 'Vesu lends none of that token out, so the Vault does not supply it.',
+    });
+    expect(f.commitmentRequests).toEqual([]);
+    expect(f.invoked).toEqual([]);
+    // A position already there reads and redeems as any other.
+    f.state.rows = rows({ xSTRK: { shares: 3n * ONE, assets: 3n * ONE, maxWithdraw: 3n * ONE, maxRedeem: 3n * ONE } });
+    await expect(f.operations.vaultPositions()).resolves.toMatchObject({
+      positions: [{ token: STRK }, { token: xstrk.token, shares: 3n * ONE, assets: 3n * ONE, redeemable: 3n * ONE }],
+    });
+    const batch = await f.operations.prepareVaultRedeem(xstrk.token, 'all');
+    expect(batch.action).toEqual({ kind: 'redeem', token: xstrk.token, amount: 3n * ONE, all: true });
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    expect(f.invoked).toEqual([
+      vaultRedeemActions({ market: xstrk, shadowAccount: SHADOW, player: PLAYER, redeem: { shares: 3n * ONE } }),
+    ]);
   });
 
   it('refuses a token the build does not admit, even one with a pinned vault, before the wallet is asked', async () => {

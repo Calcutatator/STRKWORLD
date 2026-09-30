@@ -3651,7 +3651,7 @@ facts: the stats show the crowd, and nothing about who is in it.
 
 ## D-077 — The Vault opens on shadow accounts
 
-**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market the pool can hold, some through curated pools)**
+**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market, some through curated pools; a collateral-only market is not supplied)**
 
 **Context.** D-007 kept Vesu out of v1 because the Vault was the only
 building needing new Cairo: a project-owned `privacy_invoke` adapter, the
@@ -3934,7 +3934,7 @@ build takes about a fifth longer, the pitch and the wider backdrop together.
 
 ## D-079 — The Vault lends five tokens and shows each position
 
-**2026-09-30 · Accepted by the user (the lead asked for more Vault tokens and a clearer position) · amends D-077 (the Vault lends ETH, USDC, USDT and WBTC beside STRK, its switch takes a list, and its position read covers every pinned vault and hands the shell the stand-in address) · extends D-036's frozen seam (`vaultPositions` replaces `vaultPosition`, `prepareVaultRedeem` takes a token, and `vaultRates` is added) · adds one public read to D-014's backend, Vesu's supply APY, which the backend alone fetches from Vesu · keeps D-077's register grades, disclosure and approval, whose words name no token · amended by D-081 (every Vesu market whose token the STRK20 pool has held: sixteen tokens across Prime and two curated pools, strkBTC through Re7 xBTC, a map generated and re-verified by `scripts/vesu-markets.mjs`, a grouped picker, and batched reads)**
+**2026-09-30 · Accepted by the user (the lead asked for more Vault tokens and a clearer position) · amends D-077 (the Vault lends ETH, USDC, USDT and WBTC beside STRK, its switch takes a list, and its position read covers every pinned vault and hands the shell the stand-in address) · extends D-036's frozen seam (`vaultPositions` replaces `vaultPosition`, `prepareVaultRedeem` takes a token, and `vaultRates` is added) · adds one public read to D-014's backend, Vesu's supply APY, which the backend alone fetches from Vesu · keeps D-077's register grades, disclosure and approval, whose words name no token · amended by D-081 (every Vesu market: twenty-three tokens across Prime and five curated pools, strkBTC through Re7 xBTC, collateral-only markets kept out of Supply, a map generated and re-verified by `scripts/vesu-markets.mjs`, a grouped picker, and batched reads)**
 
 **Context.** D-077 opened the Vault for STRK alone, and its first live round
 trip worked in Ready on 2026-09-29: a 2 STRK supply into Vesu's Prime vSTRK
@@ -4172,7 +4172,7 @@ same as a hostile one; it is never shown badly, only left out.
 
 ## D-081 — The Vault lends in every Vesu market the pool can hold
 
-**2026-09-30 · Accepted by the user (the lead asked for every Vesu market whose token can reach it privately, strkBTC included) · amends D-079 (sixteen tokens across Vesu's Prime pool and two curated pools, a generated and re-verified map, a switch of up to sixteen, a batched position read and a rate read per pinned pool) · amends D-077 (a market may lend through a curated pool) · `VaultMarket` gains its pool, the pool's name and whether it is Prime or curated; no seam method changes (D-036) · keeps D-077's register grades, disclosure and approval, whose words name no token or pool**
+**2026-09-30 · Accepted by the user (the lead asked for every Vesu market whose token can reach it privately, strkBTC included; collateral-only markets stay out of Supply until borrowing ships) · amends D-079 (twenty-three tokens across Vesu's Prime pool and five curated pools, a generated and re-verified map, a switch of up to twenty-three, a batched position read and a rate read per pinned pool) · amends D-077 (a market may lend through a curated pool, and `prepareVaultSupply` refuses a collateral-only one) · `VaultMarket` gains its pool, the pool's name, whether it is Prime or curated, and whether the pool lends the token out; no seam signature changes (D-036) · keeps D-077's register grades, disclosure and approval, whose words name no token or pool**
 
 **Context.** D-079 opened five Prime markets and left strkBTC out, because
 lending it meant choosing a curated pool for players. The lead answered on
@@ -4183,75 +4183,102 @@ then we should include it." Vesu's glossary calls each asset of a pool a
 lending market. Its API (`GET /pools`) listed 36 pools: 16 deprecated V1
 pools, 10 V2 pools Vesu does not verify, and 10 live V2 pools it does,
 holding 23 distinct assets. Read over mainnet RPC on 2026-09-30 (blocks
-15,678,829 to 15,680,638), every one of the 57 vTokens in those 10 pools runs
+15,678,829 to 15,681,808), every one of the 57 vTokens in those 10 pools runs
 vSTRK's class, which is also the official PoolFactory's
 `v_token_class_hash()`; the PoolFactory (`0x03760f90…88c0`, from Vesu's
 contract-addresses page) maps each pool and asset to its vToken and back;
-each pool's `pool_name()` matches Vesu's name, and none is paused. The STRK20 pool has no token list (its ABI has no such
-entry point) and holds amounts as `u128`. Sixteen of the 23 assets have been
-credited to a pool note at least once (a `Deposit` or `OpenNoteDeposited`
-event naming the token): fifteen hold a pool balance today, and xtBTC was
-deposited and withdrawn. Seven never have: sUSN, mRe7YIELD, uniBTC, YBTC.B,
-mRe7BTC, xLBTC and xsBTC. Every one of the 23 is an ordinary ERC-20 by its
-ABI, with `approve(ContractAddress, u256) -> bool`. Prime lists nine of the
-sixteen. strkBTC is lent in two curated pools: Re7 xBTC (against xtBTC,
-xstrkBTC and xWBTC at 91.5% LTV, supply APY 0.0006%, 1.99 strkBTC supplied)
-and Clearstar USDC Reactor (against xstrkBTC alone at 94% LTV, 0.15%, 4.09
-strkBTC), and held as collateral only in Re7 USDC Prime.
+each pool's `pool_name()` matches Vesu's name, and none is paused. The STRK20
+pool has no token list (its ABI has no such entry point) and holds amounts as
+`u128`, so any ordinary ERC-20 can sit in a private balance. Every one of the
+23 is one by its ABI, with `approve(ContractAddress, u256) -> bool`; sixteen
+have been credited to a pool note already, and seven (sUSN, mRe7YIELD,
+uniBTC, YBTC.B, mRe7BTC, xLBTC, xsBTC) not yet. Prime lists nine of the 23.
+strkBTC is lent in two curated pools: Re7 xBTC (against xtBTC, xstrkBTC and
+xWBTC at 91.5% LTV, supply APY 0.0006%, 1.99 strkBTC supplied) and Clearstar
+USDC Reactor (against xstrkBTC alone at 94% LTV, 0.15%, 4.09 strkBTC), and
+held as collateral only in Re7 USDC Prime. Twelve of the 23 are collateral
+only in the pool the policy picks: no pair there lends them out, so a supply
+earns nothing.
 
 **Decision.**
 
-- **Every market the pool can hold.** The Vault pins one vault for each
-  asset of a live, verified Vesu V2 pool whose token the STRK20 pool has
-  credited to a note: sixteen today. Nine lend through Prime (STRK, ETH, USDC,
-  USDT, USDC.e, WBTC, xSTRK, wstETH, xWBTC), six through Re7 xBTC (strkBTC,
-  tBTC, SolvBTC, xstrkBTC, xtBTC, LBTC) and EKUBO through Re7 Labs Starknet
-  Ecosystem. D-079's five keep their vaults. The seven never held are
-  refused and reported, and a later run admits each once someone has held it
-  privately.
+- **Every Vesu market.** The Vault pins one vault for each asset of a live,
+  verified Vesu V2 pool whose token is an ordinary ERC-20 that passes the
+  on-chain checks: all twenty-three. Nine lend through Prime (STRK, ETH,
+  USDC, USDT, USDC.e, WBTC, xSTRK, wstETH, xWBTC); nine through Re7 xBTC
+  (strkBTC, tBTC, SolvBTC, mRe7BTC, xstrkBTC, xtBTC, LBTC, xLBTC, xsBTC); sUSN
+  and mRe7YIELD through Re7 USDC Stable Core; uniBTC through Re7 USDC Core;
+  YBTC.B through Re7 USDC Frontier; and EKUBO through Re7 Labs Starknet
+  Ecosystem. D-079's five keep their vaults. No market waits on someone having
+  shielded its token first.
 - **One vault per token, by policy.** Prime's vault whenever Prime lists the
   token. Otherwise Re7 xBTC's when it lists the token: the lead named it for
   strkBTC, and it is Vesu's BTC pool, where every pair lends a BTC token
   against BTC collateral, so every BTC token it lists that Prime lacks goes
-  there and shares one curator's risk settings. Otherwise the only pool that lists the
-  token; otherwise a choice recorded with its reason (sUSN would go to Re7
-  USDC Stable Core). Every pool a market may name is approved by address in
-  the policy. strkBTC stays with Re7 xBTC: Clearstar pays more today and holds
-  twice as much, but both lend strkBTC only against BTC staking tokens, so
-  neither is clearly better-suited, and the lead's pool stands.
+  there and shares one curator's risk settings. Otherwise the only pool that
+  lists the token; otherwise a choice recorded with its reason (sUSN goes to
+  Re7 USDC Stable Core, not Clearstar USDC Reactor: both hold it as collateral
+  only, and Stable Core lends only stablecoins against stable collateral).
+  Every pool a market may name is approved by address in the policy. strkBTC
+  stays with Re7 xBTC: Clearstar pays more today and holds twice as much, but
+  both lend strkBTC only against BTC staking tokens, so neither is clearly
+  better-suited, and the lead's pool stands.
+- **Collateral only, and how it is known.** A market is `lendable` when three
+  sources agree that its pool lends the token out: Vesu's `stats.canBeBorrowed`
+  for the asset, the pool's `pairs` naming it as the debt asset of at least one
+  pair, and the pool contract's `pair_config(collateral, token)` answering a
+  `max_ltv` above zero for such a pair. It is collateral only when all three
+  say no, the contract for every other asset the pool lists. A disagreement
+  skips the market. Eleven are lendable (STRK, ETH, USDC, USDT, USDC.e, WBTC,
+  strkBTC, tBTC, SolvBTC, wstETH, LBTC) and twelve collateral only (sUSN,
+  mRe7YIELD, uniBTC, YBTC.B, mRe7BTC, xSTRK, xWBTC, xstrkBTC, xtBTC, xLBTC,
+  xsBTC, EKUBO). A collateral-only market stays pinned, since borrowing will
+  need it, but Supply does not offer it until borrowing ships, and
+  `prepareVaultSupply` refuses it before the wallet is asked. A position
+  already in one is listed, once a read finds it, and redeems as any other.
+  wstETH and LBTC pay 0% today yet count as lendable: pairs lend them out
+  (LBTC's cap borrowing at 100 base units each), and nobody is borrowing now.
 - **Pinned, generated and re-verified.** `scripts/vesu-markets.mjs` derives
   the list from Vesu's API and checks every entry on mainnet: the vault's
   class (vSTRK's, or an ABI with every entry point the builders call, in
   their shapes), its `asset()` and `pool_contract()`, the PoolFactory's
   mapping both ways, the pool's `pool_name()` and `is_paused()`, the token's
-  ERC-20 entry points, `decimals()` and `symbol()`, and the pool credit. It
-  writes `scripts/vesu-markets.json` and the three copies from it (the
-  privacy package's `VESU_MARKET_ROWS` behind `VAULT_MARKETS`, the backend's
+  ERC-20 entry points, `decimals()` and `symbol()`, and `lendable`. It writes
+  `scripts/vesu-markets.json` and the three copies from it (the privacy
+  package's `VESU_MARKET_ROWS` behind `VAULT_MARKETS`, the backend's
   `VESU_VAULT_ROWS` behind `VESU_VAULTS`, and the web's
   `VAULT_MARKET_METADATA` behind `VAULT_TOKENS`); `vesu-markets.test.mjs`
   pins the list entry by entry and fails if any copy differs from what the
-  script renders. Run without `--write`, it fails on any drift. The API only
+  script renders. Run without `--write` (about 20 s), it fails on any drift,
+  a pool starting or stopping lending a token included. The API only
   proposes: a new asset stays unplaced, a pool the policy does not approve by
   address is never chosen, and a failed check skips the token by name, so a
   compromised API can fail a run or propose a diff but never move a pinned
   vault. USDC.e shows as Vesu names it, since its contract's `symbol()` is
   USDC. Nothing reads Vesu at run time except the display-only rates.
 - **The market model.** A market is one token in one Vesu pool: `VaultMarket`
-  carries the pool, its name and whether it is Prime or curated, so a borrow
-  can name the same pool and token, and borrowing can reuse the map.
-- **The switch.** `VITE_STRK20_VAULT_ALLOWED_TOKENS` takes one to sixteen
-  pinned tokens, as D-079's rules, fail-closed. No list may ever pass 48
+  carries the pool, its name, whether it is Prime or curated, and whether the
+  pool lends the token out, so a borrow can name the same pool and token, and
+  borrowing can reuse the map, collateral-only markets included.
+- **The switch.** `VITE_STRK20_VAULT_ALLOWED_TOKENS` takes one to twenty-three
+  pinned tokens, as D-079's rules, fail-closed; a collateral-only token on it
+  is admitted and simply never offered for supply. No list may ever pass 48
   (`MAX_VAULT_MARKETS`), and the adapter reads no more rows than that.
-  `deploy/RAILWAY.md` gives the test deployment all sixteen.
+  `deploy/RAILWAY.md` gives the test deployment all twenty-three.
 - **The counter.** A picker grouped Majors, Stables, Bitcoin, Staking tokens
   and Ecosystem, and the market list grouped the same way, each row naming
   its pool ("Prime", or "Re7 xBTC, curated") beside Vesu's supply APY and the
   position once read, with one line: "Curated pools are run by their own
-  curators, with their own risk settings." The chosen market's pool shows
-  under the picker. A rate above zero and below 0.01% reads "<0.01%". The
-  per-token positions, the stand-in address line and the fee-in-STRK note
-  stay as D-079 made them. Token symbols and decimals come from the
-  generated metadata, read on-chain at generation, not the Exchange catalog.
+  curators, with their own risk settings." Supply offers the lendable markets
+  alone; Redeem adds any collateral-only market the visit's last read found a
+  position in, and the list shows the same, a collateral-only row saying
+  "Collateral only: Vesu lends none of it out here, so it earns nothing, and
+  it is not offered for supply. You can still redeem it." A group with nothing
+  to show is left out. The chosen market's pool shows under the picker. A rate
+  above zero and below 0.01% reads "<0.01%". The per-token positions, the
+  stand-in address line and the fee-in-STRK note stay as D-079 made them.
+  Token symbols and decimals come from the generated metadata, read on-chain
+  at generation, not the Exchange catalog.
 - **A supply needs the token in the pool balance.** Reviewing a supply first
   reads that one token's pool balance; the wallet may ask, since the player
   started it. With none there, the counter says "You have no strkBTC in your
@@ -4260,38 +4287,42 @@ strkBTC), and held as collateral only in Re7 USDC Prime.
   made blocks nothing, since the wallet still checks the funds, and a declined
   one stops quietly. Reading positions and rates never depends on it.
 - **Bounded reads.** The position read is one JSON-RPC batch of `balance_of`
-  for every pinned vault, then one batch of the preview and both limits for
-  the vaults that hold shares, at most 50 calls a batch: two requests to the
-  node for sixteen vaults, four at most for 48. Each call is answered by id,
-  so a failed or malformed one makes its vault `ok: false` and nothing else.
-  A node that refuses batches is read one call at a time, four at once; one
-  that is down or rate-limiting reads every vault as unread, and is not
-  retried call by call. Reading only the tokens the player picks or holds was
-  not taken: the first needs the request to name vaults, which D-077 ruled
-  out, and the second needs this same sweep first. The rate read asks Vesu's
-  endpoint for each pinned pool (three today) at once, on one five-second
-  timeout. A pool whose read fails answers no rates for its own vaults only,
-  and a refresh with a failure is kept only for the one-minute retry window.
+  for every pinned vault, then the preview and both limits for the vaults that
+  hold shares, at most 50 calls a batch: two requests to the node while up to
+  sixteen vaults hold shares, three with all twenty-three, four at most for
+  48. Each call is answered by id, so a failed or malformed one makes its
+  vault `ok: false` and nothing else. A node that refuses batches is read one
+  call at a time, four at once; one that is down or rate-limiting reads every
+  vault as unread, and is not retried call by call. Reading only the tokens
+  the player picks or holds was not taken: the first needs the request to name
+  vaults, which D-077 ruled out, and the second needs this same sweep first.
+  The rate read asks Vesu's endpoint for each pinned pool (six today) at once,
+  on one five-second timeout. A pool whose read fails answers no rates for its
+  own vaults only, and a refresh with a failure is kept only for the
+  one-minute retry window.
 - **The register (D-020).** `vault.supply` and `vault.redeem` keep their
   grade, their one disclosure and calc's approval of 2026-09-29. Their
   `observable` no longer lists tokens: it says the pinned Vesu vault for the
   token, in the Prime pool or a curated pool, and that every Vault action in
   any token and any pool uses the one stand-in address.
 
-**Consequences.** The Vault depends on sixteen third-party vaults in three
-pools, and on the risk settings of the one curator that runs both curated
+**Consequences.** The Vault depends on twenty-three third-party vaults in six
+pools, and on the risk settings of the one curator that runs all five curated
 pools (the same `curator()` on each), besides Vesu's own. A share can lose
 value: Vesu's 4 September 2026 oracle fault liquidated positions in seven
 pools and wrote their lenders' shares down, 95% of it since recovered (Vesu's
-post of 13 September). Five markets are collateral only in their pool (xSTRK,
-xWBTC, xstrkBTC, xtBTC and EKUBO): Vesu lends none of them out, so their
-supply APY is 0%, which the counter shows as Vesu's figure; they matter again
-for borrowing. A supply review adds one balance read, which a wallet may
-confirm with the player first. A position read costs at most two requests to
-the node where D-079 sent up to twenty, and a rate refresh up to three to
-`api.vesu.xyz`. A refund a curator sends to a stand-in address would sit
-there publicly: the Vault collects only what its own calls gain, and has no
-sweep. The first supply through a curated pool, strkBTC in Re7 xBTC, is the
-next live probe (`deploy/RAILWAY.md`). Rerun `node scripts/vesu-markets.mjs`
-after Vesu lists an asset or the pool first holds a skipped token; until the
-list is regenerated with `--write`, the run fails.
+post of 13 September). The seven tokens never yet in the pool are all
+collateral only, so none is offered for supply; once one is, its first player
+must shield it first, and whether deposit screening passes an unfamiliar
+token is untested. Supply offers eleven markets; the other twelve wait for
+borrowing, which will supply collateral to the pool directly rather than
+through their vTokens. A supply
+review adds one balance read, which a wallet may confirm with the player
+first. A position read costs at most three requests to the node where D-079
+sent up to twenty, and a rate refresh six to `api.vesu.xyz`. A refund a
+curator sends to a stand-in address would sit there publicly: the Vault
+collects only what its own calls gain, and has no sweep. The first supply
+through a curated pool, strkBTC in Re7 xBTC, is the next live probe
+(`deploy/RAILWAY.md`). Rerun `node scripts/vesu-markets.mjs` after Vesu lists
+an asset or a pool changes what it lends; until the list is regenerated with
+`--write`, the run fails.

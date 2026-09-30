@@ -6,7 +6,15 @@ import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import type { ShellFailure } from '../../privacy/errors.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { VAULT_MARKET_METADATA } from '../../production/vesu-markets.js';
-import { createVaultPanel, noneInPoolLine, vaultTokenChoices, voyagerContractUrl, type VaultTokenView } from './vault-machine.js';
+import {
+  createVaultPanel,
+  noneInPoolLine,
+  vaultChoices,
+  vaultListedMarkets,
+  vaultTokenChoices,
+  voyagerContractUrl,
+  type VaultTokenView,
+} from './vault-machine.js';
 
 /**
  * The Vault's counter machine (D-077, D-079, D-081), against the
@@ -20,10 +28,17 @@ const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb
 const USDT = '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8';
 const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
 const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
-/** Vesu lists sUSN, but the STRK20 pool has never held it, so no vault is pinned (D-081). */
-const SUSN = '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17';
+/** LORDS: a real Starknet token Vesu lists in no pool, so no vault is pinned. */
+const LORDS = '0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49';
+/** xSTRK: pinned in Prime, and collateral only there: Vesu lends none of it out (D-081). */
+const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
 /** Every pinned market's symbol, in pinned order (D-081). */
-const PINNED_SYMBOLS = ['STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'EKUBO'];
+const PINNED_SYMBOLS = [
+  'STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'sUSN', 'mRe7YIELD', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'uniBTC', 'YBTC.B',
+  'mRe7BTC', 'xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'xLBTC', 'xsBTC', 'EKUBO',
+];
+/** The markets Vesu lends out, and so the only ones a supply offers (D-081). */
+const LENDABLE_SYMBOLS = ['STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'wstETH', 'LBTC'];
 const ONE = 10n ** 18n;
 const USDC_ONE = 10n ** 6n;
 const POOL_FEE = 6n * ONE;
@@ -42,6 +57,7 @@ function view(token: string): VaultTokenView {
     group: market.group,
     poolName: market.poolName,
     curation: market.curation,
+    lendable: market.lendable,
   };
 }
 
@@ -125,10 +141,10 @@ describe('the Vault counter (D-077)', () => {
     const { tokens, token } = panel.store.getState();
     expect(tokens.map((entry) => entry.symbol)).toEqual(PINNED_SYMBOLS);
     expect(tokens.slice(0, 4)).toEqual([
-      { token: STRK, symbol: 'STRK', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime' },
-      { token: ETH, symbol: 'ETH', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime' },
-      { token: USDC, symbol: 'USDC', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime' },
-      { token: USDT, symbol: 'USDT', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime' },
+      { token: STRK, symbol: 'STRK', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime', lendable: true },
+      { token: ETH, symbol: 'ETH', decimals: 18, group: 'majors', poolName: 'Prime', curation: 'prime', lendable: true },
+      { token: USDC, symbol: 'USDC', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime', lendable: true },
+      { token: USDT, symbol: 'USDT', decimals: 6, group: 'stables', poolName: 'Prime', curation: 'prime', lendable: true },
     ]);
     expect(token).toBe(STRK);
   });
@@ -144,20 +160,95 @@ describe('the Vault counter (D-077)', () => {
       group: 'btc',
       poolName: 'Re7 xBTC',
       curation: 'curated',
+      lendable: true,
     });
     const groups = new Map<string, string[]>();
     for (const entry of tokens) groups.set(entry.group, [...(groups.get(entry.group) ?? []), entry.symbol]);
     expect(Object.fromEntries(groups)).toEqual({
       majors: ['STRK', 'ETH'],
-      stables: ['USDC', 'USDT', 'USDC.e'],
-      btc: ['WBTC', 'strkBTC', 'tBTC', 'SolvBTC'],
-      staking: ['xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC'],
+      stables: ['USDC', 'USDT', 'USDC.e', 'sUSN', 'mRe7YIELD'],
+      btc: ['WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'uniBTC', 'YBTC.B', 'mRe7BTC'],
+      staking: ['xSTRK', 'wstETH', 'xWBTC', 'xstrkBTC', 'xtBTC', 'LBTC', 'xLBTC', 'xsBTC'],
       ecosystem: ['EKUBO'],
     });
-    expect(tokens.filter((entry) => entry.curation === 'curated').map((entry) => `${entry.symbol} ${entry.poolName}`)).toEqual([
-      'strkBTC Re7 xBTC', 'tBTC Re7 xBTC', 'SolvBTC Re7 xBTC', 'xstrkBTC Re7 xBTC', 'xtBTC Re7 xBTC', 'LBTC Re7 xBTC',
-      'EKUBO Re7 Labs Starknet Ecosystem',
+    expect(tokens.filter((entry) => entry.curation === 'curated').map((entry) => entry.poolName)).toEqual([
+      'Re7 USDC Stable Core', 'Re7 USDC Stable Core', 'Re7 xBTC', 'Re7 xBTC', 'Re7 xBTC', 'Re7 USDC Core', 'Re7 USDC Frontier',
+      'Re7 xBTC', 'Re7 xBTC', 'Re7 xBTC', 'Re7 xBTC', 'Re7 xBTC', 'Re7 xBTC', 'Re7 Labs Starknet Ecosystem',
     ]);
+  });
+
+  it('offers only the markets Vesu lends out for supply, and lists only them until a read finds a collateral-only position (D-081)', async () => {
+    const { panel } = machine(fake());
+    await panel.open();
+    const state = panel.store.getState();
+    expect(vaultChoices(state, 'supply').map((entry) => entry.symbol)).toEqual(LENDABLE_SYMBOLS);
+    expect(vaultChoices(state, 'redeem').map((entry) => entry.symbol)).toEqual(LENDABLE_SYMBOLS);
+    expect(vaultListedMarkets(state).map((entry) => entry.symbol)).toEqual(LENDABLE_SYMBOLS);
+    // A collateral-only market cannot be chosen for a supply.
+    panel.setToken(XSTRK);
+    expect(panel.store.getState().token).toBe(STRK);
+  });
+
+  it('keeps a collateral-only position listed and redeemable, never suppliable (D-081)', async () => {
+    const operations = fake({ vault: { markets: { [XSTRK]: { shares: 20n * ONE } } } });
+    const supply = vi.spyOn(operations, 'prepareVaultSupply');
+    const { panel } = machine(operations);
+    await panel.open();
+    await panel.refreshPosition();
+    let state = panel.store.getState();
+    expect(state.heldTokens).toEqual([XSTRK]);
+    expect(vaultListedMarkets(state).map((entry) => entry.symbol)).toEqual([...LENDABLE_SYMBOLS.slice(0, 9), 'xSTRK', ...LENDABLE_SYMBOLS.slice(9)]);
+    expect(vaultChoices(state, 'supply').map((entry) => entry.symbol)).toEqual(LENDABLE_SYMBOLS);
+
+    // Redeem offers it; supply never does.
+    panel.setToken(XSTRK);
+    expect(panel.store.getState().token).toBe(STRK);
+    panel.setMode('redeem');
+    panel.setToken(XSTRK);
+    expect(panel.store.getState().token).toBe(XSTRK);
+    panel.setRedeemAll(true);
+    await panel.prepare();
+    state = panel.store.getState();
+    expect(state.flow.name === 'review' && state.flow.summary.action).toEqual({ kind: 'redeem', token: XSTRK, amount: 20_400_000_000_000_000_000n, all: true });
+    await panel.confirm();
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'redeem', token: XSTRK, amount: 20_400_000_000_000_000_000n, all: true }]);
+    // The figures changed; the market stays redeemable until a read says otherwise.
+    panel.acknowledge();
+    expect(panel.store.getState()).toMatchObject({ heldTokens: [XSTRK], token: XSTRK, position: { status: 'unrequested' } });
+
+    // A new read finds it empty: the choice moves to the first market, and it is no longer listed.
+    await panel.refreshPosition();
+    state = panel.store.getState();
+    expect(state.heldTokens).toEqual([]);
+    expect(state.token).toBe(STRK);
+    expect(vaultListedMarkets(state).map((entry) => entry.symbol)).toEqual(LENDABLE_SYMBOLS);
+
+    // Back in supply, a collateral-only token is never the choice.
+    panel.setMode('supply');
+    expect(panel.store.getState().token).toBe(STRK);
+    expect(supply).not.toHaveBeenCalled();
+  });
+
+  it('moves a redeem’s collateral-only choice to the first supply choice when the mode turns to supply (D-081)', async () => {
+    const { panel } = machine(fake({ vault: { markets: { [XSTRK]: { shares: ONE } } } }));
+    await panel.open();
+    await panel.refreshPosition();
+    panel.setMode('redeem');
+    panel.setToken(XSTRK);
+    panel.setAmount('0.5');
+    panel.setMode('supply');
+    expect(panel.store.getState()).toMatchObject({ mode: 'supply', token: STRK, amountText: '' });
+  });
+
+  it('offers nothing for supply in a build that admits only collateral-only markets, and still reads them', async () => {
+    const operations = fake({ vault: { markets: { [XSTRK]: { shares: ONE } } } });
+    const { panel } = machine(operations, { tokens: [view(XSTRK)] });
+    await panel.open();
+    expect(panel.store.getState()).toMatchObject({ token: null, tokens: [view(XSTRK)] });
+    await panel.refreshPosition();
+    expect(panel.store.getState().position).toMatchObject({ status: 'loaded' });
+    panel.setMode('redeem');
+    expect(panel.store.getState().token).toBe(XSTRK);
   });
 
   it('reads every offered token’s position and the stand-in address only when asked', async () => {
@@ -517,8 +608,10 @@ describe('the Vault counter (D-077)', () => {
 
   it('offers the build’s Vault list, in its order, and nothing unpinned or undescribed', () => {
     expect(vaultTokenChoices(vaultPolicy([USDC, STRK])).map((entry) => entry.symbol)).toEqual(['USDC', 'STRK']);
-    // sUSN is a Vesu token with no pinned vault; a repeat is offered once.
-    expect(vaultTokenChoices(vaultPolicy([SUSN, WBTC, `0x${WBTC.slice(3)}`])).map((entry) => entry.symbol)).toEqual(['WBTC']);
+    // LORDS is a token with no pinned vault; a repeat is offered once.
+    expect(vaultTokenChoices(vaultPolicy([LORDS, WBTC, `0x${WBTC.slice(3)}`])).map((entry) => entry.symbol)).toEqual(['WBTC']);
+    // A collateral-only market is offered to the counter, which keeps it out of Supply (D-081).
+    expect(vaultTokenChoices(vaultPolicy([XSTRK])).map((entry) => [entry.symbol, entry.lendable])).toEqual([['xSTRK', false]]);
     expect(vaultTokenChoices(vaultPolicy([STRKBTC, USDC])).map((entry) => entry.symbol)).toEqual(['strkBTC', 'USDC']);
     expect(vaultTokenChoices({ ...vaultPolicy([]), allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] } })).toEqual([]);
     expect(vaultTokenChoices(null).map((entry) => entry.symbol)).toEqual(PINNED_SYMBOLS);

@@ -655,8 +655,10 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
   const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
   const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
   const USDC_E = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
-  /** Vesu lists sUSN, but the STRK20 pool has never held it, so no vault is pinned (D-081). */
+  /** sUSN: pinned since D-081, though the STRK20 pool has never held it, and collateral only. */
   const SUSN = '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17';
+  /** LORDS: a real Starknet token Vesu lists in no pool, so no vault is pinned. */
+  const LORDS = '0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49';
   /** The list the Railway test deployment sets (D-081): every pinned market, in pinned order. */
   const RAILWAY = [...VAULT_TOKENS];
   const base = {
@@ -683,13 +685,13 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
   it('pins the generated Vault tokens and their metadata to the privacy package’s token → vault map, in its order', async () => {
     const { MAX_VAULT_MARKETS, VAULT_MARKETS } = await import('@strkworld/privacy');
     expect(VAULT_TOKENS).toEqual(VAULT_MARKETS.map((market) => market.token));
-    expect(MAX_VAULT_TOKENS).toBe(16);
+    expect(MAX_VAULT_TOKENS).toBe(23);
     expect(MAX_VAULT_TOKENS).toBe(VAULT_MARKETS.length);
     expect(MAX_VAULT_TOKENS).toBeLessThanOrEqual(MAX_VAULT_MARKETS);
     expect(Object.isFrozen(VAULT_TOKENS)).toBe(true);
     // What the counter shows agrees with what the chain reported, token for token.
-    expect(VAULT_MARKET_METADATA.map(({ token, symbol, decimals, poolName, curation }) => ({ token, symbol, decimals, poolName, curation })))
-      .toEqual(VAULT_MARKETS.map(({ token, symbol, decimals, poolName, curation }) => ({ token, symbol, decimals, poolName, curation })));
+    expect(VAULT_MARKET_METADATA.map(({ token, symbol, decimals, poolName, curation, lendable }) => ({ token, symbol, decimals, poolName, curation, lendable })))
+      .toEqual(VAULT_MARKETS.map(({ token, symbol, decimals, poolName, curation, lendable }) => ({ token, symbol, decimals, poolName, curation, lendable })));
     for (const market of VAULT_MARKET_METADATA) expect(VAULT_MARKET_GROUPS, market.symbol).toContain(market.group);
   }, 30_000);
 
@@ -718,11 +720,11 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
     expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
   });
 
-  it('admits exactly the Railway list, all sixteen, in the order given, frozen', () => {
+  it('admits exactly the Railway list, all twenty-three, in the order given, frozen', () => {
     const { policy } = parseProductionWalletConfig({ ...base, ...vault(RAILWAY.join(',')) });
     expect(policy.enabledRoutes).toEqual(['vault']);
     expect(policy.allowedTokens.vault).toEqual(RAILWAY);
-    expect(RAILWAY).toHaveLength(16);
+    expect(RAILWAY).toHaveLength(23);
     expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
     // A space after each comma is the same list; another order is kept as given.
     expect(parseRoutePolicy(vault(RAILWAY.join(', '))).allowedTokens.vault).toEqual(RAILWAY);
@@ -746,8 +748,9 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
     for (const token of VAULT_TOKENS.filter((pinned) => pinned !== STRK_TOKEN)) {
       expect(parseRoutePolicy(vault(token)).allowedTokens.vault, token).toEqual([token]);
     }
-    // strkBTC through its curated pool, and the bridged USDC.e beside Circle's USDC (D-081).
-    expect(parseRoutePolicy(vault(`${STRKBTC},${USDC_E},${USDC}`)).allowedTokens.vault).toEqual([STRKBTC, USDC_E, USDC]);
+    // strkBTC through its curated pool, the bridged USDC.e beside Circle's USDC, and sUSN, which
+    // the pool has never held and Vesu lends none of out: admission is the pinned list alone (D-081).
+    expect(parseRoutePolicy(vault(`${STRKBTC},${USDC_E},${USDC},${SUSN}`)).allowedTokens.vault).toEqual([STRKBTC, USDC_E, USDC, SUSN]);
   });
 
   it('never narrows another route', () => {
@@ -778,8 +781,8 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
     ['one token in two cases', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${ETH},0x${ETH.slice(2).toUpperCase()}` }],
     ['a repeat at the end of the full list', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, WBTC].join(',') }],
     ['strkBTC twice, padded and unpadded', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRKBTC},0x${STRKBTC.slice(3)}` }],
-    ['sUSN, which the pool has never held', { VITE_STRK20_VAULT_ALLOWED_TOKENS: SUSN }],
-    ['an unpinned token beside pinned ones', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${USDC},${SUSN}` }],
+    ['LORDS, which Vesu lists in no pool', { VITE_STRK20_VAULT_ALLOWED_TOKENS: LORDS }],
+    ['an unpinned token beside pinned ones', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${USDC},${LORDS}` }],
     ['a pinned vault in place of its token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d' }],
     ['a token nobody lends', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '0x1234' }],
     ['a list longer than the pinned vaults', { VITE_STRK20_VAULT_ALLOWED_TOKENS: [...RAILWAY, '0x1234'].join(',') }],

@@ -60,6 +60,10 @@ import { stageCopy } from '../bank/bank-machine.js';
  *   supply first reads that one balance (a player action, so the wallet may
  *   ask); with none of the token there it stops and says so plainly, and asks
  *   the wallet nothing more. Reading positions and rates never depends on it.
+ * - **Supply offers only markets Vesu lends out** (D-081). A collateral-only
+ *   market pays no supply interest, so it is not offered for supply. Once a
+ *   read finds a position in one, it is listed and offered for redeem for the
+ *   rest of the visit, so nothing already there is ever stranded.
  * - **The stand-in address stays in memory.** A position read hands it over
  *   so the counter can say it is public and link to it; it is never stored,
  *   logged, or sent anywhere by this machine.
@@ -102,6 +106,8 @@ export interface VaultTokenView {
   readonly poolName: string;
   /** Vesu's own Prime pool, or a curated pool with its curator's risk settings. */
   readonly curation: 'prime' | 'curated';
+  /** Whether the pool lends the token out; a collateral-only market is never offered for supply (D-081). */
+  readonly lendable: boolean;
 }
 
 /**
@@ -130,9 +136,26 @@ export function vaultTokenChoices(policy: WalletRoutePolicy | null): readonly Va
       group: market.group,
       poolName: market.poolName,
       curation: market.curation,
+      lendable: market.lendable,
     }));
   }
   return Object.freeze(offered);
+}
+
+/**
+ * The markets the counter lists and offers in `mode` (D-081): every market
+ * Vesu lends out, and, for a redeem and in the list, any collateral-only one
+ * the last read found a position in. A supply never offers a collateral-only
+ * market.
+ */
+export function vaultChoices(state: Pick<VaultState, 'tokens' | 'heldTokens'>, mode: VaultMode): readonly VaultTokenView[] {
+  return state.tokens.filter((entry) => entry.lendable
+    || (mode === 'redeem' && state.heldTokens.some((held) => sameAddress(held, entry.token))));
+}
+
+/** The markets the counter's list shows: what a redeem offers (D-081). */
+export function vaultListedMarkets(state: Pick<VaultState, 'tokens' | 'heldTokens'>): readonly VaultTokenView[] {
+  return vaultChoices(state, 'redeem');
 }
 
 /**
@@ -252,10 +275,20 @@ export interface VaultState {
   /** The mode's approved disclosure, previewed while composing. */
   readonly disclosure: string | null;
   readonly capability: VaultCapabilityView;
-  /** What the counter offers (D-079), in order. Empty: nothing can be lent in this build. */
+  /**
+   * Every market this build admits (D-079), in order, collateral-only ones
+   * included. What a mode offers is `vaultChoices` (D-081). Empty: nothing can
+   * be lent in this build.
+   */
   readonly tokens: readonly VaultTokenView[];
-  /** The chosen token, one of `tokens`; null only when there is none to choose. */
+  /** The chosen token, one of the mode's choices; null only when there is none to choose. */
   readonly token: Address | null;
+  /**
+   * The markets the last position read found shares in, this visit (D-081).
+   * Kept when a submission marks the figures changed, so a collateral-only
+   * position stays redeemable until a new read says otherwise.
+   */
+  readonly heldTokens: readonly Address[];
   readonly position: VaultPositionView;
   readonly rates: VaultRatesView;
   /** The chosen token in the pool balance, for a supply (D-081). */
@@ -312,7 +345,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
   if (!ALL_VAULT_MODES.includes(initialMode)) throw new Error(`VaultPanel unsupported mode: ${String(initialMode)}`);
   const tokens = Object.freeze((options.tokens ?? vaultTokenChoices(detectRoutePolicy())).map((entry) => Object.freeze({ ...entry })));
 
-  const stateStore = createStore<VaultState>(freezeVaultState(initialState(initialMode, register, tokens, tokens[0]?.token ?? null)));
+  const stateStore = createStore<VaultState>(freezeVaultState(initialState(initialMode, register, tokens, null)));
   const store: ReadableStore<VaultState> = Object.freeze({
     getState: stateStore.getState,
     getServerSnapshot: stateStore.getServerSnapshot,
@@ -357,8 +390,16 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
   }
 
   function chosenToken(): VaultTokenView | undefined {
-    const { token } = store.getState();
-    return token === null ? undefined : tokens.find((entry) => sameAddress(entry.token, token));
+    const state = store.getState();
+    const { token } = state;
+    return token === null ? undefined : vaultChoices(state, state.mode).find((entry) => sameAddress(entry.token, token));
+  }
+
+  /** The chosen token if the mode still offers it, else the mode's first choice (D-081). */
+  function tokenFor(mode: VaultMode, heldTokens: readonly Address[], token: Address | null): Address | null {
+    const choices = vaultChoices({ tokens, heldTokens }, mode);
+    const kept = token === null ? undefined : choices.find((entry) => sameAddress(entry.token, token));
+    return kept?.token ?? choices[0]?.token ?? null;
   }
 
   function discardPrepared(): void {
@@ -511,6 +552,11 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       begin();
       discardPrepared();
       const routeId = ROUTE_BY_VAULT_MODE[mode];
+      const token = tokenFor(mode, state.heldTokens, state.token);
+      if (token === null || state.token === null || !sameAddress(token, state.token)) {
+        // A collateral-only market is redeemable but never offered for supply (D-081).
+        patch({ token });
+      }
       patch({
         mode,
         routeId,
@@ -527,7 +573,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
     setToken(token: Address): void {
       const state = store.getState();
       if (state.flow.name === 'submitting' || typeof token !== 'string') return;
-      const choice = tokens.find((entry) => sameAddress(entry.token, token));
+      const choice = vaultChoices(state, state.mode).find((entry) => sameAddress(entry.token, token));
       if (!choice || (state.token !== null && sameAddress(state.token, choice.token))) return;
       begin();
       discardPrepared();
@@ -579,7 +625,21 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
           if (!found) throw new Error('The Vault answered no position for an offered token.');
           return { token: entry.token, shares: found.shares, assets: found.assets, redeemable: found.redeemable };
         });
-        patch({ position: { status: 'loaded', standIn: answer.standIn, positions } });
+        // D-081: what holds shares now decides which collateral-only markets
+        // are listed and redeemable; the choice moves off one no longer held.
+        const heldTokens = positions.filter((entry) => entry.shares > 0n).map((entry) => entry.token);
+        const latest = store.getState();
+        // A prepared or submitting batch keeps its token; otherwise a token the
+        // mode no longer offers gives way to its first choice, amount cleared.
+        const settled = latest.flow.name !== 'preparing' && latest.flow.name !== 'review' && latest.flow.name !== 'submitting';
+        const token = settled ? tokenFor(latest.mode, heldTokens, latest.token) : latest.token;
+        const moved = token !== latest.token && !(token !== null && latest.token !== null && sameAddress(token, latest.token));
+        patch({
+          position: { status: 'loaded', standIn: answer.standIn, positions },
+          heldTokens,
+          token,
+          ...(moved ? { amountText: '', redeemAll: false } : {}),
+        });
       } catch (error) {
         if (session !== mySession || read !== positionRead) return;
         const { kind } = toFailure(error);
@@ -772,7 +832,9 @@ function initialState(
   token: Address | null,
 ): VaultState {
   const routeId = ROUTE_BY_VAULT_MODE[mode];
-  const chosen = token === null ? undefined : tokens.find((entry) => sameAddress(entry.token, token));
+  // A fresh visit knows no positions, so a mode offers what Vesu lends out (D-081).
+  const choices = vaultChoices({ tokens, heldTokens: [] }, mode);
+  const chosen = token === null ? undefined : choices.find((entry) => sameAddress(entry.token, token));
   return {
     mode,
     routeId,
@@ -780,7 +842,8 @@ function initialState(
     disclosure: routeDisclosure(routeId, register),
     capability: { status: 'checking' },
     tokens,
-    token: chosen?.token ?? tokens[0]?.token ?? null,
+    token: chosen?.token ?? choices[0]?.token ?? null,
+    heldTokens: [],
     position: { status: 'unrequested' },
     rates: { status: 'unrequested' },
     holding: { status: 'unknown' },
@@ -822,6 +885,7 @@ function freezeVaultState(state: VaultState): VaultState {
     door: Object.freeze({ ...state.door }),
     capability: Object.freeze({ ...state.capability }) as VaultCapabilityView,
     tokens: Object.isFrozen(state.tokens) ? state.tokens : Object.freeze([...state.tokens]),
+    heldTokens: Object.isFrozen(state.heldTokens) ? state.heldTokens : Object.freeze([...state.heldTokens]),
     position: position as VaultPositionView,
     rates: rates as VaultRatesView,
     holding: Object.freeze({ ...state.holding }) as VaultHoldingView,

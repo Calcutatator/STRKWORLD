@@ -36,7 +36,7 @@ for the accepted boundaries.
 | The Exchange | AVNU private swaps | Room and machine covered by headless/offline tests | D-057 mock rendered room/station integration accepted; live/funded swap behavior remains open; production swap policy remains disabled |
 | The Post Office | Private address-to-address transfer | Room and transfer surfaces implemented | Production activation still needs an approved live relay-fee tuple |
 | The Bridge | Any chain → STRK → the pool. Arrival is **public** | Manual recovery/deposit flow implemented offline | New production quotes stay locked without the fee-aware public-shield planner |
-| The Vault | Vesu lending from the player's STRK20 shadow account in every Vesu market whose token has been held in the pool: sixteen tokens, through Prime and two curated pools (D-077, D-079, D-081) | Room, counter and Wallet API path implemented; locked unless a build switches it on | No project Cairo: the canonical shadow-account anonymizer. Its first live supply and redeem is the probe of wallet support |
+| The Vault | Vesu lending from the player's STRK20 shadow account in every Vesu market: twenty-three tokens, through Prime and five curated pools, eleven of them offered for supply and the collateral-only rest kept for borrowing (D-077, D-079, D-081) | Room, counter and Wallet API path implemented; locked unless a build switches it on | No project Cairo: the canonical shadow-account anonymizer. Its first live supply and redeem is the probe of wallet support |
 
 The Privacy Plaza (D-076) is not a building: an open square below the
 street's west end with two stations used with E. The monument shows public,

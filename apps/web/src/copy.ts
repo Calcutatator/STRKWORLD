@@ -304,6 +304,15 @@ export const COPY = freezeCopy({
     redeemAll: 'Redeem everything',
     /** D-079: a build whose Vault list names no token the counter can describe. */
     noToken: 'No token can be lent in this build yet.',
+    /**
+     * D-081: a collateral-only market, where Vesu lends none of the token
+     * out. It is never offered for supply; one holding a position is listed
+     * and redeemable.
+     */
+    collateralOnly: 'Collateral only: Vesu lends none of it out here, so it earns nothing, and it is not offered for supply. You can still redeem it.',
+    /** D-081: a mode with nothing to offer in this build. */
+    noSupply: 'No token here can be supplied: Vesu lends none of them out.',
+    noRedeem: 'Nothing to redeem yet. Read your positions to see what you hold.',
     /** D-081: the picker's groups, and the headings of the market list. */
     groups: {
       majors: 'Majors',

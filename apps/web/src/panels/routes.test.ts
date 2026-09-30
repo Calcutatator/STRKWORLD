@@ -511,11 +511,11 @@ describe('the Vault switch (D-077, D-079, D-081)', () => {
   it('keeps the Vault shut when its list is missing, empty, or names a token with no pinned vault (D-079, D-081)', () => {
     const list = (vault: string[]): WalletRoutePolicy => ({ ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } });
     const noList: WalletRoutePolicy = { ...vaultOn, allowedTokens: denyAll.allowedTokens };
-    // sUSN: Vesu lists it, but the STRK20 pool has never held it, so no vault is pinned (D-081).
-    const SUSN = '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17';
+    // LORDS: a token Vesu lists in no pool, so no vault is pinned.
+    const LORDS = '0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49';
     // A repeat by value, padded or not, is refused as the parser and the adapter refuse it.
     const repeated = list([STRK, `0x${STRK.slice(3)}`]);
-    for (const policy of [list(['0x123']), list([]), list([STRK, SUSN]), repeated, noList]) {
+    for (const policy of [list(['0x123']), list([]), list([STRK, LORDS]), repeated, noList]) {
       expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
     }
   });
