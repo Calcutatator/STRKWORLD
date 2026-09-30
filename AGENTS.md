@@ -259,6 +259,101 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-30 — The Vault wears Vesu: its palette and type from vesu.xyz's stylesheet, its V from the logo art
+
+The lead asked for the Vault to look more like Vesu, outside and in. vesu.xyz
+is now the app itself, a Vite single-page app whose whole design system is one
+vanilla-extract stylesheet (`https://vesu.xyz/assets/index-EjXmYiWE.css`) with
+four themes: light, dark, and a "btcfi" pair in orange. The light theme is
+the one the Vault wears: a `#F5F5F5` page under `#FFFFFF` cards, `#FBFBFB`
+rows, `#E8E8E8` fills, hairlines at 7 % black, ink `#0A0A0A`, secondary text
+`#808080`, link and brand text `#2030B6`, the primary button `#2C41F6` with
+white text (hover lays 7 % black over it), the secondary `#E0E5FF` with
+`#2030B6` text, success, warning and danger text `#0D7328`, `#997800` and
+`#90090C`, radii of 4, 8 and 16 px, and shadows of `0 8px 28px -6px
+#13284e1f, 0 18px 88px -4px #13284e24`. Headings are Base Neue, Wide cuts
+only, at 600 (served from vesu.xyz's own `/fonts/`); body copy and buttons
+are Nunito Sans from Google Fonts, 16 px at 160 %, and buttons are 8 px
+round, 36 or 45 px tall. The app's bundle names its theme contract
+(`text.primary`, `link`, `brand`, `button.primary`) and loads its header logo
+from `/img/vesu-logo-{light,dark}[-mobile].png`. The mark is a V of two
+strokes, a leaning bar and a rounded inverted triangle in an iridescent
+gradient: on light pages a teal bar shading to ink and a glossy triangle,
+gold and green at the top, orange to rust at the tip, darkening to its right
+(`vesu-logo-light.png`); on dark pages and on Vesu's socials an ice-blue bar
+and a triangle glowing gold, mint and cream (`vesu-logo-dark.png`,
+`https://github.com/vesuxyz.png`). Its og:image
+(`https://docs.vesu.xyz/img/vesu.png`) sets the lockup white on black over
+"CRYPTO LOANS & YIELD" in wide caps. No brand or press kit was found: the
+docs site has no brand page and a search found none.
+
+What changed. The street Vault is a white building on a periwinkle plinth,
+blue light lines along the plinth, round an ink portal and under the
+cornice, tall rounded windows of night-blue or periwinkle-lit glass, white
+planters, the door's sign as Vesu's primary button (white on the blue),
+`vesu` in wide ink letters across the attic (the brand plate, no board), and
+the V two units tall on the roof, painted per vertex from the light-page
+logo's sampled gradients (`VESU_MARK`, `addVesuMark`). Locked it is still
+chained and padlocked behind a dim red portal (Vesu's own danger red), and
+opened it is D-077's swung door and blue light; the door, its position and
+the 7 by 6 footprint are unchanged. The room keeps its layout and counter: a
+white floor in large tiles with hairline joints, a periwinkle runner edged in
+blue light over the V inlaid by the exit, Vesu's avatar (the V glowing on
+black) behind the counter between two market boards in the app's idiom
+(discs and bars, no figure), safe-deposit lockers under `vesu` on the side
+walls, and a counter in Vesu's own look (`VESU_STATION_THEME`): a white desk
+under an ink top, a supply card and a desk-sized V on it, `vesu` on its
+status panel. The window re-points every token to the light theme above,
+names Nunito Sans and Base Neue first in system stacks that load nothing,
+sets 8 px buttons and fields, and draws the V beside its title as an inline
+SVG, with the triangle's gradient as a hairline along the header's top.
+Traps met on the way:
+
+- In Vesu's own lockup the V is the word's first letter ("V" + "esu"), so no
+  official art sets "vesu" in letters to crop. The plates set the name in
+  the platform's sans, widened by a new `titleStretch` sign option, which
+  scales each glyph about the line's centre and measures it wider to fit.
+- Vesu's secondary grey `#808080` is 3.95:1 on white; the window lifts dim
+  text to `#666666` (5.74:1), and darkens Vesu's warning `#997800` (4.2:1) to
+  `#806600`. Its fields have no border; the window keeps a `#8A8A8A` one for
+  the 3:1 a field boundary needs.
+- `font-stretch: 125%` widens the heading face only where the system face
+  has a width axis (SF Pro in WebKit); elsewhere headings stay normal width.
+- An SVG in a CSS data URI needs its `xmlns` and `#` written `%23`, and its
+  own `url(#id)` fills sit inside the quoted URI, so the styles test strips
+  quoted URIs before looking for any other `url(`.
+- `factory.sign(text, { ...style, titleStretch })` fails typecheck: an
+  object literal is checked against the factory's `SignOptions`. Build a
+  typed `SignStyleOptions` first, as the builders do.
+- The V brings orange and green into a room whose test said blue leads, so
+  the room test now finds every orange or green vertex inside one of the
+  three V's, and the boards and card use only blues.
+- For offline label renders: canvas `textBaseline = 'middle'` sits
+  `(ascent - descent) / 2` above the alphabetic baseline.
+
+Draw calls, counted as the street budget test counts them: 81 to 83 locked
+and 82 to 84 open (the V's self-lit bin, and a lit-window bin the old Vault
+never used), still under 150. The Vault's triangles went from 4,668 to 5,311
+locked and 1,888 to 2,531 open; the room from 20 draw calls (19 meshes and
+one label) to 27 (23 and four), under its 40, and 2,132 triangles to 7,551.
+
+*Verified:* `vesu-mark.test.ts` (the tokens, both art versions' gradients,
+the outlines' gap and convexity, the colours at their sampled points, and
+the relief facing out of and reading the right way round on every face;
+dropping the mirroring fails two of its cases), `street-builder.test.ts`
+(the Vault's dress, the V's colours, placement, facing and framing in the
+fixed camera, the wordmark over the sign, the locked and open doors, the
+walkable-intrusion and draw-call checks), `room-builder.test.ts` (the room
+and counter themes, the plate and wordmarks as the only words beside the
+Shell's label, orange and green only inside the V's, the room budget and
+the walkable floor), `labels.test.ts` (the stretch) and `styles.test.ts`
+(the tokens, AA pairs, no font or fetched url, no motion to reduce). Renders
+from an offline z-buffer rasterizer with labels drawn in PIL
+(`renders/vesu-before-*.png` and `renders/vesu-after-*.png` in the working
+scratchpad, not committed) and Quick Look thumbnails of a static window mock
+with `styles.css`. Nobody has looked at it in a browser; that is the lead's
+check.
+
 ### 2026-09-30 — The wallet cue's figure is a walk pre-rendered from the 3D model; the 2D sheets no longer ship
 
 The lead asked for the old 2D character on the loading screen to become the
