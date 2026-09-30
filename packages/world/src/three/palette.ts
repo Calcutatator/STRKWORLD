@@ -228,7 +228,7 @@ export interface DegenToken {
 
 /**
  * A bundled poster. `new URL` with `import.meta.url` is what Vite rewrites to
- * the emitted asset (as `avatar-visual.ts` does for the avatar sheets), so the
+ * the emitted asset (as `avatar-walker.ts` does for the Shell's walker), so the
  * browser fetches it from the game's own origin, and node tests read the file.
  */
 function degenPosterAsset(file: string): string {

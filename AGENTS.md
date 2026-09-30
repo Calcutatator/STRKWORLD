@@ -259,6 +259,79 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-30 — The wallet cue's figure is a walk pre-rendered from the 3D model; the 2D sheets no longer ship
+
+The lead asked for the old 2D character on the loading screen to become the
+current 3D standard character, walking towards the screen. The shell's only 2D
+character was D-058's wallet-attention cue: Avatar 1's pixel-art idle frame,
+shown while the production session connects ("Waiting for your wallet…"),
+while the entry gate's balance read waits, and while a wallet approval is
+pending. The boot screens ("Waking up the city…", "Loading the wallet
+connection…") are text only, and still are.
+
+The cue now shows `AVATAR_WALKER` (`packages/world/src/avatar-walker.ts`):
+`assets/avatar-walker/walk.png`, a 1664 × 128 RGBA PNG of 13 square cells drawn
+at 2x for a 64 px slot. Cell 0 is Avatar 1 (the default figure, standard build)
+standing; cells 1-12 are one stride towards the viewer at the figure's 1.6
+strides a second, 625 ms. The file is 48,132 bytes and the SHA-256 of its RGBA
+pixels is `84cf0a4c27745602a7bc03620ab5589dc7d45ad4557e6db4654d4a0255637371`.
+The Shell plays cells 1-12 with `steps(12)`; `prefers-reduced-motion: reduce`
+drops the animation, which leaves cell 0, the standing figure. The figure
+stands on a light disc in the slot (`#f8ecda` to `#eacfab`, the game's horizon
+light). On the cue's dark card only 16-20% of its opaque pixels reached 3:1
+(its darkest tenth, the trousers and boots, 1.1-1.3:1) and the contact shadow
+did not show at all; on the disc 85-95% do, and the darkest tenth reaches
+12-16:1. The projection imports nothing from three, so the Shell's entry chunk
+still carries no engine.
+
+Regenerate it after changing the figure, its walk or the World's light:
+`npm run render:walker --workspace=@strkworld/world`. The generator drives the
+real `createAvatarFigure('avatar-1')` through `update()`, four whole strides of
+warm-up and then one step per cell, and `tools/avatar-walker.ts` rasterizes
+each pose in software at 4 × 4 samples a pixel. It shades as three r186 does
+under the engine's lights, now shared from `three/lighting.ts`: the sun's
+self-shadow at the engine's texel, PCF radius and normal bias, ACES filmic and
+sRGB. The camera keeps the street rig's 28° pitch and its 12.9-unit distance
+to a player, a 7.2° vertical field. The contact shadow is a soft ellipse on
+the ground, 0.40 × 0.30 units at 0.42 peak opacity. A render takes about a
+second; `tools/avatar-walker.test.ts` fails, naming the command, once the
+committed pixels no longer match the model. Traps met on the way:
+
+- The walk is a function of `sin(phase)`. `applyPose` drives legs, arms and
+  twist from it, and the bob from `cos(2 · phase)`, so phases φ and π − φ are
+  the same pose and a 12-frame stride holds 7 distinct walking poses. Test for
+  a new pose on every step, not for distinct frames.
+- Under vitest the render ran about seven times slower than under tsx until
+  the imported constants read in hot loops were copied into locals: Vite's
+  module runner turns every read of an imported binding into a getter call.
+- three r186's MeshStandardMaterial is not Lambert plus GGX. Direct diffuse is
+  scaled by 1 − F, and the hemisphere's diffuse by the DFG table's energy term
+  (`three/src/renderers/shaders/DFGLUTData.js`, which ships no declaration;
+  `tools/three-internals.d.ts` declares it). Its shadow map stores back faces
+  for FrontSide materials, and PCF is five Vogel taps turned by per-pixel
+  noise; the offline render averages eight turns instead.
+- The 2D catalog (`AVATAR_SPRITE_ASSET_URLS`, `resolveAvatarSheet`) served the
+  cue alone, and its `new URL` template made every production build emit all
+  sixteen sheets (380 KB) though only Avatar 1's was ever fetched. It is gone;
+  `avatar-visual.ts` keeps `AVATAR_BODY_SIZE`. The sheets stay in
+  `assets/player-sprites/v1/` as the approved art the 3D looks are coloured
+  from, still pinned byte for byte by `avatar-asset.test.ts`.
+
+*Verified:* `tools/avatar-walker.test.ts` (6 tests) renders the strip twice:
+the same SHA-256 both times, the committed pixels within one level (they are
+equal here), a standing cell, a new pose on every step with each foot leading
+once, transparent edges with no stray colour, a soft shadow below the feet in
+every cell, and a file under 64 KB. `src/avatar-walker.test.ts` (4) checks the
+projection, its file's size and that it and `avatar-state.ts` import nothing
+that draws. The cue's test pins its exact `<img>`; `styles.test.ts` ties the
+CSS to `AVATAR_WALKER` (`steps(12)`, 625 ms, -64 px to -832 px), the reduced
+motion rule and the disc (at least 7:1 on the card); `architecture.test.ts`
+finds no 2D sheet name or path in the shell's code. The Bank, Exchange and
+production connect tests find the walker. Mutating the reduced-motion rule
+or the step count fails those tests. A production build emits `walk-*.png` and
+none of the sixteen sheets; the entry chunk grew 111 bytes and contains no
+`WebGLRenderer`. Browser acceptance of the look is the lead's.
+
 ### 2026-09-30 — Vesu's Prime vaults share vSTRK's class; a wallet-submitted pool fee is repaid in a token the wallet picks (D-079)
 
 Vesu's public API (`https://api.vesu.xyz/pools/<pool id>`, no key) lists
@@ -8156,6 +8229,9 @@ tilemap gate and `git diff --check`. No product code, wallet, provider, RPC,
 proof, signature, funds or transaction was used.
 
 ### 2026-08-29 — Wallet attention follows human-owned operation stages
+
+*The cue's figure is the 3D walker since [the 2026-09-30 finding](#2026-09-30--the-wallet-cues-figure-is-a-walk-pre-rendered-from-the-3d-model-the-2d-sheets-no-longer-ship);
+the stages, signal and title rules below still hold.*
 
 The inline pending sentence was not a reliable handoff when a wallet prompt
 opened outside the game or took long enough for the player to look elsewhere.

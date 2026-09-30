@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "render:walker": "tsx tools/render-avatar-walker.ts"
   },
   "dependencies": {
     "@strkworld/shared": "*",
@@ -18,6 +19,7 @@
     "./host": "./src/host.ts"
   },
   "devDependencies": {
-    "@types/three": "0.186.0"
+    "@types/three": "0.186.0",
+    "tsx": "4.23.12"
   }
 }

@@ -200,6 +200,19 @@ describe('shell boundaries', () => {
     expect(main).not.toMatch(/Promise\.all\([\s\S]*production-runtime/);
   });
 
+  it("draws the wallet cue from the World's 3D walker, and nothing of the retired 2D sheets (D-058)", () => {
+    // The cue's figure is AVATAR_WALKER, a strip the World pre-renders from its
+    // 3D model. The 2D sheets' resolver is gone; nothing in the shell, on the
+    // loading path or anywhere else, may reach for them by name or by path.
+    const offenders = sources()
+      .filter(({ path }) => !isTest(path))
+      .filter(({ text }) => /resolveAvatarSheet|AvatarVisualSheet|player-sprites|avatar-1\.png/.test(stripComments(text)))
+      .map(({ path }) => path);
+    expect(offenders).toEqual([]);
+    const cue = readFileSync(join(SRC, 'wallet/WalletAttentionCue.tsx'), 'utf8');
+    expect(imports(cue)).toContainEqual({ clause: '{ AVATAR_WALKER }', specifier: '@strkworld/world' });
+  });
+
   it('keeps the install links display-only: one card reads them, and nothing else names the sites (D-073)', () => {
     // SPEC §5 rules 1-2: a recommended-wallet list must never become a
     // connector source, a filter or an allowlist. Only the card that prints

@@ -1,4 +1,4 @@
-import { resolveAvatarSheet } from '@strkworld/world';
+import { AVATAR_WALKER } from '@strkworld/world';
 import type { OperationStage } from '@strkworld/privacy';
 import { useEffect, useRef } from 'react';
 import { COPY } from '../copy.js';
@@ -11,7 +11,6 @@ const TITLES: Readonly<Record<WalletAttentionKind, string>> = Object.freeze({
   confirm: COPY.walletAttention.confirmTitle,
 });
 
-const AVATAR = resolveAvatarSheet('avatar-1');
 const attentionTitleOwners = new Set<symbol>();
 let titleBeforeAttention: string | null = null;
 
@@ -25,6 +24,11 @@ export function walletOperationAttention(
 
 /**
  * One conspicuous but data-free handoff for a real-wallet step (D-058).
+ *
+ * Its character is the default 3D figure walking towards the player: a strip
+ * the World pre-renders from the model (`AVATAR_WALKER`), played with CSS
+ * steps, so the cue needs no Three.js and shows before the World loads. It
+ * stands still for players who prefer reduced motion.
  *
  * `signal` is injectable so lifecycle tests can prove one signal per owned
  * handoff without constructing a browser audio device.
@@ -75,10 +79,10 @@ export function WalletAttentionCue({
     >
       <span className="wallet-attention-avatar" aria-hidden="true">
         <img
-          className="wallet-attention-avatar-sheet"
-          src={AVATAR.url}
-          width={AVATAR.width}
-          height={AVATAR.height}
+          className="wallet-attention-walker"
+          src={AVATAR_WALKER.url}
+          width={AVATAR_WALKER.cells * AVATAR_WALKER.cellSize}
+          height={AVATAR_WALKER.cellSize}
           alt=""
           draggable={false}
         />
