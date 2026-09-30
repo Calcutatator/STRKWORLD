@@ -36,6 +36,16 @@ export type VaultDebugStep =
   /** A confirm stage, or how the attempt ended here. */
   | { readonly step: 'confirm'; readonly kind: 'supply' | 'redeem'; readonly stage: string };
 
+/**
+ * A moment at the football pitch (D-078): the local player kicked, a goal
+ * went in for a side, or a side won at full time. Never who: no identifier,
+ * no position, no player count.
+ */
+export type FootballDebugStep =
+  | { readonly event: 'kick' }
+  | { readonly event: 'goal'; readonly side: 'west' | 'east' }
+  | { readonly event: 'full-time'; readonly winner: 'west' | 'east' };
+
 export interface DebugTap {
   /** A privacy or wallet failure: its PrivacyError kind, wallet code and message. */
   failure(event: string, error: unknown): void;
@@ -58,6 +68,8 @@ export interface DebugTap {
   plazaShells?(result: unknown): void;
   /** A Vault step (D-077), by code only. Optional, like `plazaShells`. */
   vault?(step: unknown): void;
+  /** A football moment (D-078): a kick, a goal's side, full time's winner. Optional, like `vault`. */
+  football?(step: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -161,6 +173,19 @@ export function debugVault(step: VaultDebugStep): void {
   if (!tap) return;
   try {
     tap.vault?.(step);
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * A football moment (D-078), by side at most: see `FootballDebugStep`. The
+ * kick is the local player's own; goals and full time are everyone's.
+ */
+export function debugFootball(step: FootballDebugStep): void {
+  if (!tap) return;
+  try {
+    tap.football?.(step);
   } catch {
     // As above.
   }

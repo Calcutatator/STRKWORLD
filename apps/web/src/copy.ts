@@ -472,7 +472,7 @@ export const COPY = freezeCopy({
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
       { input: 'F', effect: 'Swap your outfit.' },
-      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at.' },
+      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
     ],
     buildingsTitle: 'Inside a building',
@@ -494,7 +494,10 @@ export const COPY = freezeCopy({
       'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there.',
     plazaTitle: 'The Privacy Plaza',
     plaza:
-      "At the road's west end, opposite the sandbox, a square with no money in it. Press E at the monument for the pool's live figures, or at the table to play Where's the note?",
+      "At the street's west end, beside the football pitch, a square with no money in it. Press E at the monument for the pool's live figures, or at the table to play Where's the note?",
+    pitchTitle: 'The football pitch',
+    pitch:
+      'The road begins at a football pitch with one ball for everyone there. Walk into the ball to dribble it, or press E when E · KICK shows to kick it away from you. West shoots east and East shoots west; the first side to 5 wins, and the score starts again from 0–0.',
     dismiss: 'Got it',
     stationHint: 'Lit counters open when you walk up to them; grey ones are not open yet. Menu Mode opens the full menu.',
   },

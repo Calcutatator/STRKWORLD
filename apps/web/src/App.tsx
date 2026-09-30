@@ -85,6 +85,7 @@ export function App({
         in={shellIn}
         remotePeers={presence.remotePeers}
         sandbox={presence.sandbox}
+        football={presence.football}
         vaultOpen={VAULT_DOOR_OPEN}
       />
       <HudLayer shell={shellIn} />

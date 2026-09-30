@@ -17,6 +17,7 @@ import {
   describeValue,
   describeVaultStep,
   describeWalletSession,
+  describeFootball,
   eventName,
   failureLevel,
   plazaPanel,
@@ -453,6 +454,11 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
     // D-077: the Vault's probe steps, by code only.
     vault: (step) => {
       const entry = describeVaultStep(step);
+      if (entry) record(entry.level, entry.event, entry.detail);
+    },
+    // D-078: the football's kicks, goals and full time, by side at most.
+    football: (step) => {
+      const entry = describeFootball(step);
       if (entry) record(entry.level, entry.event, entry.detail);
     },
   });

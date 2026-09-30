@@ -16,6 +16,7 @@ export {
   TILE_SIZE,
   TILES,
   tileToWorld,
+  westRoadColumn,
   worldToTile,
 } from './map/street.js';
 export type {
@@ -212,6 +213,23 @@ export {
   normalizeSandboxTile,
 } from './sandbox-channel.js';
 export type { SandboxChannel } from './sandbox-channel.js';
+
+// The football pitch (D-078): the Shell supplies the channel, as for the
+// sandbox, and the World never imports the lobby or moves the ball.
+export { normalizeFootballFrame, normalizeFootballMoment } from './football-channel.js';
+export type { FootballChannel, FootballFrame, FootballMoment } from './football-channel.js';
+export {
+  PITCH_FIXTURES,
+  PITCH_FULL_TIME_TEXT,
+  PITCH_GATE,
+  PITCH_GATE_TEXT,
+  PITCH_GOAL_TEXT,
+  PITCH_KICK_PROMPT,
+  pitchScoreText,
+  pitchWinnerText,
+  withinKickRange,
+} from './map/pitch.js';
+export type { PitchFixture, PitchFixtureKind } from './map/pitch.js';
 
 // The Privacy Plaza (D-076): its tile layout and its two street stations,
 // used with E. No money and no route: the Shell maps the station ids to its

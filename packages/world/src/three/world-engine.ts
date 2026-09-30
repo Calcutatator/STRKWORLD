@@ -177,6 +177,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         view,
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
+        football: config.football,
         // The creation value, never `config.vaultOpen`: the presenter drew
         // the street and rooms from it, and a session must walk the same map.
         vaultOpen,

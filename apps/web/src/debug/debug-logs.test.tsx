@@ -25,6 +25,7 @@ import {
   debugBank,
   debugConnectState,
   debugFailure,
+  debugFootball,
   debugGate,
   debugPlazaShells,
   debugSandboxBurst,
@@ -560,6 +561,29 @@ describe('what it captures', () => {
       ['info', 'bank.confirm', 'stage=fee-moved'],
     ]);
     expect(JSON.stringify(entries())).not.toContain(address);
+  });
+
+  it('records the football by side at most: a kick, a goal\'s side and full time\'s winner (D-078)', async () => {
+    const { entries, tick } = harness();
+    debugFootball({ event: 'kick' });
+    debugFootball({ event: 'goal', side: 'west' });
+    debugFootball({ event: 'full-time', winner: 'east' });
+    debugFootball({ event: 'goal', side: 'north' } as never);
+    debugFootball({ event: 'goal', side: 'west', scorer: '0123456789abcdef' } as never);
+    debugFootball({ event: 'kick', x: 448, y: 480 } as never);
+    debugFootball({ event: 'score', west: 5 } as never);
+    debugFootball(Object.defineProperty({ event: 'goal' }, 'side', { get: () => 'west' }) as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('football.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'football.kick', ''],
+      ['info', 'football.goal', 'side=west'],
+      ['info', 'football.full-time', 'winner=east'],
+      ['info', 'football.goal', 'side=west'],
+      ['info', 'football.kick', ''],
+    ]);
+    const surface = JSON.stringify(entries());
+    expect(surface).not.toContain('0123456789abcdef');
+    expect(surface).not.toContain('448');
   });
 
   it('records a sandbox burst by its tile, and nothing but a tile inside the square (D-071)', async () => {
