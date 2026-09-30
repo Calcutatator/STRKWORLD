@@ -332,6 +332,72 @@ or the step count fails those tests. A production build emits `walk-*.png` and
 none of the sixteen sheets; the entry chunk grew 111 bytes and contains no
 `WebGLRenderer`. Browser acceptance of the look is the lead's.
 
+### 2026-09-30 — Vesu's PoolFactory verifies a vault both ways; 16 of Vesu's 23 tokens have ever sat in the pool (D-081)
+
+Vesu's official PoolFactory (`0x03760f90…88c0`, on Vesu's contract-addresses
+page) answers `v_token_for_asset(pool, asset)` and `asset_for_v_token(pool,
+vToken)`, and its `v_token_class_hash()` is vSTRK's class (`0x41b16e0c…4f78`).
+Each verified pool answers `pool_name()` (a short string; Re7 USDC Frontier's
+ends in a space) and `is_paused()`, and runs the factory's pool class
+(`0x317ce57b…4128`). Read over `https://api.cartridge.gg/x/starknet/mainnet`
+on 2026-09-30 (blocks 15,678,829 to 15,680,638), all 57 vTokens of the 10
+live V2 pools Vesu marks verified run vSTRK's class and map both ways, so a
+vault is checkable on-chain without trusting Vesu's API. `GET
+https://api.vesu.xyz/pools` answers every pool (about 465 kB) with
+`isVerified`, `isDeprecated`, `protocolVersion`, each asset's `vToken`,
+`stats.canBeBorrowed` and `stats.supplyApy`, and the pool's `pairs` (collateral,
+debt, `maxLTV`); `/pools/<id>` answers one. An asset no pair borrows is
+collateral only: its vToken takes deposits, share for share, and pays 0%.
+Five of the Vault's sixteen markets are that (xSTRK, xWBTC, xstrkBTC, xtBTC,
+EKUBO).
+
+The STRK20 pool's ABI has no token list and holds amounts as `u128`. Its
+`Deposit(user_addr, token, amount)` and `OpenNoteDeposited(depositor, token,
+note_id, amount)` both key the token third, so one `starknet_getEvents` filter,
+`keys: [[Deposit, OpenNoteDeposited], [], [token]]`, from block 8,978,970,
+finds whether any note ever held a token. A token never held takes about 82
+pages to rule out; sUSN, mRe7YIELD, uniBTC, YBTC.B, mRe7BTC, xLBTC and xsBTC
+never have. Traps met on the way:
+
+- USDC.e's `symbol()` is "USDC", the same as Circle's USDC; Vesu calls it
+  USDC.e, and so does the Vault. sUSN's `symbol()` is a ByteArray whose one
+  data word is zero before "sUSN": starknet.js drops the zero bytes, and a
+  byte-exact decoder reads 31 NULs first.
+- Cartridge's public RPC answers JSON-RPC batches, with an error per item.
+  It also rate-limits (HTTP 429) parallel event scans; the generator backs
+  off (honouring `Retry-After`) and runs three calls at once.
+- The forward-compatibility scanner fails any `.name` or `.id` read in
+  production privacy source, so the market model's field is `poolName`.
+- `formatRatePercent` truncated Re7 xBTC's strkBTC rate (0.0006%) to
+  "0.00%", which reads as zero; it now says "<0.01%".
+- Vesu's 13 September post: an oracle fault on 4 September liquidated 47
+  positions in seven pools and wrote their lenders' shares down; 95% has
+  been recovered. A Vault share can shrink.
+
+**Seam heads-up (D-036).** `VaultMarket` gains `pool`, `poolName` and
+`curation` (`'prime' | 'curated'`), and `MAX_VAULT_MARKETS` (48) is exported;
+no method changes. `VAULT_MARKETS`, the backend's `VESU_VAULTS` (now with
+`pool`) and the web's `VAULT_TOKENS` come from files `scripts/vesu-markets.mjs`
+writes; edit none by hand. The backend's `VESU_PRIME_POOL_API_URL` gave way to
+`VESU_POOLS` and `vesuPoolApiUrl(pool)`, and `parseVesuPoolRates` takes the
+pool. The Vault's token metadata is `production/vesu-markets.ts`, not the
+Exchange catalog.
+
+*Verified:* read-only `starknet_call`, `starknet_getClass`,
+`starknet_getClassHashAt` and `starknet_getEvents` against the Cartridge RPC on
+2026-09-30, by hand and then by two full runs of `node
+scripts/vesu-markets.mjs --write` (the second at block 15,680,638, about three
+minutes); `GET https://api.vesu.xyz/pools` and `/pools/<id>`; Vesu's docs
+(glossary, pools, curators, PoolFactory, contract addresses) and the 13
+September refund post. Headless: `scripts/vesu-markets.test.mjs`,
+`vault.test.ts`, `vault-operations.test.ts`, `backend-client.test.ts`,
+`fake-vault.test.ts`, the backend's `vault.test.ts` and `vesu-rates.test.ts`,
+`config.test.ts`, `routes.test.ts`, `format.test.ts`, `vault-machine.test.ts`,
+`VaultPanel.flow.test.tsx`, `privacy-grades.test.ts` and
+`scripts/check-invariants.test.mjs`. No wallet was opened and nothing was
+submitted. Nobody has supplied through a curated pool yet, or looked at the
+grouped counter in a browser.
+
 ### 2026-09-30 — Vesu's Prime vaults share vSTRK's class; a wallet-submitted pool fee is repaid in a token the wallet picks (D-079)
 
 Vesu's public API (`https://api.vesu.xyz/pools/<pool id>`, no key) lists
