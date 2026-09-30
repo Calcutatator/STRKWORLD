@@ -78,9 +78,14 @@ function isSeam(specifier: string): boolean {
 }
 
 function isAllowedLobbyImport(specifier: string): boolean {
-  // D-060: the pure sandbox rules run the solo sandbox in the browser. The
-  // test below pins that entry to `@strkworld/shared` imports only.
-  return specifier === '@strkworld/lobby/client' || specifier === '@strkworld/lobby/sandbox';
+  // D-060: the pure sandbox rules run the solo sandbox in the browser, and
+  // D-078's football rules the solo ball and the ball the Shell draws. The
+  // tests below pin both entries to `@strkworld/shared` imports only.
+  return (
+    specifier === '@strkworld/lobby/client' ||
+    specifier === '@strkworld/lobby/sandbox' ||
+    specifier === '@strkworld/lobby/football'
+  );
 }
 
 const isTest = (path: string): boolean => /\.test\.tsx?$/.test(path);
@@ -95,6 +100,7 @@ describe('shell boundaries', () => {
     expect(offenders).toEqual([]);
     expect(isAllowedLobbyImport('@strkworld/lobby/client')).toBe(true);
     expect(isAllowedLobbyImport('@strkworld/lobby/sandbox')).toBe(true);
+    expect(isAllowedLobbyImport('@strkworld/lobby/football')).toBe(true);
     expect(isAllowedLobbyImport('@strkworld/lobby/server')).toBe(false);
     expect(isAllowedLobbyImport('@strkworld/lobby')).toBe(false);
     // Adversarial fixture: the scanner must catch a bare server-capable entry,
@@ -104,9 +110,12 @@ describe('shell boundaries', () => {
     )).toBe(true);
   });
 
-  it('keeps the browser-side sandbox rules free of server code (D-060)', () => {
+  it.each([
+    ['sandbox', 'sandbox-rules.ts', 'D-060'],
+    ['football', 'football-rules.ts', 'D-078'],
+  ])('keeps the browser-side %s rules free of server code', (_name, file) => {
     const rules = readFileSync(
-      fileURLToPath(new URL('../../../packages/lobby/src/sandbox-rules.ts', import.meta.url)),
+      fileURLToPath(new URL(`../../../packages/lobby/src/${file}`, import.meta.url)),
       'utf8',
     );
     const specifiers = imports(rules).map(({ specifier }) => specifier);

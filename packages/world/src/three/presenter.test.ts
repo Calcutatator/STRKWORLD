@@ -405,3 +405,54 @@ describe('presenter', () => {
     expect(() => world.presenter.bindSession()).toThrow();
   });
 });
+
+describe('the football in the presenter (D-078)', () => {
+  const ballFrame = { x: 14 * 32, y: 15 * 32, vx: 0, vy: 0, west: 2, east: 1, phase: 'live' } as const;
+  const find = (root: Group, name: string) => {
+    let found: import('three').Object3D | undefined;
+    root.traverse((object) => {
+      if (!found && (object.name === name || object.userData['pitch'] === name || object.userData['football'] === name)) found = object;
+    });
+    if (!found) throw new Error(`no ${name}`);
+    return found;
+  };
+
+  it('draws the ball and the scoreboard from the session\'s frame, and hides them with the street', () => {
+    const world = setup();
+    world.view.setFootball(ballFrame);
+    world.presenter.update(16);
+    const ball = find(world.parent, 'football:ball');
+    expect(ball.visible).toBe(true);
+    expect(ball.position.x).toBeCloseTo(14);
+    expect(find(world.parent, 'scoreboard').userData['text']).toBe('WEST 2 – 1 EAST');
+    world.view.setStreetVisible(false);
+    expect(find(world.parent, 'football').visible).toBe(false);
+    world.view.setStreetVisible(true);
+    expect(find(world.parent, 'football').visible).toBe(true);
+    world.view.setKickPrompt(true);
+    expect(find(world.parent, 'prompt').visible).toBe(true);
+    world.view.footballMoment({ kind: 'goal', side: 'west' });
+    expect(find(world.parent, 'cheer').visible).toBe(true);
+  });
+
+  it('starts a new session clean: no ball, no prompt, no cheer, 0-0 on the board', () => {
+    const world = setup();
+    world.view.setFootball(ballFrame);
+    world.view.setKickPrompt(true);
+    world.view.footballMoment({ kind: 'full-time', winner: 'west', west: 5, east: 1 });
+    world.presenter.bindSession();
+    expect(find(world.parent, 'football:ball').visible).toBe(false);
+    expect(find(world.parent, 'prompt').visible).toBe(false);
+    expect(find(world.parent, 'cheer').visible).toBe(false);
+    expect(find(world.parent, 'scoreboard').userData['text']).toBe('WEST 0 – 0 EAST');
+    // The retired session's view steers nothing.
+    world.view.setFootball(ballFrame);
+    expect(find(world.parent, 'football:ball').visible).toBe(false);
+  });
+
+  it('passes the reduced-motion preference to the football, so a goal throws no confetti', () => {
+    const world = setup(() => true);
+    world.view.footballMoment({ kind: 'goal', side: 'east' });
+    expect((find(world.parent, 'football:confetti') as InstancedMesh).count).toBe(0);
+  });
+});

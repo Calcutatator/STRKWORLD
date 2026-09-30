@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVE_BUILDINGS, BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
+import {
+  ACTIVE_BUILDINGS,
+  BUILDINGS,
+  PITCH_AREA,
+  PITCH_FIELD,
+  SANDBOX_AREA,
+  SANDBOX_ENTRANCE,
+  STREET_ORIGIN_X,
+} from '@strkworld/shared';
 import {
   createStreetMap,
   doorAt,
@@ -9,14 +17,18 @@ import {
   TILES,
   TILE_SIZE,
   tileToWorld,
+  westRoadColumn,
   worldToTile,
   type DistrictMap,
   type DoorZone,
 } from './street.js';
+import { PITCH_GATE } from './pitch.js';
 import type { TiledObject } from '../tiled-object-props.js';
 
 const map = createStreetMap();
 const DOOR_MAP_BOUNDS = { width: 48, height: 28 } as const;
+/** D-078: the street's first column, past the pitch square's fence. */
+const X = STREET_ORIGIN_X;
 
 describe('the street is walkable', () => {
   it('keeps the canonical collision vocabulary immutable', () => {
@@ -58,11 +70,35 @@ describe('the street is walkable', () => {
     expect(isSolidAt(map, map.spawn.x, map.spawn.y)).toBe(false);
   });
 
-  it('has a continuous road across the full width', () => {
+  it('runs the road without a break from the pitch gate to the sandbox gate', () => {
     const roadRow = 14;
-    for (let x = 0; x < map.width; x++) {
-      expect(isSolidAt(map, x, roadRow)).toBe(false);
+    // Road all the way, crossed by each door's zebra crossing.
+    for (let x = PITCH_GATE.x; x < SANDBOX_AREA.x; x++) {
+      expect(['road', 'pavement'], `road ${x}`).toContain(map.tiles[roadRow]![x]);
     }
+    expect(map.tiles[roadRow]![PITCH_GATE.x]).toBe('road');
+    expect(map.tiles[roadRow]![SANDBOX_AREA.x - 1]).toBe('road');
+    // Inside each square the same row stays walkable, but for the goals' nets
+    // at the pitch's two ends (D-078).
+    for (let x = 0; x < map.width; x++) {
+      const inGoal = x === PITCH_FIELD.x - 1 || x === PITCH_FIELD.x + PITCH_FIELD.width;
+      expect(isSolidAt(map, x, roadRow), `row ${roadRow}, ${x}`).toBe(inGoal);
+    }
+    expect(westRoadColumn(map)).toBe(PITCH_GATE.x);
+  });
+
+  it('widens by the pitch square west of the street, and nothing east of it moves but by the street\'s first column (D-078)', () => {
+    expect(X).toBe(PITCH_AREA.x + PITCH_AREA.width + 1);
+    expect(map.width).toBe(X + 54 + SANDBOX_AREA.width);
+    expect(SANDBOX_AREA.x).toBe(X + 54);
+    expect(map.spawn).toEqual({ x: X + 24, y: 15 });
+    expect(map.doors.map((door) => [door.building, door.x - X, door.y])).toEqual([
+      ['bank', 5, 10],
+      ['exchange', 14, 10],
+      ['post-office', 23, 10],
+      ['bridge', 32, 10],
+      ['vault', 41, 10],
+    ]);
   });
 
   it('treats out-of-bounds as solid so the player cannot leave the map', () => {
@@ -73,14 +109,14 @@ describe('the street is walkable', () => {
   });
 
   it('extends a hidden two-tile path from spawn to the south edge', () => {
-    expect(map.avatarStudioEntrance).toEqual({ x: 23, y: 27, width: 2, height: 1 });
+    expect(map.avatarStudioEntrance).toEqual({ x: X + 23, y: 27, width: 2, height: 1 });
     for (let y = map.spawn.y; y < map.height; y += 1) {
-      expect(isSolidAt(map, 23, y)).toBe(false);
-      expect(isSolidAt(map, 24, y)).toBe(false);
+      expect(isSolidAt(map, X + 23, y)).toBe(false);
+      expect(isSolidAt(map, X + 24, y)).toBe(false);
     }
-    expect(isAvatarStudioEntrance(map, 23, 27)).toBe(true);
-    expect(isAvatarStudioEntrance(map, 24, 27)).toBe(true);
-    expect(isAvatarStudioEntrance(map, 22, 27)).toBe(false);
+    expect(isAvatarStudioEntrance(map, X + 23, 27)).toBe(true);
+    expect(isAvatarStudioEntrance(map, X + 24, 27)).toBe(true);
+    expect(isAvatarStudioEntrance(map, X + 22, 27)).toBe(false);
   });
 });
 
@@ -187,11 +223,11 @@ describe('every building is present and reachable', () => {
 
   it('gives every facade a readable placeholder name and function', () => {
     expect(map.exteriorLabels).toEqual([
-      { building: 'bank', text: 'BANK\nSHIELD / UNSHIELD', x: 6.5, y: 7 },
-      { building: 'exchange', text: 'EXCHANGE\nSWAP', x: 15.5, y: 7 },
-      { building: 'post-office', text: 'POST OFFICE\nTRANSFER', x: 24.5, y: 7 },
-      { building: 'bridge', text: 'BRIDGE\nDEPOSIT', x: 33.5, y: 7 },
-      { building: 'vault', text: 'VAULT\nCOMING SOON', x: 42.5, y: 7 },
+      { building: 'bank', text: 'BANK\nSHIELD / UNSHIELD', x: X + 6.5, y: 7 },
+      { building: 'exchange', text: 'EXCHANGE\nSWAP', x: X + 15.5, y: 7 },
+      { building: 'post-office', text: 'POST OFFICE\nTRANSFER', x: X + 24.5, y: 7 },
+      { building: 'bridge', text: 'BRIDGE\nDEPOSIT', x: X + 33.5, y: 7 },
+      { building: 'vault', text: 'VAULT\nCOMING SOON', x: X + 42.5, y: 7 },
     ]);
   });
 

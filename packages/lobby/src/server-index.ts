@@ -52,4 +52,4 @@ export {
   type PresenceRoomConfig,
   type PresenceRoomConfigOverrides,
 } from './config';
-export { LobbyState, PresenceEntry, PositionSchema, SandboxColumnEntry } from './state';
+export { FootballEntry, LobbyState, PresenceEntry, PositionSchema, SandboxColumnEntry } from './state';

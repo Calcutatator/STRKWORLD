@@ -19,7 +19,7 @@ import {
   Vector2,
   Vector3,
 } from 'three';
-import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
+import { SANDBOX_AREA, SANDBOX_ENTRANCE, STREET_ORIGIN_X } from '@strkworld/shared';
 import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../map/street.js';
 import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from '../fixed-room.js';
 import { createNullLabelFactory } from './labels.js';
@@ -39,12 +39,15 @@ import {
 } from './street-builder.js';
 import type { StreetView } from './types.js';
 
+/** The street's first column, past the pitch square's fence (D-078). */
+const X = STREET_ORIGIN_X;
+
 const PLAN = [
-  { building: 'bank', x: 3 },
-  { building: 'exchange', x: 12 },
-  { building: 'post-office', x: 21 },
-  { building: 'bridge', x: 30 },
-  { building: 'vault', x: 39 },
+  { building: 'bank', x: X + 3 },
+  { building: 'exchange', x: X + 12 },
+  { building: 'post-office', x: X + 21 },
+  { building: 'bridge', x: X + 30 },
+  { building: 'vault', x: X + 39 },
 ] as const;
 
 /** The gap in the sandbox wall: its column, and the open rows [z0, z1). */
@@ -78,9 +81,11 @@ describe('buildStreet', () => {
     // Five facade signs, four brand plates, the sandbox square's sign and its
     // gate's, and the label on the Exchange tower's roof lift; then the Privacy
     // Plaza's (D-076): its gateway sign, the monument's three faces, the
-    // table's card and the two E prompts.
-    expect(view.labels.children).toHaveLength(19);
+    // table's card and the two E prompts; then the football pitch's (D-078):
+    // its scoreboard and its gate's board.
+    expect(view.labels.children).toHaveLength(21);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(7);
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'pitch').map((child) => child.userData['pitch'])).toEqual(['scoreboard', 'gate']);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -89,6 +94,10 @@ describe('buildStreet', () => {
         'street:pavement',
         'street:markings',
         'street:sandbox-floor',
+        'pitch:ground',
+        'pitch:decor',
+        'pitch:gate',
+        'pitch:floodlights',
       ]),
     );
     view.dispose();
@@ -187,8 +196,9 @@ describe('buildStreet', () => {
     const occluders = view.occluders as readonly StreetOccluder[];
     const gates = occluders.filter((occluder): occluder is GateOccluder => occluder.kind === 'sandbox-gate');
     expect(gates).toHaveLength(1);
-    // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts).
-    expect(occluders.filter((occluder) => occluder.kind !== 'plaza')).toHaveLength(PLAN.length + 1);
+    // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts)
+    // and the pitch gate (D-078, pitch-builder.test.ts).
+    expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch')).toHaveLength(PLAN.length + 1);
     const gate = gates[0]!;
     const mesh = meshNamed(view.ground, 'street:sandbox-gate');
     expect(gate.object).toBe(mesh);
@@ -558,7 +568,7 @@ describe('buildStreet', () => {
         }
       }
     }
-    for (const [x, z] of [[exchange.bounds.minX + 0.12, 8], [exchange.bounds.maxX - 0.12, 8], [15.5, exchange.bounds.minZ + 0.12], [15.5, front - 0.02]] as const) {
+    for (const [x, z] of [[exchange.bounds.minX + 0.12, 8], [exchange.bounds.maxX - 0.12, 8], [X + 15.5, exchange.bounds.minZ + 0.12], [X + 15.5, front - 0.02]] as const) {
       expect(firstBelow(x, z), `edge ${x},${z}`).toBeGreaterThan(H + 1.1);
     }
     // Nothing stands on the deck below head height, the lift pad included.
@@ -648,10 +658,10 @@ describe('buildStreet', () => {
     const map = createStreetMap();
     const H = EXCHANGE_ROOF_HEIGHT;
     const crate = new Object3D();
-    const box = new Mesh(boxGeometry(14.3, H, 7.3, 14.7, H + 0.6, 7.7));
+    const box = new Mesh(boxGeometry(X + 14.3, H, 7.3, X + 14.7, H + 0.6, 7.7));
     box.name = 'crate';
     crate.add(box);
-    const deck = (x: number, z: number) => x >= 13 && x < 18 && z >= 6 && z < 10;
+    const deck = (x: number, z: number) => x >= X + 13 && x < X + 18 && z >= 6 && z < 10;
     expect(findWalkableIntrusions(crate, deck, map, { minY: H + 0.15, maxY: H + 1.9 })).toEqual([expect.stringContaining('crate')]);
   });
 
@@ -670,7 +680,7 @@ describe('buildStreet', () => {
     const map = createStreetMap();
     const walkable = (x: number, z: number) => !isSolidAt(map, Math.floor(x), Math.floor(z));
     const planted = new Object3D();
-    const prop = new Mesh(boxGeometry(10.3, 0, 11.3, 10.7, 1, 11.7));
+    const prop = new Mesh(boxGeometry(X + 10.3, 0, 11.3, X + 10.7, 1, 11.7));
     prop.name = 'planted';
     planted.add(prop);
     expect(findWalkableIntrusions(planted, walkable, map)).toEqual([
@@ -678,13 +688,13 @@ describe('buildStreet', () => {
     ]);
     // The sandbox square is walkable ground too.
     const square = new Object3D();
-    const block = new Mesh(boxGeometry(68.2, 0, 14.2, 68.8, 0.6, 14.8));
+    const block = new Mesh(boxGeometry(SANDBOX_AREA.x + 14.2, 0, 14.2, SANDBOX_AREA.x + 14.8, 0.6, 14.8));
     block.name = 'block';
     square.add(block);
     expect(findWalkableIntrusions(square, walkable, map)).toEqual([expect.stringContaining('block')]);
     // An alcove side wall standing exactly on the solid/walkable boundary.
     const flush = new Object3D();
-    flush.add(new Mesh(boxGeometry(4, 0, 9.8, 5, 2, 11)));
+    flush.add(new Mesh(boxGeometry(X + 4, 0, 9.8, X + 5, 2, 11)));
     expect(findWalkableIntrusions(flush, walkable, map)).toEqual([]);
   });
 
@@ -771,13 +781,13 @@ describe('buildStreet', () => {
 
   it('reports raised pavement so the avatar can stand on the kerb', () => {
     const map = createStreetMap();
-    expect(streetSurfaceHeightAt(map, 10, 11)).toBe(PAVEMENT_HEIGHT);
-    expect(streetSurfaceHeightAt(map, 10, 18)).toBe(PAVEMENT_HEIGHT);
-    expect(streetSurfaceHeightAt(map, 5, 10)).toBe(PAVEMENT_HEIGHT);
-    expect(streetSurfaceHeightAt(map, 10, 14)).toBe(0);
-    expect(streetSurfaceHeightAt(map, 5, 14)).toBe(0);
-    expect(streetSurfaceHeightAt(map, 10, 2)).toBe(0);
-    expect(streetSurfaceHeightAt(map, 23, 22)).toBe(0);
+    expect(streetSurfaceHeightAt(map, X + 10, 11)).toBe(PAVEMENT_HEIGHT);
+    expect(streetSurfaceHeightAt(map, X + 10, 18)).toBe(PAVEMENT_HEIGHT);
+    expect(streetSurfaceHeightAt(map, X + 5, 10)).toBe(PAVEMENT_HEIGHT);
+    expect(streetSurfaceHeightAt(map, X + 10, 14)).toBe(0);
+    expect(streetSurfaceHeightAt(map, X + 5, 14)).toBe(0);
+    expect(streetSurfaceHeightAt(map, X + 10, 2)).toBe(0);
+    expect(streetSurfaceHeightAt(map, X + 23, 22)).toBe(0);
   });
 });
 

@@ -259,6 +259,60 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-30 — A Colyseus simulation interval cannot be paused; the street moved behind `STREET_ORIGIN_X` (D-078)
+
+The football needed a fixed step that runs only while someone is near the
+pitch. `@colyseus/core` 0.17.50's `Room.setSimulationInterval(cb, ms)` ticks
+the room clock itself, but calling it again without a callback clears the
+Node interval and leaves `_simulationInterval` set, and `broadcastPatch` ticks
+the clock only while `_simulationInterval` is unset (`Room.mjs` lines 205-221,
+368-381, 590). So "pausing" it freezes the room clock for good, and with it
+every `clock.setTimeout`, the sandbox's sky drops included. The room instead
+arms a `clock.setInterval(step, 40)`, which fires as the clock ticks, at the
+50 ms patch rate and just before each patch is encoded, and the rules step
+every whole 40 ms tick up to `performance.now()`, so the simulation keeps its
+own 25 Hz clock and every patch carries the latest ball, dated by its tick.
+Other traps met on the way:
+
+- Room state is JSON-scanned for financial patterns (`privacy.test.ts`,
+  `testing/forbidden-vocabulary.json`), and a float coordinate such as
+  `448.8123` matches its "decimal currency figure". The ball therefore
+  travels as `int32` in 64ths of a pixel (`FOOTBALL_WIRE_SCALE`): whole
+  numbers, like every other field in the state.
+- `onFootball`, like `onSandbox`, replays synchronously inside the
+  subscription. A controller that installs its current authority only after
+  subscribing drops that replay as stale; the football controller sets it
+  first.
+- three r186's `IcosahedronGeometry(r, detail)` has 20·(detail+1)² faces:
+  detail 2 is 180, not the 320 of a recursive split.
+- The map is a zero-based grid read by collision, the door triggers, every
+  builder, the backdrop and the lobby's `uint8` sandbox tiles, so the pitch
+  square was added by moving the street east behind one constant,
+  `STREET_ORIGIN_X` (29), not by a negative origin. Literal street
+  coordinates lived in `map/street.ts`, `map/plaza.ts`, the Exchange roof in
+  `fixed-room.ts`, `backdrop.ts` (`CROSS_ORIGIN`, the near rows' start, four
+  hills) and many tests; world tests now count from `STREET_ORIGIN_X`, and
+  the lobby's keep D-060's numbers as `S(n)`. `SANDBOX_AREA` is x 83-110.
+
+*Verified:* `football-room.test.ts` runs the production room class on a real
+server: a kick from the wrapper client moves the ball, the raw `football:goal`
+payload is exactly `{ side: 'west' }` and arrives before the patch that raises
+the score. `football-controller.test.ts` steps the lobby's registry and the
+solo controller through the same moves and kick and gets identical snapshots,
+tick for tick. `privacy.test.ts` pins the entry's fields and scans a seeded
+600-step match. `street.test.ts`, `pitch.test.ts` and `plaza.test.ts` pin the
+square, the gate and the unmoved relative layout; the rooftop ray test and the
+walkable-intrusion test pass on the wider map. Draw calls 75 to 81 and street
+ground triangles 87,837 to 103,393, counted as the budget test counts them
+and by an offline z-buffer render (not committed). Building the street takes
+about 1.1 s against 0.9 s before, alone. On this machine, with other agents'
+runs pushing the load average from 50 to 130, each full run timed out a
+different handful of tests, every one of which passed alone; among them the
+first tests of `presenter.test.ts` and `world-engine.test.ts`, the lobby's
+long sandbox sequences (`sandbox.test.ts`, `privacy.test.ts`,
+`sandbox-capacity.test.ts`, as slow on `main` under the same load) and the
+deploy smoke tests.
+
 ### 2026-09-29 — A shadow account's address is the anonymizer's view, derived with the Primer class; starknet.js 10.8 converts calls both ways (D-077)
 
 The canonical `ShadowAccountAnonymizer`

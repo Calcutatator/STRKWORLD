@@ -8,6 +8,7 @@ import { createPresenceController, type PresenceController } from './presence/pr
 import { lobbyEndpoint } from './presence/config.js';
 import { LobbyClient } from '@strkworld/lobby/client';
 import { createSandboxController } from './sandbox/sandbox-controller.js';
+import { createFootballController } from './football/football-controller.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
@@ -55,22 +56,29 @@ let activePresence: PresenceController | null = null;
 // once, like the buses, so the World always holds one stable channel.
 const sandbox = createSandboxController();
 const stopSandboxWorld = sandbox.listen(worldOut);
+// The football (D-078), likewise: the lobby's ball while connected, the same
+// rules locally for solo play, one stable channel for the World.
+const football = createFootballController();
+const stopFootballWorld = football.listen(worldOut);
 const createPresence = (): PresenceController => {
   const next = createPresenceController({
     endpoint: lobbyEndpoint(),
-    factory: (options) => sandbox.adopt(new LobbyClient(options)),
+    factory: (options) => football.adopt(sandbox.adopt(new LobbyClient(options))),
     sandbox: sandbox.channel,
+    football: football.channel,
   });
   activePresence = next;
   return next;
 };
 // One teardown for everything multiplayer: Vite keeps a single `hot.dispose`
-// callback per module, so the sandbox rides on the presence lifecycle rather
-// than registering a second one that would silently replace it.
+// callback per module, so the sandbox and the football ride on the presence
+// lifecycle rather than registering a second one that would silently replace it.
 const presenceLifecycle = {
   destroy: async () => {
     stopSandboxWorld();
     sandbox.destroy();
+    stopFootballWorld();
+    football.destroy();
     await activePresence?.destroy();
   },
 };

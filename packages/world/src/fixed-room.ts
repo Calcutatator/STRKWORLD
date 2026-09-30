@@ -4,7 +4,7 @@
  * handoff and the renderer only draws its map and state (D-059).
  */
 
-import type { BuildingId, EventBus, ShellEvents, StationId, WorldEvents } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type BuildingId, type EventBus, type ShellEvents, type StationId, type WorldEvents } from '@strkworld/shared';
 
 export const FIXED_ROOM_TILE_SIZE = 32;
 
@@ -402,8 +402,9 @@ export const EXCHANGE_ROOF_HEIGHT = 36;
 
 /**
  * The Exchange tower's roof: its real top in the street scene, a deck of 5 by
- * 4 tiles inside a solid ledge ring over the tower's 7 by 6 footprint (street
- * tiles 12-18, 5-10). The lift down stands in the deck's south-east corner.
+ * 4 tiles inside a solid ledge ring over the tower's 7 by 6 footprint (the
+ * street's tiles 12-18, 5-10, counted from `STREET_ORIGIN_X`). The lift down
+ * stands in the deck's south-east corner.
  */
 export const EXCHANGE_ROOF_LEVEL = freezeAuthoredLevel({
   building: 'exchange',
@@ -413,7 +414,8 @@ export const EXCHANGE_ROOF_LEVEL = freezeAuthoredLevel({
   spawn: { x: 5, y: 3 },
   stations: [],
   lifts: [{ to: 'degen', x: 5, y: 4, width: 1, height: 1, arrival: { x: 5, y: 3 } }],
-  rooftop: { x: 12, y: 5, height: EXCHANGE_ROOF_HEIGHT },
+  // Over the Exchange's street footprint, which the street lays out from its first column (D-078).
+  rooftop: { x: STREET_ORIGIN_X + 12, y: 5, height: EXCHANGE_ROOF_HEIGHT },
 } as const satisfies FixedRoomLevelDefinition);
 
 export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({

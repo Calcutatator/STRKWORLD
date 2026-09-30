@@ -1,5 +1,6 @@
-import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
+import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, STREET_ORIGIN_X, type BuildingId } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
+import { paintPitch } from './pitch.js';
 import { paintPlaza } from './plaza.js';
 
 /**
@@ -26,7 +27,11 @@ export type TileKind =
   | 'sandbox'
   | 'fence'
   | 'plaza'
-  | 'plinth';
+  | 'plinth'
+  | 'turf'
+  | 'walkway'
+  | 'footing'
+  | 'railing';
 
 export interface TileSpec {
   kind: TileKind;
@@ -60,6 +65,21 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    * stands every plaza volume on these.
    */
   plinth: Object.freeze({ kind: 'plinth', solid: true, colour: 0xa89a82 }),
+  /** The football pitch's field (D-078). Walkable: the ball is shared state on top of it. */
+  turf: Object.freeze({ kind: 'turf', solid: false, colour: 0x5a9a48 }),
+  /** The paved walkway round the field, inside the pitch square (D-078). Walkable. */
+  walkway: Object.freeze({ kind: 'walkway', solid: false, colour: 0xcfc4b0 }),
+  /**
+   * Under a piece of pitch furniture: a stand, a bleacher, a floodlight or a
+   * goal's net and posts (D-078). Solid; the renderer stands every pitch
+   * volume on these.
+   */
+  footing: Object.freeze({ kind: 'footing', solid: true, colour: 0x9a948a }),
+  /**
+   * The pitch square's fence on its street side (D-078). Solid — you come in
+   * through the gate, where the road runs through it.
+   */
+  railing: Object.freeze({ kind: 'railing', solid: true, colour: 0x8e959c }),
 });
 
 /**
@@ -152,14 +172,23 @@ export interface StreetMapOptions {
  * locked door, so the world reads as complete while v1 ships without it
  * (D-007), until the Shell opens it (D-077): then its door is as open as the
  * others and its sign names its counter. Nothing else changes. The road ends
- * in the block sandbox square (D-060), and the Privacy Plaza sits below its
- * west end, opposite the sandbox (D-076).
+ * in the block sandbox square (D-060) at its east end and in the football
+ * pitch square (D-078) at its west end, and the Privacy Plaza sits below the
+ * street's west end, beside the pitch (D-076).
+ *
+ * Every street tile is laid out from `STREET_ORIGIN_X`, the column past the
+ * pitch square's fence: the pitch came last, and the street moved east to
+ * make room for it rather than the map growing a negative-x region, so the
+ * grid stays a zero-based array and every seam that reads it is unchanged.
  */
 export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // Fails closed: only a real `true` opens the Vault.
   const vaultOpen = options?.vaultOpen === true;
+  // D-078: the street's own columns count from here.
+  const X = STREET_ORIGIN_X;
   // The original street is 48 tiles wide; the road then runs on into the block
-  // sandbox square at its east end (D-060).
+  // sandbox square at its east end (D-060), and the pitch square lies west of
+  // it (D-078).
   const width = SANDBOX_AREA.x + SANDBOX_AREA.width;
   const height = 28;
 
@@ -174,13 +203,13 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
 
   // Five buildings along the north side, evenly spaced.
   const plan: Array<{ building: BuildingId; x: number; locked: boolean; label: string }> = [
-    { building: 'bank', x: 3, locked: false, label: 'BANK\nSHIELD / UNSHIELD' },
-    { building: 'exchange', x: 12, locked: false, label: 'EXCHANGE\nSWAP' },
-    { building: 'post-office', x: 21, locked: false, label: 'POST OFFICE\nTRANSFER' },
-    { building: 'bridge', x: 30, locked: false, label: 'BRIDGE\nDEPOSIT' },
+    { building: 'bank', x: X + 3, locked: false, label: 'BANK\nSHIELD / UNSHIELD' },
+    { building: 'exchange', x: X + 12, locked: false, label: 'EXCHANGE\nSWAP' },
+    { building: 'post-office', x: X + 21, locked: false, label: 'POST OFFICE\nTRANSFER' },
+    { building: 'bridge', x: X + 30, locked: false, label: 'BRIDGE\nDEPOSIT' },
     vaultOpen
-      ? { building: 'vault', x: 39, locked: false, label: 'VAULT\nSUPPLY / REDEEM' }
-      : { building: 'vault', x: 39, locked: true, label: 'VAULT\nCOMING SOON' },
+      ? { building: 'vault', x: X + 39, locked: false, label: 'VAULT\nSUPPLY / REDEEM' }
+      : { building: 'vault', x: X + 39, locked: true, label: 'VAULT\nCOMING SOON' },
   ];
 
   const buildingWidth = 7;
@@ -238,11 +267,16 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // The hidden Avatar Studio has no facade or BUILDINGS entry. It is reached
   // by a two-tile path that continues directly south from the spawn column to
   // the bottom edge, where the offscreen trigger lives.
-  fill(tiles, 23, 17, 2, height - 17, 'pavement');
+  fill(tiles, X + 23, 17, 2, height - 17, 'pavement');
 
   // The Privacy Plaza (D-076): a paved square below the south pavement at the
-  // road's west end, clear of the Studio path and the spawn (see plaza.ts).
+  // street's west end, clear of the Studio path and the spawn (see plaza.ts).
   paintPlaza(tiles);
+
+  // The football pitch square where the road begins (D-078): its walkway,
+  // field and furniture, and the fence on its street side with a gate where
+  // the road and both pavements run in (see pitch.ts).
+  paintPitch(tiles);
 
   // The block sandbox square where the road ends (D-060). Its floor is plain
   // walkable ground; block stacks are shared state layered on top of it.
@@ -263,8 +297,8 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     tiles,
     doors: objectLayerToDoors(doorObjects, { width, height }),
     exteriorLabels,
-    avatarStudioEntrance: { x: 23, y: height - 1, width: 2, height: 1 },
-    spawn: { x: 24, y: 15 },
+    avatarStudioEntrance: { x: X + 23, y: height - 1, width: 2, height: 1 },
+    spawn: { x: X + 24, y: 15 },
   };
 }
 
@@ -346,6 +380,21 @@ function normalizeDoorGeometry(
     return null;
   }
   return geometry;
+}
+
+/**
+ * The column whose road and pavements run on west, past the map's edge: the
+ * west edge itself on a street that runs off the map there, or — with the
+ * pitch square at that end (D-078), which the road enters through a gate —
+ * the first column that carries road. Past the square the backdrop carries
+ * that road on west, closed by the barrier where the square interrupts it.
+ * -1 on a map without road.
+ */
+export function westRoadColumn(map: DistrictMap): number {
+  for (let x = 0; x < map.width; x++) {
+    if (map.tiles.some((row) => row[x] === 'road')) return x;
+  }
+  return -1;
 }
 
 /** Is this tile coordinate blocked? Out of bounds counts as blocked. */

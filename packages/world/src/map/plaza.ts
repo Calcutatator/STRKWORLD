@@ -1,10 +1,10 @@
-import type { StationId } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type StationId } from '@strkworld/shared';
 import type { TileKind } from './street.js';
 
 /**
- * The Privacy Plaza (D-076), as data: a paved square south of the road's
- * west end, opposite the sandbox, with a pool-stats monument and a shell-game
- * table.
+ * The Privacy Plaza (D-076), as data: a paved square south of the street's
+ * west end, beside the football pitch (D-078), with a pool-stats monument and
+ * a shell-game table.
  *
  * No money, no wallet, no route. Its two stations open client-only windows,
  * and the plaza is a `BuildingId` only so those stations share the station
@@ -22,15 +22,22 @@ export interface PlazaRect {
   readonly height: number;
 }
 
-/** The plaza's paving, in street tiles: x 0-10, y 19-27, below the south pavement. */
-export const PLAZA_AREA: PlazaRect = Object.freeze({ x: 0, y: 19, width: 11, height: 9 });
+/**
+ * D-078: the plaza is laid out from the street's first column, so it moved
+ * east with the street when the pitch square took the road's west end, and
+ * nothing in it moved relative to the street.
+ */
+const at = (x: number): number => STREET_ORIGIN_X + x;
+
+/** The plaza's paving, in street tiles: the street's x 0-10, y 19-27, below the south pavement. */
+export const PLAZA_AREA: PlazaRect = Object.freeze({ x: at(0), y: 19, width: 11, height: 9 });
 
 /**
  * Where the monument is in the fixed north-looking camera's frame: the plaza,
  * the south pavement and the road in front of it. While the player is in
  * here, the Shell keeps the monument's figures fresh (`plaza:nearby`).
  */
-export const PLAZA_NEARBY: PlazaRect = Object.freeze({ x: 0, y: 14, width: 16, height: 14 });
+export const PLAZA_NEARBY: PlazaRect = Object.freeze({ x: at(0), y: 14, width: 16, height: 14 });
 
 export const PLAZA_MONUMENT_STATION: StationId = 'plaza:monument';
 export const PLAZA_SHELLS_STATION: StationId = 'plaza:shells';
@@ -69,26 +76,26 @@ const fixture = (value: PlazaFixture): PlazaFixture => Object.freeze({ ...value 
  * the camera looks north from beyond it.
  */
 export const PLAZA_FIXTURES: readonly PlazaFixture[] = Object.freeze([
-  fixture({ kind: 'monument', x: 4, y: 22, width: 3, height: 3 }),
-  fixture({ kind: 'table', x: 9, y: 23, width: 1, height: 1 }),
-  fixture({ kind: 'arch-post', x: 3, y: 19, width: 1, height: 1 }),
-  fixture({ kind: 'arch-post', x: 7, y: 19, width: 1, height: 1 }),
-  fixture({ kind: 'planter', x: 0, y: 19, width: 3, height: 1 }),
-  fixture({ kind: 'planter', x: 8, y: 19, width: 3, height: 1 }),
-  fixture({ kind: 'tree', x: 0, y: 20, width: 1, height: 1 }),
-  fixture({ kind: 'tree', x: 10, y: 20, width: 1, height: 1 }),
-  fixture({ kind: 'bench', x: 0, y: 23, width: 1, height: 2, facing: 'east' }),
-  fixture({ kind: 'bench', x: 10, y: 25, width: 1, height: 2, facing: 'west' }),
-  fixture({ kind: 'bench', x: 2, y: 27, width: 2, height: 1, facing: 'north' }),
-  fixture({ kind: 'bench', x: 7, y: 27, width: 2, height: 1, facing: 'north' }),
-  fixture({ kind: 'lamp', x: 0, y: 27, width: 1, height: 1 }),
-  fixture({ kind: 'lamp', x: 10, y: 27, width: 1, height: 1 }),
+  fixture({ kind: 'monument', x: at(4), y: 22, width: 3, height: 3 }),
+  fixture({ kind: 'table', x: at(9), y: 23, width: 1, height: 1 }),
+  fixture({ kind: 'arch-post', x: at(3), y: 19, width: 1, height: 1 }),
+  fixture({ kind: 'arch-post', x: at(7), y: 19, width: 1, height: 1 }),
+  fixture({ kind: 'planter', x: at(0), y: 19, width: 3, height: 1 }),
+  fixture({ kind: 'planter', x: at(8), y: 19, width: 3, height: 1 }),
+  fixture({ kind: 'tree', x: at(0), y: 20, width: 1, height: 1 }),
+  fixture({ kind: 'tree', x: at(10), y: 20, width: 1, height: 1 }),
+  fixture({ kind: 'bench', x: at(0), y: 23, width: 1, height: 2, facing: 'east' }),
+  fixture({ kind: 'bench', x: at(10), y: 25, width: 1, height: 2, facing: 'west' }),
+  fixture({ kind: 'bench', x: at(2), y: 27, width: 2, height: 1, facing: 'north' }),
+  fixture({ kind: 'bench', x: at(7), y: 27, width: 2, height: 1, facing: 'north' }),
+  fixture({ kind: 'lamp', x: at(0), y: 27, width: 1, height: 1 }),
+  fixture({ kind: 'lamp', x: at(10), y: 27, width: 1, height: 1 }),
 ]);
 
 /** The monument (live pool stats) and the shell-game table. */
 export const PLAZA_STATIONS: readonly PlazaStation[] = Object.freeze([
-  Object.freeze({ station: PLAZA_MONUMENT_STATION, label: 'POOL STATS', x: 4, y: 22, width: 3, height: 3 }),
-  Object.freeze({ station: PLAZA_SHELLS_STATION, label: "WHERE'S THE NOTE?", x: 9, y: 23, width: 1, height: 1 }),
+  Object.freeze({ station: PLAZA_MONUMENT_STATION, label: 'POOL STATS', x: at(4), y: 22, width: 3, height: 3 }),
+  Object.freeze({ station: PLAZA_SHELLS_STATION, label: "WHERE'S THE NOTE?", x: at(9), y: 23, width: 1, height: 1 }),
 ]);
 
 /** Pave the plaza and mark every fixture's tiles solid, in an existing grid. */

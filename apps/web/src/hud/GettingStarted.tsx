@@ -76,6 +76,9 @@ export function GettingStarted({
       <h3>{COPY.guide.plazaTitle}</h3>
       <p>{COPY.guide.plaza}</p>
 
+      <h3>{COPY.guide.pitchTitle}</h3>
+      <p>{COPY.guide.pitch}</p>
+
       <button type="button" className="journey-guide-dismiss" onClick={onDismiss}>
         {COPY.guide.dismiss}
       </button>

@@ -1,5 +1,6 @@
 import type { Color, ColorRepresentation } from 'three';
-import type { DistrictMap } from '../map/street.js';
+import { STREET_ORIGIN_X } from '@strkworld/shared';
+import { westRoadColumn, type DistrictMap } from '../map/street.js';
 import {
   PALETTE,
   aoPaint,
@@ -33,6 +34,13 @@ import {
  * south past the groves the houses thin into the same green. Nothing stands on
  * a map tile and nothing rises above the near rows, so the Exchange tower stays
  * the district's one tall building.
+ *
+ * The town is laid out from the street, not from the map's edge: when the
+ * football pitch square widened the map west (D-078), everything the street
+ * sees kept its place beside the street (`STREET_ORIGIN_X`), and the town and
+ * the near rows run on west behind the square. The road that the square
+ * interrupts runs on west past it, closed by the barrier, with the houses that
+ * lined it, and the country past the map's edges stays relative to them.
  *
  * The rooftop camera looks steeply down from 36 up, where the fog never
  * reaches, so the ground runs on past its whole frame, a wide window's included
@@ -74,7 +82,7 @@ const MID_FRONTAGE = 6;
 
 /** North-south streets: one every `PITCH` along x, the first on the gap between the Bank and the Exchange. */
 const PITCH = 18;
-const CROSS_ORIGIN = 9;
+const CROSS_ORIGIN = STREET_ORIGIN_X + 9;
 /** They run from the first street to the last. */
 const CORRIDOR_SOUTH = STREET_SOUTH[0];
 const CORRIDOR_NORTH = STREET_SOUTH[2] - STREET;
@@ -360,7 +368,8 @@ function makePlan(map: DistrictMap): Plan {
     grid,
     yardEast: Math.ceil(near.east) + 1,
     ...fieldParcels(W, H),
-    westRoad: roadRows(map, 0),
+    // The road runs on west past the map's edge, or past the pitch square (D-078).
+    westRoad: roadRows(map, westRoadColumn(map)),
     eastRoad: roadRows(map, W - 1),
   };
   const cells = raster(layout);
@@ -392,7 +401,8 @@ function nearBlocks(width: number, west: number): { blocks: NearBlock[]; east: n
   let east = -Infinity;
   let seed = 1;
   for (const row of NEAR_ROWS) {
-    const start = -18 + hash01(seed, 0, 41) * 2;
+    // Their original run starts where it always did beside the street (D-078).
+    const start = STREET_ORIGIN_X - 18 + hash01(seed, 0, 41) * 2;
     starts.push(start);
     let x = start;
     while (x < width + 18) {
@@ -435,7 +445,7 @@ function fieldParcels(width: number, height: number): Pick<Layout, 'columns' | '
 
 /** The street's surface where it runs off one map edge, by row, read from the tiles like its barrier. */
 function roadRows(map: DistrictMap, edgeX: number): number[] {
-  return map.tiles.map((row) => (row[edgeX] === 'road' ? ROAD : row[edgeX] === 'pavement' ? PAVEMENT : 0));
+  return map.tiles.map((row) => (edgeX < 0 ? 0 : row[edgeX] === 'road' ? ROAD : row[edgeX] === 'pavement' ? PAVEMENT : 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -844,16 +854,19 @@ export function backdropCity(map: DistrictMap, bin: GeometryBin): void {
 function hillSpots(width: number, height: number): readonly Hill[] {
   const W = width;
   const H = height;
+  // Behind the town and south of the groves, placed along the street (D-078);
+  // west and east, past the houses at the map's own edges.
+  const X = STREET_ORIGIN_X;
   const spots: ReadonlyArray<readonly [number, number, number, number]> = [
-    [-4, -74, 20, 0.26],
-    [56, -76, 22, 0.24],
+    [X - 4, -74, 20, 0.26],
+    [X + 56, -76, 22, 0.24],
     [W + 30, -72, 18, 0.26],
     [-68, -18, 13, 0.28],
     [-38, 38, 14, 0.28],
     [W + 60, 6, 14, 0.28],
     [W + 38, 36, 13, 0.3],
-    [8, H + 36, 16, 0.25],
-    [40, H + 40, 18, 0.25],
+    [X + 8, H + 36, 16, 0.25],
+    [X + 40, H + 40, 18, 0.25],
   ];
   return spots.map(([x, z, radius, scaleY]) => ({ x, z, radius, scaleY }));
 }
@@ -980,7 +993,8 @@ function streetTrees(map: DistrictMap, g: Grid, trees: BackdropTree[], seeds: { 
       trees.push({ x, y: 0, z, seed });
     }
   }
-  const road = map.tiles.flatMap((row, y) => (row[0] === 'road' || row[0] === 'pavement' ? [y] : []));
+  const column = westRoadColumn(map);
+  const road = column < 0 ? [] : map.tiles.flatMap((row, y) => (row[column] === 'road' || row[column] === 'pavement' ? [y] : []));
   if (road.length === 0) return;
   // Past the lamps, down both pavements of the road running on west.
   for (const z of [road[0]! + 0.5, road[road.length - 1]! + 0.5]) {

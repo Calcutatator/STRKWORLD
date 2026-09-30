@@ -2,7 +2,7 @@
 import { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorldEvents } from '@strkworld/shared';
+import { SANDBOX_AREA, type WorldEvents } from '@strkworld/shared';
 import { FakePrivacyOperations, mapWalletError, PrivacyError, type WalletSession } from '@strkworld/privacy';
 import { createEventBus } from '../bus/event-bus.js';
 import { createConnectFlow } from '../connect/connect-machine.js';
@@ -25,6 +25,7 @@ import {
   debugBank,
   debugConnectState,
   debugFailure,
+  debugFootball,
   debugGate,
   debugPlazaShells,
   debugSandboxBurst,
@@ -146,7 +147,7 @@ describe('the runtime opt-in', () => {
     debugWalletSession({ phase: 'connecting' });
     debugVisit({ name: 'outside' }, { name: 'locked', building: 'vault', reason: 'coming-soon' });
     debugBank({ step: 'mode', mode: 'unshield', from: 'shield' });
-    debugSandboxBurst({ x: 60, y: 10 });
+    debugSandboxBurst({ x: SANDBOX_AREA.x + 6, y: 10 });
     debugGate('checking');
     window.dispatchEvent(new Event('pagehide'));
     await tick(10_000);
@@ -562,18 +563,44 @@ describe('what it captures', () => {
     expect(JSON.stringify(entries())).not.toContain(address);
   });
 
+  it('records the football by side at most: a kick, a goal\'s side and full time\'s winner (D-078)', async () => {
+    const { entries, tick } = harness();
+    debugFootball({ event: 'kick' });
+    debugFootball({ event: 'goal', side: 'west' });
+    debugFootball({ event: 'full-time', winner: 'east' });
+    debugFootball({ event: 'goal', side: 'north' } as never);
+    debugFootball({ event: 'goal', side: 'west', scorer: '0123456789abcdef' } as never);
+    debugFootball({ event: 'kick', x: 448, y: 480 } as never);
+    debugFootball({ event: 'score', west: 5 } as never);
+    debugFootball(Object.defineProperty({ event: 'goal' }, 'side', { get: () => 'west' }) as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('football.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'football.kick', ''],
+      ['info', 'football.goal', 'side=west'],
+      ['info', 'football.full-time', 'winner=east'],
+      ['info', 'football.goal', 'side=west'],
+      ['info', 'football.kick', ''],
+    ]);
+    const surface = JSON.stringify(entries());
+    expect(surface).not.toContain('0123456789abcdef');
+    expect(surface).not.toContain('448');
+  });
+
   it('records a sandbox burst by its tile, and nothing but a tile inside the square (D-071)', async () => {
     const { entries, tick } = harness();
-    debugSandboxBurst({ x: 60, y: 10 });
-    debugSandboxBurst({ x: 60, y: 10, gameId: '0123456789abcdef' } as never);
+    // A tile six in from the square's gate, wherever the street puts the square (D-078).
+    const x = SANDBOX_AREA.x + 6;
+    debugSandboxBurst({ x, y: 10 });
+    debugSandboxBurst({ x, y: 10, gameId: '0123456789abcdef' } as never);
     debugSandboxBurst({ x: 10, y: 10 });
-    debugSandboxBurst({ x: 60.5, y: 10 });
-    debugSandboxBurst({ x: '60', y: '10' } as never);
-    debugSandboxBurst(Object.defineProperty({ y: 10 }, 'x', { get: () => 60 }) as never);
+    debugSandboxBurst({ x: SANDBOX_AREA.x - 1, y: 10 });
+    debugSandboxBurst({ x: x + 0.5, y: 10 });
+    debugSandboxBurst({ x: String(x), y: '10' } as never);
+    debugSandboxBurst(Object.defineProperty({ y: 10 }, 'x', { get: () => x }) as never);
     await tick();
     expect(entries().filter((entry) => entry.event.startsWith('sandbox.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
-      ['info', 'sandbox.burst', 'x=60 y=10'],
-      ['info', 'sandbox.burst', 'x=60 y=10'],
+      ['info', 'sandbox.burst', `x=${x} y=10`],
+      ['info', 'sandbox.burst', `x=${x} y=10`],
     ]);
     expect(JSON.stringify(entries())).not.toContain('0123456789abcdef');
   });

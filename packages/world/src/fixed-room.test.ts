@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type EventBus, type ShellEvents, type WorldEvents } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
   BRIDGE_ROOM_DEFINITION,
@@ -1751,7 +1751,8 @@ describe('fixed room floors (the Exchange tower)', () => {
       spawn: { x: 5, y: 3 },
       stations: [],
       lifts: [{ to: 'degen', x: 5, y: 4, width: 1, height: 1, arrival: { x: 5, y: 3 } }],
-      rooftop: { x: 12, y: 5, height: EXCHANGE_ROOF_HEIGHT },
+      // Over the tower's street footprint, the street's tiles 12-18 (D-078).
+      rooftop: { x: STREET_ORIGIN_X + 12, y: 5, height: EXCHANGE_ROOF_HEIGHT },
     });
     expect(EXCHANGE_DEGEN_STATION).toBe('exchange:degen');
     // Only the Exchange has floors, and every authored piece is frozen.
@@ -1769,7 +1770,7 @@ describe('fixed room floors (the Exchange tower)', () => {
     expect(fixedRoomLiftAt(ground, 3, 1)).toBeNull();
     const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
     expect(roof.exit).toBeNull();
-    expect(roof.rooftop).toEqual({ x: 12, y: 5, height: EXCHANGE_ROOF_HEIGHT });
+    expect(roof.rooftop).toEqual({ x: STREET_ORIGIN_X + 12, y: 5, height: EXCHANGE_ROOF_HEIGHT });
     expect(roof.tiles.map((row) => row.join(' '))).toEqual([
       'wall wall wall wall wall wall wall',
       'wall floor floor floor floor floor wall',

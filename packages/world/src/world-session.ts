@@ -88,6 +88,14 @@ import {
   type SandboxAim,
   type SandboxHeights,
 } from './sandbox.js';
+import {
+  normalizeFootballFrame,
+  normalizeFootballMoment,
+  type FootballChannel,
+  type FootballFrame,
+  type FootballMoment,
+} from './football-channel.js';
+import { withinKickRange } from './map/pitch.js';
 
 /**
  * The World's gameplay session, independent of any renderer (D-059).
@@ -171,6 +179,13 @@ export interface WorldSessionView {
   setPlazaHighlight?(station: StationId | null): void;
   /** The monument's pre-formatted figures; a null part is drawn as "…". */
   setPlazaStats?(stats: PlazaStatsPresentation): void;
+  // The football pitch (D-078). Optional: a view without the pitch ignores them.
+  /** The ball to draw this frame and the scoreboard, or no ball. */
+  setFootball?(frame: FootballFrame | null): void;
+  /** Show "E · KICK" over the ball: the player is close enough to kick it. */
+  setKickPrompt?(visible: boolean): void;
+  /** A goal or full time: the pitch celebrates it. */
+  footballMoment?(moment: FootballMoment): void;
 }
 
 interface OutfitKeyEvent {
@@ -188,7 +203,8 @@ export interface WorldKeyboard extends KeyboardLike {
   readonly sprinting: boolean;
   /**
    * `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a
-   * block (D-060), or uses a Privacy Plaza station (D-076).
+   * block (D-060), uses a Privacy Plaza station (D-076), or kicks the ball
+   * (D-078).
    */
   on(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
@@ -203,6 +219,8 @@ export interface WorldSessionOptions {
   readonly onTileChanged?: (tile: { x: number; y: number }) => void;
   /** The shared block sandbox (D-060); absent means no sandbox interaction. */
   readonly sandbox?: SandboxChannel;
+  /** The shared football (D-078); absent means no ball is drawn or kicked. */
+  readonly football?: FootballChannel;
   /**
    * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its
    * door opens onto its room. Absent or false, it is D-007's locked facade.
@@ -350,6 +368,13 @@ class Session implements WorldSession {
   private aim: SandboxAim | null = null;
   private plaza?: PlazaController;
   private plazaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  private readonly football?: FootballChannel;
+  private stopFootballMoments?: () => void;
+  private footballKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** Whether "E · KICK" shows: exactly when a kick would reach the ball. */
+  private kickPrompt = false;
+  /** Whether the view was last given a ball, so a missing one is cleared once. */
+  private ballShown = false;
   /** D-077: the Shell opened the Vault, so its door and room exist. */
   private readonly vaultOpen: boolean;
 
@@ -359,6 +384,7 @@ class Session implements WorldSession {
     this.config = options.config;
     this.onTileChanged = options.onTileChanged;
     this.sandbox = options.sandbox;
+    this.football = options.football;
     this.vaultOpen = options.vaultOpen === true;
     try {
       this.map = createStreetMap({ vaultOpen: this.vaultOpen });
@@ -377,6 +403,7 @@ class Session implements WorldSession {
       this.createInteriorVisuals();
       this.createSandbox();
       this.createPlaza();
+      this.createFootball();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -447,6 +474,8 @@ class Session implements WorldSession {
       if (this.cleanedUp) return;
       this.reportTile();
     });
+    // A door may just have taken the player inside, where there is no ball.
+    if (!this.cleanedUp && this.area === 'street') this.presentFootball();
   }
 
   destroy(): void {
@@ -504,6 +533,15 @@ class Session implements WorldSession {
     if (plazaKey && this.keyboard) {
       const keyboard = this.keyboard;
       attempt(() => keyboard.off('keydown-E', plazaKey));
+    }
+    const stopFootballMoments = this.stopFootballMoments;
+    this.stopFootballMoments = undefined;
+    if (stopFootballMoments) attempt(stopFootballMoments);
+    const footballKey = this.footballKey;
+    this.footballKey = undefined;
+    if (footballKey && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('keydown-E', footballKey));
     }
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
@@ -967,9 +1005,10 @@ class Session implements WorldSession {
   private teleport(position: { readonly x: number; readonly y: number }): void {
     this.position = { x: position.x, y: position.y };
     this.view.setPlayerPosition(this.position, true);
-    // Room spawns and street return tiles are never in the sandbox.
+    // Room spawns and street return tiles are never in the sandbox, nor by the ball.
     this.setElevation(0);
     this.setAim(null);
+    this.setKickPrompt(false);
   }
 
   // -- block sandbox (D-060) -------------------------------------------------
@@ -1035,6 +1074,58 @@ class Session implements WorldSession {
     };
     keyboard.on('keydown-E', onKey);
     this.plazaKey = onKey;
+  }
+
+  // -- the football pitch (D-078) ---------------------------------------------
+
+  /**
+   * The ball, drawn where the Shell's channel says each frame, its
+   * celebrations, and E to kick it while "E · KICK" shows. The World never
+   * moves the ball: the authority does.
+   */
+  private createFootball(): void {
+    const channel = this.football;
+    if (!channel) return;
+    if (typeof channel.subscribeMoments === 'function') {
+      this.stopFootballMoments = channel.subscribeMoments((value) => {
+        if (this.cleanedUp) return;
+        const moment = normalizeFootballMoment(value);
+        if (moment) this.view.footballMoment?.(moment);
+      });
+    }
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat) return;
+      if (this.inputGate.suspended || this.area !== 'street') return;
+      // The prompt shows exactly when a kick would reach the ball.
+      if (!this.kickPrompt) return;
+      channel.kick();
+    };
+    keyboard.on('keydown-E', onKey);
+    this.footballKey = onKey;
+  }
+
+  /** Hand the view this frame's ball, and show "E · KICK" while a kick would reach it. */
+  private presentFootball(): void {
+    const channel = this.football;
+    if (!channel) return;
+    let frame: FootballFrame | null = null;
+    try {
+      frame = normalizeFootballFrame(channel.frame());
+    } catch {
+      // A failing channel draws no ball; the street carries on.
+      frame = null;
+    }
+    if (frame || this.ballShown) this.view.setFootball?.(frame);
+    this.ballShown = frame !== null;
+    this.setKickPrompt(frame !== null && frame.phase === 'live' && withinKickRange(this.position, frame, TILE_SIZE));
+  }
+
+  private setKickPrompt(visible: boolean): void {
+    if (visible === this.kickPrompt) return;
+    this.kickPrompt = visible;
+    this.view.setKickPrompt?.(visible);
   }
 
   private applySandbox(value: SandboxSnapshot): void {

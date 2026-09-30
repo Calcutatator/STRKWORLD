@@ -17,6 +17,7 @@ import type { PlayerMotion, WorldRect, WorldSessionView } from '../world-session
 import { isSandboxTile } from '../sandbox-channel.js';
 import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights } from '../sandbox.js';
 import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
+import { buildFootball, type FootballView } from './football-view.js';
 import { avatarFigureHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
@@ -63,6 +64,7 @@ export interface PresenterOptions {
   /**
    * Whether the player asked for less motion (`prefers-reduced-motion`),
    * read at each sandbox burst: its blocks then pop out instead of flying.
+   * The football's GOAL! and FULL TIME read it too, and hold still (D-078).
    */
   readonly reducedMotion?: () => boolean;
   /**
@@ -179,6 +181,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const sandbox: SandboxView = buildSandbox({ reducedMotion: options.reducedMotion });
   root.add(sandbox.group);
   disposers.push(() => sandbox.dispose());
+  // The football (D-078): the shared ball, its prompt and the pitch's moments.
+  const football: FootballView = buildFootball({ labels: options.labels, reducedMotion: options.reducedMotion });
+  root.add(football.group);
+  disposers.push(() => football.dispose());
   const carried = createCarriedBlock(null);
   avatar.object.add(carried.object);
   const placeCarried = (): void => {
@@ -237,6 +243,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
     // The plaza's prompt and figures belong to the session that set them (D-076).
     street.plaza?.setHighlight(null);
     street.plaza?.setStats(EMPTY_PLAZA_STATS);
+    // So do the ball, its prompt, the pitch's moments and the scoreboard (D-078).
+    football.group.visible = true;
+    football.reset();
+    street.pitch?.setScore(0, 0);
     elevationTarget = 0;
     elevationShown = 0;
     fallSpeed = 0;
@@ -315,6 +325,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
           streetVisible = visible;
           street.ground.visible = visible;
           sandbox.group.visible = visible;
+          football.group.visible = visible;
         },
         setDoorsVisible(visible) {
           if (!live()) return;
@@ -400,6 +411,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
           if (!live()) return;
           street.plaza?.setStats(stats);
         },
+        setFootball(frame) {
+          if (!live()) return;
+          football.setBall(frame);
+          if (frame) street.pitch?.setScore(frame.west, frame.east);
+        },
+        setKickPrompt(visible) {
+          if (!live()) return;
+          football.setPrompt(visible);
+        },
+        footballMoment(moment) {
+          if (!live()) return;
+          football.celebrate(moment);
+        },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;
           cameraBounds = {
@@ -454,6 +478,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (streetVisible) {
         street.update(dt);
         sandbox.update(dt);
+        football.update(dt);
       }
       if (visibleRoom) rooms.get(visibleRoom)?.update(dt);
       if (studioVisible) studio.update(dt);

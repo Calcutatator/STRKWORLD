@@ -13,6 +13,8 @@
  *      state or onto the wire.
  *   5. The block sandbox (D-060) is anonymous: no column, drop or sandbox
  *      patch names a player.
+ *   6. So is the football (D-078): the ball, the score and the phase, and a
+ *      goal cue naming a side, never a player.
  *
  * The vocabulary they scan for lives in `testing/forbidden-vocabulary.json`
  * rather than in this file, because check 5 of `scripts/check-invariants.sh`
@@ -25,6 +27,7 @@ import { Encoder, Metadata, Reflection } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
+  type FootballSnapshot,
   type GameId,
   type Position,
   type PresenceState,
@@ -33,6 +36,7 @@ import {
 } from '@strkworld/shared';
 import {
   DEFAULT_ROOM_CONFIG,
+  FOOTBALL_MIN_KICK_INTERVAL_MS,
   SANDBOX_MIN_ACTION_INTERVAL_MS,
   resolveRoomConfig,
   type PresenceRoomConfig,
@@ -40,6 +44,7 @@ import {
 import { LobbyPresence } from './presence';
 import { PresenceRoom, definePresenceRoom } from './room';
 import {
+  FootballEntry,
   LobbyState,
   PositionSchema,
   PresenceEntry,
@@ -73,6 +78,18 @@ const FROZEN_SANDBOX_COLUMN_FIELDS: Record<keyof SandboxColumn, true> = {
   x: true,
   y: true,
   colours: true,
+};
+
+/** D-078's ball and scoreboard, likewise: the frozen snapshot, field for field. */
+const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
+  tick: true,
+  x: true,
+  y: true,
+  vx: true,
+  vy: true,
+  west: true,
+  east: true,
+  phase: true,
 };
 
 function fieldNames(klass: unknown): string[] {
@@ -136,12 +153,30 @@ describe('the schema is the enforcement point', () => {
     );
   });
 
-  it('has two fields at the root: interest-filtered presence and the shared sandbox', () => {
-    expect(fieldNames(LobbyState)).toEqual(['peers', 'sandbox']);
-    const fields = Metadata.getFields(LobbyState) as Record<string, Record<string, unknown>>;
+  it('has three fields at the root: interest-filtered presence, the shared sandbox and the shared ball', () => {
+    expect(fieldNames(LobbyState)).toEqual(['football', 'peers', 'sandbox']);
+    const fields = Metadata.getFields(LobbyState) as Record<string, unknown>;
     expect(fields['peers']).toEqual({ map: PresenceEntry, view: true });
     // D-060: everyone shares one sandbox, so it is deliberately not a view.
     expect(fields['sandbox']).toEqual({ map: SandboxColumnEntry });
+    // D-078: and one ball, likewise.
+    expect(fields['football']).toBe(FootballEntry);
+  });
+
+  it('carries exactly the frozen FootballSnapshot field set, in fields that hold numbers only', () => {
+    expect(fieldNames(FootballEntry)).toEqual(Object.keys(FROZEN_FOOTBALL_FIELDS).sort());
+    const fields = Metadata.getFields(FootballEntry) as Record<string, unknown>;
+    // Whole numbers throughout: the ball in 64ths of a pixel, the score and phase in bytes.
+    expect(fields).toEqual({
+      tick: 'uint32',
+      x: 'int32',
+      y: 'int32',
+      vx: 'int32',
+      vy: 'int32',
+      west: 'uint8',
+      east: 'uint8',
+      phase: 'uint8',
+    });
   });
 
   it('carries exactly the frozen SandboxColumn field set', () => {
@@ -202,6 +237,8 @@ describe('a client cannot set the room configuration', () => {
     sandboxSlowSpawnIntervalMs: 50,
     sandboxFastSpawnLimit: 900,
     sandboxActionIntervalMs: 0,
+    // D-078: nor may one switch the kick floor off.
+    footballKickIntervalMs: 0,
   };
 
   /**
@@ -210,7 +247,8 @@ describe('a client cannot set the room configuration', () => {
    */
   function armedDropDelays(room: PresenceRoom): number[] {
     const probe = { sessionId: 'probe', send: () => undefined } as unknown as Client;
-    room.onJoin(probe, { x: 0, y: 0 });
+    // On the street by the sandbox, far from the pitch, so no ball step is armed (D-078).
+    room.onJoin(probe, { x: SANDBOX_AREA.x * 32 - 48, y: 0 });
     const timers = (room.clock as unknown as { delayed: Array<{ active: boolean; time: number }> })
       .delayed;
     return timers.filter((timer) => timer.active).map((timer) => timer.time);
@@ -229,6 +267,7 @@ describe('a client cannot set the room configuration', () => {
     expect(armedDropDelays(room)).toEqual([DEFAULT_ROOM_CONFIG.sandboxSpawnIntervalMs]);
     expect(trustedConfigOf(room)).toEqual(DEFAULT_ROOM_CONFIG);
     expect(trustedConfigOf(room).sandboxActionIntervalMs).toBe(SANDBOX_MIN_ACTION_INTERVAL_MS);
+    expect(trustedConfigOf(room).footballKickIntervalMs).toBe(FOOTBALL_MIN_KICK_INTERVAL_MS);
   });
 
   it('a configured room uses the operator config, not hostile options', () => {
@@ -657,5 +696,59 @@ describe('the block sandbox is anonymous (D-060)', () => {
     const wire = observer.patch();
     expect(wire).not.toContain(id);
     expect(JSON.stringify(observer.read())).not.toContain(id);
+  });
+});
+
+describe('the football is anonymous (D-078)', () => {
+  /** What an observer of the shared state decodes, and the raw bytes of each patch. */
+  function observe(encoder: Encoder): { football: () => Record<string, unknown>; patch: () => string } {
+    const decoder = Reflection.decode(Reflection.encode(encoder));
+    decoder.decode(encoder.encodeAll());
+    return {
+      football: () => (decoder.state as unknown as { football: { toJSON(): Record<string, unknown> } }).football.toJSON(),
+      patch: () => {
+        const bytes = encoder.encode();
+        decoder.decode(bytes);
+        encoder.discardChanges();
+        return Buffer.from(bytes).toString('latin1');
+      },
+    };
+  }
+
+  it('names no player in the ball, the score or the phase, whoever kicks and pushes it', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 0 });
+    const encoder = new Encoder(registry.state);
+    const observer = observe(encoder);
+    const random = mulberry32(78);
+    const centre = { x: 14 * 32, y: 15 * 32 };
+    const ids = ['a', 'b', 'c'].map((key, n) => join(registry, key, centre.x - 30 + n * 20, centre.y + 10));
+    let now = 1000;
+    registry.keepFootballRunning(now);
+    const attempts = vocabulary.smuggleAttempts;
+    for (let step = 0; step < 600; step += 1) {
+      now += 40;
+      const key = ['a', 'b', 'c'][Math.floor(random() * 3)] as string;
+      const ball = registry.footballSnapshot();
+      // Wander round the ball, sometimes with a hostile payload on the move.
+      registry.move(
+        key,
+        {
+          x: ball.x + (random() - 0.5) * 60,
+          y: ball.y + (random() - 0.5) * 60,
+          facing: random() < 0.2 ? attempts[step % attempts.length] : 'right',
+        },
+        now,
+      );
+      if (random() < 0.3) registry.kickBall(key, now);
+      registry.footballTick(now);
+      const wire = observer.patch();
+      expect(findLeak(wire), `step ${step}`).toBeNull();
+      for (const id of ids) expect(wire).not.toContain(id);
+    }
+    const seen = observer.football();
+    expect(Object.keys(seen).sort()).toEqual(Object.keys(FROZEN_FOOTBALL_FIELDS).sort());
+    expect(JSON.stringify(seen)).not.toMatch(/[a-z]{3,}"?:"[a-z]/);
+    expect(findLeak(JSON.stringify(registry.state))).toBeNull();
+    expect(findLeak(wireOf(new Encoder(registry.state)))).toBeNull();
   });
 });

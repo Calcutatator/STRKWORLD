@@ -25,7 +25,8 @@ export type BuildingId =
    */
   | 'vault'
   /**
-   * D-076: the Privacy Plaza, an open square south of the road's west end.
+   * D-076: the Privacy Plaza, an open square south of the street's west end,
+   * beside D-078's football pitch.
    * Not a building: no door, no room, no route and no money. It is an id only
    * so its two stations share the station vocabulary (`plaza:monument`,
    * `plaza:shells`), and `BUILDINGS` below leaves it out.
@@ -143,6 +144,38 @@ export interface PresenceState {
 }
 
 // ---------------------------------------------------------------------------
+// The district's columns — D-078
+// ---------------------------------------------------------------------------
+//
+// The road runs between two squares of the same size: the football pitch at
+// its west end and the block sandbox at its east end. The pitch square came
+// second, so the street it widened moved east behind one constant.
+
+/** A street tile rectangle, in tiles. */
+export interface TileRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * D-078: street tile rectangle of the football pitch square, in tiles: as
+ * big as the sandbox's, at the other end of the road.
+ */
+export const PITCH_AREA: TileRect = Object.freeze({ x: 0, y: 0, width: 28, height: 28 });
+
+/**
+ * D-078: the column where the protocol street begins. The pitch square's
+ * fence stands one tile east of it, as the sandbox's wall stands one tile west
+ * of the sandbox, and the street starts one tile past that fence. Everything
+ * east of the square — buildings, doors, the spawn, the Studio path, the
+ * Privacy Plaza and the sandbox — is laid out from this column, so it is the
+ * one constant the district widened by.
+ */
+export const STREET_ORIGIN_X = PITCH_AREA.x + PITCH_AREA.width + 1;
+
+// ---------------------------------------------------------------------------
 // The block sandbox — D-060
 // ---------------------------------------------------------------------------
 //
@@ -151,9 +184,9 @@ export interface PresenceState {
 // unrelated to money. The lobby stores it so every player sees the same
 // blocks; nothing here identifies a player or a financial action.
 
-/** Street tile rectangle of the sandbox, in tiles. */
+/** Street tile rectangle of the sandbox, in tiles. Laid out from `STREET_ORIGIN_X` (D-078). */
 export const SANDBOX_AREA: Readonly<{ x: number; y: number; width: number; height: number }> =
-  Object.freeze({ x: 54, y: 0, width: 28, height: 28 });
+  Object.freeze({ x: STREET_ORIGIN_X + 54, y: 0, width: 28, height: 28 });
 
 /**
  * The way in: the tiles just inside the square's gate, where the road and
@@ -165,7 +198,7 @@ export const SANDBOX_AREA: Readonly<{ x: number; y: number; width: number; heigh
  * `height` tiles wide.
  */
 export const SANDBOX_ENTRANCE: Readonly<{ x: number; y: number; width: number; height: number }> =
-  Object.freeze({ x: 54, y: 11, width: 3, height: 8 });
+  Object.freeze({ x: SANDBOX_AREA.x, y: 11, width: 3, height: 8 });
 
 /** Tallest stack a column may reach. The sky is effectively open. */
 export const SANDBOX_MAX_HEIGHT = 256;
@@ -213,6 +246,79 @@ export interface SandboxSnapshot {
   columns: readonly SandboxColumn[];
   /** The colour this client carries, or null. */
   carrying: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// The football pitch — D-078
+// ---------------------------------------------------------------------------
+//
+// One shared ball on a pitch at the west end of the road. The lobby is its
+// authority and simulates it on a fixed tick while anyone is near; its whole
+// state is the ball, the score and the phase of play — anonymous, cosmetic and
+// unrelated to money. No kick, goal or score names a player, and there are no
+// per-player statistics anywhere.
+
+/**
+ * The field, in street tiles: the rectangle inside the touchlines and the goal
+ * lines. The long axis runs east-west, so the north-facing camera sees it as a
+ * broadcast does. The ball stays inside it, or inside a goal.
+ */
+export const PITCH_FIELD: TileRect = Object.freeze({ x: 3, y: 7, width: 22, height: 16 });
+
+/**
+ * Each goal, in tiles: `width` between the posts' centres, centred on the
+ * field's middle, and `depth` of net behind the goal line. The posts stand
+ * just behind the line, their faces on it (`FOOTBALL_POST_RADIUS`), so the
+ * frame stands wholly on the goal's solid footing.
+ */
+export const PITCH_GOAL: Readonly<{ width: number; depth: number }> = Object.freeze({ width: 4, depth: 1 });
+
+/** The ball's radius, in tiles. */
+export const FOOTBALL_BALL_RADIUS = 0.25;
+
+/** A goal post's radius, in tiles; its centre stands this far behind the goal line. */
+export const FOOTBALL_POST_RADIUS = 0.1;
+
+/** The furthest a player's centre may be from the ball's centre and kick it, in tiles. */
+export const FOOTBALL_KICK_RANGE = 1.3;
+
+/** The first side to this many goals wins, and the score starts again from 0–0. */
+export const FOOTBALL_WIN_SCORE = 5;
+
+/** One step of the ball's simulation, in ms: 25 steps a second. */
+export const FOOTBALL_TICK_MS = 40;
+
+/**
+ * A team, named for the goal it defends: West defends the west goal, so a
+ * ball into the east goal is West's.
+ */
+export type FootballSide = 'west' | 'east';
+
+/**
+ * `live`: in play. `goal`: a goal was just scored, the ball is dead and the
+ * pitch celebrates. `full-time`: a side reached `FOOTBALL_WIN_SCORE`; then the
+ * score goes back to 0–0 and play kicks off again.
+ */
+export type FootballPhase = 'live' | 'goal' | 'full-time';
+
+/** The ball and the scoreboard, as the authority holds them. */
+export interface FootballSnapshot {
+  /** The simulation step this is, counted in `FOOTBALL_TICK_MS` from the authority's start. */
+  readonly tick: number;
+  /** The ball's centre, in World pixels. */
+  readonly x: number;
+  readonly y: number;
+  /** The ball's velocity, in World pixels per second. */
+  readonly vx: number;
+  readonly vy: number;
+  readonly west: number;
+  readonly east: number;
+  readonly phase: FootballPhase;
+}
+
+/** A goal, as broadcast: the side that scored, and nothing else. */
+export interface FootballGoal {
+  readonly side: FootballSide;
 }
 
 // ---------------------------------------------------------------------------

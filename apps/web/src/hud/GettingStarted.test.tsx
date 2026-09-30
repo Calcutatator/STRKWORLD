@@ -39,12 +39,14 @@ describe('Getting started card', () => {
     expect(camera).not.toContain('addEventListener');
     expect(camera).not.toMatch(/'(wheel|pointerdown|pointermove)'/);
 
-    // E belongs to the sandbox and the Privacy Plaza on the street (D-076);
-    // F follows the avatar everywhere.
+    // E belongs to the sandbox, the Privacy Plaza (D-076) and the football
+    // pitch (D-078) on the street; F follows the avatar everywhere.
     const session = source('../../../../packages/world/src/world-session.ts');
     expect(session).toContain("if (this.inputGate.suspended || this.area !== 'street') return;");
     expect(session).toContain('this.plaza?.activate();');
+    expect(session).toContain('channel.kick();');
     expect(COPY.guide.controls.find(({ input }) => input === 'E')?.effect).toMatch(/Privacy Plaza/);
+    expect(COPY.guide.controls.find(({ input }) => input === 'E')?.effect).toContain('E · KICK');
 
     // Escape closes a counter or Menu Mode (React owns it, not the World).
     const visits = source('../visits/VisitLayer.tsx');
@@ -66,6 +68,8 @@ describe('Getting started card', () => {
     expect(open).toContain(COPY.guide.title);
     expect(open).toContain(COPY.guide.sandbox);
     expect(open).toContain(COPY.guide.plaza.replace(/'/g, '&#x27;'));
+    expect(open).toContain(COPY.guide.pitchTitle);
+    expect(open).toContain(COPY.guide.pitch);
     expect(open).toContain(COPY.guide.dismiss);
     for (const step of guideRouteSteps()) expect(open).toContain(step);
   });

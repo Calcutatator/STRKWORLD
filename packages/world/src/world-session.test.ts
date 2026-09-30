@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AvatarSpriteKey, BuildingId, ShellEvents, WorldEvents } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type AvatarSpriteKey, type BuildingId, type ShellEvents, type WorldEvents } from '@strkworld/shared';
 import { pairedAvatarSprite } from './avatar-state.js';
 import {
   AVATAR_STUDIO_DEFINITION,
@@ -304,6 +304,9 @@ function createRecordingView(journal: Journal) {
     setSandboxAim: (aim) => record('setSandboxAim', [aim]),
     setPlazaHighlight: (station) => record('setPlazaHighlight', [station]),
     setPlazaStats: (stats) => record('setPlazaStats', [stats]),
+    setFootball: (frame) => record('setFootball', [frame]),
+    setKickPrompt: (visible) => record('setKickPrompt', [visible]),
+    footballMoment: (moment) => record('footballMoment', [moment]),
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>
@@ -2080,10 +2083,10 @@ describe('WorldSession: the Exchange tower', () => {
     expect(session.area).toBe('exchange');
     expect(session.player).toEqual(arrival);
     expect(session.elevation).toBe(EXCHANGE_ROOF_HEIGHT);
-    // Standing over the tower's own street footprint (tiles 12-18, 5-10).
+    // Standing over the tower's own street footprint (the street's tiles 12-18, 5-10; D-078).
     const tile = worldToTile(arrival.x, arrival.y);
-    expect(tile.x).toBeGreaterThanOrEqual(12);
-    expect(tile.x).toBeLessThanOrEqual(18);
+    expect(tile.x).toBeGreaterThanOrEqual(STREET_ORIGIN_X + 12);
+    expect(tile.x).toBeLessThanOrEqual(STREET_ORIGIN_X + 18);
     expect(tile.y).toBeGreaterThanOrEqual(5);
     expect(tile.y).toBeLessThanOrEqual(10);
     expect(world.view.calls.map(({ method, args }) => [method, ...args])).toEqual([

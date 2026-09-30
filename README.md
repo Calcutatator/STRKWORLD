@@ -6,9 +6,10 @@ Walk around a shared pseudonymous world, step into a building, and use a real
 privacy-preserving protocol with real funds on Starknet mainnet. One balance,
 one world, several protocols — with the rule that a financial building cannot
 open unless it has an approved private execution path. Where the road ends, a
-shared block sandbox lets everyone build together (D-060); at its other end
-the Privacy Plaza, which moves no money, shows the pool's live public figures
-and a shell game about hidden notes (D-076).
+shared block sandbox lets everyone build together (D-060); at its other end a
+football pitch of the same size has one shared ball for drop-in matches
+(D-078); and beside the pitch the Privacy Plaza, which moves no money, shows
+the pool's live public figures and a shell game about hidden notes (D-076).
 
 Built on [STRK20](https://strk20-by-example.org), Starknet's confidential
 token standard.
@@ -37,11 +38,18 @@ for the accepted boundaries.
 | The Bridge | Any chain → STRK → the pool. Arrival is **public** | Manual recovery/deposit flow implemented offline | New production quotes stay locked without the fee-aware public-shield planner |
 | The Vault | Vesu lending from the player's STRK20 shadow account (D-077) | Room, counter and Wallet API path implemented; locked unless a build switches it on | No project Cairo: the canonical shadow-account anonymizer. Its first live supply and redeem is the probe of wallet support |
 
-The Privacy Plaza (D-076) is not a building: an open square below the road's
-west end with two stations used with E. The monument shows public, pool-wide
-aggregates (accounts registered, deposits in the last 24 hours, what the pool
-holds) from the backend's cache, and "Where's the note?" is a client-only
-shell game. No money, no wallet and no route are involved.
+The Privacy Plaza (D-076) is not a building: an open square below the
+street's west end with two stations used with E. The monument shows public,
+pool-wide aggregates (accounts registered, deposits in the last 24 hours, what
+the pool holds) from the backend's cache, and "Where's the note?" is a
+client-only shell game. No money, no wallet and no route are involved.
+
+The football pitch (D-078) is not a building either: the road's west end
+runs through a gate onto a walkway round a broadcast-style pitch with a goal
+at each end. The lobby simulates one shared ball on a 40 ms tick while anyone
+is near; walking into it dribbles it, E kicks it away from you, and the first
+side to 5 wins before the score starts again from 0–0. No kick, goal or score
+names anyone, and there are no player statistics.
 
 ---
 

@@ -13,12 +13,20 @@ import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/s
 import {
   SANDBOX_AREA,
   SANDBOX_MAX_HEIGHT,
+  STREET_ORIGIN_X,
   type SandboxSnapshot,
   type SandboxTile,
 } from '@strkworld/shared';
 import { MESSAGE, SANDBOX_CLIENT_ACTION_INTERVAL_MS, SERVER_MESSAGE } from './config';
 import { LobbyClient, type PeerSnapshot } from './client';
 import type { LobbyState } from './state';
+
+/**
+ * D-078 moved the street, the sandbox with it, east by the pitch square. The
+ * tiles here keep D-060's numbering: `S(n)` is the street's column `n`, so the
+ * square is `S(54)` to `S(81)`, and a comment's "tile 62" is `S(62)`.
+ */
+const S = (column: number): number => STREET_ORIGIN_X + column;
 
 const OWN = '0123456789abcdef';
 const PEER = 'fedcba9876543210';
@@ -116,9 +124,9 @@ describe('sandbox()', () => {
   it('reads every validated column, sorted by (y, x), and the own carried colour', async () => {
     const joined = fakeRoom();
     const sandbox = joined.state.sandbox as Map<string, unknown>;
-    sandbox.set('70,3', column(70, 3, [1]));
-    sandbox.set('60,9', column(60, 9, [2, 3]));
-    sandbox.set('65,3', column(65, 3, [4]));
+    sandbox.set(`${S(70)},3`, column(S(70), 3, [1]));
+    sandbox.set(`${S(60)},9`, column(S(60), 9, [2, 3]));
+    sandbox.set(`${S(65)},3`, column(S(65), 3, [4]));
     joined.state.peers.set(OWN, presence(OWN, 5));
     joined.state.peers.set(PEER, presence(PEER, 6));
     const client = await connectedTo(joined);
@@ -126,9 +134,9 @@ describe('sandbox()', () => {
     const snapshot = client.sandbox();
     expect(snapshot).toEqual({
       columns: [
-        { x: 65, y: 3, colours: [4] },
-        { x: 70, y: 3, colours: [1] },
-        { x: 60, y: 9, colours: [2, 3] },
+        { x: S(65), y: 3, colours: [4] },
+        { x: S(70), y: 3, colours: [1] },
+        { x: S(60), y: 9, colours: [2, 3] },
       ],
       carrying: 5,
     });
@@ -138,7 +146,7 @@ describe('sandbox()', () => {
     expect(Object.isFrozen(snapshot.columns[0]?.colours)).toBe(true);
     // The same object while nothing changes; a new one when something does.
     expect(client.sandbox()).toBe(snapshot);
-    sandbox.set('55,0', column(55, 0, [7]));
+    sandbox.set(`${S(55)},0`, column(S(55), 0, [7]));
     expect(client.sandbox()).not.toBe(snapshot);
     expect(snapshot.columns).toHaveLength(3);
   });
@@ -147,33 +155,33 @@ describe('sandbox()', () => {
     const joined = fakeRoom();
     const sandbox = joined.state.sandbox as Map<string, unknown>;
     const throwing = {
-      x: 71,
+      x: S(71),
       y: 1,
       get colours(): unknown {
         throw new Error('hostile decoded state');
       },
     };
-    sandbox.set('60,1', column(60, 1, [1, 2]));
-    sandbox.set('wrong-key', column(61, 2, [1]));
-    sandbox.set('62,1', column(61, 1, [1])); // key names another tile
+    sandbox.set(`${S(60)},1`, column(S(60), 1, [1, 2]));
+    sandbox.set('wrong-key', column(S(61), 2, [1]));
+    sandbox.set(`${S(62)},1`, column(S(61), 1, [1])); // key names another tile
     sandbox.set(`${LEFT - 1},1`, column(LEFT - 1, 1, [1]));
     sandbox.set(`${LEFT},${TOP + SANDBOX_AREA.height}`, column(LEFT, TOP + SANDBOX_AREA.height, [1]));
-    sandbox.set('63,1.5', column(63, 1.5, [1]));
-    sandbox.set('64,1', column(64, 1, []));
-    sandbox.set('65,1', column(65, 1, Array.from({ length: SANDBOX_MAX_HEIGHT + 1 }, () => 0)));
-    sandbox.set('66,1', column(66, 1, [1, 8]));
-    sandbox.set('67,1', column(67, 1, [-1]));
-    sandbox.set('68,1', column(68, 1, [2.5]));
-    sandbox.set('69,1', column(69, 1, ['1']));
-    sandbox.set('70,1', column(70, 1, { length: 1, 0: 1.1 } as never));
-    sandbox.set('71,1', throwing);
-    sandbox.set('72,1', null);
-    sandbox.set('73,1', column(73, 1, [SANDBOX_MAX_HEIGHT - 250, 0]));
+    sandbox.set(`${S(63)},1.5`, column(S(63), 1.5, [1]));
+    sandbox.set(`${S(64)},1`, column(S(64), 1, []));
+    sandbox.set(`${S(65)},1`, column(S(65), 1, Array.from({ length: SANDBOX_MAX_HEIGHT + 1 }, () => 0)));
+    sandbox.set(`${S(66)},1`, column(S(66), 1, [1, 8]));
+    sandbox.set(`${S(67)},1`, column(S(67), 1, [-1]));
+    sandbox.set(`${S(68)},1`, column(S(68), 1, [2.5]));
+    sandbox.set(`${S(69)},1`, column(S(69), 1, ['1']));
+    sandbox.set(`${S(70)},1`, column(S(70), 1, { length: 1, 0: 1.1 } as never));
+    sandbox.set(`${S(71)},1`, throwing);
+    sandbox.set(`${S(72)},1`, null);
+    sandbox.set(`${S(73)},1`, column(S(73), 1, [SANDBOX_MAX_HEIGHT - 250, 0]));
     const client = await connectedTo(joined);
 
     expect(client.sandbox().columns).toEqual([
-      { x: 60, y: 1, colours: [1, 2] },
-      { x: 73, y: 1, colours: [6, 0] },
+      { x: S(60), y: 1, colours: [1, 2] },
+      { x: S(73), y: 1, colours: [6, 0] },
     ]);
   });
 
@@ -202,12 +210,12 @@ describe('sandbox()', () => {
     const joined = fakeRoom();
     const sandbox = joined.state.sandbox as Map<string, unknown>;
     const full = (): number[] => Array.from({ length: SANDBOX_MAX_HEIGHT }, () => 1);
-    for (const [x, y] of [[60, 4], [61, 4], [62, 4], [63, 4]] as const) {
+    for (const [x, y] of [[S(60), 4], [S(61), 4], [S(62), 4], [S(63), 4]] as const) {
       sandbox.set(`${x},${y}`, column(x, y, full()));
     }
     const client = await connectedTo(joined);
     // 3 x 256 = 768 fits the 900 cap; a fourth full stack would not.
-    expect(client.sandbox().columns.map(({ x }) => x)).toEqual([60, 61, 62]);
+    expect(client.sandbox().columns.map(({ x }) => x)).toEqual([S(60), S(61), S(62)]);
   });
 
   it('validates the own carried colour and never borrows a peer’s', async () => {
@@ -237,7 +245,7 @@ describe('sandbox()', () => {
 
   it('reports nothing carried while suspended, and nothing at all after disconnect', async () => {
     const joined = fakeRoom();
-    (joined.state.sandbox as Map<string, unknown>).set('60,1', column(60, 1, [1]));
+    (joined.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [1]));
     joined.state.peers.set(OWN, presence(OWN, 3));
     const client = await connectedTo(joined);
     expect(client.sandbox().carrying).toBe(3);
@@ -245,7 +253,7 @@ describe('sandbox()', () => {
     client.suspend();
     // The stale entry is still in the decoded state, but the server has
     // already discarded the block.
-    expect(client.sandbox()).toEqual({ columns: [{ x: 60, y: 1, colours: [1] }], carrying: null });
+    expect(client.sandbox()).toEqual({ columns: [{ x: S(60), y: 1, colours: [1] }], carrying: null });
 
     await client.disconnect();
     expect(client.sandbox()).toEqual({ columns: [], carrying: null });
@@ -268,15 +276,15 @@ describe('onSandbox', () => {
     joined.stateChange();
     expect(seen).toHaveLength(1);
 
-    sandbox.set('60,1', column(60, 1, [1]));
+    sandbox.set(`${S(60)},1`, column(S(60), 1, [1]));
     joined.stateChange();
     joined.stateChange();
     expect(seen).toHaveLength(2);
-    expect(seen[1]).toEqual({ columns: [{ x: 60, y: 1, colours: [1] }], carrying: null });
+    expect(seen[1]).toEqual({ columns: [{ x: S(60), y: 1, colours: [1] }], carrying: null });
     expect(Object.isFrozen(seen[1])).toBe(true);
 
     (joined.state.peers.get(OWN) as { carrying: number }).carrying = 1;
-    sandbox.delete('60,1');
+    sandbox.delete(`${S(60)},1`);
     joined.stateChange();
     expect(seen[2]).toEqual({ columns: [], carrying: 1 });
 
@@ -289,7 +297,7 @@ describe('onSandbox', () => {
 
   it('delivers the empty sandbox when the connection ends', async () => {
     const joined = fakeRoom();
-    (joined.state.sandbox as Map<string, unknown>).set('60,1', column(60, 1, [1]));
+    (joined.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [1]));
     const client = await connectedTo(joined);
     const seen: SandboxSnapshot[] = [];
     client.onSandbox((snapshot) => seen.push(snapshot));
@@ -311,9 +319,9 @@ describe('onSandbox', () => {
       });
     }).not.toThrow();
     client.onSandbox((snapshot) => later.push(snapshot));
-    (joined.state.sandbox as Map<string, unknown>).set('60,1', column(60, 1, [2]));
+    (joined.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [2]));
     expect(() => joined.stateChange()).not.toThrow();
-    expect(later.at(-1)?.columns).toEqual([{ x: 60, y: 1, colours: [2] }]);
+    expect(later.at(-1)?.columns).toEqual([{ x: S(60), y: 1, colours: [2] }]);
     expect(consoleError).toHaveBeenCalledWith('lobby client: sandbox subscriber threw');
     expect(consoleError).not.toHaveBeenCalledWith('lobby client: sandbox subscriber threw', error);
     stop();
@@ -337,11 +345,11 @@ describe('onSandbox', () => {
     stopSecond = client.onSandbox(second);
     second.mockClear();
 
-    (joined.state.sandbox as Map<string, unknown>).set('60,1', column(60, 1, [2]));
+    (joined.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [2]));
     joined.stateChange();
 
     expect(second).not.toHaveBeenCalled();
-    expect(late).toEqual([{ columns: [{ x: 60, y: 1, colours: [2] }], carrying: null }]);
+    expect(late).toEqual([{ columns: [{ x: S(60), y: 1, colours: [2] }], carrying: null }]);
   });
 
   it('stops delivering after unsubscribe', async () => {
@@ -350,7 +358,7 @@ describe('onSandbox', () => {
     const listener = vi.fn();
     const stop = client.onSandbox(listener);
     stop();
-    (joined.state.sandbox as Map<string, unknown>).set('60,1', column(60, 1, [2]));
+    (joined.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [2]));
     joined.stateChange();
     expect(listener).toHaveBeenCalledOnce();
   });
@@ -368,19 +376,19 @@ describe('onSandboxDrop', () => {
       enumerable: true,
       get: () => {
         accessorRead = true;
-        return 60;
+        return S(60);
       },
     });
     for (const payload of [
       undefined,
       null,
       'drop',
-      [60, 1],
+      [S(60), 1],
       { x: LEFT - 1, y: 1 },
-      { x: 60.5, y: 1 },
-      { x: 60, y: Number.NaN },
-      { x: '60', y: '1' },
-      Object.create({ x: 60, y: 1 }),
+      { x: S(60) + 0.5, y: 1 },
+      { x: S(60), y: Number.NaN },
+      { x: String(S(60)), y: '1' },
+      Object.create({ x: S(60), y: 1 }),
       accessor,
     ]) {
       joined.message(SERVER_MESSAGE.sandboxDrop, payload);
@@ -388,8 +396,8 @@ describe('onSandboxDrop', () => {
     expect(drops).toEqual([]);
     expect(accessorRead).toBe(false);
 
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 60, y: 1, gameId: PEER });
-    expect(drops).toEqual([{ x: 60, y: 1 }]);
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(60), y: 1, gameId: PEER });
+    expect(drops).toEqual([{ x: S(60), y: 1 }]);
     expect(Object.isFrozen(drops[0])).toBe(true);
     expect(Object.keys(drops[0] as object).sort()).toEqual(['x', 'y']);
   });
@@ -397,20 +405,20 @@ describe('onSandboxDrop', () => {
   it('does not replay, stops after unsubscribe, and ignores a retired room', async () => {
     const joined = fakeRoom();
     const client = await connectedTo(joined);
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 60, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(60), y: 1 });
     const listener = vi.fn();
     const stop = client.onSandboxDrop(listener);
     expect(listener).not.toHaveBeenCalled();
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 61, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(61), y: 1 });
     expect(listener).toHaveBeenCalledTimes(1);
     stop();
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 62, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(62), y: 1 });
     expect(listener).toHaveBeenCalledTimes(1);
 
     const after = vi.fn();
     client.onSandboxDrop(after);
     await client.disconnect();
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 63, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(63), y: 1 });
     expect(after).not.toHaveBeenCalled();
   });
 
@@ -423,8 +431,8 @@ describe('onSandboxDrop', () => {
       throw new Error('drop subscriber failed');
     });
     client.onSandboxDrop(later);
-    expect(() => joined.message(SERVER_MESSAGE.sandboxDrop, { x: 60, y: 1 })).not.toThrow();
-    expect(later).toHaveBeenCalledWith({ x: 60, y: 1 });
+    expect(() => joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(60), y: 1 })).not.toThrow();
+    expect(later).toHaveBeenCalledWith({ x: S(60), y: 1 });
     expect(consoleError).toHaveBeenCalledWith('lobby client: sandbox drop subscriber threw');
   });
 });
@@ -442,19 +450,19 @@ describe('onSandboxBurst (D-071)', () => {
       enumerable: true,
       get: () => {
         accessorRead = true;
-        return 60;
+        return S(60);
       },
     });
     for (const payload of [
       undefined,
       null,
       'burst',
-      [60, 1],
+      [S(60), 1],
       { x: LEFT - 1, y: 1 },
-      { x: 60.5, y: 1 },
-      { x: 60, y: Number.NaN },
-      { x: '60', y: '1' },
-      Object.create({ x: 60, y: 1 }),
+      { x: S(60) + 0.5, y: 1 },
+      { x: S(60), y: Number.NaN },
+      { x: String(S(60)), y: '1' },
+      Object.create({ x: S(60), y: 1 }),
       accessor,
     ]) {
       joined.message(SERVER_MESSAGE.sandboxBurst, payload);
@@ -462,8 +470,8 @@ describe('onSandboxBurst (D-071)', () => {
     expect(bursts).toEqual([]);
     expect(accessorRead).toBe(false);
 
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1, gameId: PEER, colours: [1] });
-    expect(bursts).toEqual([{ x: 60, y: 1 }]);
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(60), y: 1, gameId: PEER, colours: [1] });
+    expect(bursts).toEqual([{ x: S(60), y: 1 }]);
     expect(Object.isFrozen(bursts[0])).toBe(true);
     expect(Object.keys(bursts[0] as object).sort()).toEqual(['x', 'y']);
   });
@@ -475,43 +483,43 @@ describe('onSandboxBurst (D-071)', () => {
     const bursts = vi.fn();
     client.onSandboxDrop(drops);
     client.onSandboxBurst(bursts);
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(60), y: 1 });
     expect(drops).not.toHaveBeenCalled();
-    expect(bursts).toHaveBeenCalledWith({ x: 60, y: 1 });
-    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 61, y: 1 });
+    expect(bursts).toHaveBeenCalledWith({ x: S(60), y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: S(61), y: 1 });
     expect(bursts).toHaveBeenCalledTimes(1);
-    expect(drops).toHaveBeenCalledWith({ x: 61, y: 1 });
+    expect(drops).toHaveBeenCalledWith({ x: S(61), y: 1 });
   });
 
   it('arrives while the snapshot still holds the blocks it throws', async () => {
     const joined = fakeRoom();
     const client = await connectedTo(joined);
     const sandbox = joined.state.sandbox as Map<string, unknown>;
-    sandbox.set('60,1', column(60, 1, [1, 2, 3]));
+    sandbox.set(`${S(60)},1`, column(S(60), 1, [1, 2, 3]));
     joined.stateChange();
     const seen: number[] = [];
     client.onSandboxBurst(() => seen.push(client.sandbox().columns.length));
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(60), y: 1 });
     expect(seen).toEqual([1]);
   });
 
   it('does not replay, stops after unsubscribe, and ignores a retired room', async () => {
     const joined = fakeRoom();
     const client = await connectedTo(joined);
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(60), y: 1 });
     const listener = vi.fn();
     const stop = client.onSandboxBurst(listener);
     expect(listener).not.toHaveBeenCalled();
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 61, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(61), y: 1 });
     expect(listener).toHaveBeenCalledTimes(1);
     stop();
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 62, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(62), y: 1 });
     expect(listener).toHaveBeenCalledTimes(1);
 
     const after = vi.fn();
     client.onSandboxBurst(after);
     await client.disconnect();
-    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 63, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(63), y: 1 });
     expect(after).not.toHaveBeenCalled();
   });
 
@@ -524,8 +532,8 @@ describe('onSandboxBurst (D-071)', () => {
       throw new Error('burst subscriber failed');
     });
     client.onSandboxBurst(later);
-    expect(() => joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 })).not.toThrow();
-    expect(later).toHaveBeenCalledWith({ x: 60, y: 1 });
+    expect(() => joined.message(SERVER_MESSAGE.sandboxBurst, { x: S(60), y: 1 })).not.toThrow();
+    expect(later).toHaveBeenCalledWith({ x: S(60), y: 1 });
     expect(consoleError).toHaveBeenCalledWith('lobby client: sandbox burst subscriber threw');
   });
 });
@@ -538,13 +546,13 @@ describe('pickBlock and placeBlock', () => {
     const client = await connectedTo(joined);
     joined.send.mockClear();
 
-    client.pickBlock({ x: 60, y: 1 });
+    client.pickBlock({ x: S(60), y: 1 });
     now += SANDBOX_CLIENT_ACTION_INTERVAL_MS;
-    client.placeBlock({ x: 61, y: 2, extra: 'ignored' } as SandboxTile);
+    client.placeBlock({ x: S(61), y: 2, extra: 'ignored' } as SandboxTile);
 
     expect(joined.send.mock.calls).toEqual([
-      [MESSAGE.sandboxPick, { x: 60, y: 1 }],
-      [MESSAGE.sandboxPlace, { x: 61, y: 2 }],
+      [MESSAGE.sandboxPick, { x: S(60), y: 1 }],
+      [MESSAGE.sandboxPlace, { x: S(61), y: 2 }],
     ]);
     expect(MESSAGE.sandboxPick).toBe('sandbox:pick');
     expect(MESSAGE.sandboxPlace).toBe('sandbox:place');
@@ -558,14 +566,14 @@ describe('pickBlock and placeBlock', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       joined.send.mockClear();
-      client.pickBlock({ x: 60, y: 1 });
+      client.pickBlock({ x: S(60), y: 1 });
       expect(joined.send).toHaveBeenCalledTimes(1);
 
       // The pick shows up 44 ms later and the Shell places at once: held, not lost.
       now = 1044;
-      client.placeBlock({ x: 61, y: 1 });
+      client.placeBlock({ x: S(61), y: 1 });
       now = 1100;
-      client.placeBlock({ x: 62, y: 1 }); // a newer request replaces the held one
+      client.placeBlock({ x: S(62), y: 1 }); // a newer request replaces the held one
       expect(joined.send).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(1);
 
@@ -576,14 +584,14 @@ describe('pickBlock and placeBlock', () => {
       now = 1200;
       vi.advanceTimersByTime(50);
       expect(joined.send.mock.calls).toEqual([
-        [MESSAGE.sandboxPick, { x: 60, y: 1 }],
-        [MESSAGE.sandboxPlace, { x: 62, y: 1 }],
+        [MESSAGE.sandboxPick, { x: S(60), y: 1 }],
+        [MESSAGE.sandboxPlace, { x: S(62), y: 1 }],
       ]);
       expect(vi.getTimerCount()).toBe(0);
 
       // An action with the floor open goes at once and supersedes nothing held.
       now = 1400;
-      client.pickBlock({ x: 60, y: 1 });
+      client.pickBlock({ x: S(60), y: 1 });
       expect(joined.send).toHaveBeenCalledTimes(3);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -603,7 +611,7 @@ describe('pickBlock and placeBlock', () => {
       now = 1010;
       // A step across a tile edge, still inside the move floor: held.
       client.updatePosition(1840, 464, 'right');
-      client.pickBlock({ x: 59, y: 14 });
+      client.pickBlock({ x: S(59), y: 14 });
       expect(joined.send.mock.calls.map(([type]) => type)).toEqual([MESSAGE.move]);
       now = 1100;
       vi.advanceTimersByTime(100);
@@ -625,9 +633,9 @@ describe('pickBlock and placeBlock', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       joined.send.mockClear();
-      client.pickBlock({ x: 60, y: 1 });
+      client.pickBlock({ x: S(60), y: 1 });
       now = 500; // rolled back: the floor stays closed until 1200 again
-      client.placeBlock({ x: 61, y: 1 });
+      client.placeBlock({ x: S(61), y: 1 });
       vi.advanceTimersByTime(200);
       expect(joined.send).toHaveBeenCalledTimes(1);
       now = Number.NaN;
@@ -635,7 +643,7 @@ describe('pickBlock and placeBlock', () => {
       expect(joined.send).toHaveBeenCalledTimes(1);
       now = 1200;
       vi.advanceTimersByTime(10_000);
-      expect(joined.send).toHaveBeenLastCalledWith(MESSAGE.sandboxPlace, { x: 61, y: 1 });
+      expect(joined.send).toHaveBeenLastCalledWith(MESSAGE.sandboxPlace, { x: S(61), y: 1 });
       expect(joined.send).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
@@ -652,9 +660,9 @@ describe('pickBlock and placeBlock', () => {
         const joined = fakeRoom();
         const client = await connectedTo(joined);
         joined.send.mockClear();
-        client.pickBlock({ x: 60, y: 1 });
+        client.pickBlock({ x: S(60), y: 1 });
         now = 1050;
-        client.placeBlock({ x: 61, y: 1 });
+        client.placeBlock({ x: S(61), y: 1 });
         expect(vi.getTimerCount()).toBe(1);
 
         if (ending === 'suspend') client.suspend();
@@ -687,17 +695,17 @@ describe('pickBlock and placeBlock', () => {
       enumerable: true,
       get: () => {
         accessorRead = true;
-        return 60;
+        return S(60);
       },
     });
     for (const tile of [
       null,
       undefined,
       { x: LEFT - 1, y: 1 },
-      { x: 60, y: TOP - 1 },
-      { x: 60.5, y: 1 },
+      { x: S(60), y: TOP - 1 },
+      { x: S(60) + 0.5, y: 1 },
       { x: Number.POSITIVE_INFINITY, y: 1 },
-      { x: '60', y: 1 },
+      { x: String(S(60)), y: 1 },
       accessor,
     ]) {
       expect(() => client.pickBlock(tile as never)).not.toThrow();
@@ -709,18 +717,18 @@ describe('pickBlock and placeBlock', () => {
 
   it('is a no-op unless connected', async () => {
     const idle = new LobbyClient({ endpoint: 'ws://example', start: { x: 0, y: 0 } });
-    expect(() => idle.pickBlock({ x: 60, y: 1 })).not.toThrow();
+    expect(() => idle.pickBlock({ x: S(60), y: 1 })).not.toThrow();
 
     const joined = fakeRoom();
     const client = await connectedTo(joined);
     client.suspend();
     joined.send.mockClear();
-    client.pickBlock({ x: 60, y: 1 });
-    client.placeBlock({ x: 60, y: 1 });
+    client.pickBlock({ x: S(60), y: 1 });
+    client.placeBlock({ x: S(60), y: 1 });
     expect(joined.send).not.toHaveBeenCalled();
 
     await client.disconnect();
-    client.pickBlock({ x: 60, y: 1 });
+    client.pickBlock({ x: S(60), y: 1 });
     expect(joined.send).not.toHaveBeenCalled();
   });
 
@@ -730,7 +738,7 @@ describe('pickBlock and placeBlock', () => {
     const first = fakeRoom();
     const client = await connectedTo(first);
     first.send.mockImplementationOnce(() => first.left(1006));
-    client.pickBlock({ x: 60, y: 1 });
+    client.pickBlock({ x: S(60), y: 1 });
     expect(client.status).toBe('closed');
 
     const second = fakeRoom();
@@ -743,8 +751,8 @@ describe('pickBlock and placeBlock', () => {
     await reconnecting;
     second.send.mockClear();
     now += 1;
-    client.pickBlock({ x: 60, y: 1 });
-    expect(second.send).toHaveBeenCalledWith(MESSAGE.sandboxPick, { x: 60, y: 1 });
+    client.pickBlock({ x: S(60), y: 1 });
+    expect(second.send).toHaveBeenCalledWith(MESSAGE.sandboxPick, { x: S(60), y: 1 });
   });
 });
 

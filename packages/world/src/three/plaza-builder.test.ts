@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, InstancedMesh, Material, Mesh, Object3D, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { STREET_ORIGIN_X } from '@strkworld/shared';
 import { PLAZA_AREA, PLAZA_FIXTURES, PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION, PLAZA_SIGN_TEXT } from '../map/plaza.js';
 import { createStreetMap, isSolidAt } from '../map/street.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
@@ -20,6 +21,9 @@ import type { StreetView } from './types.js';
  * the way the renderer builds it, so every assertion is about the scene the
  * player gets.
  */
+
+/** The street's first column (D-078); the plaza is laid out from it. */
+const X = STREET_ORIGIN_X;
 
 function build(): { view: StreetView; plazaLabels: Object3D[] } {
   const view = buildStreet(createStreetMap(), createNullLabelFactory());
@@ -134,13 +138,13 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     expect(sign.rotation.y).toBe(0);
     const { width, height } = sign.userData['options'] as { width: number; height: number };
     // Over the opening between the posts, clear of anyone walking through.
-    expect(sign.position.x).toBeCloseTo(5.5);
+    expect(sign.position.x).toBeCloseTo(X + 5.5);
     expect(sign.position.y - height / 2).toBeGreaterThan(2.3);
-    expect(sign.position.x - width / 2).toBeGreaterThan(3.7);
-    expect(sign.position.x + width / 2).toBeLessThan(7.3);
+    expect(sign.position.x - width / 2).toBeGreaterThan(X + 3.7);
+    expect(sign.position.x + width / 2).toBeLessThan(X + 7.3);
     // Whole in the fixed camera's frame from the south pavement in front of it.
     const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
-    createCameraRig({ camera }).update(16, { x: 5.5, z: 17.5 }, null);
+    createCameraRig({ camera }).update(16, { x: X + 5.5, z: 17.5 }, null);
     camera.updateMatrixWorld(true);
     for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
       const ndc = new Vector3(sign.position.x + (dx * width) / 2, sign.position.y + (dy * height) / 2, sign.position.z).project(camera);
@@ -162,7 +166,7 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     expect(accounts.rotation.y).toBeCloseTo(-Math.PI / 4);
     expect(deposits.rotation.y).toBeCloseTo(Math.PI / 4);
     expect(held.rotation.y).toBe(0);
-    expect(held.position.x).toBeCloseTo(5.5);
+    expect(held.position.x).toBeCloseTo(X + 5.5);
     expect(accounts.userData['options']).toMatchObject(PLAZA_THEME.face);
     for (const face of [accounts, deposits, held]) {
       expect(face.userData['options']).toMatchObject({ background: css(STRK20.black), accent: css(STRK20.orange) });
@@ -174,7 +178,7 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     const { view, plazaLabels } = build();
     view.labels.updateMatrixWorld(true);
     const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
-    createCameraRig({ camera }).update(16, { x: 5.5, z: 26.5 }, null);
+    createCameraRig({ camera }).update(16, { x: X + 5.5, z: 26.5 }, null);
     camera.updateMatrixWorld(true);
     for (const part of ['accounts', 'deposits24h', 'held']) {
       const face = labelFor(plazaLabels, part);

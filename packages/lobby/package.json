@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./sandbox": "./src/sandbox-rules.ts",
+    "./football": "./src/football-rules.ts",
     "./server": "./src/server-index.ts"
   },
   "scripts": {

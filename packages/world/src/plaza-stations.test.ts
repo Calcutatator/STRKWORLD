@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ShellEvents, StationId, WorldEvents } from '@strkworld/shared';
+import { STREET_ORIGIN_X, type ShellEvents, type StationId, type WorldEvents } from '@strkworld/shared';
 import { PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION } from './map/plaza.js';
 import {
   EMPTY_PLAZA_STATS,
@@ -81,11 +81,13 @@ function setup() {
   };
 }
 
+/** Street tiles count from the street's first column (D-078), as the plaza does. */
+const X = STREET_ORIGIN_X;
 /** The tile just south of the monument (its approach), and one beside the table. */
-const AT_MONUMENT = { x: 5, y: 25 };
-const AT_TABLE = { x: 10, y: 23 };
-const ON_ROAD = { x: 5, y: 15 };
-const FAR = { x: 24, y: 15 };
+const AT_MONUMENT = { x: X + 5, y: 25 };
+const AT_TABLE = { x: X + 10, y: 23 };
+const ON_ROAD = { x: X + 5, y: 15 };
+const FAR = { x: X + 24, y: 15 };
 
 describe('the plaza stations (D-076)', () => {
   it('announces the plaza coming into view and leaving it, once each way', () => {
@@ -106,16 +108,16 @@ describe('the plaza stations (D-076)', () => {
     const plaza = setup();
     plaza.controller.update(ON_ROAD);
     plaza.controller.update(AT_MONUMENT);
-    plaza.controller.update({ x: 6, y: 25 });
+    plaza.controller.update({ x: X + 6, y: 25 });
     plaza.controller.update(AT_TABLE);
-    plaza.controller.update({ x: 5, y: 20 });
+    plaza.controller.update({ x: X + 5, y: 20 });
     expect(plaza.highlights).toEqual([PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION, null]);
     expect(plaza.controller.state.highlightedStation).toBeNull();
   });
 
   it('does nothing on E away from a station', () => {
     const plaza = setup();
-    plaza.controller.update({ x: 5, y: 20 });
+    plaza.controller.update({ x: X + 5, y: 20 });
     expect(plaza.controller.activate()).toBe(false);
     expect(plaza.input.suspend).not.toHaveBeenCalled();
     expect(plaza.emitted.filter((entry) => entry.event === 'station:activated')).toEqual([]);

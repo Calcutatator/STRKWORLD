@@ -90,6 +90,25 @@ export const SANDBOX_MIN_ACTION_INTERVAL_MS = 150;
  */
 export const SANDBOX_CLIENT_ACTION_INTERVAL_MS = 200;
 
+/**
+ * Server-side floor between two accepted kicks from the same session, in ms.
+ * D-078.
+ *
+ * Its own floor, like the sandbox's: a kick is a key press, and a ball can
+ * only go one way at a time. A kick the rules refuse (out of reach, or play
+ * not live) still consumes it, so a client cannot probe at full rate.
+ */
+export const FOOTBALL_MIN_KICK_INTERVAL_MS = 250;
+
+/**
+ * The floor the client wrapper holds its own kicks to, in ms. Above the
+ * server floor, so jitter never turns an honest kick into a dropped one; a
+ * kick inside it is dropped, not held, since a late kick is a different kick.
+ * Moves, sandbox actions and kicks together stay under
+ * `MAX_MESSAGES_PER_SECOND`: 20 + 5 + 3.3 a second, against 40.
+ */
+export const FOOTBALL_CLIENT_KICK_INTERVAL_MS = 300;
+
 /** How often the room encodes state changes, in ms. 20fps. */
 export const PATCH_RATE_MS = 50;
 
@@ -190,7 +209,7 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Five verbs, none of them financial. There is no message type through which
+ * Six verbs, none of them financial. There is no message type through which
  * a client could tell the room anything else, which is the enforcement: the
  * room's surface has no field for it.
  */
@@ -205,15 +224,21 @@ export const MESSAGE = Object.freeze({
   sandboxPick: 'sandbox:pick',
   /** `{ x, y }` integer sandbox tile — put the carried block there. D-060. */
   sandboxPlace: 'sandbox:place',
+  /**
+   * No payload — kick the ball from where the room says you stand. D-078.
+   * Whatever a client sends with it is never read.
+   */
+  kick: 'football:kick',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
 
 /**
- * Server-to-client messages. Three, and none says anything about another
+ * Server-to-client messages. Four, and none says anything about another
  * player: `welcome` carries only the recipient's own server-assigned session
  * identifier, so the client can recognise its own avatar in the shared state,
- * and `sandbox:drop` and `sandbox:burst` carry only a tile.
+ * `sandbox:drop` and `sandbox:burst` carry only a tile, and `football:goal`
+ * only a side.
  */
 export const SERVER_MESSAGE = Object.freeze({
   /** `{ gameId }` — sent once, right after a join is admitted. */
@@ -231,6 +256,13 @@ export const SERVER_MESSAGE = Object.freeze({
    * receiver still holds them. An animation hint only: state is the truth.
    */
   sandboxBurst: 'sandbox:burst',
+  /**
+   * `{ side }` — D-078: a goal, for `west` or `east`. Broadcast to every
+   * client at once, before the patch that raises the score. A cue for the
+   * celebration only: the score in state is the truth, and nothing names
+   * who scored.
+   */
+  goal: 'football:goal',
 } as const);
 
 export type ServerMessageType =
@@ -273,6 +305,11 @@ export interface PresenceRoomConfig {
    * client's own floor, or honest held actions would be dropped silently.
    */
   readonly sandboxActionIntervalMs: number;
+  /**
+   * D-078: per-session floor between two accepted kicks. Clamped to
+   * `[50, FOOTBALL_CLIENT_KICK_INTERVAL_MS]`, like the sandbox floor.
+   */
+  readonly footballKickIntervalMs: number;
 }
 
 /** Operator-supplied overrides. Every field optional; all are clamped. */
@@ -293,6 +330,7 @@ export const DEFAULT_ROOM_CONFIG: PresenceRoomConfig = Object.freeze({
   sandboxSlowSpawnIntervalMs: SANDBOX_SLOW_SPAWN_INTERVAL_MS,
   sandboxFastSpawnLimit: SANDBOX_FAST_SPAWN_LIMIT,
   sandboxActionIntervalMs: SANDBOX_MIN_ACTION_INTERVAL_MS,
+  footballKickIntervalMs: FOOTBALL_MIN_KICK_INTERVAL_MS,
 });
 
 /** Bounds on the sandbox spawner delays: never a busy loop, never longer than an hour. */
@@ -301,6 +339,9 @@ const MAX_SANDBOX_SPAWN_INTERVAL_MS = 3_600_000;
 
 /** The lowest server sandbox floor an operator may set: the floor is never off. */
 const MIN_SANDBOX_ACTION_INTERVAL_MS = 50;
+
+/** The lowest server kick floor an operator may set (D-078). */
+const MIN_FOOTBALL_KICK_INTERVAL_MS = 50;
 
 function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -379,6 +420,13 @@ export function resolveRoomConfig(
       MIN_SANDBOX_ACTION_INTERVAL_MS,
       SANDBOX_CLIENT_ACTION_INTERVAL_MS,
       SANDBOX_MIN_ACTION_INTERVAL_MS,
+    ),
+    // Likewise for kicks: never above what the client sends at (D-078).
+    footballKickIntervalMs: clamp(
+      overrides.footballKickIntervalMs,
+      MIN_FOOTBALL_KICK_INTERVAL_MS,
+      FOOTBALL_CLIENT_KICK_INTERVAL_MS,
+      FOOTBALL_MIN_KICK_INTERVAL_MS,
     ),
   });
 }

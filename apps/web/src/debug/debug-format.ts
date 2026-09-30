@@ -432,7 +432,7 @@ export function describeBankStep(step: unknown): { level: DebugLevel; event: str
 }
 
 /**
- * The tile a sandbox burst came from (D-071), as `x=60 y=10`: two integers
+ * The tile a sandbox burst came from (D-071), as `x=89 y=10`: two integers
  * inside the square, or null for anything else.
  */
 export function describeSandboxTile(tile: unknown): string | null {
@@ -496,6 +496,31 @@ const VAULT_CONFIRM_STAGES = setOf({
 const WALLET_API_VERSION = /^v?\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.-]{1,32})?$/;
 
 type DebugEntry = { level: DebugLevel; event: string; detail: string };
+
+/** The two sides at the football pitch (D-078), the only words a football line may add. */
+const FOOTBALL_SIDES = setOf({ west: true, east: true });
+
+/**
+ * A football moment as one entry, or null for anything unexpected:
+ * `football.kick`, `football.goal side=west`, `football.full-time winner=east`.
+ * A side from a fixed list and nothing else: no identifier, no position.
+ */
+export function describeFootball(step: unknown): DebugEntry | null {
+  switch (readData(step, 'event')) {
+    case 'kick':
+      return { level: 'info', event: 'football.kick', detail: '' };
+    case 'goal': {
+      const side = readData(step, 'side');
+      return FOOTBALL_SIDES.has(side) ? { level: 'info', event: 'football.goal', detail: `side=${String(side)}` } : null;
+    }
+    case 'full-time': {
+      const winner = readData(step, 'winner');
+      return FOOTBALL_SIDES.has(winner) ? { level: 'info', event: 'football.full-time', detail: `winner=${String(winner)}` } : null;
+    }
+    default:
+      return null;
+  }
+}
 
 /**
  * A Vault step as one entry, or null for anything unexpected:

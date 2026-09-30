@@ -30,9 +30,11 @@ Arrow keys and WASD move the avatar identically outdoors, in every fixed room
 interior and in the Studio. Hold either Shift key to sprint at exactly 1.5×
 walk speed. Diagonal movement stays normalized, including while sprinting.
 `F` swaps the paired outfit anywhere the avatar is (D-053). In the block
-sandbox at the end of the road, `E` picks up the block in front of you and `E`
-again puts it down (D-060). At the Privacy Plaza, `E` uses the monument or
-the shell-game table you stand beside (D-076).
+sandbox at the east end of the road, `E` picks up the block in front of you
+and `E` again puts it down (D-060). At the Privacy Plaza, `E` uses the
+monument or the shell-game table you stand beside (D-076). On the football
+pitch at the road's west end, `E` kicks the ball while "E · KICK" shows
+(D-078).
 
 The camera follows the player, north-up by default. Drag (left or right
 button) to orbit, scroll to zoom. Movement keys are camera-relative — "up"
@@ -115,8 +117,8 @@ the approved cosmetic sprite key onto its local avatar look.
 
 ## The block sandbox (D-060)
 
-The road runs through a gate into a 28×28 square (`SANDBOX_AREA`) where blocks
-drop from the sky and players stack them. A two-block toy-block wall (solid
+The road runs through a gate into a 28×28 square (`SANDBOX_AREA`, at the
+road's east end) where blocks drop from the sky and players stack them. A two-block toy-block wall (solid
 `fence` tiles) closes the square's street side. Sky drops keep clear of the
 three tiles inside the gate (`SANDBOX_ENTRANCE`) and stacks there stay one
 block high, so the way in always stays walkable; the aim highlight shows the
@@ -146,8 +148,9 @@ World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.
 
 ## The Privacy Plaza (D-076)
 
-A paved square below the road's west end (`map/plaza.ts`: street tiles
-x 0-10, y 19-27), opposite the sandbox, with no money in it. The map paints
+A paved square below the street's west end (`map/plaza.ts`: the street's
+tiles x 0-10, y 19-27, counted from `STREET_ORIGIN_X`), beside the football
+pitch, with no money in it. The map paints
 it with two tile kinds, walkable `plaza` paving and solid `plinth` under
 every fixture, so collision stays tile-based. `three/plaza-builder.ts` draws
 it into the street's groups and budget: paving level with the pavement, a
@@ -165,6 +168,33 @@ Shell's pre-formatted `plaza:stats` figures (or "…").
   enters or leaves `PLAZA_NEARBY`, and `{ near: false }` when a World torn
   down there goes, so the Shell reads the stats only while someone can see
   them.
+
+## The football pitch (D-078)
+
+The road begins at a 28×28 square (`PITCH_AREA`, tiles x 0-27), as big as the
+sandbox's, at the other end of the road. The street was moved east to make
+room for it: every street tile is laid out from `STREET_ORIGIN_X` (29), so the
+grid stays a zero-based array and nothing moved relative to anything else. A
+`railing` fence one tile east of the square (x 28) opens at a gate in line
+with the road and both pavements onto a `walkway` round the field (`turf`,
+x 3-24, y 7-22, long axis east-west); solid `footing` stands under every
+fixture: a goal at each end (net and posts), the stand along the north side,
+bleachers on the south, a floodlight in each corner (`map/pitch.ts`).
+`three/pitch-builder.ts` draws it into the street's groups and budget, with
+the scoreboard ("WEST 0 – 0 EAST") in the facade signs' brand-plate style.
+
+- **The ball** is shared state with one authority, the lobby room or the
+  same pure rules run by the Shell for solo play (`@strkworld/lobby/football`).
+  The World receives a World-owned `FootballChannel` through `WorldConfig`,
+  draws the frame it hands out each street frame (`three/football-view.ts`:
+  a rolling low-poly ball and its contact shadow) and never moves the ball.
+- **`E`** kicks while "E · KICK" shows over the ball, which is exactly while
+  the player's centre is within `FOOTBALL_KICK_RANGE` (1.3 tiles) of the
+  ball's in live play: the authority's own rule (`withinKickRange`).
+- **Moments.** A goal shows "GOAL!" over the goal it went into with a burst
+  of confetti; full time shows "FULL TIME" and the winning score over the
+  centre spot. Under `prefers-reduced-motion` the words hold still and no
+  confetti flies.
 
 ## Fixed Game Mode rooms
 

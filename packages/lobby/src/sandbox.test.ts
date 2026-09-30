@@ -11,6 +11,7 @@ import {
   SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_MAX_BLOCKS,
+  STREET_ORIGIN_X,
   type GameId,
   type SandboxColumn,
   type SandboxTile,
@@ -32,6 +33,13 @@ import {
   sandboxTileKey,
 } from './sandbox-rules';
 import { SandboxColumnEntry } from './state';
+
+/**
+ * D-078 moved the street, the sandbox with it, east by the pitch square. The
+ * tiles here keep D-060's numbering: `S(n)` is the street's column `n`, so the
+ * square is `S(54)` to `S(81)`, and a comment's "tile 62" is `S(62)`.
+ */
+const S = (column: number): number => STREET_ORIGIN_X + column;
 
 const T = SANDBOX_TILE_SIZE;
 const LEFT = SANDBOX_AREA.x;
@@ -181,16 +189,16 @@ describe('trusted sandbox configuration', () => {
 describe('the schema mirror', () => {
   it('adds, grows, shrinks and deletes columns exactly as the authority does', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 2);
-    drop({ x: 60, y: 10 }, 5);
-    expect(mirrorOf(registry)).toEqual([{ x: 60, y: 10, colours: [2, 5] }]);
+    drop({ x: S(60), y: 10 }, 2);
+    drop({ x: S(60), y: 10 }, 5);
+    expect(mirrorOf(registry)).toEqual([{ x: S(60), y: 10, colours: [2, 5] }]);
 
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
-    expect(mirrorOf(registry)).toEqual([{ x: 60, y: 10, colours: [2] }]);
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, STEP)).toBe('applied');
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 2 * STEP)).toBe('applied');
-    expect(mirrorOf(registry)).toEqual([{ x: 62, y: 10, colours: [5] }]);
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
+    expect(mirrorOf(registry)).toEqual([{ x: S(60), y: 10, colours: [2] }]);
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, STEP)).toBe('applied');
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 2 * STEP)).toBe('applied');
+    expect(mirrorOf(registry)).toEqual([{ x: S(62), y: 10, colours: [5] }]);
     expect(mirrorOf(registry)).toEqual(plain(registry.sandboxColumns()));
   });
 
@@ -198,23 +206,23 @@ describe('the schema mirror', () => {
     const { registry, drop, join } = registryWith();
     const encoder = new Encoder(registry.state);
     const client = decoderFor(encoder);
-    drop({ x: 60, y: 10 }, 1);
-    drop({ x: 60, y: 10 }, 2);
-    drop({ x: 64, y: 10 }, 3);
+    drop({ x: S(60), y: 10 }, 1);
+    drop({ x: S(60), y: 10 }, 2);
+    drop({ x: S(64), y: 10 }, 3);
     expect(client.sync()).toEqual(plain(registry.sandboxColumns()));
 
-    join('a', 61, 10);
-    join('b', 59, 10);
-    join('c', 63, 10);
-    expect(registry.pickBlock('c', { x: 64, y: 10 }, 0)).toBe('applied');
+    join('a', S(61), 10);
+    join('b', S(59), 10);
+    join('c', S(63), 10);
+    expect(registry.pickBlock('c', { x: S(64), y: 10 }, 0)).toBe('applied');
     expect(client.sync()).toEqual(plain(registry.sandboxColumns()));
     // One patch: the stack is emptied, its entry deleted, and rebuilt reversed.
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, STEP)).toBe('applied');
-    expect(registry.pickBlock('b', { x: 60, y: 10 }, STEP)).toBe('applied');
-    expect(registry.placeBlock('a', { x: 60, y: 10 }, 2 * STEP)).toBe('applied');
-    expect(registry.placeBlock('b', { x: 60, y: 10 }, 2 * STEP)).toBe('applied');
-    expect(registry.sandboxColumns()).toEqual([{ x: 60, y: 10, colours: [2, 1] }]);
-    expect(client.sync()).toEqual([{ x: 60, y: 10, colours: [2, 1] }]);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, STEP)).toBe('applied');
+    expect(registry.pickBlock('b', { x: S(60), y: 10 }, STEP)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(60), y: 10 }, 2 * STEP)).toBe('applied');
+    expect(registry.placeBlock('b', { x: S(60), y: 10 }, 2 * STEP)).toBe('applied');
+    expect(registry.sandboxColumns()).toEqual([{ x: S(60), y: 10, colours: [2, 1] }]);
+    expect(client.sync()).toEqual([{ x: S(60), y: 10, colours: [2, 1] }]);
   });
 
   // Thousands of seeded operations: about 2.5 s alone and slower under a full
@@ -271,10 +279,10 @@ describe('the schema mirror', () => {
   it('clears a mirror handed over non-empty, since the authority starts empty', () => {
     const mirror = new MapSchema<SandboxColumnEntry>();
     const stale = new SandboxColumnEntry();
-    stale.x = 60;
+    stale.x = S(60);
     stale.y = 10;
     stale.colours.push(1);
-    mirror.set('60,10', stale);
+    mirror.set(`${S(60)},10`, stale);
     const sandbox = new LobbySandbox(mirror);
     expect(mirror.size).toBe(0);
     expect(sandbox.columns()).toEqual([]);
@@ -284,48 +292,48 @@ describe('the schema mirror', () => {
 describe('pick and place through the registry', () => {
   it('acts from the position the registry holds and writes carrying from the authority', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    const id = join('a', 61, 10);
+    drop({ x: S(60), y: 10 }, 6);
+    const id = join('a', S(61), 10);
     // Position fields in the payload are not the actor's position; only the
     // tile is read.
     expect(
-      registry.pickBlock('a', { x: 60, y: 10, px: 0, py: 0, carrying: 3, gameId: 'x' }, 0),
+      registry.pickBlock('a', { x: S(60), y: 10, px: 0, py: 0, carrying: 3, gameId: 'x' }, 0),
     ).toBe('applied');
     expect(registry.peers.get(id)?.carrying).toBe(6);
     expect(registry.sandboxCarrying('a')).toBe(6);
 
-    expect(registry.placeBlock('a', { x: 61, y: 11 }, STEP)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(61), y: 11 }, STEP)).toBe('applied');
     expect(registry.peers.get(id)?.carrying).toBe(-1);
     expect(registry.sandboxCarrying('a')).toBeNull();
-    expect(registry.sandboxColumns()).toEqual([{ x: 61, y: 11, colours: [6] }]);
+    expect(registry.sandboxColumns()).toEqual([{ x: S(61), y: 11, colours: [6] }]);
   });
 
   it('starts every entry empty-handed', () => {
     const { registry, join } = registryWith();
-    const id = join('a', 61, 10);
+    const id = join('a', S(61), 10);
     expect(registry.peers.get(id)?.carrying).toBe(-1);
   });
 
   it('refuses malformed payloads silently without consuming the floor', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    const id = join('a', 61, 10);
+    drop({ x: S(60), y: 10 }, 6);
+    const id = join('a', S(61), 10);
     const hostile: unknown[] = [
       undefined,
       null,
       'sandbox',
       42,
-      [60, 10],
+      [S(60), 10],
       {},
-      { x: 60 },
-      { x: 60.5, y: 10 },
+      { x: S(60) },
+      { x: S(60) + 0.5, y: 10 },
       { x: Number.NaN, y: 10 },
-      { x: 60, y: Number.NEGATIVE_INFINITY },
-      { x: '60', y: '10' },
+      { x: S(60), y: Number.NEGATIVE_INFINITY },
+      { x: String(S(60)), y: '10' },
       { x: LEFT - 1, y: 10 },
-      { x: 60, y: TOP + SANDBOX_AREA.height },
-      Object.create({ x: 60, y: 10 }),
-      Object.defineProperty({ y: 10 }, 'x', { get: () => 60, enumerable: true }),
+      { x: S(60), y: TOP + SANDBOX_AREA.height },
+      Object.create({ x: S(60), y: 10 }),
+      Object.defineProperty({ y: 10 }, 'x', { get: () => S(60), enumerable: true }),
       new Proxy({}, {
         getOwnPropertyDescriptor: () => {
           throw new Error('hostile trap');
@@ -335,102 +343,102 @@ describe('pick and place through the registry', () => {
     for (const payload of hostile) {
       expect(registry.pickBlock('a', payload, 0)).toBe('malformed');
     }
-    expect(registry.sandboxColumns()).toEqual([{ x: 60, y: 10, colours: [6] }]);
+    expect(registry.sandboxColumns()).toEqual([{ x: S(60), y: 10, colours: [6] }]);
     expect(registry.peers.get(id)?.carrying).toBe(-1);
     // None of that consumed the floor: a real request at the same instant lands.
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
   });
 
   it('refuses a session that is unknown or suspended', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    expect(registry.pickBlock('ghost', { x: 60, y: 10 }, 0)).toBe('absent');
-    join('a', 61, 10);
+    drop({ x: S(60), y: 10 }, 6);
+    expect(registry.pickBlock('ghost', { x: S(60), y: 10 }, 0)).toBe('absent');
+    join('a', S(61), 10);
     registry.suspend('a');
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('absent');
-    expect(registry.placeBlock('a', { x: 60, y: 10 }, 0)).toBe('absent');
-    expect(registry.sandboxColumns()).toEqual([{ x: 60, y: 10, colours: [6] }]);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('absent');
+    expect(registry.placeBlock('a', { x: S(60), y: 10 }, 0)).toBe('absent');
+    expect(registry.sandboxColumns()).toEqual([{ x: S(60), y: 10, colours: [6] }]);
   });
 
   it('refuses out-of-reach requests without changing anything', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    const id = join('a', 63, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('rejected');
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, STEP)).toBe('rejected');
-    expect(registry.sandboxColumns()).toEqual([{ x: 60, y: 10, colours: [6] }]);
+    drop({ x: S(60), y: 10 }, 6);
+    const id = join('a', S(63), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('rejected');
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, STEP)).toBe('rejected');
+    expect(registry.sandboxColumns()).toEqual([{ x: S(60), y: 10, colours: [6] }]);
     expect(registry.peers.get(id)?.carrying).toBe(-1);
   });
 
   it('will not put a block under another live player, but ignores a suspended one', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    join('a', 61, 10);
-    join('b', 62, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, STEP)).toBe('rejected');
+    drop({ x: S(60), y: 10 }, 6);
+    join('a', S(61), 10);
+    join('b', S(62), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, STEP)).toBe('rejected');
     registry.suspend('b');
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, 2 * STEP)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, 2 * STEP)).toBe('applied');
   });
 
   it('will not take a block from under another live player, but ignores a suspended one', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    join('a', 61, 10);
-    join('b', 60, 10); // standing on the stack
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('rejected');
-    expect(registry.sandboxColumns()).toEqual([{ x: 60, y: 10, colours: [6] }]);
+    drop({ x: S(60), y: 10 }, 6);
+    join('a', S(61), 10);
+    join('b', S(60), 10); // standing on the stack
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('rejected');
+    expect(registry.sandboxColumns()).toEqual([{ x: S(60), y: 10, colours: [6] }]);
     registry.suspend('b');
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, STEP)).toBe('applied');
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, STEP)).toBe('applied');
   });
 });
 
 describe('the sandbox action floor', () => {
   it('drops a second action inside the floor and accepts one after it', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 1000)).toBe('applied');
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, 1000 + SANDBOX_MIN_ACTION_INTERVAL_MS - 1)).toBe(
+    drop({ x: S(60), y: 10 }, 6);
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 1000)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, 1000 + SANDBOX_MIN_ACTION_INTERVAL_MS - 1)).toBe(
       'throttled',
     );
     expect(registry.sandboxCarrying('a')).toBe(6);
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, 1000 + SANDBOX_MIN_ACTION_INTERVAL_MS)).toBe(
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, 1000 + SANDBOX_MIN_ACTION_INTERVAL_MS)).toBe(
       'applied',
     );
   });
 
   it('charges a rule-refused action against the floor', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 6);
-    join('a', 61, 10);
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, 0)).toBe('rejected');
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 10)).toBe('throttled');
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, SANDBOX_MIN_ACTION_INTERVAL_MS)).toBe('applied');
+    drop({ x: S(60), y: 10 }, 6);
+    join('a', S(61), 10);
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, 0)).toBe('rejected');
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 10)).toBe('throttled');
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, SANDBOX_MIN_ACTION_INTERVAL_MS)).toBe('applied');
   });
 
   it('floors each session independently', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 1);
-    drop({ x: 66, y: 10 }, 2);
-    join('a', 61, 10);
-    join('b', 65, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
-    expect(registry.pickBlock('b', { x: 66, y: 10 }, 0)).toBe('applied');
+    drop({ x: S(60), y: 10 }, 1);
+    drop({ x: S(66), y: 10 }, 2);
+    join('a', S(61), 10);
+    join('b', S(65), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
+    expect(registry.pickBlock('b', { x: S(66), y: 10 }, 0)).toBe('applied');
   });
 
   it('keeps the floor across suspend and resume, and forgets it on leave', () => {
     const { registry, drop, join } = registryWith();
-    drop({ x: 60, y: 10 }, 1);
-    drop({ x: 60, y: 10 }, 2);
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+    drop({ x: S(60), y: 10 }, 1);
+    drop({ x: S(60), y: 10 }, 2);
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
     registry.suspend('a');
-    expect(registry.resume('a', centre(61, 10), 1)).toBe(true);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 2)).toBe('throttled');
+    expect(registry.resume('a', centre(S(61), 10), 1)).toBe(true);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 2)).toBe('throttled');
     registry.release('a');
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 3)).toBe('applied');
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 3)).toBe('applied');
   });
 });
 
@@ -438,11 +446,11 @@ describe('a carried block goes back to the sky (conservation)', () => {
   it('falls away from where its carrier stood on suspend, and resume starts empty-handed', () => {
     const drops: SandboxTile[] = [];
     const { registry, drop, join } = registryWith({ onSandboxDrop: (tile) => drops.push(tile) });
-    drop({ x: 60, y: 10 }, 6);
+    drop({ x: S(60), y: 10 }, 6);
     drops.length = 0;
-    const id = join('a', 61, 10);
-    join('b', 70, 20);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+    const id = join('a', S(61), 10);
+    join('b', S(70), 20);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
     expect(registry.sandboxColumns()).toEqual([]);
 
     expect(registry.suspend('a')).toBe(true);
@@ -453,23 +461,23 @@ describe('a carried block goes back to the sky (conservation)', () => {
     const landed = drops[0] as SandboxTile;
     expect(Object.keys(landed).sort()).toEqual(['x', 'y']);
     expect(registry.sandboxColumns()).toEqual([{ x: landed.x, y: landed.y, colours: [6] }]);
-    expect(chebyshev(landed, { x: 61, y: 10 })).toBeGreaterThan(1);
-    expect(chebyshev(landed, { x: 70, y: 20 })).toBeGreaterThan(1);
+    expect(chebyshev(landed, { x: S(61), y: 10 })).toBeGreaterThan(1);
+    expect(chebyshev(landed, { x: S(70), y: 20 })).toBeGreaterThan(1);
     expect(mirrorOf(registry)).toEqual(plain(registry.sandboxColumns()));
 
-    expect(registry.resume('a', centre(61, 10), 1)).toBe(true);
+    expect(registry.resume('a', centre(S(61), 10), 1)).toBe(true);
     expect(registry.peers.get(id)?.carrying).toBe(-1);
-    expect(registry.placeBlock('a', { x: 62, y: 10 }, STEP)).toBe('rejected');
+    expect(registry.placeBlock('a', { x: S(62), y: 10 }, STEP)).toBe('rejected');
   });
 
   it('falls away from where its carrier stood on leave', () => {
     const drops: SandboxTile[] = [];
     const { registry, drop, join } = registryWith({ onSandboxDrop: (tile) => drops.push(tile) });
-    drop({ x: 60, y: 10 }, 6);
-    drop({ x: 64, y: 10 }, 7);
+    drop({ x: S(60), y: 10 }, 6);
+    drop({ x: S(64), y: 10 }, 7);
     drops.length = 0;
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
 
     registry.release('a');
 
@@ -477,24 +485,24 @@ describe('a carried block goes back to the sky (conservation)', () => {
     expect(registry.sandboxCarrying('a')).toBeNull();
     expect(drops).toHaveLength(1);
     const landed = drops[0] as SandboxTile;
-    expect(chebyshev(landed, { x: 61, y: 10 })).toBeGreaterThan(1);
+    expect(chebyshev(landed, { x: S(61), y: 10 })).toBeGreaterThan(1);
     const columns = registry.sandboxColumns();
-    expect(columns).toContainEqual({ x: 64, y: 10, colours: [7] });
+    expect(columns).toContainEqual({ x: S(64), y: 10, colours: [7] });
     expect(columns.find((column) => column.x === landed.x && column.y === landed.y)?.colours.at(-1)).toBe(6);
   });
 
   it('is discarded only when no tile is allowed, and then nothing is announced', () => {
     const drops: SandboxTile[] = [];
     const { registry, drop } = registryWith({ onSandboxDrop: (tile) => drops.push(tile) });
-    drop({ x: 60, y: 10 }, 6);
+    drop({ x: S(60), y: 10 }, 6);
     drops.length = 0;
-    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81];
+    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81].map(S);
     const ys = [1, 4, 7, 10, 13, 16, 19, 22, 25, 27];
     for (const y of ys) for (const x of xs) expect(registry.admit(`p${x},${y}`, centre(x, y)).ok).toBe(true);
     // p61,10 stands beside the block; the grid leaves no tile to fall onto.
-    expect(registry.pickBlock('p61,10', { x: 60, y: 10 }, 0)).toBe('applied');
+    expect(registry.pickBlock(`p${S(61)},10`, { x: S(60), y: 10 }, 0)).toBe('applied');
 
-    registry.suspend('p61,10');
+    registry.suspend(`p${S(61)},10`);
 
     expect(registry.sandboxBlocks).toBe(0);
     expect(registry.sandboxColumns()).toEqual([]);
@@ -576,14 +584,14 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
 
   it('announces a sky drop onto a full column as a burst, a tile alone, once the mirror is empty', () => {
     const { registry, drop, aim, drops, bursts, pillar } = listening();
-    pillar({ x: 60, y: 10 });
-    drop({ x: 70, y: 20 }, 4);
+    pillar({ x: S(60), y: 10 });
+    drop({ x: S(70), y: 20 }, 4);
     drops.length = 0;
 
-    aim({ x: 60, y: 10 }, 0);
+    aim({ x: S(60), y: 10 }, 0);
     expect(registry.spawnBlock()).toBeNull();
 
-    expect(bursts).toEqual([{ tile: { x: 60, y: 10 }, mirrored: 0, blocks: 0 }]);
+    expect(bursts).toEqual([{ tile: { x: S(60), y: 10 }, mirrored: 0, blocks: 0 }]);
     expect(Object.keys(bursts[0]!.tile).sort()).toEqual(['x', 'y']);
     expect(drops).toEqual([]);
     expect(registry.sandboxColumns()).toEqual([]);
@@ -592,18 +600,18 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
 
   it('bursts on a place: the placer ends empty-handed, and a peer keeps the block they carry', () => {
     const { registry, drop, join, bursts, pillar } = listening();
-    pillar({ x: 61, y: 11 }, SANDBOX_BURST_HEIGHT - 1); // where 'a' stands: level 13
-    pillar({ x: 62, y: 11 }); // the full column beside it
-    pillar({ x: 61, y: 10 }, SANDBOX_BURST_HEIGHT - 1); // a supply stack in reach
-    drop({ x: 72, y: 20 }, 3);
-    const a = join('a', 61, 11);
-    const b = join('b', 73, 20);
-    expect(registry.pickBlock('b', { x: 72, y: 20 }, 0)).toBe('applied');
-    expect(registry.pickBlock('a', { x: 61, y: 10 }, 0)).toBe('applied');
+    pillar({ x: S(61), y: 11 }, SANDBOX_BURST_HEIGHT - 1); // where 'a' stands: level 13
+    pillar({ x: S(62), y: 11 }); // the full column beside it
+    pillar({ x: S(61), y: 10 }, SANDBOX_BURST_HEIGHT - 1); // a supply stack in reach
+    drop({ x: S(72), y: 20 }, 3);
+    const a = join('a', S(61), 11);
+    const b = join('b', S(73), 20);
+    expect(registry.pickBlock('b', { x: S(72), y: 20 }, 0)).toBe('applied');
+    expect(registry.pickBlock('a', { x: S(61), y: 10 }, 0)).toBe('applied');
 
-    expect(registry.placeBlock('a', { x: 62, y: 11 }, STEP)).toBe('applied');
+    expect(registry.placeBlock('a', { x: S(62), y: 11 }, STEP)).toBe('applied');
 
-    expect(bursts).toEqual([{ tile: { x: 62, y: 11 }, mirrored: 0, blocks: 1 }]);
+    expect(bursts).toEqual([{ tile: { x: S(62), y: 11 }, mirrored: 0, blocks: 1 }]);
     expect(registry.sandboxColumns()).toEqual([]);
     expect(mirrorOf(registry)).toEqual([]);
     expect(registry.peers.get(a)?.carrying).toBe(-1);
@@ -614,16 +622,16 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
 
   it('bursts when a carrier suspends and their block falls onto a full column, and announces no drop', () => {
     const { registry, drop, aim, join, drops, bursts, pillar } = listening();
-    drop({ x: 60, y: 10 }, 6);
-    pillar({ x: 70, y: 5 });
+    drop({ x: S(60), y: 10 }, 6);
+    pillar({ x: S(70), y: 5 });
     drops.length = 0;
-    join('a', 61, 10);
-    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+    join('a', S(61), 10);
+    expect(registry.pickBlock('a', { x: S(60), y: 10 }, 0)).toBe('applied');
 
-    aim({ x: 70, y: 5 });
+    aim({ x: S(70), y: 5 });
     expect(registry.suspend('a')).toBe(true);
 
-    expect(bursts).toEqual([{ tile: { x: 70, y: 5 }, mirrored: 0, blocks: 0 }]);
+    expect(bursts).toEqual([{ tile: { x: S(70), y: 5 }, mirrored: 0, blocks: 0 }]);
     expect(drops).toEqual([]);
     expect(registry.sandboxCarrying('a')).toBeNull();
     expect(registry.sandboxColumns()).toEqual([]);
@@ -633,18 +641,18 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
     const { registry, drop, aim, pillar } = listening();
     const encoder = new Encoder(registry.state);
     const client = decoderFor(encoder);
-    pillar({ x: 60, y: 10 });
-    drop({ x: 64, y: 10 }, 3);
+    pillar({ x: S(60), y: 10 });
+    drop({ x: S(64), y: 10 }, 3);
     expect(client.sync()).toEqual(plain(registry.sandboxColumns()));
 
     // One patch: the burst, then blocks landing where the pillar stood and beside it.
-    aim({ x: 60, y: 10 }, 0);
+    aim({ x: S(60), y: 10 }, 0);
     expect(registry.spawnBlock()).toBeNull();
-    drop({ x: 60, y: 10 }, 5);
-    drop({ x: 64, y: 10 }, 6);
+    drop({ x: S(60), y: 10 }, 5);
+    drop({ x: S(64), y: 10 }, 6);
     const after = [
-      { x: 60, y: 10, colours: [5] },
-      { x: 64, y: 10, colours: [6] },
+      { x: S(60), y: 10, colours: [5] },
+      { x: S(64), y: 10, colours: [6] },
     ];
     expect(plain(registry.sandboxColumns())).toEqual(after);
     expect(client.sync()).toEqual(after);
@@ -662,11 +670,11 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
     const encoder = new Encoder(registry.state);
     const client = decoderFor(encoder);
     // Players everywhere but the 3x3 corner around (55, 1): the rain piles up there.
-    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81];
+    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81].map(S);
     const ys = [1, 4, 7, 10, 13, 16, 19, 22, 25, 27];
     for (const y of ys) {
       for (const x of xs) {
-        if (x === 55 && y === 1) continue;
+        if (x === S(55) && y === 1) continue;
         expect(registry.admit(`p${x},${y}`, centre(x, y)).ok).toBe(true);
       }
     }
@@ -686,7 +694,7 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
 describe('the spawner inputs', () => {
   it('never drops within a tile of a live player, but ignores suspended ones', () => {
     const { registry } = registryWith();
-    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81];
+    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81].map(S);
     const ys = [1, 4, 7, 10, 13, 16, 19, 22, 25, 27];
     for (const y of ys) {
       for (const x of xs) {
@@ -695,7 +703,7 @@ describe('the spawner inputs', () => {
       }
     }
     expect(registry.spawnBlock()).toBeNull();
-    registry.suspend('p55,1');
+    registry.suspend(`p${S(55)},1`);
     // The constant draw lands every drop on one tile, which holds
     // SANDBOX_BURST_HEIGHT blocks before the next one would burst it (D-071).
     for (let n = 0; n < SANDBOX_BURST_HEIGHT; n += 1) {

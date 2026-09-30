@@ -6,6 +6,7 @@ import {
   createRemotePeerSource,
   isAvatarSpriteKey,
   type RemotePeerSnapshot,
+  type FootballChannel,
   type RemotePeerSource,
   type SandboxChannel,
 } from '@strkworld/world';
@@ -31,6 +32,8 @@ export interface PresenceController {
   readonly remotePeers: RemotePeerSource;
   /** The shared block sandbox (D-060), when the composition provides one. */
   readonly sandbox?: SandboxChannel;
+  /** The shared football (D-078), when the composition provides one. */
+  readonly football?: FootballChannel;
   reconnect(): void;
   destroy(): Promise<void>;
 }
@@ -39,7 +42,7 @@ function freezePresenceState(next: PresenceState): PresenceState {
   return Object.freeze({ ...next });
 }
 
-export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel }): PresenceController {
+export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel }): PresenceController {
   let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
@@ -508,6 +511,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     },
     remotePeers: peerSource,
     ...(sandbox ? { sandbox } : {}),
+    ...(football ? { football } : {}),
     getState: () => state,
     reconnect() {
       if (!endpoint || destroyed) return;
