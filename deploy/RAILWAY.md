@@ -100,33 +100,44 @@ the Vault probe below: unset, the Vault is the locked facade.
    `[relay] AVNU_PAYMASTER_API_KEY is not set`, set the key before the
    unshield: that line names the routes that will be refused.
 
-## The Vault probe (D-077)
+## The Vault probe (D-077, D-079)
 
-The Vault lends STRK to Vesu from the player's STRK20 shadow account. Its
-first live use answers whether the wallet runs shadow accounts end to end.
+The Vault lends to Vesu's Prime vaults from the player's STRK20 shadow
+account, in STRK, ETH, USDC, USDT and WBTC. Its first live use, in STRK,
+showed that Ready runs shadow accounts end to end. The next one, in a token
+other than STRK, answers which token Ready takes the pool fee in.
 
 1. Set both browser variables and redeploy. They are compiled into the
    bundle, so it takes a rebuild; the Dockerfile declares both as build
    arguments. Nothing changes on the backend: the Vault is submitted by the
-   wallet, needs no avnu key and has no `BACKEND_ROUTE_*` block, and its two
-   public reads follow `BACKEND_GLOBAL_ENABLED`.
+   wallet, needs no avnu key and has no `BACKEND_ROUTE_*` block, and its
+   three public reads (the stand-in address, the positions and Vesu's
+   supply APY, which the backend fetches from `api.vesu.xyz`) follow
+   `BACKEND_GLOBAL_ENABLED`.
 
    | Variable | Value |
    |---|---|
    | `VITE_STRK20_VAULT_ENABLED` | `true` |
-   | `VITE_STRK20_VAULT_ALLOWED_TOKENS` | `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d` (STRK, and nothing else) |
+   | `VITE_STRK20_VAULT_ALLOWED_TOKENS` | `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d,0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7,0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb,0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8,0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac` (STRK, ETH, USDC, USDT and WBTC, the same list as the shield's) |
+
+   Any subset of those five, in any order, also works; anything else keeps
+   the whole Vault locked. strkBTC has no Prime vault and is refused.
 
 2. Turn on the debug logs below as well, and open the site with `?debug=1`.
 3. With a funded account on a wallet that reports Wallet API 0.10.4, keep at
-   least the pool fee (6 STRK) plus the amount in the shielded balance. At
-   the Vault's counter: Show my position, supply a small amount, show the
-   position again, then redeem everything. Each move pays the pool fee from
-   the shielded balance.
+   least the pool fee (6 STRK) in the shielded balance, in STRK, as well as
+   the amount to lend. At the Vault's counter: Show my positions, choose a
+   token, supply a small amount, read the positions again, then redeem
+   everything. Each move pays the pool fee from the shielded balance. For a
+   token other than STRK, note which token the wallet's prompt takes the fee
+   in.
 4. Read the `vault.*` lines: `vault.capability`, `vault.commitment` (ok or
    the wallet's code), `vault.address` (resolved and deployed, never the
    address), `vault.position`, `vault.prepare`, `vault.confirm` stages,
    `vault.submit` (ok or the code) and `vault.receipt`. They carry no amount,
-   address, balance or hash.
+   address, balance, token or hash. If a non-STRK supply is refused with
+   119 while that token's balance covers it, check the STRK balance: the
+   wallet may be taking the fee in STRK.
 
 To lock it again, unset both variables and redeploy.
 

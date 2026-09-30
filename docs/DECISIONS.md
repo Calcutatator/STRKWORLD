@@ -369,7 +369,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070 · a background public-aggregate scan (the Privacy Plaza's pool stats) added by D-076 · two pinned public Vault reads (the shadow account and its position) added by D-077**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070 · a background public-aggregate scan (the Privacy Plaza's pool stats) added by D-076 · two pinned public Vault reads (the shadow account and its position) added by D-077 · Vesu's supply APY, fetched from Vesu's public API by the backend alone, added by D-079**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -1220,7 +1220,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`) · the Vault's `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and `shadow-accounts-unsupported` added by D-077**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`) · the Vault's `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and `shadow-accounts-unsupported` added by D-077 · `vaultPositions` (replacing `vaultPosition`), a token for `prepareVaultRedeem`, and `vaultRates` by D-079**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -3650,7 +3650,7 @@ facts: the stats show the crowd, and nothing about who is in it.
 
 ## D-077 — The Vault opens on shadow accounts
 
-**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29)**
+**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained)**
 
 **Context.** D-007 kept Vesu out of v1 because the Vault was the only
 building needing new Cairo: a project-owned `privacy_invoke` adapter, the
@@ -3928,3 +3928,140 @@ and push or kick the ball from there: it can spoil a match, not reach money.
 An observer next to the ball when it moves can guess who touched it, as they
 can with a sandbox block; the lobby records nothing about it. The street
 build takes about a fifth longer, the pitch and the wider backdrop together.
+
+---
+
+## D-079 — The Vault lends five tokens and shows each position
+
+**2026-09-30 · Accepted by the user (the lead asked for more Vault tokens and a clearer position) · amends D-077 (the Vault lends ETH, USDC, USDT and WBTC beside STRK, its switch takes a list, and its position read covers every pinned vault and hands the shell the stand-in address) · extends D-036's frozen seam (`vaultPositions` replaces `vaultPosition`, `prepareVaultRedeem` takes a token, and `vaultRates` is added) · adds one public read to D-014's backend, Vesu's supply APY, which the backend alone fetches from Vesu · keeps D-077's register grades, disclosure and approval, whose words name no token**
+
+**Context.** D-077 opened the Vault for STRK alone, and its first live round
+trip worked in Ready on 2026-09-29: a 2 STRK supply into Vesu's Prime vSTRK
+vault and a redeem of everything, both through the canonical
+`ShadowAccountAnonymizer`, and both receipts succeeded. The lead asked for more
+tokens, the shield list's STRK, ETH, USDC, USDT and WBTC plus strkBTC, and
+a clearer position: each token in its own units, Vesu's rate if it is
+public, the earnings if they can be computed without storing amounts, a
+clear way to read again, and a line saying the stand-in address is public
+with an optional Voyager link. Vesu's public API (`api.vesu.xyz`, no key)
+lists each Prime asset's vToken and supply APY. Read over mainnet RPC at
+block 15,669,141 (2026-09-30), the ETH, USDC, USDT and WBTC vaults it names
+all run vSTRK's class (`0x41b16e0c…4f78`), so every entry point the Vault
+calls has vSTRK's shape; each one's `asset()` is its token and
+`pool_contract()` the Prime pool (`0x0451fe48…c3b5`), and each token's
+`approve` takes `(ContractAddress, u256)`. strkBTC has no Prime vault. It
+has vaults of the same class only in curated pools with other collateral
+and risk settings (Clearstar USDC Reactor, Re7 xBTC and Re7 USDC Prime),
+with supply APYs between 0 and 0.15%. The pool's own fee, 6 STRK, is paid
+in STRK to its fee collector by whoever submits. On a wallet-submitted
+action the relayer (avnu's paymaster forwarder, `0x0127021a…584f`) pays it,
+and the wallet adds one withdrawal from the player's shielded balance to
+repay it, in a token the wallet picks (`pool_fee_token` in StarkWare's
+reference wallet). Ready repaid 6 STRK on each leg of the probe. Of 216 such
+fee withdrawals in the 200,000 blocks to 15,668,951, 98 were STRK, 89 USDC,
+21 strkBTC and 4 ETH, mostly but not always in the token the transaction
+moved. One vSTRK redeem through the anonymizer repaid in USDC. No token
+other than STRK has yet gone through the anonymizer.
+
+**Decision.**
+
+- **The token → vault map is pinned in one place,** `VAULT_MARKETS` in
+  `packages/privacy/src/vault.ts`: STRK (vSTRK), ETH (vETH `0x006ac248…043e`),
+  Circle's native USDC (vUSDC `0x00387e8d…4e65`, not the bridged USDC.e's
+  separate vault), USDT (vUSDT `0x06be9f89…2f9d`) and WBTC (vWBTC
+  `0x04ecb066…f56c`), all in Vesu's Prime pool. The action builders take a
+  market and refuse any market the map does not pin; every token builds
+  D-077's shapes with its own token and vault. The backend pins its own copy
+  of the vaults (`VESU_VAULTS`), and the web its own copy of the tokens
+  (`VAULT_TOKENS`), each checked by a test against the map, token for token.
+  **strkBTC is not pinned.** Lending it would mean choosing a curator's pool
+  and its risk settings for players, which is the lead's call, not a
+  configuration detail.
+- **The switch takes a list,** the way D-072 widened shield's:
+  `VITE_STRK20_VAULT_ALLOWED_TOKENS` is one to five canonical addresses (`0x`
+  and 1 to 64 hex digits), no two with the same field value, each in
+  `VAULT_TOKENS`, kept in the order given. A missing, zero, malformed,
+  repeated, oversized, unpinned or partial value keeps the whole Vault
+  locked, as D-007's facade, and touches no other route. The door needs no
+  STRK on the list. The adapter applies the same rule to any policy it is
+  handed. `deploy/RAILWAY.md` gives the test deployment all five.
+- **The seam (D-036).** `vaultPositions(options?)` replaces
+  `vaultPosition(options?)`. It answers one position per admitted token, in
+  the list's order, and the stand-in address (`standIn`). `prepareVaultRedeem`
+  takes the token first. `vaultRates(signal?)` answers Vesu's supply APY for
+  each admitted token as an integer and its decimals, asking no wallet.
+  `VaultPosition` keeps its shape, and its `assets` is the token's own units
+  by the vault's `preview_redeem`: a vToken has 18 decimals whatever the
+  token, so shares are never shown. `PreparedVaultBatch.poolFee` is the
+  pool's fee in STRK whatever the action moves.
+- **The position read.** The backend's route still takes only the stand-in
+  address, never a vault. It answers one row per pinned vault
+  (`balance_of`, and for a held position `preview_redeem`, `max_withdraw` and
+  `max_redeem`, on that vault only). The adapter takes the rows of the
+  vaults it admits by address, and one missing, repeated or malformed row
+  fails the whole read. One commitment, one address read and one position
+  read answer every token.
+- **Vesu's rate.** `POST /v1/vault-rates` with `{ v: 1 }` answers each pinned
+  vault's `stats.supplyApy` from Vesu's public Prime pool endpoint. The
+  backend alone fetches it, so Vesu never sees a player's IP (D-014, as
+  D-067 does for avnu's list). One read serves everyone for five minutes,
+  single-flight, on its own five-second timeout. A failed read answers no
+  rates for a minute. A rate counts only when exactly one asset names both
+  the token and its pinned vault, the pool is Prime and not deprecated, and
+  the value is a plain integer below 10,000%. The route logs nothing per
+  request and follows the kill switch and the shared rate window. The
+  counter reads it when it opens and whenever the player reads positions,
+  shows it as "Supply APY 2.73%, Vesu's figure", and shows none when it
+  cannot read one. There is no backend switch, as for D-077's reads.
+- **The counter.** It offers the build's tokens that the Exchange catalog
+  describes, in order, with a picker when there is more than one. Amounts
+  are read and every figure shown in the chosen token's decimals and symbol.
+  The positions are read only when the player asks ("Show my positions"),
+  one row per token, and say they are one read that does not update on its
+  own ("Read my positions again" reads positions and rates again). A
+  submission marks them changed, as before.
+- **The stand-in address is shown, and stays in memory.** Once a read has
+  resolved it, a line says "Your stand-in address, 0x…, is public: anyone
+  can look up what it holds." It carries an optional "View it on Voyager"
+  link, which opens a new tab with no referrer and says Voyager sees the
+  player's IP address. The address is never stored, logged, put in a probe
+  line (D-069, unchanged) or handed to the connect flow. This relaxes
+  D-077's "neither the commitment nor the address leaves this package" for
+  the address alone, which is public on-chain; the commitment still never
+  leaves it.
+- **Fees in another token.** The pool fee is set in STRK. The wallet repays
+  its relayer from the shielded balance in a token it chooses, which can be
+  STRK even when the action moves USDC. So a non-STRK Vault action may need
+  STRK in the private balance, and whether Ready takes it in STRK or in the
+  moved token is not yet verified. While another token is chosen, the
+  counter says the fee is set in STRK and to keep some STRK in the pool too,
+  and the review says the wallet chooses which token pays it. The fee
+  ceiling still guards the pool fee. The demo fake takes the fee in STRK,
+  the conservative case.
+- **No earnings figure.** An amount earned since supplying needs a cost
+  basis. That means storing amounts, which the lead ruled out, or reading the
+  vault's `Deposit` and `Withdraw` events for the stand-in address, which
+  took 41 RPC pages and about 11 seconds for one vault from the anonymizer's
+  first use. That is too heavy for each read through the shared window. A
+  session-only figure would count only what accrued since the first read in
+  that session, which is near zero and would read as "since you supplied".
+  So there is none.
+- **The register (D-020).** `vault.supply` and `vault.redeem` keep their
+  grade (`anonymous`), their one disclosure and calc's approval of
+  2026-09-29: neither the grade nor the disclosure names a token, as D-072
+  found for shield. Their `observable` now describes any of the five tokens,
+  the fee withdrawal's token, and the one address that links a player's
+  positions in every token.
+
+**Consequences.** A player who lends two tokens shows both on one public
+stand-in address, so a watcher links the positions to each other, which the
+disclosure already says of every supply and redeem. The Vault now depends on
+five third-party vaults, and for its rate on Vesu's API, which it only
+displays: a wrong or missing rate cannot move funds. The backend reads up to
+twenty `starknet_call`s per position request instead of four. Once a minute
+at most it makes one outbound request to `api.vesu.xyz`, and only after a
+player opens the Vault. A non-STRK action may fail with too little STRK in
+the pool, depending on the wallet's fee token, and the first live non-STRK
+supply is the check of which token Ready uses. strkBTC waits on the lead's
+choice of a pool. A rebuild with the new list is needed to open the extra
+tokens on the test deployment (`deploy/RAILWAY.md`).

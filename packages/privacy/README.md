@@ -26,8 +26,10 @@ active financial building must map to exactly one approved execution route:
   staking, D-063), or
 - the canonical STRK20 shadow-account anonymizer (Vault, D-077): Vesu calls
   run from the player's shadow account, built here from pinned constants in
-  `src/vault.ts`, proved and submitted by the wallet. Capability is the
-  Wallet API 0.10.4 version query plus the account's commitment method.
+  `src/vault.ts`, whose `VAULT_MARKETS` maps each token the Vault lends to
+  its Vesu Prime vault (D-079), proved and submitted by the wallet.
+  Capability is the Wallet API 0.10.4 version query plus the account's
+  commitment method.
 
 There is no public fallback. If a route is unavailable, stale or killed, the
 door stays locked. Never expose raw contract targets, selectors or calldata to
