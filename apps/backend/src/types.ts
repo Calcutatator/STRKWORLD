@@ -184,9 +184,10 @@ export interface PoolEventsFilter {
  * a pinned token; nothing a request carries reaches one.
  */
 /**
- * The Vault's two public reads (D-077), each pinned to one contract: the
- * canonical shadow-account anonymizer and Vesu's vSTRK (`vault.ts`). A caller
- * supplies the value to look up, never a target or a selector.
+ * The Vault's public chain reads (D-077, D-079), each pinned: the canonical
+ * shadow-account anonymizer, and every Vesu vault in `VESU_VAULTS`
+ * (`vault.ts`). A caller supplies the value to look up, never a target or a
+ * selector.
  */
 export interface VaultRpcPort {
   /**
@@ -195,8 +196,8 @@ export interface VaultRpcPort {
    * deployed yet. It is deployed lazily, on its first invoke.
    */
   getShadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<ShadowAccountRead>;
-  /** `account`'s vSTRK position, in base units. */
-  getVaultPosition(account: string, signal?: AbortSignal): Promise<VaultPositionRead>;
+  /** `account`'s position in every pinned vault, one row each in `VESU_VAULTS` order, in base units. */
+  getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]>;
 }
 
 export interface ShadowAccountRead {
@@ -205,14 +206,31 @@ export interface ShadowAccountRead {
 }
 
 export interface VaultPositionRead {
-  /** `balance_of(account)`: vSTRK shares. */
+  /** The pinned vault this row reads. */
+  readonly vault: string;
+  /** `balance_of(account)`: the vault's shares. */
   readonly shares: bigint;
-  /** `preview_redeem(shares)`: the STRK those shares redeem for now. Zero with no shares. */
+  /** `preview_redeem(shares)`: what those shares redeem for now, in the vault's token. Zero with no shares. */
   readonly assets: bigint;
-  /** `max_withdraw(account)`: the most STRK the vault lets it withdraw now. */
+  /** `max_withdraw(account)`: the most of its token the vault lets it withdraw now. */
   readonly maxWithdraw: bigint;
   /** `max_redeem(account)`: the most shares the vault lets it redeem now. */
   readonly maxRedeem: bigint;
+}
+
+/**
+ * Vesu's supply APY for the pinned vaults (D-079), from Vesu's public API,
+ * fetched by this service and cached: no request reaches Vesu, and nothing a
+ * request carries reaches the fetch.
+ */
+export interface VaultRatesPort {
+  rates(signal?: AbortSignal): Promise<readonly VaultRateRead[]>;
+}
+
+export interface VaultRateRead {
+  readonly vault: string;
+  /** The yearly rate as a fraction, `value / 10^decimals`, as Vesu states it. */
+  readonly supplyApy: { readonly value: bigint; readonly decimals: number };
 }
 
 export interface PoolStatsRpcPort {

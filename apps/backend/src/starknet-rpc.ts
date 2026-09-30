@@ -15,7 +15,7 @@ import {
   MAX_WITHDRAW_SELECTOR,
   PREVIEW_REDEEM_SELECTOR,
   SHADOW_ACCOUNT_ANONYMIZER,
-  VESU_VSTRK,
+  VESU_VAULTS,
 } from './vault.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
@@ -224,21 +224,27 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
   }
 
   /**
-   * D-077: `account`'s position in the pinned vSTRK vault. With no shares
-   * there is nothing to preview, so one read answers; otherwise the preview
-   * and both limits are read together. Every value is a u256 as two u128
-   * felts, and anything else is refused.
+   * D-077, D-079: `account`'s position in every pinned vault, one row each in
+   * `VESU_VAULTS` order, read together. A vault holding no shares has
+   * nothing to preview, so one read answers it; otherwise the preview and
+   * both limits are read too. Every value is a u256 as two u128 felts, and
+   * anything else fails the whole answer.
    */
-  async getVaultPosition(account: string, signal?: AbortSignal): Promise<VaultPositionRead> {
+  async getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]> {
     if (!isFelt(account) || BigInt(account) === 0n) throw new Error('Vault account is invalid.');
-    const shares = u256Of(await this.callContract(VESU_VSTRK, BALANCE_OF_SELECTOR, [account], signal), 'vault shares');
-    if (shares === 0n) return { shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+    return Promise.all(VESU_VAULTS.map(({ vault }) => this.readVaultPosition(vault, account, signal)));
+  }
+
+  private async readVaultPosition(vault: string, account: string, signal?: AbortSignal): Promise<VaultPositionRead> {
+    const shares = u256Of(await this.callContract(vault, BALANCE_OF_SELECTOR, [account], signal), 'vault shares');
+    if (shares === 0n) return { vault, shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
     const [assets, maxWithdraw, maxRedeem] = await Promise.all([
-      this.callContract(VESU_VSTRK, PREVIEW_REDEEM_SELECTOR, u256Felts(shares), signal),
-      this.callContract(VESU_VSTRK, MAX_WITHDRAW_SELECTOR, [account], signal),
-      this.callContract(VESU_VSTRK, MAX_REDEEM_SELECTOR, [account], signal),
+      this.callContract(vault, PREVIEW_REDEEM_SELECTOR, u256Felts(shares), signal),
+      this.callContract(vault, MAX_WITHDRAW_SELECTOR, [account], signal),
+      this.callContract(vault, MAX_REDEEM_SELECTOR, [account], signal),
     ]);
     return {
+      vault,
       shares,
       assets: u256Of(assets, 'vault preview'),
       maxWithdraw: u256Of(maxWithdraw, 'vault withdraw limit'),
