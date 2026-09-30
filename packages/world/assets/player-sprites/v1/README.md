@@ -3,7 +3,7 @@
 This directory contains the World-owned runtime sheets for the eight paired
 player-character designs. Avatar 1 cosy has an explicitly approved production
 override described below. That approval does not extend to Avatar 1 fighting
-or avatars 2-16, whose existing files remain unchanged. James accepted the new
+or avatars 2-16, whose existing files remain unchanged. calc accepted the new
 Avatar 1 cosy sheet in the live game on 2026-08-28; rendered acceptance of
 Avatar 1 fighting and avatars 2-16 remains pending. The older `v1-review/`
 directory remains unchanged as historical review and generation provenance.
@@ -104,7 +104,7 @@ current channels and includes an injected-channel negative test.
 The aggregate evidence in this section predates the Avatar 1 override and did
 not change the then-current row or frame mapping. The current six-column Avatar
 1 mapping and its scoped evidence are documented above; runtime integration is
-complete and James accepted Avatar 1 cosy in the live game on 2026-08-28. That
+complete and calc accepted Avatar 1 cosy in the live game on 2026-08-28. That
 acceptance does not extend to Avatar 1 fighting or avatars 2-16, whose rendered
 gate remains pending.
 
@@ -138,7 +138,7 @@ sprite slice or wire field.
 ## Provenance
 
 The character concepts and pixels are project-owned STRKWORLD work produced
-under James Wilcock's art direction. This D-052 pass applies character-specific
+under calc's art direction. This D-052 pass applies character-specific
 pixel reconstruction guided by project-owned reference turnarounds,
 nearest-neighbour quantization, explicit anatomy-gap repair, and
 source-preserving sheet assembly. Generated imagery was used as visual

@@ -8647,18 +8647,18 @@ localhost restart.*
 
 ### 2026-08-28 — Avatar 1 cosy passes live rendered acceptance
 
-James accepted the exact Avatar 1 cosy replacement as looking good in the live
+calc accepted the exact Avatar 1 cosy replacement as looking good in the live
 game. This closes rendered acceptance only for the six-column `avatar-1.png`
 with SHA-256
 `f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb`.
 Avatar 1 fighting and avatars 2-16 remain outside that acceptance, so the
 aggregate remaining-sheets rendered gate stays open.
 
-*Verified:* James reported the Avatar looked good after loading the exact
+*Verified:* calc reported the Avatar looked good after loading the exact
 source-authoritative sheet in the live game. The per-key manifest records
 `renderedAcceptance: true` for Avatar 1 cosy while the aggregate review state
 remains false and names the remaining sheets as pending. The horizontal blur
-James reported in the same review happened regardless of sprite and is tracked
+calc reported in the same review happened regardless of sprite and is tracked
 separately by the camera finding above.*
 
 ### 2026-08-28 — Avatar 1 cosy owns a six-column per-sheet contract
@@ -10198,7 +10198,7 @@ channels through the expected body envelope, and inspect enlarged silhouettes
 plus repeated motion on contrasting backgrounds. Only stable, anatomically
 readable intentional negative space may be explicitly whitelisted.
 
-*Verified:* James supplied an in-game rear-view screenshot showing the missing
+*Verified:* calc supplied an in-game rear-view screenshot showing the missing
 leg pixels; direct inspection of the committed `avatar-1.png` up-facing cells
 reproduced the same transparent channel. World renders the authored alpha from
 that facing row without direction-specific scaling or masking. No runtime,
@@ -10362,7 +10362,7 @@ Independent decoding proved a valid 64x64 32-bit Aseprite source with 192
 slices; all 192 reconstructed cels were pixel-identical to the PNGs. Separate
 scans matched every committed QA frame/hash, movement, palette, edge/shadow
 heuristic and approved idle. Provenance records project-owned original work
-from the James Wilcock-directed Codex/ImageGen workflow and no third-party
+from the calc-directed Codex/ImageGen workflow and no third-party
 pixels; that record is not an independent legal/originality determination.
 The manifest still says
 `final-art-handoff-awaiting-runtime-integration-and-rendered-acceptance`:

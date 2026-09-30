@@ -175,7 +175,7 @@ feet at `(32, 56)` and the unchanged authoritative 24×24 gameplay/contact body.
 Smaller characters use transparent padding, while characters 4 and 7 may use
 more of the same canvas. Variable per-key canvases and layered weapons are not
 part of the initial runtime. Commit `86e8f5f` contains the complete sixteen-key
-`v1/` handoff and QA evidence; independent QA verified it, and James visually
+`v1/` handoff and QA evidence; independent QA verified it, and calc visually
 approved those committed assets for runtime integration. World-local sprite
 wiring now routes local players, remote peers and Studio selectors through one
 semantic resolver in headless coverage, without changing any lobby/wire field,
