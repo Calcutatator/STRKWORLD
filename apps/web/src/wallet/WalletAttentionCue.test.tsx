@@ -2,6 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { AVATAR_WALKER } from '@strkworld/world';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COPY } from '../copy.js';
 import {
@@ -22,7 +23,7 @@ describe('WalletAttentionCue', () => {
     vi.useRealTimers();
   });
 
-  it('renders the approved mini avatar as an assertive fixed wallet handoff', () => {
+  it('renders the 3D figure walking towards the player as an assertive fixed wallet handoff', () => {
     const markup = renderToStaticMarkup(
       <WalletAttentionCue active kind="balance" signal={() => {}} />,
     );
@@ -32,7 +33,24 @@ describe('WalletAttentionCue', () => {
     expect(markup).toContain('data-wallet-attention="balance"');
     expect(markup).toContain(COPY.walletAttention.balanceTitle);
     expect(markup).toContain(COPY.walletAttention.body);
-    expect(markup).toMatch(/<img[^>]+avatar-1\.png/);
+    // The World's pre-rendered walker strip, shown one 64px cell at a time
+    // (the slot clips it; styles.css steps it), and decorative only.
+    const slot = markup.match(/<span class="wallet-attention-avatar" aria-hidden="true">(.*?)<\/span>/)?.[1];
+    expect(slot).toBe(
+      `<img class="wallet-attention-walker" src="${AVATAR_WALKER.url}" ` +
+        `width="${AVATAR_WALKER.cells * AVATAR_WALKER.cellSize}" height="${AVATAR_WALKER.cellSize}" ` +
+        'alt="" draggable="false"/>',
+    );
+    expect(AVATAR_WALKER.url).toMatch(/\/avatar-walker\/walk\.png$/);
+  });
+
+  it('shows nothing of the retired 2D sprite on any wallet step', () => {
+    // The shell's code is scanned for it too (architecture.test.ts).
+    for (const kind of ['connect', 'balance', 'confirm'] as const) {
+      const markup = renderToStaticMarkup(<WalletAttentionCue active kind={kind} signal={() => {}} />);
+      expect(markup).toContain('class="wallet-attention-walker"');
+      expect(markup).not.toMatch(/player-sprites|avatar-1\.png|avatar-sheet/);
+    }
   });
 
   it('stays absent when no human-owned wallet step is active', () => {

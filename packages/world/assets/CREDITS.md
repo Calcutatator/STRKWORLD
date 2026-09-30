@@ -27,6 +27,17 @@ SHA-256s, licence) remains in git history before the removal commit.
   Phaser integration. The runtime-owned gameplay/contact body remains the
   common 24x24 footprint.
 
+## Avatar walker (`avatar-walker/`)
+
+- What: `walk.png`, a 1664x128 RGBA strip of 13 cells for the Shell's
+  wallet-attention cue (D-058): Avatar 1, the default 3D figure, standing and
+  then walking one stride towards the viewer.
+- Provenance: rendered offline on 2026-09-30 by `tools/render-avatar-walker.ts`
+  from this repository's own procedural figure (`src/three/avatar-figure.ts`,
+  `src/three/avatar-looks.ts`) and lighting (`src/three/lighting.ts`). No
+  third-party pixels, models or fonts.
+- Regenerate with `npm run render:walker --workspace=@strkworld/world`.
+
 ## Degen floor posters (`degen-posters/`)
 
 - What: eight 512x768 WebP posters for the Exchange tower's Degen floor, one

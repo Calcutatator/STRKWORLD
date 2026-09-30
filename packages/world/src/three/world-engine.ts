@@ -21,6 +21,22 @@ import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js
 import { CAMERA_FOV, createCameraRig, type CameraRig } from './camera-rig.js';
 import { createImageTextureLoader } from './image-textures.js';
 import { createCanvasLabelFactory } from './labels.js';
+import {
+  HEMISPHERE_GROUND,
+  HEMISPHERE_INTENSITY,
+  HEMISPHERE_SKY,
+  SHADOW_EXTENT,
+  SHADOW_FAR,
+  SHADOW_MAP_SIZE,
+  SHADOW_NEAR,
+  SHADOW_NORMAL_BIAS,
+  SHADOW_RADIUS,
+  SHADOW_TEXEL,
+  SUN_COLOR,
+  SUN_INTENSITY,
+  SUN_OFFSET,
+  TONE_MAPPING_EXPOSURE,
+} from './lighting.js';
 import { createPresenter, type Presenter } from './presenter.js';
 import { disposeSandboxCaches } from './sandbox-view.js';
 
@@ -64,12 +80,6 @@ const SKY_HORIZON = 0xf2dcc0;
 const SKY_GROUND = 0xd8c6ad;
 const FOG_NEAR = 26;
 const FOG_FAR = 64;
-/** Sun offset from the camera focus: high in the south-west, so facades are lit. */
-const SUN_OFFSET = { x: -14, y: 24, z: 12 } as const;
-const SHADOW_EXTENT = 22;
-const SHADOW_MAP_SIZE = 2048;
-/** World units per shadow texel; the light moves in whole texels so edges hold still. */
-const SHADOW_TEXEL = (SHADOW_EXTENT * 2) / SHADOW_MAP_SIZE;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
 /**
@@ -131,7 +141,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
-  const sun = new DirectionalLight(0xffe1b3, 2.4);
+  const sun = new DirectionalLight(SUN_COLOR, SUN_INTENSITY);
   const sky = createSky();
 
   const reportFrameError = (stage: string, error: unknown): void => {
@@ -268,7 +278,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
     renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in r186; PCF with a radius softens edges.
     renderer.shadowMap.type = PCFShadowMap;
@@ -286,17 +296,17 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       sky.geometry.dispose();
       sky.material.dispose();
     });
-    scene.add(new HemisphereLight(0xcfe3ff, 0x5b4a3c, 1.0));
+    scene.add(new HemisphereLight(HEMISPHERE_SKY, HEMISPHERE_GROUND, HEMISPHERE_INTENSITY));
     sun.castShadow = true;
     sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
-    sun.shadow.radius = 2;
+    sun.shadow.radius = SHADOW_RADIUS;
     sun.shadow.camera.left = -SHADOW_EXTENT;
     sun.shadow.camera.right = SHADOW_EXTENT;
     sun.shadow.camera.top = SHADOW_EXTENT;
     sun.shadow.camera.bottom = -SHADOW_EXTENT;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 80;
-    sun.shadow.normalBias = 0.03;
+    sun.shadow.camera.near = SHADOW_NEAR;
+    sun.shadow.camera.far = SHADOW_FAR;
+    sun.shadow.normalBias = SHADOW_NORMAL_BIAS;
     scene.add(sun, sun.target);
     cleanup.push(() => sun.dispose());
 

@@ -60,7 +60,7 @@ describe('ExchangePanel review render', () => {
       </PrivacyProvider>,
     );
     expect(markup).toContain('data-wallet-attention="balance"');
-    expect(markup).toMatch(/<img[^>]+avatar-1\.png/);
+    expect(markup).toMatch(/<img[^>]+avatar-walker\/walk\.png/);
     await loading;
 
     const loaded = renderToStaticMarkup(

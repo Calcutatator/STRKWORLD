@@ -170,7 +170,7 @@ describe('ProductionRoot', () => {
     );
 
     expect(connecting).toContain('data-wallet-attention="connect"');
-    expect(connecting).toMatch(/<img[^>]+avatar-1\.png/);
+    expect(connecting).toMatch(/<img[^>]+avatar-walker\/walk\.png/);
     expect(choosing).not.toContain('data-wallet-attention');
   });
 

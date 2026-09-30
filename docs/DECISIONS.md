@@ -2557,7 +2557,7 @@ Xverse and every funded/onchain claim remain separate production gates.
 
 ## D-058 — Manual wallet handoffs use one visible in-game attention cue
 
-**2026-08-29 · Accepted by the user**
+**2026-08-29 · Accepted by the user · the cue's figure is the default 3D figure walking, pre-rendered, instead of Avatar 1's 2D idle frame, since [the 2026-09-30 finding](../AGENTS.md#2026-09-30--the-wallet-cues-figure-is-a-walk-pre-rendered-from-the-3d-model-the-2d-sheets-no-longer-ship)**
 
 **Context.** Mock mode can exercise the complete production wallet seam without
 interrupting the user, but a real wallet still owns connection, private-balance
@@ -2595,7 +2595,8 @@ checks after the headless state and lifecycle regressions pass.
 **2026-09-27 · Accepted by the user · supersedes D-044's placeholder art base ·
 partially supersedes D-049 and D-052 for in-World avatars · amends the Phaser
 mechanism named in D-008, D-030 and D-039 · the street and its backdrop move
-east, unchanged relative to each other, for the football pitch by D-078**
+east, unchanged relative to each other, for the football pitch by D-078 · the
+2D sheets no longer feed D-058's cue, by [the 2026-09-30 finding](../AGENTS.md#2026-09-30--the-wallet-cues-figure-is-a-walk-pre-rendered-from-the-3d-model-the-2d-sheets-no-longer-ship)**
 
 **Context.** The user asked for STRKWORLD to become a 3D-rendered, simple game
 world you can walk around in, entirely in the browser, built on the same

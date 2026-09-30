@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
+import { AVATAR_WALKER } from '@strkworld/world';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -221,5 +222,70 @@ describe('form controls', () => {
     const box = rules.find((rule) => rule.selectors.includes('.panel input[type="checkbox"]') && /width:\s*1\.1rem/.test(rule.body));
     expect(box, 'a compact checkbox rule').toBeDefined();
     expect(box!.selectors).toContain('.panel input[type="radio"]');
+  });
+});
+
+/** The body of every at-rule whose prelude is exactly `prelude`, braces matched. */
+function atRuleBodies(prelude: string): string[] {
+  const bodies: string[] = [];
+  for (let start = css.indexOf(`${prelude} {`); start !== -1; start = css.indexOf(`${prelude} {`, start + 1)) {
+    const open = css.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < css.length; index += 1) {
+      if (css[index] === '{') depth += 1;
+      else if (css[index] === '}' && --depth === 0) {
+        bodies.push(css.slice(open + 1, index));
+        break;
+      }
+    }
+  }
+  return bodies;
+}
+
+/**
+ * The wallet cue's walker (D-058): the World's pre-rendered strip of the 3D
+ * figure, standing in its first cell and walking through the rest. The CSS
+ * numbers must be the strip's, or the cue would show half a figure or skip.
+ */
+describe("the wallet cue's walker (D-058)", () => {
+  const walker = ruleBody('.wallet-attention-walker');
+  const cell = AVATAR_WALKER.cellSize;
+
+  it("steps through the strip's walking cells over one stride", () => {
+    expect(walker).toMatch(new RegExp(
+      `animation:\\s*wallet-attention-walk ${AVATAR_WALKER.strideMs}ms steps\\(${AVATAR_WALKER.walkFrames}\\) infinite;`,
+    ));
+    const frames = atRuleBodies('@keyframes wallet-attention-walk');
+    expect(frames).toHaveLength(1);
+    // From the first walking cell to one past the last: steps() never shows its end.
+    expect(frames[0]).toMatch(new RegExp(`from\\s*\\{\\s*transform:\\s*translateX\\(-${cell}px\\);\\s*\\}`));
+    expect(frames[0]).toMatch(new RegExp(
+      `to\\s*\\{\\s*transform:\\s*translateX\\(-${AVATAR_WALKER.cells * cell}px\\);\\s*\\}`,
+    ));
+  });
+
+  it('shows the standing cell when motion is reduced', () => {
+    // At rest the strip sits unmoved in the slot, so its first cell shows.
+    expect(walker).toMatch(/top:\s*0;/);
+    expect(walker).toMatch(/left:\s*0;/);
+    expect(walker).not.toMatch(/transform|translate/);
+    const reduced = atRuleBodies('@media (prefers-reduced-motion: reduce)')
+      .flatMap((body) => [...body.matchAll(/([^{}]+)\{([^{}]*)\}/g)])
+      .filter((match) => match[1]!.split(',').map((selector) => selector.trim()).includes('.wallet-attention-walker'));
+    expect(reduced.map((match) => match[2]!.trim())).toEqual(['animation: none;']);
+  });
+
+  it("fills the old sprite's 64px slot, on a light disc that sets it off the dark card", () => {
+    const slot = ruleBody('.wallet-attention-avatar');
+    expect(slot).toMatch(new RegExp(`width:\\s*${cell}px;`));
+    expect(slot).toMatch(new RegExp(`height:\\s*${cell}px;`));
+    expect(slot).toMatch(/overflow:\s*hidden;/);
+    expect(ruleBody('.wallet-attention-cue')).toMatch(new RegExp(`grid-template-columns:\\s*${cell}px `));
+    const stops = [...ruleBody('.wallet-attention-avatar::before').matchAll(/#[0-9a-f]{6}/g)].map((match) => match[0]);
+    expect(stops).toHaveLength(2);
+    for (const stop of stops) {
+      for (const card of ['#33271e', '#271d17']) expect(contrast(stop, card)).toBeGreaterThanOrEqual(7);
+    }
+    expect(css).not.toMatch(/wallet-attention-avatar-sheet|pixelated/);
   });
 });

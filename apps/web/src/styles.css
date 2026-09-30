@@ -286,17 +286,35 @@ body {
   width: 64px;
   height: 64px;
   overflow: hidden;
-  image-rendering: pixelated;
 }
 
-.wallet-attention-avatar-sheet {
+/* The walker stands on a disc of the game's own horizon light: on the dark
+ * card its dark trousers and its contact shadow would disappear. */
+.wallet-attention-avatar::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f8ecda, #eacfab);
+}
+
+/* AVATAR_WALKER (D-058): 13 cells of 64px, drawn at 2x. At rest the strip shows
+ * its first cell, the figure standing; walking steps through cells 1-12, one
+ * stride at the game's cadence, so a reduced-motion rule that drops the
+ * animation leaves the figure standing still. */
+.wallet-attention-walker {
   position: absolute;
   top: 0;
   left: 0;
   display: block;
   max-width: none;
-  image-rendering: pixelated;
   user-select: none;
+  animation: wallet-attention-walk 625ms steps(12) infinite;
+}
+
+@keyframes wallet-attention-walk {
+  from { transform: translateX(-64px); }
+  to { transform: translateX(-832px); }
 }
 
 .wallet-attention-copy {
@@ -2373,7 +2391,8 @@ button[data-locked="true"] {
   .room,
   .session-notice,
   .presence-status,
-  .wallet-attention-cue {
+  .wallet-attention-cue,
+  .wallet-attention-walker {
     animation: none;
   }
 

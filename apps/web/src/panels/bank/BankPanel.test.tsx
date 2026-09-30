@@ -86,7 +86,7 @@ describe('BankPanel rendering', () => {
     const loading = panel.refreshBalance();
     const markup = render(panel, seam);
     expect(markup).toContain('data-wallet-attention="balance"');
-    expect(markup).toMatch(/<img[^>]+avatar-1\.png/);
+    expect(markup).toMatch(/<img[^>]+avatar-walker\/walk\.png/);
     await loading;
 
     expect(render(panel, seam)).not.toContain('data-wallet-attention');

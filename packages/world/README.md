@@ -244,10 +244,14 @@ walkable area use flat decor.
 
 Procedural low-poly geometry, no third-party assets (D-059). Avatars are
 procedural blocky figures, one look per opaque avatar key, coloured from the
-approved D-049 sheets in `assets/player-sprites/v1/`; those sheets also feed
-the Shell's wallet-attention cue (D-058). Any future model pack must be checked
-for commercial-use licensing before it lands and recorded in
-`assets/CREDITS.md`.
+approved D-049 sheets in `assets/player-sprites/v1/`, which nothing bundles any
+more. The Shell's wallet-attention cue (D-058) shows `AVATAR_WALKER`: the
+default figure walking towards the viewer, pre-rendered from the model into
+`assets/avatar-walker/walk.png` so the cue needs no Three.js. After changing a
+figure, its walk or the lighting (`src/three/lighting.ts`), regenerate it with
+`npm run render:walker --workspace=@strkworld/world`; its test fails until you
+do. Any future model pack must be checked for commercial-use licensing before
+it lands and recorded in `assets/CREDITS.md`.
 
 The one exception is the Exchange tower's Degen floor: its posters are the
 token projects' own logos and art, composed into 512×768 WebPs in
