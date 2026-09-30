@@ -54,6 +54,7 @@ generated domain.
 | `STRK20_NOTE_MATURITY_BLOCKS` | `10` |
 | `STARKNET_CHAIN_ID` | `SN_MAIN` |
 | `STARKNET_RPC_URL` | `https://api.cartridge.gg/x/starknet/mainnet` (public, no key), or your own RPC |
+| `PLAZA_POOL_VALUE_URL` | Optional (D-080). Defaults to strkprice.com's public pool-value proxy, `https://strkprice-pool-api-production.up.railway.app/api/pool` — no key, backend-only (its CORS admits only strkprice origins). Set only to point the plaza's USD figure at a different aggregate; it must be https. |
 | `BACKEND_MAX_REQUEST_BYTES` / `_MAX_CALLDATA_ITEMS` / `_MAX_PROOF_BYTES` | `2500000` / `256` / `2000000` |
 | `BACKEND_REQUEST_TIMEOUT_MS` | `20000` |
 | `BACKEND_GLOBAL_ENABLED` | `true` |

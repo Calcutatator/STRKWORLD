@@ -12567,3 +12567,30 @@ export/import for cross-device resume rather than a correlating backend table.
 export/import tests in `packages/bridge/src/bridge.test.ts`.
 
 ---
+
+### 2026-09-30 — strkprice.com's pool-value proxy: shape, and two things a naive parser gets wrong
+
+Read directly at `https://strkprice-pool-api-production.up.railway.app/api/pool`
+on 2026-09-30 at 09:48 UTC (D-080): `{ t, usd, starknet_tvl, pct, tokenCount,
+unpriced, tokens }`. `tokenCount` is exactly `tokens.length` — priced tokens
+only. `unpriced` is a separate list of symbols the pool holds with no
+resolvable price (that read: 12 entries, some repeated, no address or value
+attached) — it is never `tokens.length + unpriced.length`. Each `tokens`
+entry is `{ symbol, address, usd }`, and that read had no malformed address
+and no negative or non-finite `usd`.
+
+Two things a naive parser gets wrong. First, `tokens` can carry more than one
+entry with the same display symbol at different addresses (that read: two
+distinct contracts both called `wstETH`, one worth $16,933.69, the other
+$0.14) — do not deduplicate by symbol; they are genuinely different tokens,
+and both can legitimately appear if both are ever in the top holdings.
+Second, a real, legitimate symbol can exceed 16 printable characters (that
+read: `vUSDC-Re7USDCCore`, a Re7 vault-share wrapper token) — this is not
+always a spoofing attempt, but D-080 drops it anyway rather than truncating:
+the lead's spec caps a shown symbol at 16 characters, and a truncated ticker
+reads as a different, wrong token rather than an omitted one.
+
+*Verified:* a direct `curl` read of the live proxy, cross-checked against
+`apps/backend/src/pool-stats.test.ts`'s parsing and validation suite.
+
+---

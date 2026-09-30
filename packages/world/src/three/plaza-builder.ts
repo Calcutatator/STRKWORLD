@@ -259,9 +259,18 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   let stats: PlazaStatsPresentation = EMPTY_PLAZA_STATS;
   let heldIndex = 0;
   let highlighted: StationId | null = null;
+  // D-080: the held face's frames — the USD total first, then each of the
+  // top holdings, in the Shell's order. Whichever of the two is missing,
+  // the other still cycles (or sits alone) on its own.
+  const heldFrames = (): readonly string[] => {
+    const frames: string[] = [];
+    if (stats.valueUsd !== null) frames.push(stats.valueUsd);
+    if (stats.topHoldings) frames.push(...stats.topHoldings);
+    return frames;
+  };
   const drawHeld = (): void => {
-    const lines = stats.held;
-    const line = lines && lines.length > 0 ? lines[heldIndex % lines.length]! : null;
+    const frames = heldFrames();
+    const line = frames.length > 0 ? frames[heldIndex % frames.length]! : null;
     held?.setText(plazaFaceText(line, PLAZA_FACE_CAPTIONS.held));
   };
   const draw = (): void => {
@@ -271,12 +280,12 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   };
   let lastCycle = 0;
   parts.animators.push((elapsed) => {
-    // Several tokens take turns on the held face; one stays put.
+    // The total and each holding take turns on the held face; one frame stays put.
     const cycle = Math.floor(elapsed / PLAZA_HELD_CYCLE_MS);
     if (cycle !== lastCycle) {
       lastCycle = cycle;
       heldIndex += 1;
-      if ((stats.held?.length ?? 0) > 1) drawHeld();
+      if (heldFrames().length > 1) drawHeld();
     }
     for (const { label, baseY } of prompts.values()) {
       if (label.object.visible) label.object.position.y = baseY + 0.05 * Math.sin((elapsed / 1000) * 3);

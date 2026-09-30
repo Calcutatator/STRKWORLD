@@ -393,15 +393,21 @@ export type ShellEvents = {
   'world:exit-building': { building: BuildingId };
   /**
    * D-076: the Privacy Plaza monument's figures, pre-formatted like
-   * `hud:balance` ("2,932", "2.56M STRK"). Public pool-wide aggregates only,
+   * `hud:balance` ("2,932", "$1.18M"). Public pool-wide aggregates only,
    * never anything about this player. Null while unknown (loading, or a read
    * that failed), which the monument draws as "…".
+   *
+   * D-080: `held`'s per-pinned-token amounts were replaced with the pool's
+   * USD value and its top holdings by value, read from Voyager through
+   * strkprice.com (a public aggregate, no key, no user data).
    */
   'plaza:stats': {
     accounts: string | null;
     deposits24h: string | null;
-    /** One line per token, in the Shell's order. */
-    held: readonly string[] | null;
+    /** Compact total held in the pool, e.g. "$1.18M". */
+    valueUsd: string | null;
+    /** Compact "SYMBOL · $usd" lines, most valuable first, for the cycling face. */
+    topHoldings: readonly string[] | null;
   };
 };
 

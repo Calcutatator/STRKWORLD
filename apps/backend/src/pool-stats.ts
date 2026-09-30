@@ -1,17 +1,29 @@
-import type { ChainHead, PoolEventsPage, PoolStatsPort, PoolStatsRpcPort, PoolStatsSnapshot } from './types.js';
+import type {
+  ChainHead,
+  PoolEventsPage,
+  PoolStatsPort,
+  PoolStatsRpcPort,
+  PoolStatsSnapshot,
+  PoolTokenValue,
+  PoolValueRead,
+  PoolValueSourcePort,
+} from './types.js';
 import { isFelt } from './validation.js';
 
 /**
- * The Privacy Plaza's public pool stats (D-076), computed in the background
- * and served from memory.
+ * The Privacy Plaza's public pool stats (D-076, value fields D-080), computed
+ * in the background and served from memory.
  *
- * Three aggregates, all public chain facts, none about a player:
+ * Four aggregates, all public facts, none about a player:
  *
  * - accounts registered: the pool's `ViewingKeySet` events since its first
  *   block (one per account: a viewing key is set once);
  * - deposits in the last 24 hours: its `Deposit` events in the last
  *   `DEPOSIT_WINDOW_BLOCKS` blocks;
- * - held in the pool: `balance_of(pool)` on each pinned token.
+ * - held in the pool, in USD: the pool's total value and its highest-value
+ *   holdings, read from Voyager through strkprice.com's public proxy
+ *   (`PLAZA_POOL_VALUE_URL`), which needs no key and sees no user data;
+ * - how many distinct tokens the pool holds.
  *
  * The scans are incremental and cursor-based. The first registration scan
  * reads the pool's whole life once, a window of blocks at a time, committing
@@ -28,12 +40,19 @@ import { isFelt } from './validation.js';
  * which a trailing node refuses, and a window that ends by number ends at
  * least a whole window (about five days) below the head.
  *
- * Reading never waits on the chain. The route serves the last good value of
- * each part (null until a part has one) and, when it is a minute old, starts
- * the next refresh in the background. Refreshes run about every 60 s while
- * someone keeps asking, one at a time, and stop after ten quiet minutes. A
- * part whose refresh fails keeps its last good value. Nothing is logged
- * (D-014).
+ * The pool's value is a separate, single HTTP read of the external aggregate,
+ * on its own bounded timeout, validated strictly: the total and every
+ * holding's amount must be finite and non-negative, every symbol is cleaned
+ * to short printable ASCII or dropped, every address must be a valid felt,
+ * and the holdings kept are capped to the highest-value few. A malformed or
+ * unreachable answer fails that part alone, keeping its last good value.
+ *
+ * Reading never waits on the chain or the aggregate. The route serves the
+ * last good value of each part (null until a part has one) and, when it is a
+ * minute old, starts the next refresh in the background. Refreshes run about
+ * every 60 s while someone keeps asking, one at a time, and stop after ten
+ * quiet minutes. A part whose refresh fails keeps its last good value.
+ * Nothing is logged (D-014).
  */
 
 /** The canonical mainnet pool's first block, where the registration scan starts. */
@@ -71,37 +90,48 @@ export const POOL_STATS_RATE_LIMIT = Object.freeze({ maxRequests: 600, windowMs:
 const MAX_PAGES_PER_SCAN = 1_000;
 
 /**
- * The tokens whose pool balance is read: the six the web's Exchange catalog
- * describes (`apps/web/src/panels/exchange/catalog.ts`; pool-stats.test.ts
- * checks they agree). The web shows those on its own shield allowlist. Pinned
- * here, never taken from a request, so the route cannot be made to call an
- * arbitrary contract.
+ * D-080: strkprice.com's public proxy over Voyager, summing the pool's USD
+ * value across every token it holds, with a GeckoTerminal price fallback,
+ * cached there for 20 s. Public, no key. `PLAZA_POOL_VALUE_URL` overrides it;
+ * either way `environment.ts` requires https.
  */
-export const POOL_STATS_TOKENS: readonly string[] = Object.freeze([
-  '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
-  '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
-  '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
-  '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
-  '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
-  '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135',
-]);
+export const DEFAULT_POOL_VALUE_URL = 'https://strkprice-pool-api-production.up.railway.app/api/pool';
 
-export const EMPTY_POOL_STATS: PoolStatsSnapshot = Object.freeze({ accounts: null, deposits24h: null, held: null });
+/** Longest a single read of the pool value aggregate may take. */
+export const POOL_VALUE_FETCH_TIMEOUT_MS = 15_000;
+
+/** Holdings kept from the aggregate's answer: the highest-value few. */
+export const MAX_TOP_HOLDINGS = 10;
+
+/** Longest a cleaned symbol may be; anything longer is not a symbol, it's noise. */
+export const MAX_SYMBOL_LENGTH = 16;
+
+export const EMPTY_POOL_STATS: PoolStatsSnapshot = Object.freeze({
+  accounts: null,
+  deposits24h: null,
+  valueUsd: null,
+  topHoldings: null,
+  valueAsOf: null,
+  tokenCount: null,
+});
 
 /** Returns a cancel. The default runs on an unref'd timer, so it never holds the process open. */
 export type PoolStatsScheduler = (callback: () => void, ms: number) => () => void;
 
 export interface PoolStatsCacheOptions {
   readonly rpc: PoolStatsRpcPort;
+  /** D-080: the external USD-value aggregate. Without it, valueUsd/topHoldings/tokenCount stay null. */
+  readonly poolValue?: PoolValueSourcePort;
   readonly now?: () => number;
   readonly schedule?: PoolStatsScheduler;
-  readonly tokens?: readonly string[];
   readonly firstBlock?: number;
   readonly windowBlocks?: number;
   readonly scanWindow?: number;
   readonly refreshMs?: number;
   readonly idleMs?: number;
   readonly rpcTimeoutMs?: number;
+  /** Longest one read of the pool value aggregate may take. */
+  readonly poolValueTimeoutMs?: number;
 }
 
 const defaultSchedule: PoolStatsScheduler = (callback, ms) => {
@@ -112,15 +142,16 @@ const defaultSchedule: PoolStatsScheduler = (callback, ms) => {
 
 export class PoolStatsCache implements PoolStatsPort {
   private readonly rpc: PoolStatsRpcPort;
+  private readonly poolValue?: PoolValueSourcePort;
   private readonly now: () => number;
   private readonly schedule: PoolStatsScheduler;
-  private readonly tokens: readonly string[];
   private readonly firstBlock: number;
   private readonly windowBlocks: number;
   private readonly scanWindow: number;
   private readonly refreshMs: number;
   private readonly idleMs: number;
   private readonly rpcTimeoutMs: number;
+  private readonly poolValueTimeoutMs: number;
 
   /** Registrations counted in `[firstBlock, cursor]`; null before the first window. */
   private registrations: { cursor: number | null; count: number } = { cursor: null, count: 0 };
@@ -133,15 +164,16 @@ export class PoolStatsCache implements PoolStatsPort {
 
   constructor(options: PoolStatsCacheOptions) {
     this.rpc = options.rpc;
+    this.poolValue = options.poolValue;
     this.now = options.now ?? Date.now;
     this.schedule = options.schedule ?? defaultSchedule;
-    this.tokens = Object.freeze([...(options.tokens ?? POOL_STATS_TOKENS)]);
     this.firstBlock = options.firstBlock ?? POOL_FIRST_BLOCK;
     this.windowBlocks = options.windowBlocks ?? DEPOSIT_WINDOW_BLOCKS;
     this.scanWindow = options.scanWindow ?? POOL_STATS_SCAN_WINDOW;
     this.refreshMs = options.refreshMs ?? POOL_STATS_REFRESH_MS;
     this.idleMs = options.idleMs ?? POOL_STATS_IDLE_MS;
     this.rpcTimeoutMs = options.rpcTimeoutMs ?? POOL_STATS_RPC_TIMEOUT_MS;
+    this.poolValueTimeoutMs = options.poolValueTimeoutMs ?? POOL_VALUE_FETCH_TIMEOUT_MS;
     for (const [name, value] of Object.entries({
       firstBlock: this.firstBlock,
       windowBlocks: this.windowBlocks,
@@ -149,6 +181,7 @@ export class PoolStatsCache implements PoolStatsPort {
       refreshMs: this.refreshMs,
       idleMs: this.idleMs,
       rpcTimeoutMs: this.rpcTimeoutMs,
+      poolValueTimeoutMs: this.poolValueTimeoutMs,
     })) {
       if (!Number.isSafeInteger(value) || value < (name === 'firstBlock' ? 0 : 1)) {
         throw new Error(`Pool stats ${name} must be a positive integer.`);
@@ -221,7 +254,10 @@ export class PoolStatsCache implements PoolStatsPort {
     // Quick parts first, so a first visitor sees them while the long first
     // registration scan runs. A failed part keeps its last good value.
     const failures: unknown[] = [];
-    for (const part of [() => this.refreshHeld(), () => this.refreshDeposits(head), () => this.refreshRegistrations(head)]) {
+    const parts: Array<() => Promise<void>> = [];
+    if (this.poolValue) parts.push(() => this.refreshValue());
+    parts.push(() => this.refreshDeposits(head), () => this.refreshRegistrations(head));
+    for (const part of parts) {
       try {
         await part();
       } catch (error) {
@@ -232,29 +268,19 @@ export class PoolStatsCache implements PoolStatsPort {
   }
 
   /**
-   * One read per token. A token whose read fails keeps its last good amount,
-   * or is left out until it has one; only when every read fails does the
-   * whole part keep its last good value.
+   * D-080: one read of the external USD-value aggregate, on its own timeout.
+   * The port has already validated and capped its answer strictly; a
+   * malformed or unreachable answer throws here, which keeps this part's
+   * last good value exactly like a failed chain read.
    */
-  private async refreshHeld(): Promise<void> {
-    const results = await Promise.allSettled(
-      this.tokens.map((token) => this.read((signal) => this.rpc.getPoolBalance(token, signal))),
-    );
-    const previous = this.served.held ?? [];
-    const held: { readonly token: string; readonly amount: bigint }[] = [];
-    let read = 0;
-    this.tokens.forEach((token, index) => {
-      const result = results[index]!;
-      if (result.status === 'fulfilled' && typeof result.value === 'bigint' && result.value >= 0n) {
-        read += 1;
-        held.push(Object.freeze({ token, amount: result.value }));
-        return;
-      }
-      const kept = previous.find((entry) => entry.token === token);
-      if (kept) held.push(kept);
+  private async refreshValue(): Promise<void> {
+    const read = await this.read((signal) => this.poolValue!.load(signal), this.poolValueTimeoutMs);
+    this.publish({
+      valueUsd: read.usd,
+      topHoldings: Object.freeze(read.topHoldings.map((holding) => Object.freeze({ ...holding }))),
+      valueAsOf: new Date(this.now()).toISOString(),
+      tokenCount: read.tokenCount,
     });
-    if (read === 0) throw new Error('Pool stats could not read any pool balance.');
-    this.publish({ held: Object.freeze(held) });
   }
 
   private async refreshDeposits(head: ChainHead): Promise<void> {
@@ -324,11 +350,11 @@ export class PoolStatsCache implements PoolStatsPort {
     this.served = Object.freeze({ ...this.served, ...part });
   }
 
-  private async read<T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private async read<T>(call: (signal: AbortSignal) => Promise<T>, timeoutMs: number = this.rpcTimeoutMs): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort(new DOMException('A pool stats read timed out.', 'TimeoutError'));
-    }, this.rpcTimeoutMs);
+    }, timeoutMs);
     (timer as { unref?: () => void }).unref?.();
     try {
       return await call(controller.signal);
@@ -338,11 +364,129 @@ export class PoolStatsCache implements PoolStatsPort {
   }
 }
 
-/** Whether an RPC port can serve the pool stats' narrow reads. */
+/** Whether an RPC port can serve the pool stats' narrow chain reads. */
 export function isPoolStatsRpc(value: unknown): value is PoolStatsRpcPort {
   if (!value || typeof value !== 'object') return false;
   const port = value as Partial<Record<keyof PoolStatsRpcPort, unknown>>;
-  return typeof port.getHead === 'function'
-    && typeof port.getPoolEvents === 'function'
-    && typeof port.getPoolBalance === 'function';
+  return typeof port.getHead === 'function' && typeof port.getPoolEvents === 'function';
+}
+
+// ---------------------------------------------------------------------------
+// D-080: the pool's USD value, read from the external aggregate
+// ---------------------------------------------------------------------------
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export interface PoolValueSourceOptions {
+  /** `PLAZA_POOL_VALUE_URL`, already validated https-only by `environment.ts`. */
+  readonly url: string;
+  readonly fetcher?: FetchLike;
+}
+
+/**
+ * D-080: fetches strkprice.com's public pool-value proxy and validates its
+ * answer strictly. Called from the backend only — its CORS allows strkprice
+ * origins alone, so a browser could not read it even if asked to.
+ *
+ * Times out only through the `signal` it is given: like every other RPC port
+ * here, the timeout is `PoolStatsCache`'s to own (`poolValueTimeoutMs`), not
+ * each port's own.
+ */
+export class HttpPoolValueSource implements PoolValueSourcePort {
+  private readonly url: string;
+  private readonly fetcher: FetchLike;
+
+  constructor(options: PoolValueSourceOptions) {
+    if (!isHttpsUrl(options.url)) throw new Error('Pool value URL must be https.');
+    this.url = options.url;
+    this.fetcher = options.fetcher ?? ((input, init) => globalThis.fetch(input, init));
+  }
+
+  async load(signal?: AbortSignal): Promise<PoolValueRead> {
+    const response = await this.fetcher(this.url, { method: 'GET', signal });
+    if (!response.ok) throw new Error('The pool value aggregate refused the read.');
+    return parsePoolValueResponse(await response.json());
+  }
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads the aggregate's answer strictly: the total and `tokens` must be
+ * present and well-typed, or the whole read fails (keeping the cache's last
+ * good value). Within `tokens`, one malformed entry is dropped rather than
+ * failing every other one: a single bad or unpriced token should not hide
+ * the rest of a 40-token pool. `tokenCount` is taken as a plain count; the
+ * `unpriced` symbol list (if any) is never read beyond confirming its shape,
+ * since nothing here exposes raw upstream strings besides a cleaned symbol.
+ */
+export function parsePoolValueResponse(value: unknown): PoolValueRead {
+  if (!isRecord(value)) throw invalid();
+  const usd = ownValue(value, 'usd');
+  if (typeof usd !== 'number' || !isFiniteNonNegative(usd)) throw invalid();
+  const tokensValue = ownValue(value, 'tokens');
+  if (!Array.isArray(tokensValue)) throw invalid();
+  const unpricedValue = ownValue(value, 'unpriced');
+  if (unpricedValue !== undefined && !Array.isArray(unpricedValue)) throw invalid();
+
+  const candidates: PoolTokenValue[] = [];
+  for (const item of ownItems(tokensValue)) {
+    if (!isRecord(item)) continue;
+    const rawUsd = ownValue(item, 'usd');
+    const rawAddress = ownValue(item, 'address');
+    const rawSymbol = ownValue(item, 'symbol');
+    if (typeof rawUsd !== 'number' || !isFiniteNonNegative(rawUsd)) continue;
+    if (typeof rawAddress !== 'string' || !isFelt(rawAddress) || BigInt(rawAddress) === 0n) continue;
+    const symbol = cleanSymbol(rawSymbol);
+    if (symbol === null) continue;
+    candidates.push(Object.freeze({ symbol, usd: rawUsd }));
+  }
+  candidates.sort((a, b) => b.usd - a.usd);
+  const topHoldings = Object.freeze(candidates.slice(0, MAX_TOP_HOLDINGS));
+
+  const rawCount = ownValue(value, 'tokenCount');
+  const tokenCount = typeof rawCount === 'number' && Number.isSafeInteger(rawCount) && rawCount >= 0 ? rawCount : null;
+
+  return Object.freeze({ usd, topHoldings, tokenCount });
+}
+
+/** Printable ASCII only, trimmed, 1-16 characters; anything else (homoglyphs, control bytes) is not a symbol. */
+function cleanSymbol(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[^\x20-\x7E]/g, '').trim();
+  return cleaned.length >= 1 && cleaned.length <= MAX_SYMBOL_LENGTH ? cleaned : null;
+}
+
+function isFiniteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function isRecord(value: unknown): value is object {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Own-property reads only: a getter on the prototype chain must not smuggle a value past validation. */
+function ownValue(record: object, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
+
+function ownItems(array: readonly unknown[]): unknown[] {
+  const length = Object.getOwnPropertyDescriptor(array, 'length');
+  if (!length || !('value' in length) || !Number.isSafeInteger(length.value)) throw invalid();
+  const items: unknown[] = [];
+  for (let index = 0; index < (length.value as number); index += 1) {
+    items.push(Object.getOwnPropertyDescriptor(array, String(index))?.value);
+  }
+  return items;
+}
+
+function invalid(): Error {
+  return new Error('The pool value aggregate answered with a malformed body.');
 }

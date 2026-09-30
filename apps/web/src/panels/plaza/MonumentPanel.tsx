@@ -1,35 +1,34 @@
 import { COPY } from '../../copy.js';
 import { usePoolStatsWindow } from '../../plaza/PlazaProvider.js';
 import type { PoolStatsView } from '../../plaza/pool-stats-poller.js';
-import { formatPanelAmount, formatPlazaCount, plazaHeldLines, type PlazaToken } from '../../plaza/pool-stats.js';
+import { formatCompactUsd, formatExactUsd, formatHoldingLine, formatPlazaCount } from '../../plaza/pool-stats.js';
 import { PanelFrame } from '../PanelFrame.js';
 
 /**
- * The Privacy Plaza monument's window (D-076): the pool's public figures,
- * the same three as the monument's faces, and a few plain lines on why a
- * bigger crowd means more privacy. No money, no wallet: nothing in it is
- * about the player, and it asks nothing of them.
+ * The Privacy Plaza monument's window (D-076): the pool's public figures —
+ * accounts, deposits and, since D-080, the pool's USD value and its top
+ * holdings, read by the backend from Voyager through strkprice.com — and a
+ * few plain lines on why a bigger crowd means more privacy. No money, no
+ * wallet: nothing in it is about the player, and it asks nothing of them.
  */
 export function MonumentPanel({ onClose }: { onClose: () => void }) {
-  const { view, tokens } = usePoolStatsWindow();
-  return <MonumentPanelView view={view} tokens={tokens} onClose={onClose} />;
+  const { view } = usePoolStatsWindow();
+  return <MonumentPanelView view={view} onClose={onClose} />;
 }
 
 /** Pure render half, so every state is a static-render test. */
 export function MonumentPanelView({
   view,
-  tokens,
   onClose,
 }: {
   view: PoolStatsView;
-  tokens: readonly PlazaToken[];
   onClose: () => void;
 }) {
   const copy = COPY.plaza.monument;
   const stats = view.stats;
-  const held = plazaHeldLines(stats?.held ?? null, tokens, formatPanelAmount);
   const figure = (value: number | null | undefined): string =>
     value === null || value === undefined ? copy.unknown : formatPlazaCount(value);
+  const topHoldings = stats?.topHoldings ?? null;
   return (
     <PanelFrame title={copy.title} building="plaza" disclosure={null} onClose={onClose}>
       <p className="panel-intro">{copy.intro}</p>
@@ -50,23 +49,32 @@ export function MonumentPanelView({
         <div>
           <dt>{copy.held}</dt>
           <dd data-stat="held">
-            {held ? (
-              <ul className="plaza-held">
-                {held.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : (
+            {stats?.valueUsd == null ? (
               copy.unknown
+            ) : (
+              <span title={formatExactUsd(stats.valueUsd)}>{formatCompactUsd(stats.valueUsd)}</span>
             )}
           </dd>
         </div>
+        {topHoldings && topHoldings.length > 0 ? (
+          <div>
+            <dt>{copy.topHoldings}</dt>
+            <dd data-stat="top-holdings">
+              <ul className="plaza-held">
+                {topHoldings.map((holding) => (
+                  <li key={holding.symbol}>{formatHoldingLine(holding)}</li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        ) : null}
       </dl>
       {view.status === 'failed' && stats === null ? (
         <p className="panel-notice plaza-stats-failed" role="status">
           {copy.failed}
         </p>
       ) : null}
+      <p className="plaza-source">{copy.source}</p>
       <h3 className="plaza-subhead">{copy.setTitle}</h3>
       <p className="plaza-set">{copy.set.join(' ')}</p>
       <p className="plaza-edges">{copy.edges}</p>

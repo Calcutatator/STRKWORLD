@@ -1,37 +1,38 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { WalletRoutePolicy } from '@strkworld/privacy';
-import { EXCHANGE_CATALOG } from '../panels/exchange/catalog.js';
 import { DEMO_POOL_STATS, DEMO_POOL_STATS_SOURCE } from './demo-pool-stats.js';
 import {
   POOL_STATS_PATH,
   createBackendPoolStats,
-  formatCompactAmount,
-  formatPanelAmount,
+  formatCompactUsd,
+  formatExactUsd,
+  formatHoldingLine,
+  formatMonumentHoldingLine,
   formatPlazaCount,
   parsePoolStatsResponse,
-  plazaHeldLines,
   plazaStatsEvent,
-  plazaTokens,
 } from './pool-stats.js';
 
 /**
- * The Privacy Plaza's pool stats in the Shell (D-076): one same-origin read
- * that carries nothing about the player, a strict parser, and the figures
- * the monument and its window show.
+ * The Privacy Plaza's pool stats in the Shell (D-076; USD value D-080): one
+ * same-origin read that carries nothing about the player, a strict parser,
+ * and the figures the monument and its window show.
  */
 
-const [STRK, ETH, USDC, USDT, WBTC, STRKBTC] = EXCHANGE_CATALOG.map((asset) => asset.token);
-const E18 = 10n ** 18n;
+const EMPTY = Object.freeze({
+  accounts: null,
+  deposits24h: null,
+  valueUsd: null,
+  topHoldings: null,
+  valueAsOf: null,
+  tokenCount: null,
+});
 
-function policyWithShield(tokens: readonly string[]): WalletRoutePolicy {
-  return { enabledRoutes: ['shield'], allowedTokens: { shield: tokens } } as unknown as WalletRoutePolicy;
-}
-
-describe('reading the pool stats (D-076)', () => {
+describe('reading the pool stats (D-076, D-080)', () => {
   it('posts only the version to the same-origin route', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ accounts: 2932, deposits24h: 23, held: null })));
+    const body = { ...EMPTY, accounts: 2932, deposits24h: 23 };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(body)));
     const source = createBackendPoolStats({ baseUrl: '/api', fetch: fetcher });
-    await expect(source.load()).resolves.toEqual({ accounts: 2932, deposits24h: 23, held: null });
+    await expect(source.load()).resolves.toEqual(body);
     expect(source.demo).toBe(false);
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [url, init] = fetcher.mock.calls[0]! as unknown as [string, RequestInit];
@@ -48,78 +49,103 @@ describe('reading the pool stats (D-076)', () => {
   });
 
   it('parses aggregates strictly, keeping null parts null', () => {
-    expect(parsePoolStatsResponse({
+    const full = {
       accounts: 2932,
       deposits24h: 0,
-      held: [{ token: STRK, amount: '2561829878412000000000000' }],
-    })).toEqual({ accounts: 2932, deposits24h: 0, held: [{ token: STRK, amount: 2561829878412000000000000n }] });
-    expect(parsePoolStatsResponse({ accounts: null, deposits24h: null, held: null })).toEqual({ accounts: null, deposits24h: null, held: null });
+      valueUsd: 1_177_415.13,
+      topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }],
+      valueAsOf: '2026-09-30T00:00:00.000Z',
+      tokenCount: 40,
+    };
+    expect(parsePoolStatsResponse(full)).toEqual(full);
+    expect(parsePoolStatsResponse(EMPTY)).toEqual(EMPTY);
     for (const bad of [
       null,
       [],
       { accounts: 1, deposits24h: 1 },
-      { accounts: -1, deposits24h: 1, held: null },
-      { accounts: 1.5, deposits24h: 1, held: null },
-      { accounts: '1', deposits24h: 1, held: null },
-      { accounts: 1, deposits24h: 1, held: [{ token: 'STRK', amount: '1' }] },
-      { accounts: 1, deposits24h: 1, held: [{ token: STRK, amount: 1 }] },
-      { accounts: 1, deposits24h: 1, held: [{ token: STRK, amount: '-1' }] },
-      { accounts: 1, deposits24h: 1, held: [{ token: STRK, amount: '01' }] },
-      { accounts: 1, deposits24h: 1, held: Array.from({ length: 17 }, () => ({ token: STRK, amount: '1' })) },
+      { ...EMPTY, accounts: -1 },
+      { ...EMPTY, accounts: 1.5 },
+      { ...EMPTY, accounts: '1' },
+      { ...EMPTY, valueUsd: -1 },
+      { ...EMPTY, valueUsd: Number.NaN },
+      { ...EMPTY, valueUsd: Number.POSITIVE_INFINITY },
+      { ...EMPTY, valueUsd: '1177415' },
+      { ...EMPTY, valueAsOf: 'not-a-timestamp' },
+      { ...EMPTY, valueAsOf: '2026-09-30' },
+      { ...EMPTY, tokenCount: -1 },
+      { ...EMPTY, tokenCount: 1.5 },
+      { ...EMPTY, tokenCount: '40' },
+      { ...EMPTY, topHoldings: 'not-an-array' },
+      { ...EMPTY, topHoldings: [{ symbol: 'STRK' }] },
+      { ...EMPTY, topHoldings: [{ symbol: 'STRK', usd: -1 }] },
+      { ...EMPTY, topHoldings: [{ symbol: 'STRK', usd: Number.NaN }] },
+      { ...EMPTY, topHoldings: [{ symbol: '', usd: 1 }] },
+      { ...EMPTY, topHoldings: [{ symbol: 'A'.repeat(17), usd: 1 }] },
+      { ...EMPTY, topHoldings: Array.from({ length: 11 }, () => ({ symbol: 'X', usd: 1 })) },
     ]) {
       expect(() => parsePoolStatsResponse(bad), JSON.stringify(bad)).toThrow(/malformed/);
     }
-    const accessor = Object.defineProperty({ deposits24h: 1, held: null }, 'accounts', { get: () => 1, enumerable: true });
+    const accessor = Object.defineProperty({ ...EMPTY }, 'accounts', { get: () => 1, enumerable: true });
     expect(() => parsePoolStatsResponse(accessor)).toThrow(/malformed/);
   });
 
   it('offers demo figures that say they are demo figures', async () => {
     expect(DEMO_POOL_STATS_SOURCE.demo).toBe(true);
     await expect(DEMO_POOL_STATS_SOURCE.load()).resolves.toBe(DEMO_POOL_STATS);
-    expect(DEMO_POOL_STATS.held).toHaveLength(EXCHANGE_CATALOG.length);
+    expect(DEMO_POOL_STATS.topHoldings).not.toBeNull();
+    expect(DEMO_POOL_STATS.topHoldings!.length).toBeGreaterThan(0);
+    expect(DEMO_POOL_STATS.topHoldings!.length).toBeLessThanOrEqual(10);
+    expect(DEMO_POOL_STATS.valueUsd).toBeGreaterThan(0);
   });
 });
 
-describe('what the plaza shows (D-076)', () => {
-  it("shows this build's shield allowlist, in its order, as far as the catalog describes it", () => {
-    expect(plazaTokens(policyWithShield([USDC!, STRK!, '0x1234', STRK!])).map((token) => token.symbol)).toEqual(['USDC', 'STRK']);
-    // The Railway list: STRK, ETH, USDC, USDT and WBTC.
-    expect(plazaTokens(policyWithShield([STRK!, ETH!, USDC!, USDT!, WBTC!])).map((token) => token.symbol)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']);
-    // No policy (demo, tests) restricts nothing.
-    expect(plazaTokens(null).map((token) => token.symbol)).toEqual(EXCHANGE_CATALOG.map((asset) => asset.symbol));
-    expect(plazaTokens({} as WalletRoutePolicy)).toEqual([]);
-  });
-
-  it('writes counts with separators and amounts in three figures, truncated', () => {
+describe('what the plaza shows (D-076, D-080)', () => {
+  it('writes counts with separators, and USD figures compact and exact', () => {
     expect(formatPlazaCount(2932)).toBe('2,932');
     expect(formatPlazaCount(23)).toBe('23');
     expect(formatPlazaCount(1_234_567)).toBe('1,234,567');
-    expect(formatCompactAmount(2_561_829_878_412_000_000_000_000n, 18)).toBe('2.56M');
-    expect(formatCompactAmount(18_976_348_000_000_000_000n, 18)).toBe('18.9');
-    expect(formatCompactAmount(200_355_033_845n, 6)).toBe('200K');
-    expect(formatCompactAmount(10_312_699_018n, 6)).toBe('10.3K');
-    expect(formatCompactAmount(35_931_600n, 8)).toBe('0.359');
-    expect(formatCompactAmount(1_000_000n * E18, 18)).toBe('1M');
-    expect(formatCompactAmount(999n * E18, 18)).toBe('999');
-    expect(formatCompactAmount(0n, 18)).toBe('0');
-    expect(formatPanelAmount(2_561_829_878_412_000_000_000_000n, 18)).toBe('2,561,829.87');
-    expect(formatPanelAmount(18_976_348_000_000_000_000n, 18)).toBe('18.97');
-    expect(formatPanelAmount(35_931_600n, 8)).toBe('0.3593');
+    // Matches the lead's own examples exactly (strkprice.com's reported figures).
+    expect(formatCompactUsd(1_177_415.13)).toBe('$1.18M');
+    expect(formatCompactUsd(453_000)).toBe('$453K');
+    expect(formatCompactUsd(198_000)).toBe('$198K');
+    expect(formatCompactUsd(59_000)).toBe('$59K');
+    expect(formatCompactUsd(11_000)).toBe('$11K');
+    expect(formatCompactUsd(1_500_000_000)).toBe('$1.5B');
+    expect(formatCompactUsd(42)).toBe('$42');
+    expect(formatCompactUsd(0.4)).toBe('$0.40');
+    expect(formatCompactUsd(0)).toBe('$0');
+    expect(formatCompactUsd(-5)).toBe('$0');
+    expect(formatCompactUsd(Number.NaN)).toBe('$0');
+    expect(formatExactUsd(1_177_415.13)).toBe('$1,177,415');
+    expect(formatExactUsd(0)).toBe('$0');
+    expect(formatHoldingLine({ symbol: 'xSTRK', usd: 453_000 })).toBe('xSTRK $453K');
+    expect(formatHoldingLine({ symbol: 'USDC', usd: 198_000 })).toBe('USDC $198K');
+    expect(formatMonumentHoldingLine({ symbol: 'xSTRK', usd: 453_000 })).toBe('xSTRK · $453K');
   });
 
   it('pre-formats the monument figures, and null for anything unknown', () => {
-    const tokens = plazaTokens(policyWithShield([STRK!, WBTC!, STRKBTC!]));
     expect(plazaStatsEvent({
       accounts: 2932,
       deposits24h: 23,
-      held: [
-        { token: STRK!, amount: 2_561_829n * E18 },
-        { token: WBTC!, amount: 35_931_600n },
-        { token: ETH!, amount: 19n * E18 },
+      valueUsd: 1_177_415.13,
+      topHoldings: [
+        { symbol: 'xSTRK', usd: 453_000 },
+        { symbol: 'USDC', usd: 198_000 },
       ],
-    }, tokens)).toEqual({ accounts: '2,932', deposits24h: '23', held: ['2.56M STRK', '0.359 WBTC'] });
-    expect(plazaStatsEvent(null, tokens)).toEqual({ accounts: null, deposits24h: null, held: null });
-    expect(plazaStatsEvent({ accounts: 0, deposits24h: null, held: [] }, tokens)).toEqual({ accounts: '0', deposits24h: null, held: null });
-    expect(plazaHeldLines(null, tokens, formatPanelAmount)).toBeNull();
+      valueAsOf: '2026-09-30T00:00:00.000Z',
+      tokenCount: 40,
+    })).toEqual({
+      accounts: '2,932',
+      deposits24h: '23',
+      valueUsd: '$1.18M',
+      topHoldings: ['xSTRK · $453K', 'USDC · $198K'],
+    });
+    expect(plazaStatsEvent(null)).toEqual({ accounts: null, deposits24h: null, valueUsd: null, topHoldings: null });
+    expect(plazaStatsEvent({ ...EMPTY, accounts: 0, topHoldings: [] })).toEqual({
+      accounts: '0',
+      deposits24h: null,
+      valueUsd: null,
+      topHoldings: null,
+    });
   });
 });

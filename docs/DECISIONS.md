@@ -245,7 +245,7 @@ agent building the wrong thing. `WorldEvents` and `ShellEvents` in
 
 ## D-011 — `packages/shared` is a frozen seam
 
-**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076 · with the football pitch's constants and types, and `SANDBOX_AREA` laid out from `STREET_ORIGIN_X`, by D-078**
+**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076 · with the football pitch's constants and types, and `SANDBOX_AREA` laid out from `STREET_ORIGIN_X`, by D-078 · `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` by D-080**
 
 **Context.** Four lanes work in parallel. `packages/shared` carries the event
 bus contract, the lobby schema and the building registry — a change there
@@ -3529,7 +3529,7 @@ avoidance rules are unchanged.
 
 ## D-076 — The Privacy Plaza at the west end
 
-**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020) · moves east with the street, unchanged relative to it, beside D-078's football pitch**
+**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020) · moves east with the street, unchanged relative to it, beside D-078's football pitch · the pool's value and top holdings replace the six-token `held` reads, from an external aggregate, by D-080**
 
 **Context.** The lead: "The left end of the road, opposite the sandbox, has
 nothing to do." Offered options, the lead picked "Privacy Plaza — a no-money
@@ -4067,3 +4067,102 @@ the pool, depending on the wallet's fee token, and the first live non-STRK
 supply is the check of which token Ready uses. strkBTC waits on the lead's
 choice of a pool. A rebuild with the new list is needed to open the extra
 tokens on the test deployment (`deploy/RAILWAY.md`).
+
+---
+
+## D-080 — The plaza's pool value comes from strkprice.com, not a six-token guess
+
+**2026-09-30 · Accepted by the lead · extends D-076 (the Privacy Plaza's pool figures) · amends D-011's shared seam: `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` · adds a backend-only external fetch to D-014's backend, which still logs nothing per request · registers no route (D-020)**
+
+**Context.** The lead: the plaza's "held in the pool" figure was wrong. It
+read `balance_of(pool)` for six pinned tokens only (`POOL_STATS_TOKENS`, the
+web's Exchange catalog), in raw token amounts, with no USD total — against a
+pool that actually holds about forty tokens, so the six-token figure covered
+a fraction of what the pool holds. The lead's own site, strkprice.com
+(`github.com/Calcutatator/strkprice`), already computes the pool's real
+value: its public proxy sums Voyager's USD balance for every token the pool
+holds, with a GeckoTerminal price fallback, and caches for 20 s. It needs no
+key, and its CORS admits only strkprice origins, so it must be read from the
+backend, never the browser. Read directly at
+`https://strkprice-pool-api-production.up.railway.app/api/pool` on
+2026-09-30 at 09:48 UTC: `{ t, usd, starknet_tvl, pct, tokenCount, unpriced,
+tokens }`, `usd` 1,177,403.36, `tokenCount` 40 (exactly `tokens.length`;
+`unpriced` is a separate list of symbols the pool holds with no resolvable
+price, 12 entries that day, some repeated). Each `tokens` entry is `{
+symbol, address, usd }`; addresses were well-formed felts and every `usd`
+finite and non-negative, but the answer is public and unauthenticated, nested
+addresses and symbols are not otherwise validated by the proxy, and a
+homoglyph or overlong symbol is easy to slip in cheaply. The top ten by
+value that day: xSTRK $453K, USDC $198K, SLAY $165K, STRK $107K, xstrkBTC
+$59K, ETH $51K, WBTC $30K, EKUBO $28K, BROTHER $23K, strkBTC $21K —
+compact-formatted, these numbers land exactly on the lead's own examples.
+
+**Decision.**
+
+- **The backend fetches the aggregate itself**, on the existing pool-stats
+  cache's ~60 s background refresh, on its own 15 s timeout — bounded
+  separately from the chain reads' timeout, so a slow aggregate cannot stall
+  the accounts and deposits scans, or vice versa. `PLAZA_POOL_VALUE_URL`
+  overrides the default (strkprice's proxy above); unset, empty or a
+  placeholder all fall back to it; set, it must be https, following the same
+  fail-closed style as every other URL here (`environment.ts`).
+- **Validated strictly, in `pool-stats.ts`.** The top-level `usd` must be a
+  finite number at least zero, and `tokens` must be an array, or the whole
+  read fails — which, like any failed part, keeps the cache's last good
+  value rather than publishing a wrong or partial total. Within `tokens`,
+  one malformed entry is dropped rather than failing every other one — a
+  non-finite or negative `usd`, a missing or invalid `address` (a felt,
+  nonzero), or a `symbol` that cleans to nothing printable or to more than
+  16 characters — since a single bad or unpriced token among forty should
+  not hide the rest. Symbols are cleaned to printable ASCII (`\x20`-`\x7E`)
+  only and trimmed: the read is public and unauthenticated, so a homoglyph
+  or control-character symbol is treated as noise, not a display string. The
+  kept holdings are sorted by value and capped to the ten highest
+  (`MAX_TOP_HOLDINGS`); `tokenCount` is taken as a plain count, and
+  `unpriced` is read no further than confirming it is an array — its symbol
+  strings are exactly the kind this project does not expose raw.
+- **The response gains `valueUsd`, `topHoldings` (`{ symbol, usd }`, highest
+  first), `valueAsOf` (an ISO timestamp of the backend's own last successful
+  refresh, not the proxy's) and `tokenCount`, each null until the fetch has
+  succeeded once.** `held` (raw `balance_of` per pinned token) is dropped:
+  once the total and top holdings covered what the pool holds, nothing on
+  the web still needed the six-token figure, so it goes with its on-chain
+  scan — `POOL_STATS_TOKENS`, `refreshHeld`, `getPoolBalance` and the
+  `PoolStatsRpcPort` entry that carried it are gone. `BALANCE_OF_SELECTOR`
+  stays: the Vault's shares read (D-077) still calls it, now pinned in
+  `vault.test.ts` instead of here. This also removes nine `starknet_call`s a
+  minute against the configured RPC while the plaza is watched; the accounts
+  and deposits24h scans are unchanged.
+- **The shared seam (D-011).** `plaza:stats` drops `held` (one line per
+  pinned token) for `valueUsd` (compact, e.g. "$1.18M") and `topHoldings`
+  (compact "SYMBOL · $usd" lines, e.g. "xSTRK · $453K"), pre-formatted like
+  every other Shell-to-World figure; `PlazaStatsPresentation` in
+  `packages/world` mirrors the rename.
+- **The monument's held face** keeps its "HELD IN THE POOL" caption and its
+  existing cycling mechanism unchanged; only what it cycles through changes:
+  the USD total leads, then each top holding takes a turn, then back to the
+  total. The other two faces (accounts, deposits in the last 24 hours) are
+  untouched.
+- **The window** shows the total compact, with the exact figure on hover
+  (e.g. "$1,177,415"), lists the top holdings compact (e.g. "xSTRK $453K"),
+  and adds one line on where the figures come from: "Values from Voyager via
+  strkprice.com, updated every minute." Unavailable still shows the existing
+  "…" and failure copy. Demo mode shows sample figures in the same shape,
+  labelled as demo like everything else here, and a production build still
+  refuses them.
+- **No key, no user data, backend-only, no new route.** The proxy is public
+  and unauthenticated; only the backend calls it, never the browser; nothing
+  about a player reaches it or comes back from it. This extends the existing
+  public-aggregate route rather than adding a privacy-graded one, so it
+  registers nothing in D-020's register.
+
+**Consequences.** The plaza's figure now matches strkprice.com instead of a
+six-token reading that covered a fraction of the pool. The value figure now
+depends on a third party outside this project's review; a wrong, slow or
+unreachable answer shows the plaza's last good figure and then "…", never a
+stale number frozen forever, bounded by the same serve-last-good behaviour
+as every other part here. If strkprice's proxy ever moves, or the lead
+points this at a different aggregate, `PLAZA_POOL_VALUE_URL` is the one
+value to change. A legitimate symbol longer than 16 characters (they exist —
+wrapped and vault-share tokens run long) is dropped from the top holdings,
+same as a hostile one; it is never shown badly, only left out.

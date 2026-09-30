@@ -162,22 +162,6 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
     return { blocks, continuationToken: typeof next === 'string' ? next : null };
   }
 
-  /** D-076: `balance_of(pool)` on a token contract: a u256 as two u128 felts. */
-  async getPoolBalance(token: string, signal?: AbortSignal): Promise<bigint> {
-    if (!isFelt(token) || BigInt(token) === 0n) throw new Error('Pool balance token is invalid.');
-    const value = await this.rpc('starknet_call', [{
-      contract_address: token,
-      entry_point_selector: BALANCE_OF_SELECTOR,
-      calldata: [this.options.poolAddress],
-    }, 'latest'], signal);
-    if (!Array.isArray(value) || value.length !== 2) {
-      throw new Error('Starknet RPC returned an invalid balance.');
-    }
-    const low = feltToU128(value[0] as string | undefined, 'balance');
-    const high = feltToU128(value[1] as string | undefined, 'balance');
-    return low + (high << 128n);
-  }
-
   /** D-076: the latest block's number and hash, for a scan to end at. */
   async getHead(signal?: AbortSignal): Promise<ChainHead> {
     const value = await this.rpc('starknet_blockHashAndNumber', [], signal);

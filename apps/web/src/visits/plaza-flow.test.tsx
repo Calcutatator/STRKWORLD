@@ -56,7 +56,7 @@ function harness() {
   act(() => {
     root!.render(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
-        <PlazaProvider world={world} shell={shell} demo policy={null}>
+        <PlazaProvider world={world} shell={shell} demo>
           <VisitLayer world={world} shell={shell} />
         </PlazaProvider>
       </PrivacyProvider>,

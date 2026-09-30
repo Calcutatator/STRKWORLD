@@ -17,7 +17,7 @@ import {
   type ParsedBackendEnvironment,
 } from './environment.js';
 import { createBackendFetchHandler } from './http.js';
-import { PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
+import { HttpPoolValueSource, PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type {
@@ -197,8 +197,11 @@ function createBackendApi(
   const avnuBaseUrl = parsed.swapPlanner.baseUrl;
   const rpc = overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc);
   // D-076: the plaza's stats read the same private RPC, in the background,
-  // and only when the port offers their narrow reads.
-  const poolStats = overrides.poolStats ?? (isPoolStatsRpc(rpc) ? new PoolStatsCache({ rpc }) : undefined);
+  // and only when the port offers their narrow reads. D-080: its USD value
+  // comes from a separate, public, no-key aggregate, read backend-side only.
+  const poolStats = overrides.poolStats ?? (isPoolStatsRpc(rpc)
+    ? new PoolStatsCache({ rpc, poolValue: new HttpPoolValueSource(parsed.poolValue) })
+    : undefined);
   // D-077: the Vault's two pinned reads use the same private RPC, when the
   // port offers them. D-079: Vesu's rates come from its public API, fetched
   // by this service alone, and only once a request asks.

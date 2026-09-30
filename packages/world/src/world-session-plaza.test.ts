@@ -166,8 +166,10 @@ describe('the Privacy Plaza in the session (D-076)', () => {
 
   it("hands the Shell's figures to the view", () => {
     const world = setup();
-    world.shellEmit('plaza:stats', { accounts: '2,932', deposits24h: '23', held: ['2.56M STRK'] });
-    expect(world.last('setPlazaStats')).toEqual([{ accounts: '2,932', deposits24h: '23', held: ['2.56M STRK'] }]);
+    world.shellEmit('plaza:stats', { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] });
+    expect(world.last('setPlazaStats')).toEqual([
+      { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] },
+    ]);
   });
 
   it('adds no plaza key without a bus, and releases it on destroy', () => {
@@ -180,7 +182,7 @@ describe('the Privacy Plaza in the session (D-076)', () => {
     expect(world.keyboard.count('keydown-E')).toBe(1);
     world.session.destroy();
     expect(world.keyboard.count('keydown-E')).toBe(0);
-    world.shellEmit('plaza:stats', { accounts: '1', deposits24h: '1', held: null });
+    world.shellEmit('plaza:stats', { accounts: '1', deposits24h: '1', valueUsd: null, topHoldings: null });
     expect(world.last('setPlazaStats')).toBeUndefined();
   });
 });

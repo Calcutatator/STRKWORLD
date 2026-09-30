@@ -203,8 +203,8 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     for (const [text, options] of [
       [plazaFaceText('99,999', PLAZA_FACE_CAPTIONS.accounts), PLAZA_THEME.face],
       [plazaFaceText('1,234', PLAZA_FACE_CAPTIONS.deposits24h), PLAZA_THEME.face],
-      [plazaFaceText('2.56M STRK', PLAZA_FACE_CAPTIONS.held), { ...PLAZA_THEME.face, width: 1.66, height: 0.6 }],
-      [plazaFaceText('200K USDC', PLAZA_FACE_CAPTIONS.held), { ...PLAZA_THEME.face, width: 1.66, height: 0.6 }],
+      [plazaFaceText('$1.18M', PLAZA_FACE_CAPTIONS.held), { ...PLAZA_THEME.face, width: 1.66, height: 0.6 }],
+      [plazaFaceText('xSTRK · $453K', PLAZA_FACE_CAPTIONS.held), { ...PLAZA_THEME.face, width: 1.66, height: 0.6 }],
     ] as const) {
       const width = options.width * SIGN_PIXELS_PER_UNIT;
       const height = options.height * SIGN_PIXELS_PER_UNIT;
@@ -219,36 +219,42 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
 
   it('draws the figures it is given, and "…" again for a part that goes unknown', () => {
     const { view, plazaLabels } = build();
-    view.plaza!.setStats({ accounts: '2,932', deposits24h: '23', held: ['2.56M STRK'] });
+    view.plaza!.setStats({ accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: null });
     expect(labelFor(plazaLabels, 'accounts').userData['text']).toBe(plazaFaceText('2,932', PLAZA_FACE_CAPTIONS.accounts));
     expect(labelFor(plazaLabels, 'deposits24h').userData['text']).toBe('23\nDEPOSITS\nLAST 24 H');
-    expect(labelFor(plazaLabels, 'held').userData['text']).toBe('2.56M STRK\nHELD IN THE POOL');
-    view.plaza!.setStats({ accounts: '2,933', deposits24h: null, held: null });
+    expect(labelFor(plazaLabels, 'held').userData['text']).toBe('$1.18M\nHELD IN THE POOL');
+    view.plaza!.setStats({ accounts: '2,933', deposits24h: null, valueUsd: null, topHoldings: null });
     expect(labelFor(plazaLabels, 'accounts').userData['text']).toBe('2,933\nACCOUNTS\nREGISTERED');
     expect(labelFor(plazaLabels, 'deposits24h').userData['text']).toBe('…\nDEPOSITS\nLAST 24 H');
     expect(labelFor(plazaLabels, 'held').userData['text']).toBe('…\nHELD IN THE POOL');
     view.dispose();
   });
 
-  it('takes turns on the held face when the pool holds several tokens', () => {
+  it('takes turns on the held face between the USD total and each top holding', () => {
     const { view, plazaLabels } = build();
     const held = labelFor(plazaLabels, 'held');
-    view.plaza!.setStats({ accounts: '1', deposits24h: '1', held: ['2.56M STRK', '18.9 ETH', '200K USDC'] });
-    expect(held.userData['text']).toMatch(/^2\.56M STRK\n/);
+    view.plaza!.setStats({
+      accounts: '1',
+      deposits24h: '1',
+      valueUsd: '$1.18M',
+      topHoldings: ['xSTRK · $453K', 'USDC · $198K'],
+    });
+    // The total leads; then each holding, in order; then back to the total.
+    expect(held.userData['text']).toMatch(/^\$1\.18M\n/);
     // The street integrates at most 250 ms a frame.
     const advance = (ms: number): void => {
       for (let left = ms; left > 0; left -= 250) view.update(Math.min(250, left));
     };
     advance(PLAZA_HELD_CYCLE_MS);
-    expect(held.userData['text']).toMatch(/^18\.9 ETH\n/);
+    expect(held.userData['text']).toMatch(/^xSTRK · \$453K\n/);
     advance(PLAZA_HELD_CYCLE_MS);
-    expect(held.userData['text']).toMatch(/^200K USDC\n/);
+    expect(held.userData['text']).toMatch(/^USDC · \$198K\n/);
     advance(PLAZA_HELD_CYCLE_MS);
-    expect(held.userData['text']).toMatch(/^2\.56M STRK\n/);
-    // A single token stays put.
-    view.plaza!.setStats({ accounts: '1', deposits24h: '1', held: ['2.56M STRK'] });
+    expect(held.userData['text']).toMatch(/^\$1\.18M\n/);
+    // With no top holdings, the total alone stays put.
+    view.plaza!.setStats({ accounts: '1', deposits24h: '1', valueUsd: '$1.18M', topHoldings: null });
     advance(PLAZA_HELD_CYCLE_MS * 2);
-    expect(held.userData['text']).toMatch(/^2\.56M STRK\n/);
+    expect(held.userData['text']).toMatch(/^\$1\.18M\n/);
     view.dispose();
   });
 
@@ -322,7 +328,7 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     const first = build();
     const second = build();
     for (const part of [first, second]) {
-      part.view.plaza!.setStats({ accounts: '1', deposits24h: '2', held: ['3 STRK', '4 ETH'] });
+      part.view.plaza!.setStats({ accounts: '1', deposits24h: '2', valueUsd: '$3', topHoldings: ['A · $4'] });
       part.view.plaza!.setHighlight(PLAZA_SHELLS_STATION);
     }
     const sample = (part: ReturnType<typeof build>) => part.plazaLabels.map((label) => [label.userData['text'], label.position.y]);

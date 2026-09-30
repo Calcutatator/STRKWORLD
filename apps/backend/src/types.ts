@@ -133,16 +133,46 @@ export interface PoolRpcPort {
 }
 
 /**
- * The Privacy Plaza's public pool stats (D-076): aggregates only, each null
- * until the background scan has produced it once.
+ * The Privacy Plaza's public pool stats (D-076, value fields D-080):
+ * aggregates only, each null until the background scan or fetch has
+ * produced it once.
  */
 export interface PoolStatsSnapshot {
   /** The pool's `ViewingKeySet` events since its first block: accounts registered. */
   readonly accounts: number | null;
   /** The pool's `Deposit` events in the last day of blocks. */
   readonly deposits24h: number | null;
-  /** `balance_of(pool)` for each pinned token, in base units. */
-  readonly held: readonly { readonly token: string; readonly amount: bigint }[] | null;
+  /** D-080: the pool's total USD value, read from Voyager through strkprice.com. */
+  readonly valueUsd: number | null;
+  /** D-080: the highest-value tokens the pool holds, most valuable first. */
+  readonly topHoldings: readonly PoolTokenValue[] | null;
+  /** D-080: when `valueUsd`/`topHoldings` were last refreshed, as an ISO timestamp. */
+  readonly valueAsOf: string | null;
+  /** D-080: how many distinct tokens the pool holds, priced or not. */
+  readonly tokenCount: number | null;
+}
+
+/** D-080: one token's share of the pool's value. */
+export interface PoolTokenValue {
+  readonly symbol: string;
+  readonly usd: number;
+}
+
+/** D-080: the pool's value, read fresh from the external aggregate. */
+export interface PoolValueRead {
+  readonly usd: number;
+  /** Capped and sorted by usd, most valuable first. */
+  readonly topHoldings: readonly PoolTokenValue[];
+  readonly tokenCount: number | null;
+}
+
+/**
+ * D-080: the external, public, no-key aggregate of the pool's USD value
+ * (strkprice.com's proxy over Voyager). Fetched server-side only: its CORS
+ * allows strkprice origins alone.
+ */
+export interface PoolValueSourcePort {
+  load(signal?: AbortSignal): Promise<PoolValueRead>;
 }
 
 /** The cached stats the route serves. Reading never waits on the chain. */
@@ -244,8 +274,6 @@ export interface PoolStatsRpcPort {
   getHead(signal?: AbortSignal): Promise<ChainHead>;
   /** The pool's own events whose first key is `key`, in `[fromBlock, toBlock]`. Block numbers only. */
   getPoolEvents(filter: PoolEventsFilter, signal?: AbortSignal): Promise<PoolEventsPage>;
-  /** `balance_of(pool)` on a token contract, as its u256. */
-  getPoolBalance(token: string, signal?: AbortSignal): Promise<bigint>;
 }
 
 export interface FeeAuthorizationClaims extends RelayFee {
