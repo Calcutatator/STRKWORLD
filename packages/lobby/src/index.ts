@@ -1,14 +1,16 @@
 /**
  * @strkworld/lobby — multiplayer presence.
  *
- * Broadcasts where avatars are, plus D-060's anonymous block sandbox. Nothing
- * else, and structurally nothing else: the room schema in `state.ts` mirrors
- * the frozen `PresenceState` field for field and adds only colour stacks keyed
- * by tile, so there is no field for an account, a balance, a hash or a
- * destination to travel in. See README.md.
+ * Broadcasts where avatars are, plus D-060's anonymous block sandbox and
+ * D-078's one football. Nothing else, and structurally nothing else: the room
+ * schema in `state.ts` mirrors the frozen `PresenceState` field for field and
+ * adds only colour stacks keyed by tile and one ball with its scoreboard, so
+ * there is no field for an account, a balance, a hash or a destination to
+ * travel in. See README.md.
  *
  * The pure sandbox rules the Shell runs for solo play live at
- * `@strkworld/lobby/sandbox`, with no Colyseus import at all.
+ * `@strkworld/lobby/sandbox`, and the football's at `@strkworld/lobby/football`,
+ * with no Colyseus import at all.
  *
  * ## This entry is browser-safe
  *
@@ -28,6 +30,8 @@ export {
   DEFAULT_ROOM_NAME,
   DEFAULT_SPRITE,
   DEFAULT_SPRITE_KEYS,
+  FOOTBALL_CLIENT_KICK_INTERVAL_MS,
+  FOOTBALL_MIN_KICK_INTERVAL_MS,
   GAME_ID_PATTERN,
   HARD_MAX_CLIENTS,
   HARD_MIN_INTERVAL_MS,
@@ -67,6 +71,7 @@ export {
 } from './policy';
 
 export {
+  FootballEntry,
   LobbyState,
   PositionSchema,
   PresenceEntry,

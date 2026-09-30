@@ -4,9 +4,9 @@
  *
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
- * throttling, suspend, interest, and the block sandbox's actions and returns
- * (D-060) — is exercisable in a plain unit test against the same objects that
- * get encoded in production.
+ * throttling, suspend, interest, the block sandbox's actions and returns
+ * (D-060) and the football's kicks and steps (D-078) — is exercisable in a
+ * plain unit test against the same objects that get encoded in production.
  *
  * Nothing here persists. When the last session leaves, the registry is empty
  * and the room disposes; there is no store behind it and no log of who was
@@ -14,7 +14,7 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import type { Facing, GameId, SandboxColumn, SandboxTile } from '@strkworld/shared';
+import type { Facing, FootballSnapshot, GameId, SandboxColumn, SandboxTile } from '@strkworld/shared';
 import {
   resolveRoomConfig,
 } from './config.js';
@@ -33,7 +33,9 @@ import {
   type SandboxActionOutcome,
 } from './sandbox.js';
 import type { SandboxPlayer } from './sandbox-rules.js';
-import { LobbyState, PresenceEntry, type SandboxColumnEntry } from './state.js';
+import { LobbyFootball, type KickOutcome } from './football.js';
+import type { BallState, FootballEvent, FootballPlayer } from './football-rules.js';
+import { LobbyState, PresenceEntry, type FootballEntry, type SandboxColumnEntry } from './state.js';
 
 /**
  * What a client may offer when it joins or reappears. All of it untrusted.
@@ -107,6 +109,10 @@ export interface LobbyPresenceOptions {
   sandboxSlowSpawnIntervalMs?: number;
   sandboxFastSpawnLimit?: number;
   sandboxActionIntervalMs?: number;
+  /** D-078: per-session floor between two accepted kicks. */
+  footballKickIntervalMs?: number;
+  /** D-078: where the ball starts; a kick-off ball when absent. A test seam. */
+  footballBall?: BallState;
   /**
    * Randomness source for server-minted identifiers. Injectable so a test can
    * be deterministic; production uses `crypto.getRandomValues`.
@@ -156,6 +162,13 @@ export class LobbyPresence {
   readonly #sandbox: LobbySandbox;
   readonly #onSandboxDrop: ((tile: SandboxTile) => void) | undefined;
   readonly #onSandboxBurst: ((tile: SandboxTile) => void) | undefined;
+  /** D-078: the room's ball, mirrored into `state.football`. */
+  readonly #football: LobbyFootball;
+  /**
+   * When each connection's position was last written, for the ball to read
+   * how fast a player moves. Server-side only, and gone on leave.
+   */
+  readonly #movedAt = new Map<string, number>();
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -198,6 +211,10 @@ export class LobbyPresence {
     );
     this.#onSandboxDrop = options.onSandboxDrop;
     this.#onSandboxBurst = options.onSandboxBurst;
+    this.#football = new LobbyFootball(this.state.football as FootballEntry, {
+      kickIntervalMs: config.footballKickIntervalMs,
+      ...(options.footballBall === undefined ? {} : { ball: options.footballBall }),
+    });
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -257,6 +274,7 @@ export class LobbyPresence {
     entry.position.x = x;
     entry.position.y = y;
     entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+    this.#movedAt.set(sessionKey, now);
     return 'applied';
   }
 
@@ -288,6 +306,9 @@ export class LobbyPresence {
     session.suspended = true;
     this.peers.delete(session.gameId);
     this.#announce(this.#sandbox.returnCarried(sessionKey, players));
+    // Off the street, off the pitch: the ball stops following them (D-078).
+    this.#football.lose(sessionKey);
+    this.#movedAt.delete(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -319,6 +340,7 @@ export class LobbyPresence {
       return false;
     }
     session.suspended = false;
+    this.#movedAt.set(sessionKey, now);
     this.#resumptions += 1;
     this.#peak = Math.max(this.#peak, this.peers.size);
     return true;
@@ -336,6 +358,8 @@ export class LobbyPresence {
     this.#sessions.delete(sessionKey);
     this.#throttle.forget(sessionKey);
     this.#announce(this.#sandbox.forget(sessionKey, players));
+    this.#football.forget(sessionKey);
+    this.#movedAt.delete(sessionKey);
     this.#departed += 1;
   }
 
@@ -432,6 +456,62 @@ export class LobbyPresence {
 
   #announce(tile: SandboxTile | null): void {
     if (tile !== null) this.#onSandboxDrop?.(tile);
+  }
+
+  // -------------------------------------------------------------------------
+  // The football — D-078
+  // -------------------------------------------------------------------------
+
+  /**
+   * Kick the ball for a session on the street, from the position and facing
+   * this registry holds: the kick message carries nothing, so nothing a client
+   * says is read. Refusals are silent; the state is the only answer.
+   */
+  kickBall(sessionKey: string, now: number): KickOutcome {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended) return 'absent';
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return 'absent';
+    return this.#football.kick(
+      { key: sessionKey, x: entry.position.x, y: entry.position.y, facing: normalizeFacing(entry.facing) },
+      now,
+    );
+  }
+
+  /**
+   * Run the ball while anyone on the street is on or near the pitch, and
+   * bring it to rest otherwise. Returns whether it runs; the room keeps its
+   * step timer to match.
+   */
+  keepFootballRunning(now: number): boolean {
+    return this.#football.keepRunning(this.#footballPlayers(), now);
+  }
+
+  /** Every whole simulation step up to `now`, and what happened in them. Nothing while the ball is at rest. */
+  footballTick(now: number): FootballEvent[] {
+    return this.#football.advance(now, this.#footballPlayers());
+  }
+
+  /** Whether the ball is running. */
+  get footballRunning(): boolean {
+    return this.#football.running;
+  }
+
+  /** The ball, the score and the phase, as the authority holds them. Frozen. */
+  footballSnapshot(): FootballSnapshot {
+    return this.#football.snapshot();
+  }
+
+  /** Every live entry as someone the ball meets, with when they last moved. */
+  #footballPlayers(): FootballPlayer[] {
+    const players: FootballPlayer[] = [];
+    for (const [key, session] of this.#sessions) {
+      if (session.suspended) continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      players.push({ key, x: entry.position.x, y: entry.position.y, at: this.#movedAt.get(key) ?? 0 });
+    }
+    return players;
   }
 
   /** Every live entry as a sandbox player, optionally leaving one session out. */

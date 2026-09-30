@@ -55,13 +55,30 @@
  * already holds the dropped block, and `onSandboxBurst` relays bursts
  * (D-071), which arrive before the state that empties the board. Everything
  * read from the server is validated here and fails closed.
+ *
+ * ## The football (D-078)
+ *
+ * `football()` is a frozen snapshot of the room's one ball — its position,
+ * velocity and the simulation tick they are from — and the scoreboard, or
+ * null before a valid one has arrived. `onFootball` delivers it whenever it
+ * changes, and `onGoal` relays goal cues, which arrive before the state that
+ * raises the score and name a side, never a player. `kick()` sends a kick
+ * with no payload, floored client-side at `FOOTBALL_CLIENT_KICK_INTERVAL_MS`:
+ * a kick inside the floor is dropped, not held, because a late kick is a
+ * different kick. A newer position still waiting on the move floor goes
+ * first, so the room judges the kick from where the player stands now.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
 import {
+  FOOTBALL_WIN_SCORE,
+  PITCH_AREA,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
   type Facing,
+  type FootballGoal,
+  type FootballPhase,
+  type FootballSnapshot,
   type GameId,
   type SandboxColumn,
   type SandboxSnapshot,
@@ -70,12 +87,15 @@ import {
 import {
   DEFAULT_ROOM_NAME,
   DEFAULT_SPRITE,
+  FOOTBALL_CLIENT_KICK_INTERVAL_MS,
   MESSAGE,
   MIN_CLIENT_SEND_INTERVAL_MS,
   SANDBOX_CLIENT_ACTION_INTERVAL_MS,
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
+import { FOOTBALL_MAX_SPEED, FOOTBALL_TILE_SIZE } from './football-rules';
+import { FOOTBALL_WIRE_SCALE } from './football';
 import {
   normalizeCoordinate,
   normalizeFacing,
@@ -172,6 +192,8 @@ type StatusListener = (event: LobbyStatusEvent) => void;
 type SandboxListener = (snapshot: SandboxSnapshot) => void;
 type SandboxDropListener = (tile: SandboxTile) => void;
 type SandboxBurstListener = (tile: SandboxTile) => void;
+type FootballListener = (snapshot: FootballSnapshot | null) => void;
+type GoalListener = (goal: FootballGoal) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -197,6 +219,16 @@ interface SandboxDropDelivery {
 interface SandboxBurstDelivery {
   readonly listeners: readonly ListenerOwner<SandboxBurstListener>[];
   readonly tile: SandboxTile;
+}
+
+interface FootballDelivery {
+  readonly listeners: readonly ListenerOwner<FootballListener>[];
+  readonly snapshot: FootballSnapshot | null;
+}
+
+interface GoalDelivery {
+  readonly listeners: readonly ListenerOwner<GoalListener>[];
+  readonly goal: FootballGoal;
 }
 
 const EMPTY_SANDBOX: SandboxSnapshot = Object.freeze({
@@ -228,12 +260,18 @@ export class LobbyClient {
   readonly #sandboxDeliveries: SandboxDelivery[] = [];
   readonly #dropDeliveries: SandboxDropDelivery[] = [];
   readonly #burstDeliveries: SandboxBurstDelivery[] = [];
+  readonly #footballListeners = new Map<FootballListener, symbol>();
+  readonly #goalListeners = new Map<GoalListener, symbol>();
+  readonly #footballDeliveries: FootballDelivery[] = [];
+  readonly #goalDeliveries: GoalDelivery[] = [];
 
   #deliveringPeers = false;
   #deliveringStatus = false;
   #deliveringSandbox = false;
   #deliveringDrops = false;
   #deliveringBursts = false;
+  #deliveringFootball = false;
+  #deliveringGoals = false;
 
   /** The last value `sandbox()` returned, reused while nothing changes. */
   #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
@@ -244,6 +282,15 @@ export class LobbyClient {
   /** The latest pick/place requested inside the floor, sent when it opens. */
   #pendingSandboxAction: PendingSandboxAction | null = null;
   #sandboxActionHandle: ReturnType<typeof setTimeout> | null = null;
+
+  /** The last value `football()` returned, reused while nothing changes. */
+  #footballView: FootballSnapshot | null = null;
+  /** The last value delivered to football listeners, for change detection. */
+  #footballPublished: FootballSnapshot | null = null;
+  /** When the last kick left this client, for the client-side floor. */
+  #lastKickAt: number | null = null;
+  /** A kick waiting only for a newer position to go first. */
+  #kickHandle: ReturnType<typeof setTimeout> | null = null;
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joinAttempt: JoinAttempt | null = null;
@@ -365,6 +412,7 @@ export class LobbyClient {
     if (this.#status !== 'connected' || this.#room === null) return;
     this.#cancelReconcile();
     this.#cancelSandboxAction();
+    this.#cancelKick();
     this.#desired = null;
     const room = this.#room;
     room.send(MESSAGE.suspend);
@@ -576,10 +624,120 @@ export class LobbyClient {
     this.#sendSandboxAction(MESSAGE.sandboxPlace, tile);
   }
 
+  /**
+   * The room's ball and scoreboard (D-078), or null until a valid one has
+   * arrived and after a disconnect. Frozen, and the same object for as long
+   * as nothing in it changes. Room-wide, not interest-filtered, and readable
+   * while suspended.
+   */
+  football(): FootballSnapshot | null {
+    const next = this.#readFootball();
+    if (sameFootball(this.#footballView, next)) return this.#footballView;
+    this.#footballView = next;
+    return next;
+  }
+
+  /**
+   * Subscribe to the ball. Returns an unsubscribe function.
+   *
+   * Opens nothing. Fires once immediately with the current snapshot, then
+   * whenever the ball or the scoreboard changes. Delivery follows
+   * `onSandbox`: FIFO, generation-owned, and a throwing subscriber is
+   * isolated behind a fixed diagnostic.
+   */
+  onFootball(listener: FootballListener): () => void {
+    const owner = Symbol('football listener');
+    this.#footballListeners.set(listener, owner);
+    this.#notifyFootball(listener, this.football());
+    return () => {
+      if (this.#footballListeners.get(listener) === owner) {
+        this.#footballListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * Subscribe to goal cues (D-078). Returns an unsubscribe function.
+   *
+   * No replay: a goal is an event. Each cue is a frozen `{ side }`, delivered
+   * before the snapshot that raises the score. A celebration cue only: the
+   * score in `football()` is the truth.
+   */
+  onGoal(listener: GoalListener): () => void {
+    const owner = Symbol('goal listener');
+    this.#goalListeners.set(listener, owner);
+    return () => {
+      if (this.#goalListeners.get(listener) === owner) {
+        this.#goalListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * Kick the ball (D-078). The message carries nothing: the room kicks from
+   * where it says this player stands. Returns whether a kick was sent or is
+   * about to be; false while not connected (or suspended), or inside the
+   * client floor since the last kick. The room applies its own rules and
+   * floor and answers only through the ball.
+   */
+  kick(): boolean {
+    if (this.#status !== 'connected' || this.#room === null) return false;
+    if (this.#kickHandle !== null) return true;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastKickAt;
+    if (last !== null && now - last < FOOTBALL_CLIENT_KICK_INTERVAL_MS) return false;
+    // A newer position still waiting on the move floor goes first, so the
+    // room judges the kick from where the player stands now.
+    const desired = this.#desired;
+    const unsent = desired !== null &&
+      (this.#lastSentPlacement === null || !samePlacement(desired, this.#lastSentPlacement));
+    if (unsent) {
+      const sinceMove = this.#lastSentAt === null ? null : now - this.#lastSentAt;
+      if (sinceMove !== null && sinceMove < this.#minSendIntervalMs) {
+        // Claim the floor now, so a second press while this one waits is dropped.
+        this.#lastKickAt = now;
+        this.#kickHandle = setTimeout(() => {
+          this.#kickHandle = null;
+          this.#sendKick(true);
+        }, Math.min(this.#minSendIntervalMs - sinceMove, MAX_TIMER_DELAY_MS));
+        return true;
+      }
+    }
+    return this.#sendKick(unsent);
+  }
+
+  /** Send the kick, after the waiting position if `moveFirst`. */
+  #sendKick(moveFirst: boolean): boolean {
+    if (this.#status !== 'connected' || this.#room === null) return false;
+    const now = performance.now();
+    if (moveFirst) {
+      const before = this.#room;
+      this.#pump(now);
+      if (this.#room !== before || this.#status !== 'connected' || this.#room === null) return false;
+    }
+    const room = this.#room;
+    room.send(MESSAGE.kick);
+    // A transport can report closure synchronously from send; a retired room
+    // must not stamp the floor of whatever replaces it.
+    if (this.#room !== room || this.#status !== 'connected') return false;
+    this.#lastKickAt = isValidMonotonicTime(now) ? now : this.#lastKickAt;
+    return true;
+  }
+
+  /** Forget a held kick. Called wherever this client stops sending. */
+  #cancelKick(): void {
+    if (this.#kickHandle !== null) {
+      clearTimeout(this.#kickHandle);
+      this.#kickHandle = null;
+    }
+  }
+
   /** Leave the room. The client can be connected again afterwards. */
   async disconnect(): Promise<void> {
     this.#cancelReconcile();
     this.#cancelSandboxAction();
+    this.#cancelKick();
     this.#desired = null;
     const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
@@ -656,6 +814,14 @@ export class LobbyClient {
         this.#emitBurst(tile);
       });
 
+      // D-078 goal cues, likewise: anything but a side never reaches anyone.
+      room.onMessage(SERVER_MESSAGE.goal, (payload: unknown) => {
+        if (!this.#isCurrentRoom(generation, room)) return;
+        const goal = normalizeGoal(payload);
+        if (goal === null) return;
+        this.#emitGoal(goal);
+      });
+
       let rejectWelcome!: (error: Error) => void;
       let welcomeAccepted = false;
       const welcomed = new Promise<void>((resolve, reject) => {
@@ -679,6 +845,7 @@ export class LobbyClient {
             this.#gameId = null;
             this.#cancelReconcile();
             this.#cancelSandboxAction();
+            this.#cancelKick();
             this.#setStatus('closed', 'error');
             this.#emitRoomState();
             rejectWelcome(new Error(INVALID_WELCOME_ERROR));
@@ -700,7 +867,9 @@ export class LobbyClient {
       this.#lastSentAt = null;
       this.#lastSentPlacement = null;
       this.#lastSandboxActionAt = null;
+      this.#lastKickAt = null;
       this.#cancelSandboxAction();
+      this.#cancelKick();
       this.#setStatus('connected');
       // Status delivery is synchronous. A listener may retire this exact
       // room before lifecycle callbacks are installed; do not attach stale
@@ -725,6 +894,7 @@ export class LobbyClient {
         this.#gameId = null;
         this.#cancelReconcile();
         this.#cancelSandboxAction();
+        this.#cancelKick();
         this.#setStatus('closed', 'error', code);
         this.#emitRoomState();
         rejectWelcome(new Error('Lobby room error before welcome'));
@@ -739,6 +909,7 @@ export class LobbyClient {
         this.#gameId = null;
         this.#cancelReconcile();
         this.#cancelSandboxAction();
+        this.#cancelKick();
         this.#setStatus('closed', 'server-dropped', code);
         this.#emitRoomState();
         rejectWelcome(new Error('Lobby room left before welcome'));
@@ -756,6 +927,7 @@ export class LobbyClient {
           this.#gameId = null;
           this.#cancelReconcile();
           this.#cancelSandboxAction();
+          this.#cancelKick();
           this.#desired = null;
           this.#setStatus('closed', 'error');
           this.#emitRoomState();
@@ -764,6 +936,7 @@ export class LobbyClient {
           this.#gameId = null;
           this.#cancelReconcile();
           this.#cancelSandboxAction();
+          this.#cancelKick();
           this.#desired = null;
           this.#setStatus('closed', 'error');
           this.#emitRoomState();
@@ -928,10 +1101,84 @@ export class LobbyClient {
     }
   }
 
-  /** Publish everything read from room state: peers, then the sandbox. */
+  /** Publish everything read from room state: peers, the sandbox, then the ball. */
   #emitRoomState(): void {
     this.#emitPeers();
     this.#emitSandbox();
+    this.#emitFootball();
+  }
+
+  /** Deliver the current ball if it differs from the last one delivered. */
+  #emitFootball(): void {
+    const snapshot = this.football();
+    if (sameFootball(snapshot, this.#footballPublished)) return;
+    this.#footballPublished = snapshot;
+    if (this.#footballListeners.size === 0) return;
+    this.#footballDeliveries.push({ listeners: [...this.#footballListeners], snapshot });
+    if (this.#deliveringFootball) return;
+
+    this.#deliveringFootball = true;
+    try {
+      for (;;) {
+        const delivery = this.#footballDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#footballListeners.get(listener) !== owner) continue;
+          this.#notifyFootball(listener, delivery.snapshot);
+        }
+      }
+    } finally {
+      this.#deliveringFootball = false;
+    }
+  }
+
+  #emitGoal(goal: FootballGoal): void {
+    if (this.#goalListeners.size === 0) return;
+    this.#goalDeliveries.push({ listeners: [...this.#goalListeners], goal });
+    if (this.#deliveringGoals) return;
+
+    this.#deliveringGoals = true;
+    try {
+      for (;;) {
+        const delivery = this.#goalDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#goalListeners.get(listener) !== owner) continue;
+          this.#notifyGoal(listener, delivery.goal);
+        }
+      }
+    } finally {
+      this.#deliveringGoals = false;
+    }
+  }
+
+  #notifyFootball(listener: FootballListener, snapshot: FootballSnapshot | null): void {
+    try {
+      listener(snapshot);
+    } catch {
+      console.error('lobby client: football subscriber threw');
+    }
+  }
+
+  #notifyGoal(listener: GoalListener, goal: FootballGoal): void {
+    try {
+      listener(goal);
+    } catch {
+      console.error('lobby client: goal subscriber threw');
+    }
+  }
+
+  /** The room's ball and scoreboard, validated, or null. */
+  #readFootball(): FootballSnapshot | null {
+    const room = this.#room;
+    if (room === null) return null;
+    let entry: unknown;
+    try {
+      entry = (room.state as { football?: unknown } | undefined)?.football;
+    } catch {
+      return null;
+    }
+    return readFootballEntry(entry);
   }
 
   /**
@@ -1249,6 +1496,68 @@ function readSandboxColumn(value: unknown, key: unknown): SandboxColumn | null {
   } catch {
     return null;
   }
+}
+
+/** The phase a wire byte names, or null. */
+const FOOTBALL_PHASES: readonly FootballPhase[] = Object.freeze(['live', 'goal', 'full-time']);
+
+/** The pitch square in World pixels, with a tile to spare: nowhere else can the ball be. */
+const BALL_BOUNDS = Object.freeze({
+  minX: (PITCH_AREA.x - 1) * FOOTBALL_TILE_SIZE,
+  maxX: (PITCH_AREA.x + PITCH_AREA.width + 1) * FOOTBALL_TILE_SIZE,
+  minY: (PITCH_AREA.y - 1) * FOOTBALL_TILE_SIZE,
+  maxY: (PITCH_AREA.y + PITCH_AREA.height + 1) * FOOTBALL_TILE_SIZE,
+});
+
+/**
+ * The decoded ball entry as a frozen snapshot, or null if any part of it is
+ * not exactly right: a tick that is not a whole uint32, a ball outside the
+ * pitch square or faster than the rules allow, a score past the winning one,
+ * a phase byte the rules do not have.
+ */
+function readFootballEntry(value: unknown): FootballSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  try {
+    const record = value as Partial<Record<'tick' | 'x' | 'y' | 'vx' | 'vy' | 'west' | 'east' | 'phase', unknown>>;
+    const { tick, west, east, phase } = record;
+    if (typeof tick !== 'number' || !Number.isSafeInteger(tick) || tick < 0 || tick > 0xffffffff) return null;
+    // Whole 64ths of a pixel on the wire (FOOTBALL_WIRE_SCALE), World pixels here.
+    const parts = [record.x, record.y, record.vx, record.vy];
+    if (!parts.every((part) => typeof part === 'number' && Number.isSafeInteger(part))) return null;
+    const [x, y, vx, vy] = (parts as number[]).map((part) => part / FOOTBALL_WIRE_SCALE) as [number, number, number, number];
+    if (x < BALL_BOUNDS.minX || x > BALL_BOUNDS.maxX || y < BALL_BOUNDS.minY || y > BALL_BOUNDS.maxY) return null;
+    if (Math.hypot(vx, vy) > FOOTBALL_MAX_SPEED * 1.01) return null;
+    const score = (part: unknown): part is number =>
+      typeof part === 'number' && Number.isInteger(part) && part >= 0 && part <= FOOTBALL_WIN_SCORE;
+    if (!score(west) || !score(east)) return null;
+    const named = typeof phase === 'number' && Number.isInteger(phase) ? FOOTBALL_PHASES[phase] : undefined;
+    if (named === undefined) return null;
+    return Object.freeze({ tick, x, y, vx, vy, west, east, phase: named });
+  } catch {
+    return null;
+  }
+}
+
+/** A goal cue, or null: `{ side }`, read from an own data property, and nothing else. */
+function normalizeGoal(payload: unknown): FootballGoal | null {
+  if (payload === null || typeof payload !== 'object') return null;
+  const side = ownDataField(payload, 'side');
+  return side === 'west' || side === 'east' ? Object.freeze({ side }) : null;
+}
+
+function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.tick === b.tick &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.vx === b.vx &&
+    a.vy === b.vy &&
+    a.west === b.west &&
+    a.east === b.east &&
+    a.phase === b.phase
+  );
 }
 
 function sameSandbox(a: SandboxSnapshot, b: SandboxSnapshot): boolean {

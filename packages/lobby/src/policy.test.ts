@@ -56,7 +56,15 @@ describe('default lobby vocabulary ownership', () => {
     expect(SERVER_MESSAGE.sandboxDrop).toBe('sandbox:drop');
     // D-071.
     expect(SERVER_MESSAGE.sandboxBurst).toBe('sandbox:burst');
-    expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['sandboxBurst', 'sandboxDrop', 'welcome']);
+    expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['goal', 'sandboxBurst', 'sandboxDrop', 'welcome']);
+  });
+
+  it('does not expose mutable football protocol names (D-078)', () => {
+    expect(Reflect.set(MESSAGE, 'kick', 'untrusted')).toBe(false);
+    expect(Reflect.set(SERVER_MESSAGE, 'goal', 'untrusted')).toBe(false);
+    expect(MESSAGE.kick).toBe('football:kick');
+    expect(SERVER_MESSAGE.goal).toBe('football:goal');
+    expect(Object.keys(MESSAGE).sort()).toEqual(['kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend']);
   });
 });
 

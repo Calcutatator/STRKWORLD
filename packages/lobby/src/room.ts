@@ -1,13 +1,15 @@
 /**
  * The Colyseus room. Wiring only — every rule lives in `presence.ts`,
- * `policy.ts`, `sandbox.ts` and `sandbox-rules.ts`.
+ * `policy.ts`, `sandbox.ts`, `sandbox-rules.ts`, `football.ts` and
+ * `football-rules.ts`.
  *
- * The room's whole client-facing surface is five message types and a join
+ * The room's whole client-facing surface is six message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
  * to hold. That is the enforcement: not a filter that strips money out of
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
  * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky
- * drop and a burst (D-071), each name a tile and nothing else.
+ * drop and a burst (D-071), each name a tile and nothing else. The kick
+ * (D-078) takes nothing at all, and the goal broadcast names a side.
  *
  * ## Configuration is trusted; onCreate options are not
  *
@@ -41,7 +43,7 @@
 
 import { Room, ServerError, type Client, type Delayed } from '@colyseus/core';
 import { Encoder, StateView } from '@colyseus/schema';
-import type { GameId, SandboxTile } from '@strkworld/shared';
+import { FOOTBALL_TICK_MS, type FootballSide, type GameId, type SandboxTile } from '@strkworld/shared';
 import {
   DEFAULT_ROOM_CONFIG,
   MESSAGE,
@@ -114,6 +116,9 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /** The pending sky drop, while anyone is on the street. D-060. */
   #spawnTimer: Delayed | undefined;
 
+  /** The ball's step, while anyone is on or near the pitch. D-078. */
+  #footballTimer: Delayed | undefined;
+
   /** Aggregate counters for this room. Never per-connection. */
   get counters(): PresenceCounters {
     return this.#registry.counters();
@@ -156,13 +161,17 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         payload ?? {},
         performance.now(),
       );
-      if (outcome === 'applied') this.#syncViews();
+      if (outcome === 'applied') {
+        this.#syncViews();
+        this.#scheduleFootball();
+      }
     });
 
     this.onMessage(MESSAGE.suspend, (client: Client) => {
       if (this.#registry.suspend(client.sessionId)) {
         this.#syncViews();
         this.#scheduleSpawn();
+        this.#scheduleFootball();
       }
     });
 
@@ -170,6 +179,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
         this.#syncViews();
         this.#scheduleSpawn();
+        this.#scheduleFootball();
       }
     });
 
@@ -190,6 +200,16 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
       }
     });
+
+    /*
+     * D-078. The payload is never read: the kicker's position and facing are
+     * the ones the registry holds, and the ball's is the room's own. A
+     * refused kick — throttled, out of reach, play not live — is silent; the
+     * ball in state is the only answer.
+     */
+    this.onMessage(MESSAGE.kick, (client: Client) => {
+      this.#registry.kickBall(client.sessionId, performance.now());
+    });
   }
 
   override onJoin(client: Client, options?: unknown): void {
@@ -206,6 +226,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     client.send(SERVER_MESSAGE.welcome, { gameId: outcome.gameId satisfies GameId });
     this.#syncViews();
     this.#scheduleSpawn();
+    this.#scheduleFootball();
   }
 
   override onLeave(client: Client): void {
@@ -215,11 +236,56 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#registry.release(client.sessionId);
     this.#syncViews();
     this.#scheduleSpawn();
+    this.#scheduleFootball();
   }
 
   override onDispose(): void {
     this.#spawnTimer?.clear();
     this.#spawnTimer = undefined;
+    this.#footballTimer?.clear();
+    this.#footballTimer = undefined;
+  }
+
+  /**
+   * Keep the ball's step running while anyone on the street is on or near
+   * the pitch, and stopped otherwise (D-078). Called after every change to
+   * where anyone is; idempotent.
+   *
+   * A room clock interval, which fires as the clock ticks — at the patch
+   * rate, just before each patch is encoded — and steps the simulation
+   * through every whole `FOOTBALL_TICK_MS` up to now, so each patch carries
+   * the latest ball, dated by its tick. `performance.now()` is the one time
+   * base, as for moves.
+   */
+  #scheduleFootball(): void {
+    const running = this.#registry.keepFootballRunning(performance.now());
+    if (running && this.#footballTimer === undefined) {
+      this.#footballTimer = this.clock.setInterval(() => this.#footballTick(), FOOTBALL_TICK_MS);
+    } else if (!running && this.#footballTimer !== undefined) {
+      this.#footballTimer.clear();
+      this.#footballTimer = undefined;
+    }
+  }
+
+  #footballTick(): void {
+    try {
+      for (const event of this.#registry.footballTick(performance.now())) {
+        if (event.kind === 'goal') this.#broadcastGoal(event.side);
+      }
+    } catch {
+      // The room clock runs this outside any handler; an escape would take
+      // the process down with every room in it. A fixed, content-free line.
+      console.error('lobby: football step failed');
+    }
+  }
+
+  /**
+   * Tell every client a goal went in for `side` (D-078). At once, ahead of
+   * the patch that raises the score, so the celebration starts with the ball
+   * still in the net. The payload is the side alone: nobody scored it.
+   */
+  #broadcastGoal(side: FootballSide): void {
+    this.broadcast(SERVER_MESSAGE.goal, { side });
   }
 
   /**
