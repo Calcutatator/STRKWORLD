@@ -195,3 +195,31 @@ describe('the Vault window\'s theme (D-077)', () => {
     expect(scoped).toBeGreaterThan(8);
   });
 });
+
+/**
+ * A checkbox styled as a text field is a full-width box with its tick in the
+ * middle, far from its label (the Vault's "Redeem everything" did exactly
+ * this). Text-field rules must leave checkboxes and radios out, and those get
+ * their own small box.
+ */
+describe('form controls', () => {
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
+    selectors: match[1]!.split(',').map((selector) => selector.trim()),
+    body: match[2]!,
+  }));
+
+  it('never stretches a checkbox or radio across the row', () => {
+    for (const rule of rules.filter((candidate) => /width:\s*100%/.test(candidate.body))) {
+      for (const selector of rule.selectors) {
+        expect(selector).not.toMatch(/^\.(panel|room-entry) input$/);
+        expect(selector).not.toMatch(/input\[type="(checkbox|radio)"\]$/);
+      }
+    }
+  });
+
+  it('gives checkboxes and radios their own compact box', () => {
+    const box = rules.find((rule) => rule.selectors.includes('.panel input[type="checkbox"]') && /width:\s*1\.1rem/.test(rule.body));
+    expect(box, 'a compact checkbox rule').toBeDefined();
+    expect(box!.selectors).toContain('.panel input[type="radio"]');
+  });
+});
