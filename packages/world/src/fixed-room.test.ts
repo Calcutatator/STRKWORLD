@@ -1389,6 +1389,30 @@ describe('fixed room controller', () => {
     expect(h.inputCalls.filter((call) => call === 'resume').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('rearms when the step off the approach lands while a window holds the controls', () => {
+    const h = harness();
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        {
+          station: 'post-office:transfer',
+          label: 'TRANSFER',
+          status: 'available',
+        },
+      ],
+    });
+    h.controller.update({ x: 3, y: 4 });
+    // The counter's window claims the controls; the player's last step, off
+    // every approach, is reported while it holds them.
+    h.shell.emit('world:control-owner', { building: 'post-office', owner: 'shell' });
+    h.controller.update({ x: 10, y: 8 });
+    h.shell.emit('world:control-owner', { building: 'post-office', owner: 'world' });
+    // Walking back in opens the counter again.
+    h.controller.update({ x: 3, y: 4 });
+    expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(2);
+  });
+
   it('destroys listeners and restores input without emitting an exit', () => {
     const h = harness();
     h.controller.enter();
