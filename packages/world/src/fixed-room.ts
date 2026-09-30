@@ -1161,9 +1161,14 @@ export function createFixedRoomController(
     update(tile): void {
       if (destroyed || !inRoom) return;
       standing = { x: tile.x, y: tile.y };
+      const floor = floorOf(level);
+      // Stepping off every approach re-arms the counters even while a window
+      // holds the controls. The session reports each tile once, so a step
+      // that lands as a counter opens is never reported again: dropping it
+      // here left that counter disarmed, and walking back did not reopen it.
+      if (!fixedRoomStationAtApproach(floor, tile.x, tile.y)) approachArmed = armAll();
       if (controlOwner === 'shell') return;
       const ownRevision = ++updateRevision;
-      const floor = floorOf(level);
       if (isFixedRoomExit(floor, tile.x, tile.y)) {
         leave();
         return;
