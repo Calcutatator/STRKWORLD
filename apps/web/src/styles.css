@@ -895,10 +895,10 @@ body {
   font-weight: 600;
 }
 
-.panel input,
+.panel input:not([type="checkbox"]):not([type="radio"]),
 .panel select,
 .panel textarea,
-.room-entry input,
+.room-entry input:not([type="checkbox"]):not([type="radio"]),
 .room-entry select {
   width: 100%;
   padding: 0.62rem 0.8rem;
@@ -912,10 +912,10 @@ body {
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.panel input:hover,
+.panel input:not([type="checkbox"]):not([type="radio"]):hover,
 .panel select:hover,
 .panel textarea:hover,
-.room-entry input:hover,
+.room-entry input:not([type="checkbox"]):not([type="radio"]):hover,
 .room-entry select:hover {
   border-color: var(--ui-input-border-hover);
 }
@@ -946,15 +946,37 @@ body {
   font-size: 0.9rem;
 }
 
-.panel input:focus-visible,
+.panel input:not([type="checkbox"]):not([type="radio"]):focus-visible,
 .panel select:focus-visible,
 .panel textarea:focus-visible,
-.room-entry input:focus-visible,
+.room-entry input:not([type="checkbox"]):not([type="radio"]):focus-visible,
 .room-entry select:focus-visible {
   outline: var(--ui-focus-width) solid var(--ui-focus);
   outline-offset: 1px;
   border-color: var(--ui-focus);
   box-shadow: var(--ui-input-focus-glow);
+}
+
+/* Checkboxes and radios keep their own small box beside their label; the
+ * text-field rules above would stretch them across the row. */
+.panel input[type="checkbox"],
+.panel input[type="radio"],
+.room-entry input[type="checkbox"],
+.room-entry input[type="radio"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  flex: none;
+  accent-color: var(--ui-accent);
+  cursor: pointer;
+}
+
+.panel input[type="checkbox"]:focus-visible,
+.panel input[type="radio"]:focus-visible,
+.room-entry input[type="checkbox"]:focus-visible,
+.room-entry input[type="radio"]:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
 }
 
 .panel summary:focus-visible {
