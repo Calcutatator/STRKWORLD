@@ -24,8 +24,8 @@
  *   USD line, hint and its own validation (invalid, exceeds balance, below
  *   minimum). `max` returns `null` for "no honest maximum", which disables
  *   the button; build it with `maxAfterReserve(spendable, feeReserve(...))`
- *   so a Max of the fee token leaves the pool fee behind. Never pass a
- *   wallet's aggregate as spendable (D-022).
+ *   so a Max of the fee token leaves the pool fee behind. With a wallet
+ *   that reports no maturity split, pass its per-token total (D-089).
  * - `TokenSelect`: a styled native select showing "STRK · 12.5"; native for
  *   keyboard, screen readers and phone pickers.
  * - `SettingsPopover`: a cog with presets, an optional custom value and a
@@ -49,5 +49,5 @@ export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTon
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {
-  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, type AmountCheck,
+  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, tidyFloor, type AmountCheck,
 } from './amount-math.js';

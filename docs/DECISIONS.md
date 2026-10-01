@@ -677,7 +677,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · "the shell must not derive MAX when maturity is unknown" amended by D-089 (a Max may use the wallet's per-token total; the wallet refuses a spend counting a note still maturing, and the shell says the funds are settling)**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -4177,7 +4177,7 @@ same as a hostile one; it is never shown badly, only left out.
 
 ## D-081 — The Vault lends in every Vesu market the pool can hold
 
-**2026-09-30 · Accepted by the user (the lead asked for every Vesu market whose token can reach it privately, strkBTC included; collateral-only markets stay out of Supply until borrowing ships) · amends D-079 (twenty-three tokens across Vesu's Prime pool and five curated pools, a generated and re-verified map, a switch of up to twenty-three, a batched position read and a rate read per pinned pool) · amends D-077 (a market may lend through a curated pool, and `prepareVaultSupply` refuses a collateral-only one) · `VaultMarket` gains its pool, the pool's name, whether it is Prime or curated, and whether the pool lends the token out; no seam signature changes (D-036) · keeps D-077's register grades, disclosure and approval, whose words name no token or pool**
+**2026-09-30 · Accepted by the user (the lead asked for every Vesu market whose token can reach it privately, strkBTC included; collateral-only markets stay out of Supply until borrowing ships) · amends D-079 (twenty-three tokens across Vesu's Prime pool and five curated pools, a generated and re-verified map, a switch of up to twenty-three, a batched position read and a rate read per pinned pool) · amends D-077 (a market may lend through a curated pool, and `prepareVaultSupply` refuses a collateral-only one) · `VaultMarket` gains its pool, the pool's name, whether it is Prime or curated, and whether the pool lends the token out; no seam signature changes (D-036) · keeps D-077's register grades, disclosure and approval, whose words name no token or pool · amended by D-089 (the supply field shows the pool balance once the player asks for it, so a read figure now stays in the window; a supply review's "none there" read is unchanged)**
 
 **Context.** D-079 opened five Prime markets and left strkBTC out, because
 lending it meant choosing a curated pool for players. The lead answered on
@@ -4445,7 +4445,7 @@ routes on Ready.
 
 ## D-083 — Borrowing on Vesu from a second shadow account, at its own counter in the Vault
 
-**2026-10-01 · Accepted by the user (the product owner's decisions: its own shadow account, a second counter in the Vault's room, Prime only in five tokens, four flows each one wallet-submitted private transaction, a health display, a build switch off by default) · extends D-077 (the canonical shadow-account anonymizer, to Vesu's pool contract itself) · extends D-036's frozen seam by three methods and their shapes · adds one register route (`vault.borrow`) with its own disclosure, and changes no D-024 string · builds on D-081 (the pinned Prime markets) and D-082 (wallet submission) · amended by D-088 (Menu Mode now offers the BORROW window too, behind the same gate)**
+**2026-10-01 · Accepted by the user (the product owner's decisions: its own shadow account, a second counter in the Vault's room, Prime only in five tokens, four flows each one wallet-submitted private transaction, a health display, a build switch off by default) · extends D-077 (the canonical shadow-account anonymizer, to Vesu's pool contract itself) · extends D-036's frozen seam by three methods and their shapes · adds one register route (`vault.borrow`) with its own disclosure, and changes no D-024 string · builds on D-081 (the pinned Prime markets) and D-082 (wallet submission) · amended by D-088 (Menu Mode now offers the BORROW window too, behind the same gate) · amended by D-089 (Max replaces the "repay everything" and "withdraw all" checkboxes; Max borrows to a health of 1.25, above this entry's 1.05 floor, which stands)**
 
 **Context.** The Vault lends through Vesu's vTokens from the player's shadow
 account (D-077, D-079, D-081); borrowing was the open half. The research
@@ -5199,3 +5199,82 @@ would not. Tests: `apps/web/src/visits/menu-mode-parity.flow.test.tsx`
 drives both rooms' Menu Mode through the real visit layer (a borrow and an
 unpriced swap to submission, a degen swap, and the hidden tabs with
 borrowing or swapping off). Not verified: a real browser at phone width.
+
+---
+
+## D-089 — The lending counters follow Vesu's and Aave's form conventions
+
+**2026-10-01 · Accepted · direction from the product owner (simple, familiar lending touches in the Vault's Vesu style; lending conventions only, so no 50%, flip arrow or slippage), details delegated to the lane · amends D-081 (a pool balance the player reads stays in the window for the supply field) · amends D-022 (a Max may use the wallet's per-token total) · amends D-083 (Max is how a repay or a collateral withdrawal takes everything; Max borrows to a health of 1.25) · keeps D-024's disclosures and every seam check · no seam, register, World, lobby or backend change**
+
+**Context.** The Vault's SUPPLY / REDEEM and BORROW forms were a token
+picker, a bare number and a review button, with checkboxes for "everything".
+Lending apps agree on a few touches (a research pass over Aave's modal
+sources and locale strings, and Vesu's user guides): the balance the amount is
+measured against, one Max, the market's APY, "you will supply / receive",
+the health factor before → after with the liquidation level, and a button
+that says what is missing. The shared panel kit (`apps/web/src/panels/kit/`)
+already draws them in each building's own tokens.
+
+**Decision.**
+
+- **Supply.** The field's balance line is the pool balance of the chosen
+  token, read only when the player presses "Show my pool balance" (one
+  `wallet_strk20Balances` call for every lendable token, which the wallet
+  may confirm, and the pool fee beside it). The figure stays in the window,
+  is never logged, and goes back to unread after a submission. Max leaves
+  the 6 STRK pool fee behind in STRK. `wallet_strk20Balances` answers one
+  `{ token, balance }` total per token and no maturity split, so with a real
+  wallet **Max uses that per-token total** (amending D-022's "no MAX when
+  maturity is unknown"), the rule the counters now share: a note stays
+  maturing for 10 blocks (about 20 s) after it lands, and the wallet refuses
+  a spend that counts one (119, an insufficient balance), so no funds are at
+  risk. When that refusal comes back for a supply the read balance covers,
+  the counter says "Funds you just added are still settling; try again in a
+  few seconds." rather than calling the balance short. Where the wallet does
+  report a spendable figure (the fake and demo), Max uses it. Over the
+  balance the button reads "Insufficient {token}".
+- **Redeem.** The balance line is what is supplied, from the position read.
+  Max is what the vault can pay out now; when that is the whole position,
+  the redeem is of every share by the vault's own `redeem`, as the old
+  "Redeem everything" checkbox did, which Max replaces. The review still
+  says "You redeem everything".
+- **Both.** The market's supply APY (Vesu's figure, as listed) and "You will
+  supply / receive" sit under the field.
+- **Borrow.** Once the loans are read (an existing loan changes every
+  figure, so nothing is shown before): "Available to borrow", a Max, the
+  LTV, health factor and liquidation price, each now → after.
+  **Max aims for a health of 1.25** (LTV at 80% of the pair's max), not
+  Aave's whole limit and not D-083's 1.05 floor: the collateral can lose a
+  fifth of its price before the loan is liquidatable, and a Max-filled loan
+  starts clear of the 1.15 warning band. "Available to borrow" is that same
+  figure. Typing more is allowed down to the 1.05 floor; under it the button
+  reads "Health factor too low" and offers no review, and the seam refuses
+  as before.
+- **Repay and withdraw.** Repay's balance line is the debt; Max fills it, and
+  that amount is a repay-all with the seam's buffer, replacing the
+  checkbox. A withdrawal's Max keeps health at 1.25, or is the whole
+  collateral (a withdraw-all) when nothing is owed.
+- **Tidy Max figures.** Every Max, and "Available to borrow", is floored
+  to two decimals for a stablecoin and six significant figures otherwise
+  (kit `tidyFloor`), never rounded up; the maths beneath stays exact. A
+  tidied whole position, debt or debt-free collateral still means
+  everything.
+- **One set of loan figures in the form.** The borrow form no longer repeats
+  the loan's block from the list above; it shows LTV, health factor and
+  liquidation price once each, now → after while an amount is typed. The
+  list keeps the loan's own figures and warnings.
+- **Maths in the shell for display only.** `apps/web` may not import the
+  seam's runtime, so `panels/borrow/borrow-preview.ts` restates Vesu's
+  formulas in the seam's rounding; `borrow-preview.test.ts` holds its health
+  factor and liquidation price equal to `borrowHealth` and every Max it
+  fills accepted by `assessBorrow`. The seam re-reads and decides at
+  prepare, as D-083 says.
+
+**Consequences.** Each form gains a few rows and loses a checkbox. No
+disclosure, refusal rule, review or confirm changes; one refusal's words
+change because the checkbox they named is gone ("Use Max to repay
+everything instead"). The kit gains two optional words (an `exceedsMessage`
+for `AmountField`, an `exceeds` for `primaryAction`) so a redeem says "More
+than you have supplied" and a repay "More than you owe". Tests: the panel
+flow tests, both machines' tests, the kit's, and `borrow-preview.test.ts`.
+Not verified: a real wallet's balance prompt, or a browser at phone width.

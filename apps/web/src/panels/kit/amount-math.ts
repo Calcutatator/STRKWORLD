@@ -51,13 +51,31 @@ export function feeReserve(
  * The most a player can put in: what is spendable less what must stay behind.
  *
  * `null` means "no honest Max", and the button is disabled: the spendable
- * figure is unknown (D-022: a wallet reporting only an aggregate has no
- * spendable split), the reserve is unknown, or nothing is left after it.
+ * figure is unknown, the reserve is unknown, or nothing is left after it.
+ * A wallet that reports one total per token and no maturity split passes
+ * that total (D-089): the wallet refuses a spend that counts a note still
+ * maturing, so no funds are at risk, and the panel says they are settling.
  */
 export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null = 0n): bigint | null {
   if (spendable === null || reserve === null) return null;
   const left = spendable - reserve;
   return left > 0n ? left : null;
+}
+
+/**
+ * `amount` floored to a tidy figure for a Max to fill in: two decimals for a
+ * stablecoin, six significant figures for anything else (never coarser than
+ * whole tokens), and never more places than the token has. Only ever rounds
+ * down, so a tidied Max is always within the exact one; the maths that
+ * produced it stays exact.
+ */
+export function tidyFloor(amount: bigint, decimals: number, options: { readonly stable?: boolean } = {}): bigint {
+  if (amount <= 0n) return 0n;
+  const integerDigits = amount.toString().length - decimals;
+  const wanted = options.stable ? 2 : 6 - integerDigits;
+  const keep = Math.max(0, Math.min(decimals, wanted));
+  const unit = 10n ** BigInt(decimals - keep);
+  return amount - (amount % unit);
 }
 
 /** `amount × numerator / denominator`, truncated towards zero. 50% is `(amount, 1n, 2n)`. */
@@ -77,6 +95,8 @@ export function primaryAction(input: {
   readonly symbol: string | null;
   readonly ready: string;
   readonly busy?: string | null;
+  /** The words for an amount above the balance; "Insufficient {symbol}" by default. */
+  readonly exceeds?: string;
 }): { readonly label: string; readonly disabled: boolean } {
   if (input.busy) return { label: input.busy, disabled: true };
   if (input.symbol === null) return { label: COPY.kit.chooseToken, disabled: true };
@@ -86,7 +106,7 @@ export function primaryAction(input: {
     case 'invalid':
       return { label: COPY.kit.invalidAmount, disabled: true };
     case 'exceeds-balance':
-      return { label: COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
+      return { label: input.exceeds ?? COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
     case 'below-minimum':
       return { label: COPY.kit.belowMinimum, disabled: true };
     case 'ok':

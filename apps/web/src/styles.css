@@ -2317,10 +2317,12 @@ button[data-locked="true"] {
   font-size: 0.92rem;
 }
 
-.panel[data-building="vault"] .vault-all {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
+/* D-089: the supply field's "Show my pool balance", and the borrow form's
+ * line asking for the loans first: quiet lines in the field's own dim ink. */
+.panel[data-building="vault"] :is(.vault-balance-read, .borrow-read-loans) {
+  margin: 0;
+  color: #666666;
+  font-size: 0.92rem;
 }
 
 /* Vesu's info box: deep blue text on the periwinkle, 8 px round. */

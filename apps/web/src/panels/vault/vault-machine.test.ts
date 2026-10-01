@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEMO_VAULT_STAND_IN, FakePrivacyOperations, type FakeConfig, type PrivacyOperations, type VaultStage, type WalletRoutePolicy } from '@strkworld/privacy';
+import { DEMO_VAULT_STAND_IN, FakePrivacyOperations, PrivacyError, type FakeConfig, type PrivacyOperations, type VaultStage, type WalletRoutePolicy } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import { attachDebugTap, type DebugTap, type VaultDebugStep } from '../../debug/debug-tap.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
@@ -9,6 +9,8 @@ import { VAULT_MARKET_METADATA } from '../../production/vesu-markets.js';
 import {
   createVaultPanel,
   noneInPoolLine,
+  poolBalanceOf,
+  redeemsWholePosition,
   vaultChoices,
   vaultListedMarkets,
   vaultTokenChoices,
@@ -713,5 +715,78 @@ describe('the Vault counter (D-077)', () => {
       vi.doUnmock('../../production/config.js');
       vi.resetModules();
     }
+  });
+});
+
+describe('the Vault form\'s lending touches (D-089)', () => {
+  it('reads the pool balances and the pool fee only when asked, and lets them go stale after a submission', async () => {
+    const operations = fake({ balance: 40n * ONE, balances: { [USDC]: 25n * USDC_ONE } });
+    const balances = vi.spyOn(operations, 'balances');
+    const { panel } = machine(operations);
+    await panel.open();
+    expect(panel.store.getState().balances).toEqual({ status: 'unrequested' });
+    expect(balances).not.toHaveBeenCalled();
+
+    await panel.refreshBalances();
+    expect(balances).toHaveBeenCalledTimes(1);
+    // One read for every lendable token, none for a collateral-only one.
+    expect(balances.mock.calls[0]![0]).not.toContain(XSTRK);
+    const state = panel.store.getState();
+    expect(state.balances.status === 'loaded' && state.balances.fee).toEqual({ feeAmount: POOL_FEE, feeToken: STRK });
+    expect(poolBalanceOf(state, STRK)?.total).toBe(40n * ONE);
+    expect(poolBalanceOf(state, USDC)?.total).toBe(25n * USDC_ONE);
+
+    panel.setAmount('5');
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().balances).toEqual({ status: 'unrequested' });
+  });
+
+  it('goes back to asking when the player declines the read, and reports nothing', async () => {
+    const operations = fake();
+    const read = vi.spyOn(operations, 'balances').mockRejectedValueOnce(new PrivacyError('user-rejected', 'declined'));
+    const { panel, failures } = machine(operations);
+    await panel.open();
+    await panel.refreshBalances();
+    expect(panel.store.getState().balances).toEqual({ status: 'unrequested' });
+    expect(failures).toEqual([]);
+    // Any other failure says the balance is unavailable, and is reported by kind alone.
+    read.mockRejectedValueOnce(new PrivacyError('unreachable', 'gone'));
+    await panel.refreshBalances();
+    expect(panel.store.getState().balances).toEqual({ status: 'failed' });
+    expect(failures).toEqual([{ kind: 'unreachable', cause: null }]);
+  });
+
+  it('redeems every share when the amount is the whole position as read, and an amount otherwise', async () => {
+    const operations = fake({ balance: 20n * ONE, shares: 50n * ONE });
+    const { panel } = machine(operations);
+    await panel.open();
+    await panel.refreshPosition();
+    panel.setMode('redeem');
+    const state = panel.store.getState();
+    expect(redeemsWholePosition(state, view(STRK), 51n * ONE)).toBe(true);
+    expect(redeemsWholePosition(state, view(STRK), 50n * ONE)).toBe(false);
+
+    panel.setAmount('51');
+    await panel.prepare();
+    let flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.action).toEqual({ kind: 'redeem', token: STRK, amount: 51n * ONE, all: true });
+
+    panel.cancelPrepared();
+    panel.setAmount('50');
+    await panel.prepare();
+    flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.action).toEqual({ kind: 'redeem', token: STRK, amount: 50n * ONE, all: false });
+  });
+
+  it('never treats a position the vault cannot pay out in full as everything', async () => {
+    const operations = fake({ balance: 20n * ONE, shares: 50n * ONE, vault: { liquidity: 10n * ONE } });
+    const { panel } = machine(operations);
+    await panel.open();
+    await panel.refreshPosition();
+    const state = panel.store.getState();
+    const held = state.position.status === 'loaded' ? state.position.positions.find((entry) => entry.token === STRK) : undefined;
+    expect(held && held.redeemable < held.assets).toBe(true);
+    expect(redeemsWholePosition(state, view(STRK), held!.assets)).toBe(false);
   });
 });

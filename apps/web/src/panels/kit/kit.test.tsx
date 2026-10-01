@@ -106,6 +106,13 @@ describe('AmountField', () => {
     expect(input.hasAttribute('aria-invalid')).toBe(false);
   });
 
+  it('takes a panel\'s own balance words and message, as a redeem against what is supplied', () => {
+    render(<Field balance={10n * ONE} balanceLabel="Supplied" exceedsMessage="More than you have supplied" />);
+    expect(container!.querySelector('.ui-amount-balance')!.textContent).toBe('Supplied: 10 STRK');
+    type(container!.querySelector('input')!, '11');
+    expect(container!.querySelector('.ui-amount-message')!.textContent).toBe('More than you have supplied');
+  });
+
   it('labels the input, keeps the panels\' amount name, and shows a USD line and hint', () => {
     render(<Field usd="≈ $4.20" hint="Leaves the fee behind." />);
     const input = container!.querySelector<HTMLInputElement>('input[name="amount"]')!;

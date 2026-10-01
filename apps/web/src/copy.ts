@@ -375,7 +375,27 @@ export const COPY = freezeCopy({
     redeem: 'Redeem',
     token: 'Token',
     amount: 'Amount',
-    redeemAll: 'Redeem everything',
+    /**
+     * D-089: the form's lending touches. A supply's field shows the pool
+     * balance once the player asks for it (the wallet may ask first), a
+     * redeem's shows what is supplied; Max on a redeem of the whole position
+     * redeems every share, so "Redeem everything" is Max now.
+     */
+    form: {
+      supplied: 'Supplied',
+      overSupplied: 'More than you have supplied',
+      showBalance: 'Show my pool balance',
+      balanceLoading: 'Asking your wallet for your pool balance…',
+      balanceUnavailable: 'Balance unavailable.',
+      balanceAgain: 'Read it again',
+      /** Written around the figure: "Vesu can pay out 12.5 USDC of it right now." */
+      payoutLead: 'Vesu can pay out',
+      payoutTail: 'of it right now.',
+      willSupply: 'You will supply',
+      willReceive: 'You will receive',
+      /** D-089: the wallet refused a supply that counted a note still maturing (about ten blocks). */
+      settling: 'Funds you just added are still settling; try again in a few seconds.',
+    },
     /** D-079: a build whose Vault list names no token the counter can describe. */
     noToken: 'No token can be lent in this build yet.',
     /**
@@ -505,8 +525,26 @@ export const COPY = freezeCopy({
     collateralAmount: 'Collateral to add',
     borrowAmount: 'Amount to borrow',
     amount: 'Amount',
-    repayAll: 'Repay everything',
-    withdrawAll: 'Withdraw all the collateral',
+    /**
+     * D-089: the form's lending touches. Max borrows to a health factor of
+     * 1.25, safer than D-083's 1.05 floor; on a repay it repays everything,
+     * and on a withdrawal with nothing owed it withdraws everything.
+     */
+    form: {
+      available: 'Available to borrow',
+      health: 'Health factor',
+      remaining: 'Remaining debt',
+      owed: 'Owed',
+      held: 'Collateral',
+      noDebt: '∞',
+      maxHint: 'Max keeps your health factor at 1.25 or more. Anything under 1.05 is refused.',
+      readLoans: 'Show your loans above to see what you can borrow and your health factor after.',
+      tooLow: 'Health factor too low',
+      overDebt: 'More than you owe',
+      overCollateral: 'More than the loan holds',
+      repayAllLine: 'Max repays everything: interest included, fixed by Vesu when it runs.',
+      withdrawAllLine: 'Max withdraws all the collateral.',
+    },
     /** Written around the figure: "Max LTV 68.00%". */
     maxLtv: 'Max LTV',
     noPair: 'Vesu offers no loans in these tokens right now.',
@@ -586,7 +624,7 @@ export const COPY = freezeCopy({
       'debt-cap': "That would pass the pair's debt cap on Vesu.",
       utilization: 'Vesu cannot lend or release that much of the token right now.',
       'nothing-to-repay': 'There is nothing owed in that pair.',
-      'repay-exceeds-debt': 'That is the whole debt or more. Choose Repay everything instead.',
+      'repay-exceeds-debt': 'That is the whole debt or more. Use Max to repay everything instead.',
       'withdraw-exceeds-collateral': 'That is more collateral than the loan holds.',
       'withdraw-all-with-debt': 'Repay everything before withdrawing all the collateral.',
     },
