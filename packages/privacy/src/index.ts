@@ -29,10 +29,14 @@ export type {
   BorrowPositions,
   BorrowRequest,
   DepositStatus,
+  EndurAction,
+  EndurUnstakePosition,
+  EndurWithdrawalRequest,
   Intent,
   PoolConfig,
   PreparedBatch,
   PreparedBorrowBatch,
+  PreparedEndurBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
@@ -51,12 +55,18 @@ export type {
 // D-072: the pool and its Deposit event, which `depositStatus` reads from a receipt.
 export { POOL_DEPOSIT_EVENT, STRK20_POOL } from './pool.js';
 
-// Endur private staking (D-063): the pinned mainnet contracts the stake route admits.
+// Endur private staking (D-063): the pinned mainnet contracts the stake route
+// admits; and unstaking through a shadow account (D-085).
 export {
+  ENDUR_DAPP_NAME,
   ENDUR_DEPOSIT_ANONYMIZER,
+  ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
+  ENDUR_SHADOW_NONCE,
+  ENDUR_WITHDRAWAL_QUEUE,
   ENDUR_XSTRK,
   ENDUR_XSTRK_ASSET,
   ENDUR_XSTRK_DECIMALS,
+  MAX_ENDUR_CLAIMS_PER_BATCH,
 } from './endur.js';
 
 // The Vault on shadow accounts (D-077): the pinned anonymizer and dapp name,
@@ -109,6 +119,7 @@ export {
 export {
   DEMO_BORROW_PRICES,
   DEMO_BORROW_STAND_IN,
+  DEMO_ENDUR_STAND_IN,
   DEMO_VAULT_STAND_IN,
   FakePrivacyOperations,
   type FakeConfig,
@@ -143,6 +154,8 @@ export {
   type PreparedPrivateSwap,
   type RelayFeeQuote,
   type SupportedVersionsReader,
+  type EndurReadClient,
+  type EndurUnstakeRead,
   type VaultPositionRow,
   type VaultRateRow,
   type VaultReadClient,

@@ -6,10 +6,12 @@ import type {
   BorrowPositions,
   BorrowRequest,
   DepositStatus,
+  EndurUnstakePosition,
   Intent,
   PoolConfig,
   PreparedBatch,
   PreparedBorrowBatch,
+  PreparedEndurBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   VaultCallOptions,
@@ -33,9 +35,11 @@ import { mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
 import { ShadowBorrow } from './borrow-operations.js';
+import { EndurUnstake } from './endur-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import type {
   BorrowReadClient,
+  EndurReadClient,
   PoolNativeRoute,
   PoolReadClient,
   PrivateRoute,
@@ -72,6 +76,8 @@ export interface WalletApiPrivacyOperationsOptions {
   vault?: VaultReadClient;
   /** The Borrow counter's backend reads (D-083). Absent, every borrow call fails closed. */
   borrow?: BorrowReadClient;
+  /** Endur unstaking's backend reads (D-085). Absent, every unstaking call fails closed. */
+  endur?: EndurReadClient;
   /** How the Vault waits between receipt reads; a test passes its own. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The Vault's receipt-read schedule, in ms (`VAULT_RECEIPT_WAITS_MS` by default). */
@@ -88,6 +94,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly walletAddress: Address;
   private readonly vault: ShadowVault;
   private readonly borrow: ShadowBorrow;
+  private readonly endur: EndurUnstake;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
@@ -123,6 +130,18 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
       now: this.now,
     });
+    // D-085: Endur unstaking, on its own shadow account too, the same way.
+    this.endur = new EndurUnstake({
+      wallet: this.wallet,
+      walletAddress: this.walletAddress,
+      pool: this.pool,
+      ...(options.endur ? { reads: options.endur } : {}),
+      policy: this.policy,
+      supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+      poolConfig: (signal) => this.poolConfig(signal),
+      ...(options.sleep ? { sleep: options.sleep } : {}),
+      ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+    });
   }
 
   /** D-083: Vesu's Prime pool for the admitted borrow tokens, read through the backend. See `PrivacyOperations`. */
@@ -138,6 +157,21 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   /** D-083: one borrow-counter action, proved and submitted by the wallet. See `PrivacyOperations`. */
   prepareBorrow(request: BorrowRequest, options?: VaultCallOptions): Promise<PreparedBorrowBatch> {
     return this.borrow.prepare(request, options);
+  }
+
+  /** D-085: Endur unstaking on the player's unstaking shadow account. See `PrivacyOperations`. */
+  endurUnstakePosition(options?: VaultCallOptions): Promise<EndurUnstakePosition> {
+    return this.endur.position(options);
+  }
+
+  /** D-085: an unstake request, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareEndurUnstake(shares: bigint, options?: VaultCallOptions): Promise<PreparedEndurBatch> {
+    return this.endur.prepareRequest(shares, options);
+  }
+
+  /** D-085: unstaked STRK into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch> {
+    return this.endur.prepareClaim(options);
   }
 
   /** D-077, D-079: the Vault positions on the player's shadow account. See `PrivacyOperations`. */

@@ -196,6 +196,40 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     // The anonymizer credits the minted xSTRK to an OPEN pool note.
     returnToPool: false,
   },
+  // D-085, 2026-10-01: Endur unstaking through the player's own unstaking
+  // shadow account (dapp name strkworld-endur, nonce 0), through the
+  // canonical ShadowAccountAnonymizer the Vault uses. Graded like the Vault:
+  // who acted is hidden, what the chain shows is not. Both routes show one
+  // disclosure, which says where the request waits and where the STRK goes.
+  {
+    building: 'bank',
+    route: 'bank.unstake',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable to the wallet, but public and persistent. The pool withdraws the xSTRK to the player unstaking shadow account as a public transfer with a visible amount, and the canonical ShadowAccountAnonymizer has that address call xSTRK redeem as receiver and owner, which burns the xSTRK and has the Endur withdrawal queue mint a request NFT to the address, recording the STRK owed and the time it can be claimed. Any xSTRK already on the address is collected into an open note for the wallet, whose amount is plaintext. The address, its deployment, its requests, balances and calls are public, and every unstake by the same player uses that one address (dapp name strkworld-endur, nonce 0), so they are linked to each other but not to the Vault address. Only the link from that address to the wallet is hidden: the wallet is not the sender and never appears in the calls. The wallet fee withdrawal leaves the pool publicly, and the proof publishes the block it was built against. Matching amounts or timing around a stake can still link the two.',
+    disclosure:
+      'Your unstake request sits on a stand-in address, not your wallet. That address, the xSTRK it unstakes, its requests and the STRK it claims, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away. Claimed STRK returns to your pool balance.',
+    approvedBy: 'calc',
+    approvedOn: '2026-10-01',
+    rationale:
+      'D-085: the lead asked for private unstaking through a shadow account, with the request on a stand-in address that is public but not linked to the wallet. It closes the gap D-063 left (stake-only) with no project-owned Cairo, reusing the anonymizer the Vault proved live (D-077).',
+    returnToPool: false,
+  },
+  {
+    building: 'bank',
+    route: 'bank.unstake-claim',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable to the wallet, but public and persistent. The canonical ShadowAccountAnonymizer has the player unstaking shadow account call claim_withdrawal on the Endur withdrawal queue for each ready request (or, when Endur has already paid them to the address, a balance read), a public call that burns each request NFT and pays its STRK to the address, and the pool collects every STRK on the address into an open note for the wallet, whose amount is plaintext. The address keeps its history. Only the link from that address to the wallet is hidden. The wallet fee withdrawal leaves the pool publicly, and the proof publishes the block it was built against.',
+    disclosure:
+      'Your unstake request sits on a stand-in address, not your wallet. That address, the xSTRK it unstakes, its requests and the STRK it claims, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away. Claimed STRK returns to your pool balance.',
+    approvedBy: 'calc',
+    approvedOn: '2026-10-01',
+    rationale:
+      'D-085: the way back from an Endur unstake request into the pool. The same stand-in address and public record as the request, and the same disclosure, so a player reads one account of unstaking whichever step they take.',
+    // The claimed STRK lands in an OPEN pool note, already private.
+    returnToPool: false,
+  },
   // D-072, 2026-09-29: the entry gate's deposit. The Bank's own shield,
   // offered on a second surface at the city's entrance, so it is graded under
   // the Bank with the Bank shield's approved disclosure word for word.

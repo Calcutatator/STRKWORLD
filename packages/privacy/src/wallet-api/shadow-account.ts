@@ -16,12 +16,13 @@ import type { PoolReadClient, VaultReadClient, WalletStrk20Account } from './typ
 import { freezeActions, submitThroughWallet, waitForReceipt } from './wallet-submission.js';
 
 /**
- * What every STRK20 shadow-account counter shares (D-077, D-083): resolving
+ * What every STRK20 shadow-account counter shares (D-077, D-083, D-085): resolving
  * the player's stand-in address for one dapp name and nonce, and the
  * prepared batch the wallet proves and submits. The Vault
- * (`vault-operations.ts`) and the Borrow counter (`borrow-operations.ts`)
- * each hold one resolver for their own dapp name, so the two addresses are
- * different and nothing here links them.
+ * (`vault-operations.ts`), the Borrow counter (`borrow-operations.ts`) and
+ * Endur unstaking (`endur-operations.ts`) each hold one resolver for their
+ * own dapp name, with its own commitment cache and nonce check, so the three
+ * addresses are different and nothing here links them.
  *
  * - The wallet derives the partial commitment for the dapp name locally; no
  *   transaction is sent and no key leaves it. It is asked once per
@@ -270,6 +271,13 @@ export function hasCommitmentMethod(wallet: WalletStrk20Account): boolean {
     return false;
   } catch {
     return false;
+  }
+}
+
+/** A shadow-account action's amount: a positive u256 (D-077, D-085). */
+export function assertAmount(amount: unknown): asserts amount is bigint {
+  if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
   }
 }
 

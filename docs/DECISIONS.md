@@ -2829,7 +2829,7 @@ only in the tester's checkout.
 
 ## D-063 — Endur private staking is a Bank counter, built switched off
 
-**2026-09-27 · Accepted by the user · extends D-036's frozen seam with a `stake` intent · a D-018 anonymizer path · respects D-030's one-grade-per-station rule**
+**2026-09-27 · Accepted by the user · extends D-036's frozen seam with a `stake` intent · a D-018 anonymizer path · respects D-030's one-grade-per-station rule · superseded in part by D-085 (staking is switched on for the test deployment, and the counter is no longer stake-only: unstaking runs through a shadow account, not a withdraw anonymizer)**
 
 **Context.** The feature review of strk20.starknet.io found Endur liquid
 staking live on mainnet through an STRK20 anonymizer, the strongest new
@@ -2881,7 +2881,7 @@ user chose a counter in the Bank, in Endur's look, built now and switched off.
 
 ## D-064 — The lead waives the in-game disclosure for Endur staking
 
-**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only**
+**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only · amended by D-085 (the unstaking note now points at the unstaking counter; the waiver itself is unchanged)**
 
 **Context.** D-063's staking counter is graded `anonymous`: who staked is
 hidden, while the STRK staked and the xSTRK received are public, as with the
@@ -3652,7 +3652,7 @@ facts: the stats show the crowd, and nothing about who is in it.
 
 ## D-077 — The Vault opens on shadow accounts
 
-**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market, some through curated pools; a collateral-only market is not supplied)**
+**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market, some through curated pools; a collateral-only market is not supplied) · amended by D-085 (its commitment, address cross-check and wallet submission, shared with the Borrow counter since D-083, now serve Endur unstaking too, under unstaking's own dapp name)**
 
 **Context.** D-007 kept Vesu out of v1 because the Vault was the only
 building needing new Cairo: a project-owned `privacy_invoke` adapter, the
@@ -4568,6 +4568,152 @@ on mainnet**: D-077's probe exercised vTokens only, never the pool
 contract, so the first live borrow on the Railway probe is the evidence for
 this route, and a revert there (for example the pool refusing the account as
 caller) stops it until a new decision.
+
+---
+
+## D-085 — Endur staking is switched on, and xSTRK unstakes privately through a shadow account
+
+**2026-10-01 · Accepted by the user (the lead asked for staking on and for private unstaking through a STRK20 shadow account) · supersedes D-063 in part (staking is switched on for the test deployment; the counter is no longer stake-only, and its exit is a shadow account rather than a withdraw anonymizer) · amends D-064 (the unstaking note points at the new counter; the waiver for `bank.stake` is unchanged) · amends D-077 and builds on D-083 (the shadow-account module D-083 extracted now serves the Vault, the Borrow counter and unstaking) · extends D-036's frozen seam with `endurUnstakePosition`, `prepareEndurUnstake` and `prepareEndurClaim` · adds one pinned public read to D-014's backend · registers `bank.unstake` and `bank.unstake-claim` (approved by the lead, 2026-10-01) · adds the `unstake` policy route and `VITE_STRK20_UNSTAKE_ENABLED`**
+
+**Context.** D-063 built Endur staking switched off. The reason in
+`.env.production.example` was relay acceptance: "not to be enabled until
+AVNU's sponsored-private paymaster is confirmed to accept the Endur deposit
+anonymizer and one small funded stake has succeeded". D-082 removed the
+relay: the wallet proves and submits a stake itself, with no paymaster, avnu
+key or `BACKEND_ROUTE_STAKE_*` block, so the first condition no longer
+exists and the second is the live probe D-082 already names. Nothing else
+held it off: the production policy, the register (approved, D-064 waiver)
+and the adapter were all ready. Unstaking did not exist: "no withdraw
+anonymizer exists" (D-063). The Vault proved a keyless STRK20 shadow account
+end to end in Ready (D-077, D-079), and a shadow account is a persistent
+address, so it can hold an Endur withdrawal request across the queue's wait.
+
+Read over mainnet RPC (`api.cartridge.gg/x/starknet/mainnet`) on
+2026-10-01, block 15,726,652:
+
+- Endur's xSTRK (`0x028d709c…0b0a`) exposes ERC-4626 `redeem(shares,
+  receiver, owner)` and `withdraw`; its withdrawal queue is
+  `0x0518a66e579f9eb1603f5ffaeff95d3f013788e9c37ee94995555026b9648b6`
+  (class `0x6b2e1893…3f34`), an ERC-721 with `request_withdrawal(assets,
+  shares, receiver) -> u128`, `claim_withdrawal(request_id)`,
+  `claim_withdrawal_to`, `get_request_info(request_id) -> WithdrawRequest`
+  (assets, shares, isClaimed, timestamp, claimTime, a cumulative snapshot)
+  and `get_queue_state`. A real request (`0x5653395f…448`) was xSTRK
+  `redeem` → queue `request_withdrawal` with xSTRK as caller.
+- **The request NFT is a plain mint.** A simulated xSTRK `redeem` from a
+  real holder with a live shadow account (`0x6ad69dce…aba4`, class
+  `0x70e76435…b78f`, which has no SRC5, `supports_interface` or
+  `on_erc721_received`) as receiver succeeded and minted request #10590 to
+  it; `request_withdrawal` made no call to the receiver. A keyless shadow
+  account can therefore hold a request.
+- **Anyone can claim, and Endur does.** `claim_withdrawal` burns the NFT and
+  pays its owner; Endur's relayer (`0x2d6cf618…173`) claims other people's
+  ready requests once the queue is funded (`0x5846a8a2…eba`; its source,
+  `Endur-fi/relayer`, does the same). A claim reverts "Too early to claim"
+  before `claimTime`, "Insufficient funds" while the queue is unfunded, and
+  "ERC721: invalid token ID" once paid.
+- **The wait is seven days**: `claimTime - timestamp` was 604,800 s on all
+  200 requests before #10589. D-063's "1 to 14 days" was not what the chain
+  shows; funding can add to it.
+
+**Decision.**
+
+- **Staking is switched on** for the Railway test deployment
+  (`VITE_STRK20_STAKE_*`, `deploy/RAILWAY.md`), wallet-submitted as D-082
+  made it. The example environment keeps every route denied by default, as
+  before. Its first live stake is the probe.
+- **Unstaking runs through the player's own unstaking shadow account**:
+  `dapp_name` `strkworld-endur`, nonce 0, fixed for good, and never the
+  Vault's, so a player's Endur requests and Vault positions sit on different
+  addresses and are not linked to each other.
+- **Request (flow A).** Withdraw the xSTRK from the pool to the shadow
+  account (the public leg), then through it xSTRK's `redeem(shares, shadow,
+  shadow)`, which burns exactly those shares and queues the STRK. Nothing
+  returns yet. xSTRK already on the address returns in the same batch to an
+  OPEN xSTRK note (`collect_policy: all`); with none there, nothing is
+  collected (`exact 0`, no note).
+- **Claim (flow B).** Open one STRK note and collect every STRK on the
+  address (`all`). When the address already holds STRK (Endur paid it
+  there), the batch only collects: its one call is STRK's
+  `balance_of(shadow)`, since an invoke needs a call, and no claim rides
+  along, because Endur's relayer could claim that request while the wallet
+  proves and the duplicate would revert the batch ("ERC721: invalid token
+  ID"). Otherwise the shadow account calls `claim_withdrawal` for each
+  request a read-only dry run found payable now (at most eight, oldest
+  first); a request past its wait that Endur has not funded is never
+  claimed, since one would revert the batch ("Insufficient funds"). The
+  address is unstaking's alone, so all its STRK came from its requests. A
+  claim with nothing held and nothing payable is refused before the wallet
+  is asked.
+- **The machinery is shared.** `packages/privacy/src/wallet-api/shadow-account.ts`,
+  extracted for the Vault and the Borrow counter by D-083, holds
+  `ShadowAccountResolver` (the commitment request, cached per resolver; the
+  anonymizer-view address and its Primer-derived cross-check at the
+  resolver's nonce) and `preparedShadowBatch` (the single-attempt
+  wallet-submitted batch with its receipt wait). `EndurUnstake` holds its own
+  resolver for `strkworld-endur`, as `ShadowVault` and `ShadowBorrow` hold
+  theirs; nothing is copied, and no two dapp names share a commitment.
+- **The read.** `POST /v1/rpc/endur-unstake` with `{ v: 1, account }`
+  answers the latest block's timestamp, the address's STRK and xSTRK, its
+  count of queue NFTs, and each request the queue's `WithdrawQueue` events
+  name it as receiver for, by `get_request_info`, and for each unpaid
+  request past its wait (at most eight) whether a read-only `starknet_call`
+  of `claim_withdrawal(id)` succeeds (`claimableNow`). The scan runs from
+  1,000,000 blocks back (about twenty days), never before block 15,726,000,
+  at most 12 pages, keeping the newest 16; pages left over mark the answer
+  `complete: false`, and anything malformed fails it whole. It logs nothing
+  per request and follows the kill switch, like D-077's reads. The browser
+  classifies each unpaid request by that chain timestamp, never its own
+  clock, as `waiting`, then `awaiting-funds` ("Waiting for Endur to fund
+  it") or `ready` by the dry run, and counts NFTs it could not list as
+  `unlisted`. The dry run was checked against history: #10451, #10468 and
+  #10469 answered `[]` one block before their owners' successful claims,
+  and #10583 reverts "Insufficient funds" at the head. Endur's relayer funds
+  the queue and claims in one transaction (#10582 still reverted one block
+  before its claim), so most requests go from `awaiting-funds` straight to
+  paid, and the claim step is usually a collection.
+- **The seam (D-036)** gains `endurUnstakePosition(options?)`,
+  `prepareEndurUnstake(shares, options?)` and `prepareEndurClaim(options?)`,
+  with `EndurUnstakePosition`, `EndurWithdrawalRequest`, `EndurAction` and
+  `PreparedEndurBatch` (the Vault batch's contract). The demo fake runs it at
+  the stake fixture's DEMO RATE inverted and a fixed demo clock.
+- **The switch.** Policy route `unstake`, admitted by
+  `VITE_STRK20_UNSTAKE_ENABLED=true` and nothing else: no token list, no
+  relay-fee ceiling, no intent bound. Off, the counter says unstaking is not
+  switched on. It is independent of staking either way.
+- **The counter** sits under the stake form in the Bank's staking tab, in
+  Endur's look, with its own door, and steps aside while a stake is at its
+  commit point. It reads requests only when the player asks, shows each with
+  its time left or "Ready to claim", the STRK already paid to the stand-in,
+  any leftover xSTRK, the stand-in address with an optional Voyager link, and
+  a Claim button once something is claimable. A request first reads the
+  xSTRK balance and says so plainly when there is none.
+- **The register (D-020).** `bank.unstake` and `bank.unstake-claim`, graded
+  `anonymous` like the Vault, approved by the lead on 2026-10-01 (the brief
+  asked for this explanation), with one disclosure at every commit point and
+  no waiver: "Your unstake request sits on a stand-in address, not your
+  wallet. That address, the xSTRK it unstakes, its requests and the STRK it
+  claims, with their amounts, are public on-chain. Only its link to your
+  wallet is hidden, and matching amounts or timing can still give that link
+  away. Claimed STRK returns to your pool balance." No D-024 string changes.
+  The staking note now reads "To unstake, use the unstaking counter below.
+  Endur's withdrawal queue holds the STRK for about seven days, sometimes
+  longer, before it can come back to your pool balance." (D-064's other
+  rules stand.)
+
+**Consequences.** A player who unstakes has a persistent public stand-in at
+Endur: every request and claim on it is linked to the others, and a request
+that matches a recent stake in amount or timing can give away the link,
+which the disclosure says. Endur's own service usually pays the STRK to that
+address before the player claims, so the claim is a collection; a ready but
+unfunded request makes the wallet refuse the claim, and nothing is sent. Two
+transactions per unstake, each paying the pool fee. The read's window means
+a request left unpaid for more than about twenty days stops being listed,
+though the counter still says it exists and a claim still collects it once
+Endur pays it. Unstaking depends on Endur's queue and xSTRK, pinned by
+address, and StarkWare's anonymizer; no Cairo is written here. First live
+use on Railway is the probe: one small stake, one request, one claim a week
+later.
 
 ---
 

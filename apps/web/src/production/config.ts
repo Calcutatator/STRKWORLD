@@ -130,7 +130,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   const stake = parseStakeRoute(environment);
   const vault = parseVaultRoute(environment);
   const borrow = environment.VITE_STRK20_BORROW_ENABLED === 'true';
-  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault' | 'borrow'> = [];
+  const unstake = parseUnstakeRoute(environment);
+  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault' | 'borrow' | 'unstake'> = [];
   const shieldTokens: string[] = [];
   const unshieldTokens: string[] = [];
   const transferTokens: string[] = [];
@@ -179,6 +180,12 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
     // nothing else, and its counter stands in the Vault's room, so it is
     // reachable only when the Vault's door is open too.
     enabledRoutes.push('borrow');
+  }
+  if (unstake) {
+    // D-085: Endur unstaking through a shadow account, wallet-submitted like
+    // the Vault: no intent bound, no relay-fee authority and no token list
+    // (xSTRK in and STRK out are pinned), so it narrows nothing else.
+    enabledRoutes.push('unstake');
   }
   if (enabledRoutes.length === 0) return denyAllPolicy();
 
@@ -238,11 +245,14 @@ function parseUnshieldRoute(environment: WalletEnvironment): ParsedTransferRoute
 }
 
 /**
- * D-063: Endur staking, relayed by the private-submission backend like swap.
- * It admits exactly STRK in and xSTRK out, in either order, and a positive
- * relay-fee ceiling. Missing, zero, malformed, partial or disabled values keep
- * staking denied without touching any other route; enabling it enables
- * nothing else. The backend's BACKEND_ROUTE_STAKE_* block gates it separately.
+ * D-063: Endur staking. It admits exactly STRK in and xSTRK out, in either
+ * order, and a positive relay-fee ceiling. Since D-082 the wallet submits a
+ * stake itself, so the ceiling gates no quote and the backend's
+ * BACKEND_ROUTE_STAKE_* block is not involved; the ceiling is still required
+ * so existing environments keep parsing. Missing, zero, malformed, partial or
+ * disabled values keep staking denied without touching any other route;
+ * enabling it enables nothing else (D-085 switches it on for the test
+ * deployment).
  */
 function parseStakeRoute(environment: WalletEnvironment): { maxRelayFee: bigint; allowedTokens: string[] } | null {
   if (environment.VITE_STRK20_STAKE_ENABLED !== 'true') return null;
@@ -269,6 +279,18 @@ function parseVaultRoute(environment: WalletEnvironment): { allowedTokens: strin
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_VAULT_ALLOWED_TOKENS);
   if (allowedTokens === null || !isVaultTokenList(allowedTokens)) return null;
   return { allowedTokens };
+}
+
+/**
+ * D-085: Endur unstaking through the player's unstaking shadow account. The
+ * wallet proves and submits it, like the Vault, and its contracts and tokens
+ * are pinned in `packages/privacy/src/endur.ts`, so its one value is
+ * `VITE_STRK20_UNSTAKE_ENABLED=true`. Anything else keeps unstaking shut
+ * without touching any other route; enabling it enables nothing else, not
+ * even staking.
+ */
+function parseUnstakeRoute(environment: WalletEnvironment): true | null {
+  return environment.VITE_STRK20_UNSTAKE_ENABLED === 'true' ? true : null;
 }
 
 /**

@@ -550,10 +550,11 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
   };
 }
 
-/** D-077, D-079, D-083: the Exchange never touches the Vault or the Borrow counter. */
+/** D-077, D-079, D-083, D-085: the Exchange never touches the Vault, the Borrow counter or unstaking. */
 const UNUSED_VAULT: Pick<
   PrivacyOperations,
   'vaultPositions' | 'prepareVaultSupply' | 'prepareVaultRedeem' | 'vaultRates' | 'borrowMarket' | 'borrowPositions' | 'prepareBorrow'
+  | 'endurUnstakePosition' | 'prepareEndurUnstake' | 'prepareEndurClaim'
 > = {
   vaultPositions: async () => { throw new Error('unused'); },
   prepareVaultSupply: async () => { throw new Error('unused'); },
@@ -562,4 +563,8 @@ const UNUSED_VAULT: Pick<
   borrowMarket: async () => { throw new Error('unused'); },
   borrowPositions: async () => { throw new Error('unused'); },
   prepareBorrow: async () => { throw new Error('unused'); },
+  // D-085: nor Endur unstaking.
+  endurUnstakePosition: async () => { throw new Error('unused'); },
+  prepareEndurUnstake: async () => { throw new Error('unused'); },
+  prepareEndurClaim: async () => { throw new Error('unused'); },
 };

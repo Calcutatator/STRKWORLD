@@ -38,8 +38,10 @@ import type {
   SwapPlannerPort,
   VaultRatesPort,
   VaultRpcPort,
+  EndurRpcPort,
 } from './types.js';
 import { VAULT_POSITION_PATH, VAULT_RATES_PATH, VAULT_SHADOW_ACCOUNT_PATH } from './vault.js';
+import { ENDUR_UNSTAKE_PATH } from './endur.js';
 import {
   ApiFailure,
   isFelt,
@@ -83,6 +85,8 @@ export interface BackendApiOptions {
   vaultRates?: VaultRatesPort;
   /** The Borrow counter's two pinned public reads (D-083). Without it, both routes answer 503. */
   borrow?: BorrowRpcPort;
+  /** Endur unstaking's pinned reads (D-085). Without it, that route answers 503. */
+  endur?: EndurRpcPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
   /**
@@ -109,6 +113,7 @@ export class BackendApi {
   private readonly vault?: VaultRpcPort;
   private readonly vaultRates?: VaultRatesPort;
   private readonly borrow?: BorrowRpcPort;
+  private readonly endur?: EndurRpcPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -129,6 +134,7 @@ export class BackendApi {
     this.vault = options.vault;
     this.vaultRates = options.vaultRates;
     this.borrow = options.borrow;
+    this.endur = options.endur;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
@@ -196,6 +202,7 @@ export class BackendApi {
           case VAULT_RATES_PATH: response = await abortable(this.vaultRateList(request.body, deadline.signal), deadline.signal); break;
           case BORROW_MARKET_PATH: response = await abortable(this.borrowMarket(request.body, deadline.signal), deadline.signal); break;
           case BORROW_POSITION_PATH: response = await abortable(this.borrowPosition(request.body, deadline.signal), deadline.signal); break;
+          case ENDUR_UNSTAKE_PATH: response = await abortable(this.endurUnstake(request.body, deadline.signal), deadline.signal); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -549,6 +556,40 @@ export class BackendApi {
               maxRedeem: row.maxRedeem.toString(),
             }
           : { vault: row.vault, ok: false })),
+      },
+    };
+  }
+
+  /**
+   * D-085: what a stand-in address holds at Endur's withdrawal queue: its
+   * requests in the scan window, its STRK and xSTRK, its count of queue
+   * NFTs, and the chain's clock, as decimal strings and integers. Public
+   * data, read here so the player's IP never reaches a third-party RPC next
+   * to the address. The request names the address alone.
+   */
+  private async endurUnstake(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    const value = requireRecord(body, ['v', 'account']);
+    requireVersion(value);
+    const account = requireNonzeroFelt(value.account, 'account');
+    if (!this.endur) throw new ApiFailure(503, 'The unstaking reads are unavailable.');
+    const read = await this.endur.getEndurUnstake(account, signal);
+    return {
+      status: 200,
+      body: {
+        chainTime: read.chainTime,
+        strk: read.strk.toString(),
+        xstrk: read.xstrk.toString(),
+        outstanding: read.outstanding.toString(),
+        requests: read.requests.map((request) => ({
+          requestId: request.requestId.toString(),
+          assets: request.assets.toString(),
+          shares: request.shares.toString(),
+          claimed: request.claimed,
+          requestedAt: request.requestedAt,
+          claimableAt: request.claimableAt,
+          claimableNow: request.claimableNow,
+        })),
+        complete: read.complete,
       },
     };
   }

@@ -24,6 +24,7 @@ import { WalletAttentionCue, walletOperationAttention } from '../../wallet/Walle
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
 import { GlossaryTerm } from '../Glossary.js';
+import { UnstakeCounter } from './UnstakeCounter.js';
 
 const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer', 'stake'];
 const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
@@ -225,6 +226,11 @@ export function BankPanel({
             ) : null}
           </>
         )}
+
+        {/* D-085: the unstaking counter has its own route and door, so it shows
+            whether or not staking is switched on, and steps aside while a
+            stake is at its commit point so only one confirm is ever on screen. */}
+        {state.mode === 'stake' && !committing ? <UnstakeCounter register={register} /> : null}
 
         {state.notice ? (
           <p className={`panel-notice notice-${state.notice.tone}`} role="status">

@@ -869,3 +869,49 @@ describe('production Borrow counter admission (D-083)', () => {
     expect(railway).toMatch(/\| `VITE_STRK20_BORROW_ENABLED` \| `true` \|/);
   });
 });
+
+describe('Endur staking and unstaking admission (D-085)', () => {
+  const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+  const base = {
+    VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+    VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+    VITE_BACKEND_BASE_URL: '/api',
+  };
+  /** The test deployment's stake values (deploy/RAILWAY.md). */
+  const stake = {
+    VITE_STRK20_STAKE_ENABLED: 'true',
+    VITE_STRK20_STAKE_MAX_RELAY_FEE: '10000000000000000000',
+    VITE_STRK20_STAKE_ALLOWED_TOKENS: `${STRK_TOKEN},${XSTRK}`,
+  };
+
+  it('admits unstaking with its one switch, and staking with the test deployment values', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...stake, VITE_STRK20_UNSTAKE_ENABLED: 'true' });
+    expect(policy.enabledRoutes).toEqual(['stake', 'unstake']);
+    expect(policy.allowedTokens.stake).toEqual([STRK_TOKEN, XSTRK]);
+    // Unstaking takes no token list: xSTRK in and STRK out are pinned.
+    expect('unstake' in policy.allowedTokens).toBe(false);
+  });
+
+  it('keeps each independent: one never enables the other', () => {
+    expect(parseRoutePolicy({ ...base, VITE_STRK20_UNSTAKE_ENABLED: 'true' }).enabledRoutes).toEqual(['unstake']);
+    expect(parseRoutePolicy({ ...base, ...stake }).enabledRoutes).toEqual(['stake']);
+  });
+
+  it.each([['false'], ['TRUE'], ['1'], [undefined]])('keeps unstaking shut for %s', (flag) => {
+    expect(parseRoutePolicy({ ...base, VITE_STRK20_UNSTAKE_ENABLED: flag }).enabledRoutes).toEqual([]);
+  });
+
+  it('ships the example environment with both denied, and declares the switch as a Docker build argument', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    const environment: Record<string, string> = {};
+    for (const line of example.split('\n')) {
+      const match = /^(VITE_[A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (match) environment[match[1]!] = match[2]!;
+    }
+    expect(environment.VITE_STRK20_STAKE_ENABLED).toBe('false');
+    expect(environment.VITE_STRK20_UNSTAKE_ENABLED).toBe('false');
+    expect(parseRoutePolicy(environment).enabledRoutes).toEqual([]);
+    const dockerfile = readFileSync(new URL('../../../../deploy/fly/Dockerfile', import.meta.url), 'utf8');
+    expect(dockerfile).toMatch(/^ARG VITE_STRK20_UNSTAKE_ENABLED$/m);
+  });
+});
