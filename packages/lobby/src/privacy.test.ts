@@ -426,7 +426,7 @@ describe('no sequence of client input reaches state with money in it', () => {
         ? attempts[Math.floor(random() * attempts.length)]
         : undefined;
 
-      switch (Math.floor(random() * 5)) {
+      switch (Math.floor(random() * 6)) {
         case 0:
           registry.admit(session, {
             x: hostile ? payload : Math.floor(random() * 2000) - 1000,
@@ -456,6 +456,19 @@ describe('no sequence of client input reaches state with money in it', () => {
               x: hostile ? payload : Math.floor(random() * 2000) - 1000,
               y: hostile ? payload : Math.floor(random() * 2000) - 1000,
               sprite: hostile ? payload : 'avatar-4',
+            },
+            clock,
+          );
+          break;
+        case 4:
+          // D-087: a presence area, named or smuggled.
+          registry.enterArea(
+            session,
+            {
+              area: hostile ? payload : (['street', 'roof', 'studio'] as const)[Math.floor(random() * 3)],
+              x: hostile ? payload : Math.floor(random() * 2000) - 1000,
+              y: hostile ? payload : Math.floor(random() * 2000) - 1000,
+              sprite: hostile ? payload : 'avatar-6',
             },
             clock,
           );

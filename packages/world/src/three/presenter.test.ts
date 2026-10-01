@@ -15,6 +15,7 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
+import { createRemotePeerSource } from '../remote-peer.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
 
 /**
@@ -454,5 +455,34 @@ describe('the football in the presenter (D-078)', () => {
     const world = setup(() => true);
     world.view.footballMoment({ kind: 'goal', side: 'east' });
     expect((find(world.parent, 'football:confetti') as InstancedMesh).count).toBe(0);
+  });
+});
+
+describe('remote peers in shared areas (D-087)', () => {
+  function withPeer(x: number, y: number) {
+    const parent = new Group();
+    const figures = fakeFigures();
+    const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: figures.factory });
+    const peers = createRemotePeerSource([{ id: 'peer', x, y, facing: 'down', sprite: 'avatar-3' }]);
+    const view = presenter.bindSession(peers.source);
+    const remote = () => figures.created.find((figure) => figure.object.parent?.name === 'remote-avatars');
+    return { presenter, view, peers, remote };
+  }
+
+  it('stands a peer on the roof deck while the player is on the roof, the only area it can be in', () => {
+    const roof = EXCHANGE_ROOF_LEVEL.rooftop!;
+    const deck = tile(roof.x + 3, roof.y + 2);
+    const world = withPeer(deck.x, deck.y);
+    world.view.showRooftop('exchange');
+    world.presenter.update(16);
+    expect(world.remote()?.object.position.y).toBe(EXCHANGE_ROOF_HEIGHT);
+  });
+
+  it('stands a peer on the flat floor in the Studio, with the street hidden', () => {
+    const world = withPeer(tile(6, 6).x, tile(6, 6).y);
+    world.view.setStreetVisible(false);
+    world.view.syncStudio({ visible: true, highlightedFigure: null });
+    world.presenter.update(16);
+    expect(world.remote()?.object.position.y).toBe(0);
   });
 });

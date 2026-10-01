@@ -117,6 +117,14 @@ const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
 
+/** A building's roof deck height above the street, in world units; 0 for a building without one. */
+function rooftopHeight(building: BuildingId): number {
+  for (const level of FIXED_ROOM_LEVELS[building] ?? []) {
+    if (level.rooftop) return level.rooftop.height;
+  }
+  return 0;
+}
+
 /** Which interior a floor is drawn as: the ground floor by its building, others by floor. */
 function roomKey(building: BuildingId, level?: FixedRoomLevelId): string {
   return level === undefined || level === 'ground' ? building : `${building}:${level}`;
@@ -145,6 +153,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
+  /**
+   * Where a remote peer stands (D-087). The lobby sends only peers in the
+   * player's own presence area, so on a roof every peer is on that roof's
+   * deck; in an interior or the Studio the floor is flat; on the street,
+   * the street's own surface.
+   */
+  const remoteHeight = (x: number, z: number): number => {
+    if (rooftop !== null) return rooftopHeight(rooftop);
+    return streetVisible ? streetHeight(x, z) : 0;
+  };
 
   // Every interior, keyed by `roomKey`: each ground floor (the Vault's only
   // when it is open, D-077), and floors reached by lift. A roof is not here:
@@ -294,7 +312,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
         const layer = createRemoteAvatarLayer3D({
           source: remotePeers,
           figures: options.figures,
-          surfaceHeight: streetHeight,
+          surfaceHeight: remoteHeight,
         });
         remote = layer;
         root.add(layer.group);

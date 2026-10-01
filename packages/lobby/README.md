@@ -142,6 +142,8 @@ const stopStatus = lobby.onStatus((e) => {    // learn if the connection dies
 lobby.updatePosition(x, y, 'left');           // safe to call every frame
 lobby.suspend();                              // on building entry (D-019)
 lobby.resume({ x, y, facing: 'down' }, 'avatar-9'); // optional D-047 selection
+lobby.enterArea('studio', { x, y, facing: 'down' }, 'avatar-9'); // D-087 shared room
+lobby.enterArea('street', { x, y, facing: 'up' });  // and back out
 
 // D-060 block sandbox
 const stopSandbox = lobby.onSandbox(drawStacks); // replays now, then on change
@@ -398,9 +400,11 @@ one entry, shared the same way: `tick: uint32`, the ball's `x`, `y`, `vx`,
 and `phase` as `uint8`. Whole numbers throughout, written only by the room
 from its own simulation.
 
-The client-to-server vocabulary is six verbs — `move`, `suspend`, `resume`,
-`sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer sandbox tile),
-and `football:kick`, whose payload is never read — and a join payload. There is
+The client-to-server vocabulary is seven verbs — `move`, `suspend`, `resume`,
+`area` (`{ area, x, y, facing, sprite }`, D-087: go live in `street`, `roof`
+or `studio`), `sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer
+sandbox tile), and `football:kick`, whose payload is never read — and a join
+payload. There is
 no message through which a client could tell the room anything else, because
 there is no field for it. The server sends four messages: `welcome`
 (`{ gameId }`, the recipient's own id), `sandbox:drop` (`{ x, y }`, a sky-drop
@@ -507,6 +511,41 @@ When a player enters a building, the client leaves or suspends lobby presence.
 Other players see the avatar disappear. A nearby observer may therefore infer
 the chosen building and visit timing from the last coordinate; that leak is an
 explicitly accepted v1 trade-off (D-019).
+
+### Presence areas (D-087)
+
+Two interiors are shared instead: the Exchange tower's roof (reached by lift)
+and the Avatar Studio. A live session is in exactly one presence area —
+`street`, `roof` or `studio` — and the room's interest sets only ever pair
+sessions in the same area: the radius and cap apply within it, as on the
+street. The area is the server's own bookkeeping, never a schema field, so no
+client is told any other player's area, only shown the players in its own.
+Every other interior (the Bank, the Vault, the Post Office, the Bridge, the
+Exchange's ground and degen floors) still suspends.
+
+- `area` switches a session from a suspend or from another area, keeping one
+  entry and one `gameId`; views drop and pick it up at the next patch, once
+  each. Like `resume` it stamps the move floor, so it is no faster a write
+  channel than `move`. Leaving the street puts a carried block back and
+  leaves the ball, as a suspend does.
+- A shared room holds its players to its walkable tiles
+  (`ROOF_PRESENCE_GRID`, `STUDIO_PRESENCE_GRID` in `@strkworld/shared`, kept
+  equal to the World's rooms by a World test): a placement must land on one,
+  and a move must land on one without its straight line crossing a solid tile
+  (a step within one tile may clip a corner; no wall in either room is thinner
+  than a tile). The street keeps its clamp to the world.
+- A malformed switch, or one off the area's tiles, suspends the session: a
+  client that disagrees with the room about where it stands is seen by no one
+  rather than in the wrong place.
+- The sandbox, the ball and the sky drops are street-only: a room's
+  coordinates overlap the street's (the roof lies over the tower's footprint,
+  the Studio is drawn over the hidden street by the pitch), so a room's
+  players never count as on the street.
+- `LobbyClient.enterArea` withholds peers until the room's copy of its own
+  avatar shows the switch, so the area left is never drawn in the area
+  entered; a suspended client is shown nobody.
+- Overflow (D-086) is per room: a full room still sends the next joiner to a
+  new one, and each room has its own street, roof and Studio.
 
 Suspend **erases** the entry rather than hiding it — the position is discarded,
 not retained — and `resume` takes a fresh placement from the client. The

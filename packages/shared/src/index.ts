@@ -128,7 +128,9 @@ export type AvatarSpriteKey =
  * hash, token symbol, building occupancy, and any financial action. On entry
  * the client leaves or suspends lobby presence, so other players see the
  * avatar disappear but the lobby never receives a building event or ID. That
- * presence leak is accepted for v1 by D-019.
+ * presence leak is accepted for v1 by D-019. D-087's two shared rooms (the
+ * Exchange roof and the Avatar Studio) are presence areas the lobby keeps on
+ * its side only: no field here says which area a player is in.
  */
 export interface PresenceState {
   gameId: GameId;
@@ -322,6 +324,70 @@ export interface FootballGoal {
 }
 
 // ---------------------------------------------------------------------------
+// Presence areas — D-087
+// ---------------------------------------------------------------------------
+//
+// Only the overworld and two approved rooms are multiplayer. Every other
+// interior is a private solo instance: entering it suspends presence (D-019).
+// A live player is in exactly one area, and sees and is seen only by players
+// in the same area. The area is the lobby's server-side bookkeeping, never a
+// field of `PresenceState`, so no player's area is ever broadcast.
+
+/**
+ * Where a live player is. `street` is the overworld (the road, the sandbox,
+ * the pitch and the plaza); `roof` is the Exchange tower's roof, reached by
+ * lift; `studio` is the Avatar Studio. A suspended player is in none.
+ */
+export type PresenceArea = 'street' | 'roof' | 'studio';
+
+/** Every presence area, street first. */
+export const PRESENCE_AREAS: readonly PresenceArea[] = Object.freeze(['street', 'roof', 'studio'] as const);
+
+/**
+ * A shared room's walkable grid, as the lobby checks a position against it.
+ * Positions are World pixels, in the same space the World draws the room in.
+ */
+export interface PresenceAreaGrid {
+  /** World pixel position of the grid's tile (0, 0). */
+  readonly originX: number;
+  readonly originY: number;
+  /** World pixels per tile. */
+  readonly tileSize: number;
+  /** Walkable tile rectangles, in the grid's own tiles. Every other tile is solid. */
+  readonly walkable: readonly TileRect[];
+}
+
+/**
+ * D-087: the Exchange tower's roof deck. Its grid lies over the tower's street
+ * footprint (street tiles `STREET_ORIGIN_X + 12` to `+ 18`, rows 5 to 10),
+ * raised to the roof; the walkable deck is the 5 by 4 inside its ledge ring,
+ * lift pad included. Mirrors the World's `EXCHANGE_ROOF_LEVEL`, and a World
+ * test fails if the two drift.
+ */
+export const ROOF_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
+  originX: (STREET_ORIGIN_X + 12) * 32,
+  originY: 5 * 32,
+  tileSize: 32,
+  walkable: Object.freeze([Object.freeze({ x: 1, y: 1, width: 5, height: 4 })]),
+});
+
+/**
+ * D-087: the Avatar Studio, drawn at the interiors' origin (two tiles in from
+ * the street's corner, over the hidden street): its floor inside the wall
+ * ring, and the two-tile return portal in the top wall. Mirrors the World's
+ * `AVATAR_STUDIO_DEFINITION`, and a World test fails if the two drift.
+ */
+export const STUDIO_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
+  originX: 2 * 32,
+  originY: 2 * 32,
+  tileSize: 32,
+  walkable: Object.freeze([
+    Object.freeze({ x: 1, y: 1, width: 16, height: 10 }),
+    Object.freeze({ x: 8, y: 0, width: 2, height: 1 }),
+  ]),
+});
+
+// ---------------------------------------------------------------------------
 // The event bus — world ↔ shell
 // ---------------------------------------------------------------------------
 //
@@ -353,6 +419,22 @@ export type WorldEvents = {
   'avatar-studio:exited': Record<string, never>;
   /** D-047: selected state, still only cosmetic presentation data. */
   'avatar:selected': { sprite: AvatarSpriteKey };
+  /**
+   * D-087: the Exchange lift reached its roof, a shared presence area, or the
+   * player left it (by lift, or released from the building). Emitted inside
+   * the building's visit: `building:entered` came first, and when the visit
+   * ends from the roof `rooftop:exited` comes before `building:exited`.
+   */
+  'rooftop:entered': Record<string, never>;
+  'rooftop:exited': Record<string, never>;
+  /**
+   * D-087: where the player stands inside a shared area (the roof or the
+   * Avatar Studio), in that area's World pixels. Emitted on arrival, before
+   * the area's entered event, and on every frame the player moves there.
+   * Never on the street (that is `player:moved`) and never in a private
+   * interior, so a street consumer never reads a room's coordinates.
+   */
+  'area:moved': { position: Position; facing: Facing };
   /**
    * D-076: the player came within sight of the Privacy Plaza, or left it.
    * Presentation only: while it is near, the Shell reads the pool's public

@@ -154,12 +154,18 @@ function report(): Record<string, unknown> {
   let throttled = 0;
   let refused = 0;
   let present = 0;
+  let rejected = 0;
+  let areaSwitches = 0;
+  let suspended = 0;
   for (const room of rooms) {
     clients += room.clients.length;
     const counters = room.counters;
     throttled += counters.throttled;
     refused += counters.refused;
     present += counters.present;
+    rejected += counters.rejected;
+    areaSwitches += counters.areaSwitches;
+    suspended += counters.suspended;
   }
   const tick = stats(window.tickMs);
   const message = stats(window.messageMs);
@@ -170,6 +176,10 @@ function report(): Record<string, unknown> {
     present,
     throttledTotal: throttled,
     refusedTotal: refused,
+    // D-087: moves refused by a shared area's tiles, and accepted area switches.
+    rejectedTotal: rejected,
+    areaSwitchesTotal: areaSwitches,
+    suspended,
     tickMs: tick,
     messageMs: message,
     // Wall time the event loop spent inside room code, as a share of one core.

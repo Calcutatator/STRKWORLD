@@ -4,7 +4,7 @@
  *
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
- * throttling, suspend, interest, the block sandbox's actions and returns
+ * throttling, suspend, presence areas (D-087), interest, the block sandbox's actions and returns
  * (D-060) and the football's kicks and steps (D-078) — is exercisable in a
  * plain unit test against the same objects that get encoded in production.
  *
@@ -14,7 +14,15 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import type { Facing, FootballSnapshot, GameId, SandboxColumn, SandboxTile } from '@strkworld/shared';
+import type {
+  Facing,
+  FootballSnapshot,
+  GameId,
+  PresenceArea,
+  SandboxColumn,
+  SandboxTile,
+} from '@strkworld/shared';
+import { isAreaStepAllowed, isAreaWalkable, normalizePresenceArea } from './areas.js';
 import { MOVE_BURST, resolveRoomConfig } from './config.js';
 import {
   UpdateThrottle,
@@ -49,6 +57,14 @@ export interface PlacementRequest {
   sprite?: unknown;
 }
 
+/**
+ * D-087: what a client may offer when it goes live in a presence area. All of
+ * it untrusted; `area` must name one of `PRESENCE_AREAS`.
+ */
+export interface AreaRequest extends PlacementRequest {
+  area?: unknown;
+}
+
 /** What a client may offer on the high-rate path. */
 export interface MoveRequest {
   x?: unknown;
@@ -73,7 +89,10 @@ export type MoveOutcome =
   | 'applied'
   /** Arrived inside the rate floor and was dropped. */
   | 'throttled'
-  /** Coordinates were not finite. */
+  /**
+   * Coordinates were not finite, or (D-087) not a step the session's shared
+   * area allows: off its walkable tiles, or across a solid one.
+   */
   | 'rejected'
   /** No live entry — unknown or currently suspended. */
   | 'absent';
@@ -92,6 +111,10 @@ export interface PresenceCounters {
   readonly suspensions: number;
   readonly resumptions: number;
   readonly throttled: number;
+  /** Moves refused as malformed or, in a shared area, off its walkable tiles (D-087). */
+  readonly rejected: number;
+  /** Accepted changes of presence area (D-087). */
+  readonly areaSwitches: number;
   readonly peak: number;
 }
 
@@ -142,6 +165,13 @@ interface Session {
   readonly gameId: GameId;
   /** True while the client is inside an interior overlay. See D-019. */
   suspended: boolean;
+  /**
+   * D-087: the presence area the session is live in; meaningful only while
+   * not suspended. Server-side only: no field of the room state says it, so
+   * a client learns nothing about any other player's area but whether that
+   * player is in its own.
+   */
+  area: PresenceArea;
 }
 
 export class LobbyPresence {
@@ -181,6 +211,8 @@ export class LobbyPresence {
   #suspensions = 0;
   #resumptions = 0;
   #throttled = 0;
+  #rejected = 0;
+  #areaSwitches = 0;
   #peak = 0;
 
   constructor(options: LobbyPresenceOptions = {}) {
@@ -247,7 +279,7 @@ export class LobbyPresence {
       this.#refused += 1;
       return { ok: false, reason: 'bad-placement' };
     }
-    this.#sessions.set(sessionKey, { gameId, suspended: false });
+    this.#sessions.set(sessionKey, { gameId, suspended: false, area: 'street' });
     this.#admitted += 1;
     this.#peak = Math.max(this.#peak, this.peers.size);
     return { ok: true, gameId };
@@ -262,7 +294,16 @@ export class LobbyPresence {
 
     const x = normalizeCoordinate(ownDataField(request, 'x'), this.#worldLimit);
     const y = normalizeCoordinate(ownDataField(request, 'y'), this.#worldLimit);
-    if (x === null || y === null) return 'rejected';
+    if (x === null || y === null) {
+      this.#rejected += 1;
+      return 'rejected';
+    }
+    // D-087: a shared room holds its players to its own walkable tiles. The
+    // street keeps its rule, a clamp to the world.
+    if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y })) {
+      this.#rejected += 1;
+      return 'rejected';
+    }
 
     if (!this.#throttle.accept(sessionKey, now)) {
       this.#throttled += 1;
@@ -338,10 +379,93 @@ export class LobbyPresence {
       return false;
     }
     session.suspended = false;
+    session.area = 'street';
     this.#movedAt.set(sessionKey, now);
     this.#resumptions += 1;
     this.#peak = Math.max(this.#peak, this.peers.size);
     return true;
+  }
+
+  /**
+   * D-087: go live in a presence area at a placement in it — from a suspend,
+   * from another area, or within the same area to refresh the placement and
+   * the sprite. Returns whether it was applied.
+   *
+   * The placement is checked against the area entered: anywhere in the world
+   * for the street, as `resume`; a walkable tile for a shared room. It is not
+   * checked against the area left, because the two do not share coordinates
+   * — the Studio is drawn over the hidden street, the roof above it — and a
+   * change of area is a teleport by nature.
+   *
+   * A malformed request, or a placement off the area's walkable tiles,
+   * suspends a live session rather than leaving it where it was: a client
+   * that disagrees with the room about where it stands would otherwise send
+   * one area's coordinates as moves in another, and be drawn in the wrong
+   * place. Seen by no one is the safe failure.
+   *
+   * Like `resume`, it always succeeds when well formed and stamps the move
+   * floor with `now`, so switching areas is never a faster position-write
+   * channel than moving. A live switch keeps the same entry: views drop it
+   * and pick it up at the next patch, once each, like any move (D-086).
+   * Leaving the street puts a carried block back and leaves the ball, as a
+   * suspend does; a shared room has neither.
+   */
+  enterArea(sessionKey: string, request: AreaRequest, now: number): boolean {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined) return false;
+    if (!isValidMonotonicTime(now)) return false;
+    const area = normalizePresenceArea(ownDataField(request, 'area'));
+    const x = normalizeCoordinate(ownDataField(request, 'x'), this.#worldLimit);
+    const y = normalizeCoordinate(ownDataField(request, 'y'), this.#worldLimit);
+    if (
+      area === null ||
+      x === null ||
+      y === null ||
+      (area !== 'street' && !isAreaWalkable(area, x, y))
+    ) {
+      this.suspend(sessionKey);
+      return false;
+    }
+
+    if (session.suspended) {
+      if (!this.#place(session.gameId, request)) return false;
+      if (!this.#throttle.stamp(sessionKey, now)) {
+        this.peers.delete(session.gameId);
+        return false;
+      }
+      session.suspended = false;
+    } else {
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) return false;
+      if (!this.#throttle.stamp(sessionKey, now)) return false;
+      if (session.area === 'street' && area !== 'street') {
+        // Every street position, the leaver's included, before they go.
+        const players = this.#livePlayers();
+        this.#announce(this.#sandbox.returnCarried(sessionKey, players));
+        this.#football.lose(sessionKey);
+        entry.carrying = -1;
+      }
+      entry.position.x = x;
+      entry.position.y = y;
+      entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+      entry.sprite = normalizeSprite(
+        ownDataField(request, 'sprite'),
+        this.#spriteKeys,
+        this.#defaultSprite,
+      );
+    }
+    if (session.area !== area) this.#areaSwitches += 1;
+    session.area = area;
+    this.#movedAt.set(sessionKey, now);
+    this.#peak = Math.max(this.#peak, this.peers.size);
+    return true;
+  }
+
+  /** D-087: the area a connection is live in, or null while suspended or unknown. */
+  areaFor(sessionKey: string): PresenceArea | null {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended) return null;
+    return session.area;
   }
 
   /**
@@ -396,7 +520,7 @@ export class LobbyPresence {
   /** Whether any session is on the street — the spawner runs only then. */
   get hasLivePlayers(): boolean {
     for (const session of this.#sessions.values()) {
-      if (!session.suspended && this.peers.has(session.gameId)) return true;
+      if (!session.suspended && session.area === 'street' && this.peers.has(session.gameId)) return true;
     }
     return false;
   }
@@ -428,7 +552,9 @@ export class LobbyPresence {
     now: number,
   ): SandboxActionOutcome {
     const session = this.#sessions.get(sessionKey);
-    if (session === undefined || session.suspended) return 'absent';
+    // The sandbox is on the street (D-087): a shared room's coordinates are
+    // not street tiles, whatever their numbers say.
+    if (session === undefined || session.suspended || session.area !== 'street') return 'absent';
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
 
@@ -467,7 +593,8 @@ export class LobbyPresence {
    */
   kickBall(sessionKey: string, now: number): KickOutcome {
     const session = this.#sessions.get(sessionKey);
-    if (session === undefined || session.suspended) return 'absent';
+    // The pitch is on the street (D-087); the Studio is drawn over it.
+    if (session === undefined || session.suspended || session.area !== 'street') return 'absent';
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
     return this.#football.kick(
@@ -500,11 +627,11 @@ export class LobbyPresence {
     return this.#football.snapshot();
   }
 
-  /** Every live entry as someone the ball meets, with when they last moved. */
+  /** Every street entry as someone the ball meets, with when they last moved. */
   #footballPlayers(): FootballPlayer[] {
     const players: FootballPlayer[] = [];
     for (const [key, session] of this.#sessions) {
-      if (session.suspended) continue;
+      if (session.suspended || session.area !== 'street') continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
       players.push({ key, x: entry.position.x, y: entry.position.y, at: this.#movedAt.get(key) ?? 0 });
@@ -512,11 +639,11 @@ export class LobbyPresence {
     return players;
   }
 
-  /** Every live entry as a sandbox player, optionally leaving one session out. */
+  /** Every street entry as a sandbox player, optionally leaving one session out. */
   #livePlayers(exceptSessionKey?: string): SandboxPlayer[] {
     const players: SandboxPlayer[] = [];
     for (const [key, session] of this.#sessions) {
-      if (key === exceptSessionKey || session.suspended) continue;
+      if (key === exceptSessionKey || session.suspended || session.area !== 'street') continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
       players.push({ key, x: entry.position.x, y: entry.position.y });
@@ -529,7 +656,7 @@ export class LobbyPresence {
     return this.#sessions.get(sessionKey)?.gameId;
   }
 
-  /** The live entry for a connection, if it has one on the street. */
+  /** The live entry for a connection, if it has one, in whichever area it is. */
   entryFor(sessionKey: string): PresenceEntry | undefined {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return undefined;
@@ -537,17 +664,26 @@ export class LobbyPresence {
   }
 
   /**
-   * The other entries this connection should receive: inside the interest
-   * radius, nearest first, capped. The observer's own entry is not included —
-   * the room adds that separately, so the cap means what its name says.
+   * The other entries this connection should receive: in its own presence
+   * area (D-087), inside the interest radius, nearest first, capped. The
+   * observer's own entry is not included — the room adds that separately, so
+   * the cap means what its name says.
+   *
+   * The area comes first because the areas share coordinates: the roof lies
+   * over the street, and the Studio is drawn over the hidden street near the
+   * pitch, so distance alone would show a room's players on the street.
    */
   visibleTo(sessionKey: string): PresenceEntry[] {
-    const self = this.entryFor(sessionKey);
+    const observer = this.#sessions.get(sessionKey);
+    if (observer === undefined || observer.suspended) return [];
+    const self = this.peers.get(observer.gameId);
     if (self === undefined) return [];
     const others: PresenceEntry[] = [];
-    this.peers.forEach((entry) => {
-      if (entry !== self) others.push(entry);
-    });
+    for (const session of this.#sessions.values()) {
+      if (session === observer || session.suspended || session.area !== observer.area) continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry !== undefined) others.push(entry);
+    }
     return selectVisible(
       self,
       others,
@@ -570,6 +706,8 @@ export class LobbyPresence {
       suspensions: this.#suspensions,
       resumptions: this.#resumptions,
       throttled: this.#throttled,
+      rejected: this.#rejected,
+      areaSwitches: this.#areaSwitches,
       peak: this.#peak,
     };
   }

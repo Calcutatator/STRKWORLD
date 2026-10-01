@@ -220,7 +220,7 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Six verbs, none of them financial. There is no message type through which
+ * Seven verbs, none of them financial. There is no message type through which
  * a client could tell the room anything else, which is the enforcement: the
  * room's surface has no field for it.
  */
@@ -231,6 +231,14 @@ export const MESSAGE = Object.freeze({
   suspend: 'suspend',
   /** `{ x, y, facing, sprite }` — reappear after a suspend. */
   resume: 'resume',
+  /**
+   * `{ area, x, y, facing, sprite }` — D-087: go live in a presence area
+   * (`street`, `roof` or `studio`) at a placement in that area, from a
+   * suspend or from another area. Peers in the area left stop seeing the
+   * avatar; peers in the area entered start. Sent to the current area, it
+   * refreshes the placement and the sprite.
+   */
+  area: 'area',
   /** `{ x, y }` integer sandbox tile — take the top block there. D-060. */
   sandboxPick: 'sandbox:pick',
   /** `{ x, y }` integer sandbox tile — put the carried block there. D-060. */

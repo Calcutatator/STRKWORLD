@@ -673,6 +673,8 @@ describe('WorldSession lifecycle', () => {
       'avatar-studio:entered',
       'avatar-studio:exited',
       'player:moved',
+      // D-087: the Studio is shared, so it publishes where the player stands.
+      'area:moved',
     ]);
   });
 
@@ -2280,6 +2282,111 @@ describe('WorldSession: the Exchange tower', () => {
     world.bus.shellEmit('world:exit-building', { building: 'exchange' });
     tick(world);
     expect(world.bus.count('player:moved')).toBeGreaterThan(moved);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-087: the roof and the Avatar Studio are shared presence areas
+// ---------------------------------------------------------------------------
+
+/** The events emitted since `from`, in order, with what `area:moved` said. */
+function eventsSince(world: World, from: number): string[] {
+  return world.bus.emitted.slice(from).map(({ event }) => event);
+}
+
+describe('WorldSession: shared presence areas (D-087)', () => {
+  it('announces the roof when the lift reaches it, with the arrival placement first', () => {
+    const world = createWorld();
+    const session = world.start();
+    climbTo(world, 'degen');
+    const before = world.bus.emitted.length;
+
+    ride(world, 'roof');
+    expect(eventsSince(world, before)).toEqual(['area:moved', 'rooftop:entered']);
+    const arrival = floorTileCentre('roof', liftTo('roof', 'degen').arrival);
+    const [placement] = world.bus.payloads('area:moved');
+    expect(placement?.position).toEqual(arrival);
+    expect(['up', 'down', 'left', 'right']).toContain(placement?.facing);
+    expect(Object.isFrozen(placement)).toBe(true);
+    expect(world.bus.payloads('rooftop:entered')).toEqual([{}]);
+    expect(session.level).toBe('roof');
+  });
+
+  it('publishes roof moves as area moves, never as street moves', () => {
+    const world = createWorld();
+    const session = world.start();
+    climbTo(world, 'roof');
+    const street = world.bus.count('player:moved');
+    const area = world.bus.count('area:moved');
+    for (let i = 0; i < 5; i++) tickHolding(world, { left: true });
+    expect(world.bus.count('player:moved')).toBe(street);
+    expect(world.bus.count('area:moved')).toBe(area + 5);
+    const last = world.bus.payloads('area:moved').at(-1);
+    expect(last).toEqual({ position: session.player, facing: 'left' });
+    // Idle frames publish nothing.
+    tick(world);
+    expect(world.bus.count('area:moved')).toBe(area + 5);
+  });
+
+  it('announces leaving the roof by lift, and the floor below publishes nothing', () => {
+    const world = createWorld();
+    world.start();
+    climbTo(world, 'roof');
+    const before = world.bus.emitted.length;
+    ride(world, 'degen');
+    expect(eventsSince(world, before)).toEqual(['rooftop:exited']);
+    const area = world.bus.count('area:moved');
+    for (let i = 0; i < 5; i++) tickHolding(world, { right: true });
+    expect(world.bus.count('area:moved')).toBe(area);
+    // Back up, and down again: each ride is announced once.
+    ride(world, 'roof');
+    ride(world, 'degen');
+    expect(world.bus.count('rooftop:entered')).toBe(2);
+    expect(world.bus.count('rooftop:exited')).toBe(2);
+  });
+
+  it('leaves the roof before the street placement and the building exit when the Shell releases the player', () => {
+    const world = createWorld();
+    world.start();
+    climbTo(world, 'roof');
+    const before = world.bus.emitted.length;
+    world.bus.shellEmit('world:exit-building', { building: 'exchange' });
+    expect(eventsSince(world, before)).toEqual(['rooftop:exited', 'player:moved', 'building:exited']);
+  });
+
+  it('never announces a roof for any other floor or building', () => {
+    for (const building of ROOM_BUILDINGS) {
+      const world = createWorld();
+      world.start();
+      enterBuilding(world, building);
+      for (let i = 0; i < 5; i++) tickHolding(world, { up: true });
+      if (building === 'exchange') ride(world, 'degen');
+      expect(world.bus.count('rooftop:entered'), building).toBe(0);
+      expect(world.bus.count('area:moved'), building).toBe(0);
+    }
+  });
+
+  it('places the player in the Studio before announcing it, publishes Studio moves, and leaves for the street', () => {
+    const world = createWorld();
+    const session = world.start();
+    const before = world.bus.emitted.length;
+    enterStudioByEntrance(world);
+    const entered = eventsSince(world, before);
+    expect(entered.slice(-2)).toEqual(['area:moved', 'avatar-studio:entered']);
+    expect(world.bus.payloads('area:moved').at(-1)?.position).toEqual(STUDIO_SPAWN);
+    // Peers in the Studio are drawn there: remotes stay visible.
+    expect(world.view.last('setRemoteVisible')).toEqual([true]);
+
+    const street = world.bus.count('player:moved');
+    tickHolding(world, { down: true });
+    expect(world.bus.payloads('area:moved').at(-1)).toEqual({ position: session.player, facing: 'down' });
+    expect(world.bus.count('player:moved')).toBe(street);
+
+    const leaving = world.bus.emitted.length;
+    stepOntoStudioTile(world, STUDIO_EXIT);
+    expect(session.area).toBe('street');
+    // The last Studio placement, then the street's, then the exit.
+    expect(eventsSince(world, leaving)).toEqual(['area:moved', 'player:moved', 'avatar-studio:exited']);
   });
 });
 

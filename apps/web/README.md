@@ -22,7 +22,9 @@ building (D-018).
 The submission queue is backend-owned on prepared Wallet API paths, bounded by
 proof validity, and never delays quote-bound AVNU actions (D-015). Entering a
 building separately suspends lobby presence; other players seeing the avatar
-disappear is accepted for v1 (D-019).
+disappear is accepted for v1 (D-019). The Exchange roof and the Avatar Studio
+are shared instead: the presence controller switches the client into that
+room's presence area, where only its own players see each other (D-087).
 
 ---
 

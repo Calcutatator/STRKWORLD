@@ -3,9 +3,11 @@
  * `policy.ts`, `sandbox.ts`, `sandbox-rules.ts`, `football.ts` and
  * `football-rules.ts`.
  *
- * The room's whole client-facing surface is six message types and a join
+ * The room's whole client-facing surface is seven message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
- * to hold. That is the enforcement: not a filter that strips money out of
+ * to hold. The area verb (D-087) names one of three presence areas —
+ * `street`, `roof`, `studio` — and a placement, and the area is kept on the
+ * server's side: no field of the state says which area anyone is in. That is the enforcement: not a filter that strips money out of
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
  * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky
  * drop and a burst (D-071), each name a tile and nothing else. The kick
@@ -52,6 +54,7 @@ import {
 } from './config.js';
 import {
   LobbyPresence,
+  type AreaRequest,
   type MoveRequest,
   type PlacementRequest,
   type PresenceCounters,
@@ -199,6 +202,22 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
         this.#scheduleFootball();
       }
+    });
+
+    /*
+     * D-087. Go live in a presence area. The registry checks the placement
+     * against the area entered; a refusal suspends the session, silently,
+     * and the client learns it from its own entry. Views are synced at the next patch, so a switch
+     * drops the avatar from one area's views and adds it to the other's in
+     * the same encode. Leaving the street can return a carried block and
+     * leaves the ball, so both timers are re-armed as for a suspend.
+     */
+    this.onMessage(MESSAGE.area, (client: Client, payload: AreaRequest) => {
+      // A refused switch suspends the session, so views are stale either way.
+      this.#registry.enterArea(client.sessionId, payload ?? {}, performance.now());
+      this.#viewsStale = true;
+      this.#scheduleSpawn();
+      this.#scheduleFootball();
     });
 
     /*
