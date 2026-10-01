@@ -236,8 +236,8 @@ describe('ProductionRoot', () => {
 
     expect(none).toContain(COPY.connect.none);
     expect(none).toContain('data-testid="get-a-wallet"');
-    expect(none).toContain('<a href="https://www.ready.co" target="_blank" rel="noopener noreferrer">Ready</a>');
-    expect(none).toContain('<a href="https://www.xverse.app" target="_blank" rel="noopener noreferrer">Xverse</a>');
+    expect(none).toContain('<a href="https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb" target="_blank" rel="noopener noreferrer">Ready</a>');
+    expect(none).toContain('<a href="https://chromewebstore.google.com/detail/xverse-wallet/idnnbdplmphpflfnlkomgpfbpcgelopg" target="_blank" rel="noopener noreferrer">Xverse</a>');
     expect(some).not.toContain('data-testid="get-a-wallet"');
     expect(some).not.toContain('<a ');
   });
