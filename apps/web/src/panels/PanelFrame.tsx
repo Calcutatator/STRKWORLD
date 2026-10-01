@@ -19,6 +19,7 @@ export function PanelFrame({
   closingNote = null,
   children,
   footer,
+  counters = null,
 }: {
   title: string;
   /**
@@ -48,6 +49,12 @@ export function PanelFrame({
   closingNote?: string | null;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * Presentation only: Menu Mode's row of counter tabs (D-088), shown above
+   * the window's disclosure so the disclosure always reads as the chosen
+   * counter's own. It never gates a route or changes a control.
+   */
+  counters?: ReactNode;
 }) {
   return (
     <section className="panel" aria-label={title} data-building={building} data-brand={brand}>
@@ -63,6 +70,8 @@ export function PanelFrame({
             </p>
           ) : null}
         </header>
+
+        {counters ? <div className="panel-counters">{counters}</div> : null}
 
         {disclosure ? (
           <p className="panel-disclosure" data-testid="disclosure" role="note">
