@@ -135,7 +135,7 @@ describe('the fee comes out of the balance being spent', () => {
   it('charges a different operation token and the STRK pool fee independently', async () => {
     const usdc = '0x1234';
     const ops = new FakePrivacyOperations({
-      balances: { [usdc]: 5n, [STRK]: 6n + RELAY_FEE },
+      balances: { [usdc]: 5n, [STRK]: 6n },
       registered: [BOB],
       poolConfig: { feeAmount: 6n },
     });
@@ -143,7 +143,7 @@ describe('the fee comes out of the balance being spent', () => {
       { kind: 'transfer', token: usdc, amount: 5n, recipient: BOB },
     ]);
 
-    await expect(batch.confirm({ feeCeiling: 6n + RELAY_FEE })).resolves.toBeDefined();
+    await expect(batch.confirm({ feeCeiling: 6n })).resolves.toBeDefined();
     await expect(ops.balances([usdc, STRK])).resolves.toEqual([
       expect.objectContaining({ token: usdc, spendable: 0n }),
       expect.objectContaining({ token: STRK, spendable: 0n }),
@@ -151,13 +151,10 @@ describe('the fee comes out of the balance being spent', () => {
   });
 });
 
-describe('the gas estimate varies with the batch shape', () => {
-  // Anti-regression for the "green by construction" trap. The estimate used to
-  // be a constant (`hasSpend ? 1e15 : 0`), so prepare(1) and prepare(5) were
-  // indistinguishable and no test could catch a reserve or MAX taken from one
-  // batch shape and then spent on another. If this ever goes back to a constant
-  // these assertions fail.
-  it('scales the gas estimate with the number of spend actions', async () => {
+describe('the gas estimate follows the route (D-082)', () => {
+  // Only the relayed swap carries a relay estimate. Every other route is
+  // wallet-submitted, and the wallet prices its own network fee.
+  it('reports no relay estimate for a wallet-submitted spend, whatever the batch shape (D-082)', async () => {
     const ops = fresh();
     const one = await ops.prepare([
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
@@ -171,12 +168,11 @@ describe('the gas estimate varies with the batch shape', () => {
       })),
     );
 
-    expect(one.gasEstimate).toBe(RELAY_FEE);
-    expect(five.gasEstimate).toBe(RELAY_FEE * 5n);
-    expect(five.gasEstimate).not.toBe(one.gasEstimate);
-    // The shape-dependent estimate is carried through to totalCost, not dropped.
-    expect(one.totalCost).toBe(SIX_STRK + RELAY_FEE);
-    expect(five.totalCost).toBe(SIX_STRK + RELAY_FEE * 5n);
+    // The wallet adds and prices its own network fee, so the seam reports none.
+    expect(one.gasEstimate).toBe(0n);
+    expect(five.gasEstimate).toBe(0n);
+    expect(one.totalCost).toBe(SIX_STRK);
+    expect(five.totalCost).toBe(SIX_STRK);
   });
 
   it('charges no relay/gas for a shield-only batch', async () => {
@@ -397,8 +393,8 @@ describe('the fee can move between prepare and confirm', () => {
     const batch = await ops.prepare([
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
     ]);
-    expect(batch.totalCost).toBe(SIX_STRK + RELAY_FEE);
-    await expect(batch.confirm({ feeCeiling: SIX_STRK })).rejects.toThrow(/ceiling/i);
+    expect(batch.totalCost).toBe(SIX_STRK);
+    await expect(batch.confirm({ feeCeiling: SIX_STRK - 1n })).rejects.toThrow(/ceiling/i);
 
     const retry = await ops.prepare([
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
@@ -670,7 +666,7 @@ describe('the fake owns its prepared intents too', () => {
     await expect(ops.balances([STRK])).resolves.toEqual([
       expect.objectContaining({
         token: STRK,
-        spendable: 100n * 10n ** 18n - 10n ** 18n - SIX_STRK - RELAY_FEE,
+        spendable: 100n * 10n ** 18n - 10n ** 18n - SIX_STRK,
       }),
     ]);
   });

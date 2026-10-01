@@ -130,10 +130,11 @@ function walletApiSeam() {
   const wallet: WalletStrk20Account = {
     address: PLAYER,
     strk20Balances: async (tokens) => tokens.map((token) => ({ token, balance: '0x64' })),
-    strk20InvokeTransaction: vi.fn(async () => ({ transaction_hash: '0xshield' })),
-    // The wallet refuses to prove the send with 118 although the pool reads the
-    // recipient as registered: only then is the wallet asked at all (D-074).
-    strk20PrepareInvoke: vi.fn(() => Promise.reject(refusal)),
+    // The wallet refuses to prove and submit the send with 118 although the pool
+    // reads the recipient as registered: only then is the wallet asked at all
+    // (D-074). Since D-082 the wallet submits a send itself.
+    strk20InvokeTransaction: vi.fn(() => Promise.reject(refusal)),
+    strk20PrepareInvoke: vi.fn(async () => { throw new Error('a send is not relayed'); }),
   };
   const pool: PoolReadClient = {
     config: async () => ({ feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
@@ -177,7 +178,9 @@ describe('a Post Office send to an unregistered recipient (D-074)', () => {
     await composeSend(STRANGER);
     await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
 
-    expect(wallet.strk20PrepareInvoke).toHaveBeenCalledOnce();
+    expect(wallet.strk20InvokeTransaction).toHaveBeenCalledOnce();
+    expect(wallet.strk20PrepareInvoke).not.toHaveBeenCalled();
+    expect(gateway.estimate).not.toHaveBeenCalled();
     expect(gateway.submit).not.toHaveBeenCalled();
     expectRecipientFailureInPlace();
 

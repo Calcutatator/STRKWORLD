@@ -224,8 +224,10 @@ export interface BankState {
    * Network cost **observed for a batch of exactly the shape a MAX would
    * create** — the queued intents plus one more of the current mode.
    *
-   * The seam reports the network cost only at prepare time, and it varies with
-   * batch shape: the relay fee is charged per action. So a figure measured on a
+   * The seam reports the network cost only at prepare time, and it may vary
+   * with batch shape: a relayed route's fee was charged per action. Since
+   * D-082 the wallet submits every Bank route and prices its own network fee,
+   * so the seam reports zero, but the rule stands. A figure measured on a
    * one-intent batch is not the cost of a two-intent batch, and reusing it is
    * how MAX became a button that always failed. Evidence is therefore kept per
    * shape and MAX is offered only when the exact shape has been costed. Null

@@ -41,7 +41,7 @@ generated domain.
 | Variable | Value |
 |---|---|
 | `FEE_AUTHORIZATION_SECRET` | Required: 32+ random characters, for example the output of `openssl rand -hex 32`. |
-| `AVNU_PAYMASTER_API_KEY` | Required for unshield, send, stake and swap (D-070). avnu's relay refuses private transactions without a key, so until one is set those routes answer `503 RELAY_NOT_CONFIGURED`; shield works without it. Get one at https://portal.avnu.fi: connect a deployed wallet and create a key. It is an access credential, not a budget: in private mode each transaction repays avnu itself, so Portal credits (which fund gasfree sponsorship) are not what these relays spend. |
+| `AVNU_PAYMASTER_API_KEY` | Optional, and unused by every player flow this build enables (D-082). Since D-082 the wallet proves and submits unshield, send and stake itself, as it does shield and the Vault, so none of them reaches the relay. Only the quote-bound swap still goes through the relay, and the browser never enables swap today; with swap enabled and no key, a swap answers `503 RELAY_NOT_CONFIGURED` (D-070). Get one at https://portal.avnu.fi: connect a deployed wallet and create a key. It is an access credential, not a budget: in private mode each transaction repays avnu itself, so Portal credits (which fund gasfree sponsorship) are not what these relays spend. |
 
 ### Runtime (public configuration)
 
@@ -97,9 +97,10 @@ the Vault probe below: unset, the Vault is the locked facade.
 3. Two browsers see each other's avatars on the street.
 4. With a funded wallet, do one small shield first, then read the balance at
    the Bank, then one small unshield. Those two receipts are D-056's and
-   D-062's live evidence. If `railway logs` shows a line starting
-   `[relay] AVNU_PAYMASTER_API_KEY is not set`, set the key before the
-   unshield: that line names the routes that will be refused.
+   D-062's live evidence. The wallet submits the unshield itself (D-082), so
+   it needs no avnu key. A `railway logs` line starting
+   `[relay] AVNU_PAYMASTER_API_KEY is not set` names the backend's own relay
+   endpoints, which the browser now calls only for a swap.
 
 ## The Vault probe (D-077, D-079, D-081)
 

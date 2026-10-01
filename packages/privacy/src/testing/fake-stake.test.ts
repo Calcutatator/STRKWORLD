@@ -36,9 +36,10 @@ async function runDemoScript() {
 }
 
 describe('fake Endur staking', () => {
-  it('debits STRK and the full private fee, then matures xSTRK at the fixed demo rate', async () => {
+  it('debits STRK and the pool fee, then matures xSTRK at the fixed demo rate', async () => {
     const { beforeMaturity, afterMaturity } = await runDemoScript();
-    const strkLeft = 100n * ONE_STRK - 5n * ONE_STRK - POOL_FEE - 2n * RELAY_UNIT;
+    // No relay fee: the wallet submits a stake and prices its own network fee (D-082).
+    const strkLeft = 100n * ONE_STRK - 5n * ONE_STRK - POOL_FEE;
 
     expect(beforeMaturity).toEqual([
       { token: STRK, spendable: strkLeft, maturing: 0n, total: strkLeft, maturityKnown: true },
@@ -69,12 +70,12 @@ describe('fake Endur staking', () => {
     expect(xstrk).toMatchObject({ maturing: 7n, total: 7n });
   });
 
-  it('costs a stake like a swap: the pool fee plus a two-unit relay estimate', async () => {
+  it('costs a stake at the pool fee alone, like the Wallet API adapter (D-082)', async () => {
     const batch = await fresh().prepare([stake(ONE_STRK)]);
 
     expect(batch.poolFee).toBe(POOL_FEE);
-    expect(batch.gasEstimate).toBe(2n * RELAY_UNIT);
-    expect(batch.totalCost).toBe(POOL_FEE + 2n * RELAY_UNIT);
+    expect(batch.gasEstimate).toBe(0n);
+    expect(batch.totalCost).toBe(POOL_FEE);
     expect(batch.promptCount).toBe(1);
   });
 

@@ -259,6 +259,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Ready's own STRK20 submission is an avnu gasless relay; the sender is the wallet's choice (D-082)
+
+`wallet_strk20InvokeTransaction` in Ready does not send from the player's
+account. Read over `https://api.cartridge.gg/x/starknet/mainnet`: the lead's
+Vault probe, `0x332aa465…e8a` and `0x05773318…d74f18` (blocks 15,646,840
+and 15,646,877), have `sender_address` `0x056a084e…03c7` and
+`0x071bff06…c0d`, one account class (`0x1a736d6e…2003`) and about 304,000
+nonces each: avnu relayers. The outer calls are the relayer's STRK transfer
+to avnu's forwarder (`0x0127021a…584f`) and the forwarder's execute of the
+pool call; the forwarder pays 6 STRK on to `0x056be89c…d589`, which takes
+the same from unrelated users' pool transactions. So moving a spend from
+STRKWORLD's relay to the wallet costs Ready players no sender privacy and
+needs no avnu key. It is wallet behaviour, not a protocol guarantee: in the
+same window pool transactions from `0x014aa582…f0aa` (nonce 8, another
+class) look self-submitted. How verified: `starknet_getEvents` on the pool
+over blocks 15,635,000 to 15,665,000, every hit's `starknet_getTransactionByHash`,
+receipt STRK `Transfer` events, and `starknet_getClassHashAt` and
+`starknet_getNonce` on each address. Traps met on the way:
+
+- The anonymizer address appears in a pool event's keys or data, so
+  matching `ExternalContractInvoked` needs no selector: filter the pool's
+  events for that address.
+- A wallet-submitted spend's `gasEstimate` is `0`, so tests and fixtures that
+  asserted a relay estimate on transfer, unshield or stake (the fake's
+  `estimateRelayFee`, the Bank's review figures, the staking counter's MAX)
+  had to change with it. Only a swap still carries one.
+
 ### 2026-09-30 — The Vault wears Vesu: its palette and type from vesu.xyz's stylesheet, its V from the logo art
 
 The lead asked for the Vault to look more like Vesu, outside and in. vesu.xyz

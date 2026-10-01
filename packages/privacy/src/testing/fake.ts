@@ -92,7 +92,7 @@ function demoVaultSharesToWithdraw(assets: bigint): bigint {
  *   - notes are unspendable until they mature
  *   - operation value and the complete private fee are charged in their own tokens
  *   - the fee can change between prepare and confirm
- *   - the relay/gas estimate scales with the batch shape, never a constant
+ *   - only the relayed swap carries a relay estimate; the wallet prices the rest (D-082)
  *   - a shield cannot be batched with the transfer it funds
  *   - deposits are always to self
  */
@@ -165,36 +165,26 @@ const DEFAULT_POOL: PoolConfig = {
   noteMaturityBlocks: 10,
 };
 
-/** Relay/gas cost the fake attributes to one pool-native spend action. */
-const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15 — the single-spend baseline
+/** Relay cost unit the fake attributes to the relayed swap. */
+const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15
 
 /**
- * Deterministic relay/gas estimate for a prepared batch.
+ * Deterministic relay estimate for a prepared batch.
  *
- * This is a FIXTURE, not a fee oracle. The production adapter obtains this
- * number from the paymaster's relay estimate (see `estimateRelay` in
- * `wallet-api/operations.ts`), which scales with the on-chain work the batch
- * performs. We reproduce that shape-dependence deterministically: the estimate
- * grows with the number of spend actions and their kind — a private swap drives
- * an executor and mints an output note, strictly more work than a pool-native
- * transfer or unshield, so it counts double. A stake drives the Endur
- * anonymizer and mints an output note the same way, so it counts double too.
+ * This is a FIXTURE, not a fee oracle. Since D-082 the wallet proves and
+ * submits every route but the quote-bound swap itself, adding and pricing its
+ * own network fee, so the production adapter reports a zero `gasEstimate` for
+ * shield, unshield, transfer and stake, and so does this. Only a swap is still
+ * relayed, and its relay fee comes with its quote; the fake counts it as two
+ * units, since it drives an executor and mints an output note.
  *
  * It intentionally ignores the numeric amount — a larger felt is not more
- * calldata — so the estimate stays a predictable function of the batch *shape*
- * that consuming lanes can assert against. Shield-only batches pay no relay fee
- * here: their gas is the public deposit's own, outside the pool.
- *
- * The point of making this vary at all: a reserve or MAX computed against one
- * batch shape must be *detectably* wrong when spent on another. The previous
- * constant (`hasSpend ? 1e15 : 0`) was invariant to intent count, so it hid
- * exactly that class of bug — a stale gas quote reused across batch shapes.
+ * calldata — so the estimate stays a predictable function of the batch shape.
  */
 function estimateRelayFee(intents: readonly Intent[]): bigint {
   let units = 0n;
   for (const intent of intents) {
-    if (intent.kind === 'shield') continue;
-    units += intent.kind === 'swap' || intent.kind === 'stake' ? 2n : 1n;
+    if (intent.kind === 'swap') units += 2n;
   }
   return units * RELAY_FEE_PER_ACTION;
 }

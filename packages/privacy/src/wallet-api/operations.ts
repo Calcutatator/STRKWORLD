@@ -1,5 +1,5 @@
 import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
-import { num, transaction, type STRK20_ACTION, type STRK20_CALL_AND_PROOF } from 'starknet';
+import { num, transaction, type STRK20_ACTION } from 'starknet';
 import type {
   BatchWarning,
   DepositStatus,
@@ -28,6 +28,7 @@ import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../end
 import { mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
+import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import type {
   PoolNativeRoute,
   PoolReadClient,
@@ -46,8 +47,12 @@ const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const U128_MASK = (1n << 128n) - 1n;
 
-/** Routes relayed on a fresh fee quote: everything but the quote-bound swap. */
-type RelayedRoute = Exclude<PrivateRoute, 'swap'>;
+/**
+ * Pool spends the wallet proves and submits itself (D-082), like shield and
+ * the Vault: no relay, no avnu key, no relay fee. Only the quote-bound swap
+ * is still relayed.
+ */
+type WalletSubmittedRoute = Exclude<PrivateRoute, 'swap'>;
 type StakeIntent = Extract<Intent, { kind: 'stake' }>;
 
 export interface WalletApiPrivacyOperationsOptions {
@@ -305,13 +310,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       if (reviewed.length !== 1 || intent?.kind !== 'stake') {
         throw new PrivacyError('unknown', 'A private stake must be prepared one at a time.');
       }
-      return this.prepareStake(reviewed, intent, config, warnings, signal);
+      return this.prepareStake(reviewed, intent, config, warnings);
     }
 
     const route = reviewed[0]!.kind as PoolNativeRoute;
-    const operationToken = tokenFor(reviewed[0]!);
-    const fee = await this.estimateRelay(route, operationToken, config, signal);
-    return this.preparePrivate(reviewed, route, operationToken, config, fee, warnings);
+    return this.prepareWalletSubmitted(reviewed, route, config, warnings, () => toActions(reviewed));
   }
 
   private async prepareSwap(
@@ -468,29 +471,18 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   /**
-   * Endur private staking (D-063). The swap's transfer-OPEN + invoke shape,
-   * relayed like a pool-native route: there is no quote to bind, so the fee is
-   * quoted now for costing and re-quoted at confirmation, and the backend
-   * submits it without artificial delay, like every relayed route (D-066).
+   * Endur private staking (D-063). The swap's transfer-OPEN + invoke shape
+   * around Endur's anonymizer, proved and submitted by the wallet like the
+   * pool-native spends (D-082): there is no quote to bind and no relay fee.
    */
-  private async prepareStake(
+  private prepareStake(
     reviewed: readonly Intent[],
     intent: StakeIntent,
     config: PoolConfig,
     warnings: readonly BatchWarning[],
-    signal?: AbortSignal,
-  ): Promise<PreparedBatch> {
-    const fee = await this.estimateRelay('stake', intent.tokenIn, config, signal);
+  ): PreparedBatch {
     const taker = this.walletAddress;
-    return this.preparePrivate(
-      reviewed,
-      'stake',
-      intent.tokenIn,
-      config,
-      fee,
-      warnings,
-      (relayFee) => stakeActions(intent, relayFee, taker),
-    );
+    return this.prepareWalletSubmitted(reviewed, 'stake', config, warnings, () => stakeActions(intent, taker));
   }
 
   private prepareShield(
@@ -540,28 +532,32 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     };
   }
 
-  private preparePrivate(
+  /**
+   * A pool spend the wallet proves and submits itself (D-082): unshield,
+   * transfer and stake. The actions carry no relay-fee leg; the wallet adds
+   * and prices its own network fee when it asks, so `gasEstimate` is zero and
+   * `totalCost` is the pool fee, as for shield and the Vault. The pool fee is
+   * re-read at confirmation and held to the caller's ceiling before the
+   * wallet is asked. The actions are built and frozen once, at prepare, from
+   * the frozen intents, and the wallet gets its own copy.
+   */
+  private prepareWalletSubmitted(
     intents: readonly Intent[],
-    route: RelayedRoute,
-    operationToken: string,
+    route: WalletSubmittedRoute,
     config: PoolConfig,
-    feeAtPrepare: RelayFeeQuote,
     warnings: readonly BatchWarning[],
-    /** The actions to prove around the confirm-time fee. Pool-native by default. */
-    buildActions: (relayFee: RelayFeeQuote) => STRK20_ACTION[] = (relayFee) => [
-      ...toActions(intents),
-      relayFeeWithdrawal(relayFee),
-    ],
+    buildActions: () => STRK20_ACTION[],
   ): PreparedBatch {
     const owner = this;
+    const reviewed = freezeActions(buildActions());
     let discarded = false;
     let confirmationAttempted = false;
     return {
       // The frozen snapshot itself — see prepareShield.
       intents,
       poolFee: config.feeAmount,
-      gasEstimate: feeAtPrepare.amount,
-      totalCost: checkedFeeTotal(config.feeAmount, feeAtPrepare.amount),
+      gasEstimate: 0n,
+      totalCost: config.feeAmount,
       warnings,
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
@@ -570,73 +566,42 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
-        let acceptedResult: TxResult | undefined;
+        let transactionHash: string;
         try {
           const current = ownPoolConfig(await owner.pool.config(signal));
           throwIfAborted(signal);
-          const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
-          assertFeeCeiling(checkedFeeTotal(current.feeAmount, relayFee.amount), feeCeiling);
-          const actions = buildActions(relayFee);
+          assertFeeCeiling(current.feeAmount, feeCeiling);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           assertNotDiscarded(discarded);
-          const artifact = await owner.proveRelayed(route, actions);
           throwIfAborted(signal);
-          emitProgress(onProgress, { stage: 'submitting', message: 'Queued for private submission' });
-          assertNotDiscarded(discarded);
-          const result = await owner.submission.submit({
-            route,
-            artifact,
-            feeAuthorization: relayFee.authorization,
-            proofValidityBlocks: current.proofValidityBlocks,
-            signal,
-            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
-          });
-          const accepted = readSubmissionResult(result);
-          assertMatchingAcceptedResult(acceptedResult, accepted);
-          emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return accepted;
+          transactionHash = await owner.submitSpend(route, reviewed);
         } catch (error) {
-          if (acceptedResult) {
-            emitProgress(onProgress, { stage: 'done', message: 'Done' });
-            return acceptedResult;
-          }
           emitProgress(onProgress, { stage: 'failed', message: 'Private operation failed' });
           throw mapWalletError(error);
         }
+        // The wallet has submitted: nothing below may turn that into a
+        // failure, and an abort or a discard now cannot unsend it.
+        emitProgress(onProgress, { stage: 'submitting', message: 'Your wallet submitted it' });
+        emitProgress(onProgress, { stage: 'done', message: 'Done' });
+        return Object.freeze({ transactionHash });
       },
       discard() { discarded = true; },
     };
   }
 
   /**
-   * The wallet proves a relayed batch. On a transfer a 118 rejects as the
-   * recipient's `recipient-not-registered` (D-074), even though `prepare()`
-   * read that recipient as registered; on every other route a 118 is still
-   * this account's own `not-registered`.
+   * The wallet proves and submits a pool spend. On a transfer a 118 rejects
+   * as the recipient's `recipient-not-registered` (D-074), even though
+   * `prepare()` read that recipient as registered; on every other route a 118
+   * is still this account's own `not-registered`.
    */
-  private async proveRelayed(route: RelayedRoute, actions: STRK20_ACTION[]): Promise<STRK20_CALL_AND_PROOF> {
+  private async submitSpend(route: WalletSubmittedRoute, reviewed: readonly STRK20_ACTION[]): Promise<string> {
     try {
-      return await this.wallet.strk20PrepareInvoke(actions, false);
+      return await submitThroughWallet(this.wallet, reviewed);
     } catch (error) {
       throw route === 'transfer' ? mapTransferWalletError(error) : error;
     }
-  }
-
-  private async estimateRelay(
-    route: RelayedRoute,
-    operationToken: string,
-    config: PoolConfig,
-    signal?: AbortSignal,
-  ): Promise<RelayFeeQuote> {
-    const fee = await this.submission.estimate({
-      route,
-      feeToken: config.feeToken,
-      operationToken,
-      signal,
-    });
-    throwIfAborted(signal);
-    return ownRelayFee(fee, config, this.policy.maxRelayFee);
   }
 
   /**
@@ -960,26 +925,18 @@ function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
   });
 }
 
-/** The authorized relay-fee leg every relayed route carries. */
-function relayFeeWithdrawal(relayFee: RelayFeeQuote): STRK20_ACTION {
-  return {
-    type: 'withdraw',
-    token: relayFee.token,
-    amount: toFelt(relayFee.amount),
-    recipient: relayFee.recipient,
-  };
-}
-
 /**
  * The stake request the wallet proves (D-063): the swap's transfer-OPEN +
  * invoke pattern around Endur's anonymizer, in AVNU's proven action order.
  *
  * 1. Withdraw the staked STRK to the anonymizer — the public "pool paid the
  *    helper" leg every anonymizer route has (D-018).
- * 2. Withdraw the authorized relay fee, as every relayed route does.
- * 3. Open the xSTRK note the minted shares are credited into, owned by the
+ * 2. Open the xSTRK note the minted shares are credited into, owned by the
  *    connected account so the output cannot be credited anywhere else.
- * 4. Invoke the anonymizer, last as Ready requires. The pool calls
+ * 3. Invoke the anonymizer, last as Ready requires.
+ *
+ * There is no relay-fee leg: the wallet submits it and adds its own network
+ * fee (D-082). The pool calls
  *    `privacy_invoke(in_token, out_token, assets: u256, note_id)` through its
  *    fixed invoke selector, so the calldata is exactly that signature: the u256
  *    as (low, high), then the same wallet-resolved placeholder the swap uses
@@ -988,7 +945,7 @@ function relayFeeWithdrawal(relayFee: RelayFeeQuote): STRK20_ACTION {
  * Tokens come from the validated intent, already pinned to STRK → xSTRK; the
  * target is the pinned constant, never caller input.
  */
-function stakeActions(intent: StakeIntent, relayFee: RelayFeeQuote, taker: Address): STRK20_ACTION[] {
+function stakeActions(intent: StakeIntent, taker: Address): STRK20_ACTION[] {
   const assets = splitU256(intent.amountIn);
   return [
     {
@@ -997,7 +954,6 @@ function stakeActions(intent: StakeIntent, relayFee: RelayFeeQuote, taker: Addre
       amount: toFelt(intent.amountIn),
       recipient: ENDUR_DEPOSIT_ANONYMIZER,
     },
-    relayFeeWithdrawal(relayFee),
     { type: 'transfer', token: intent.tokenOut, amount: 'OPEN', recipient: taker },
     {
       type: 'invoke',
@@ -1239,10 +1195,6 @@ function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): R
     throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
   }
   return Object.freeze({ token, recipient, amount, authorization, expiresAtBlock: expiresAtBlock as number });
-}
-
-function tokenFor(intent: Intent): string {
-  return intent.kind === 'swap' || intent.kind === 'stake' ? intent.tokenIn : intent.token;
 }
 
 function toFelt(value: bigint): string {

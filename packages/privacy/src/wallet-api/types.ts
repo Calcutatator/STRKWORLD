@@ -123,9 +123,9 @@ export interface PoolReadClient {
 
 export type PoolNativeRoute = 'unshield' | 'transfer';
 /**
- * Every route the backend relays. `swap` is quote-bound and prepared through
- * `prepareSwap`; `stake` (D-063) is relayed like a pool-native route but
- * invokes Endur's anonymizer.
+ * Every route the backend can relay. `swap` is quote-bound and prepared
+ * through `prepareSwap`; `stake` (D-063) invokes Endur's anonymizer. Since
+ * D-082 the browser relays only `swap`: the wallet submits the others itself.
  */
 export type PrivateRoute = PoolNativeRoute | 'swap' | 'stake';
 
@@ -154,7 +154,11 @@ export interface PreparedPrivateSwap {
 }
 
 export interface PrivateSubmissionGateway {
-  /** A relay fee quote for every non-quote-bound route; swaps quote in `prepareSwap`. */
+  /**
+   * A relay fee quote for a non-quote-bound route; swaps quote in
+   * `prepareSwap`. Since D-082 the Wallet API adapter asks for none: those
+   * routes are wallet-submitted.
+   */
   estimate(input: {
     route: Exclude<PrivateRoute, 'swap'>;
     feeToken: Address;

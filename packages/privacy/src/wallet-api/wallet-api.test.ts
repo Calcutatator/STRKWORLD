@@ -37,7 +37,7 @@ function fixture() {
     },
     async strk20InvokeTransaction(actions) {
       invoked.push(actions);
-      return { transaction_hash: '0xshield' };
+      return { transaction_hash: '0x5e1d' };
     },
     async strk20PrepareInvoke(actions, simulate) {
       expect(simulate).toBe(false);
@@ -279,25 +279,25 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   it.each([
     ['null', null],
     ['missing transaction hash', {}],
-    ['non-string transaction hash', { transactionHash: 42 }],
-    ['empty transaction hash', { transactionHash: '' }],
-  ] as const)('rejects a %s private submission result as invalid service data', async (_label, response) => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.submit).mockResolvedValue(response as never);
+    ['non-string transaction hash', { transaction_hash: 42 }],
+    ['empty transaction hash', { transaction_hash: '' }],
+  ] as const)('rejects a %s wallet submission result as an invalid wallet result', async (_label, response) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockResolvedValue(response as never);
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
   });
 
   it('rejects inherited or accessor-backed private transaction hashes without reading them', async () => {
-    const { ops, gateway } = fixture();
-    const inherited = Object.create({ transactionHash: '0xforged' });
-    const accessor = {} as { transactionHash?: string };
-    Object.defineProperty(accessor, 'transactionHash', {
+    const { ops, wallet } = fixture();
+    const inherited = Object.create({ transaction_hash: '0xf0' });
+    const accessor = {} as { transaction_hash?: string };
+    Object.defineProperty(accessor, 'transaction_hash', {
       configurable: true,
       get() { throw new Error('transaction hash getter must not run'); },
     });
-    vi.mocked(gateway.submit)
+    vi.spyOn(wallet, 'strk20InvokeTransaction')
       .mockResolvedValueOnce(inherited as never)
       .mockResolvedValueOnce(accessor as never);
 
@@ -465,51 +465,40 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
   });
 
-  it('rejects individually valid pool and relay fees whose prepared total exceeds u256', async () => {
-    const { ops, pool, gateway, wallet } = fixture();
+  it('costs a wallet-submitted spend at the pool fee alone, with no relay quote (D-082)', async () => {
+    const { ops, pool, gateway } = fixture();
     vi.spyOn(pool, 'config').mockResolvedValue({
       feeAmount: MAX_UINT256,
       feeToken: STRK,
       proofValidityBlocks: 450,
       noteMaturityBlocks: 10,
     });
-    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
-    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
 
-    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
-      .rejects.toMatchObject({ kind: 'unknown' });
-    expect(prepare).not.toHaveBeenCalled();
+    for (const intent of [
+      { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB },
+      { kind: 'unshield', token: TOKEN, amount: 1n, recipient: BOB },
+    ] as const) {
+      await expect(ops.prepare([intent])).resolves.toMatchObject({
+        poolFee: MAX_UINT256, gasEstimate: 0n, totalCost: MAX_UINT256,
+      });
+    }
+    expect(gateway.estimate).not.toHaveBeenCalled();
   });
 
-  it('rejects a live pool-plus-relay overflow before wallet confirmation', async () => {
-    const { ops, pool, gateway, wallet } = fixture();
+  it('holds a live pool fee above the ceiling before wallet confirmation', async () => {
+    const { ops, pool, wallet } = fixture();
     let reads = 0;
     vi.spyOn(pool, 'config').mockImplementation(async () => ({
-      feeAmount: reads++ === 0 ? POOL_FEE : MAX_UINT256,
+      feeAmount: reads++ === 0 ? POOL_FEE : POOL_FEE + 1n,
       feeToken: STRK,
       proofValidityBlocks: 450,
       noteMaturityBlocks: 10,
     }));
-    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
-    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]);
 
-    await expect(batch.confirm({ feeCeiling: MAX_UINT256 + 1n })).rejects.toMatchObject({ kind: 'unknown' });
-    expect(prepare).not.toHaveBeenCalled();
-  });
-
-  it('preserves an exact-u256 prepared fee total', async () => {
-    const { ops, pool, gateway } = fixture();
-    vi.spyOn(pool, 'config').mockResolvedValue({
-      feeAmount: MAX_UINT256 - 1n,
-      feeToken: STRK,
-      proofValidityBlocks: 450,
-      noteMaturityBlocks: 10,
-    });
-    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
-
-    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
-      .resolves.toMatchObject({ totalCost: MAX_UINT256 });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(/ceiling/i);
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -634,6 +623,7 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
       return config;
     });
     const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const walletInvoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
     const submit = vi.spyOn(gateway, 'submit');
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
     const controller = new AbortController();
@@ -650,21 +640,22 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 
     await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
     expect(walletPrepare).not.toHaveBeenCalled();
+    expect(walletInvoke).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(prepared).toHaveLength(0);
     expect(progress).not.toContain('awaiting-approval');
   });
 
-  it('does not publish a private batch after its relay estimate is aborted', async () => {
-    const { ops, gateway } = fixture();
+  it('does not publish a private batch after its pool read is aborted', async () => {
+    const { ops, pool, gateway } = fixture();
     let release!: () => void;
     let started!: () => void;
-    const estimateStarted = new Promise<void>((resolve) => { started = resolve; });
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
     const pending = new Promise<void>((resolve) => { release = resolve; });
-    vi.mocked(gateway.estimate).mockImplementation(async () => {
+    vi.spyOn(pool, 'config').mockImplementation(async () => {
       started();
       await pending;
-      return { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
+      return { feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 };
     });
     const controller = new AbortController();
     const preparing = ops.prepare(
@@ -672,11 +663,12 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
       controller.signal,
     );
 
-    await estimateStarted;
+    await readStarted;
     controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
     release();
 
     await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(gateway.estimate).not.toHaveBeenCalled();
   });
 
   it('preflights recipient registration through the pool read port', async () => {
@@ -708,8 +700,9 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   it('maps a 118 from the wallet proving a transfer to the recipient, never to this account (D-074)', async () => {
     const { ops, gateway, wallet } = fixture();
     const refusal = { code: 118, message: 'An error occurred (NOT_REGISTERED)' };
-    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue(refusal);
-    // BOB passes the pool preflight, so the 118 comes from the proving call.
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockRejectedValue(refusal);
+    // BOB passes the pool preflight, so the 118 comes from the wallet's proving
+    // and submitting call (D-082).
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
     const stages: string[] = [];
 
@@ -731,7 +724,7 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 
   it('keeps a 118 on an unshield as this account\'s own not-registered', async () => {
     const { ops, gateway, wallet } = fixture();
-    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
     // A withdrawal names a public address, which no registration governs.
     const batch = await ops.prepare([{ kind: 'unshield', token: TOKEN, amount: 20n, recipient: '0x999' }]);
 
@@ -746,7 +739,7 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     [163, 'unknown'],
   ] as const)('keeps a transfer proof\'s %s as %s', async (code, kind) => {
     const { ops, wallet } = fixture();
-    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code, message: 'wallet error' });
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockRejectedValue({ code, message: 'wallet error' });
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind });
@@ -881,40 +874,6 @@ describe('Wallet API action routes', () => {
       .rejects.toMatchObject({ kind: 'unknown' });
   });
 
-  it('owns relay fee descriptor values without invoking proxy get substitution', async () => {
-    const { ops, gateway } = fixture();
-    const target = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
-    const fee = new Proxy(target, {
-      get(_target, key, receiver) {
-        if (key === 'authorization') return 'substituted-auth';
-        if (key === 'recipient') return '0x999';
-        return Reflect.get(target, key, receiver);
-      },
-    });
-    vi.mocked(gateway.estimate).mockResolvedValue(fee);
-
-    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]);
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ feeAuthorization: AUTH.authorization }));
-  });
-
-  it.each([
-    ['descriptor trap', new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
-    ['ownKeys trap', new Proxy({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, {
-      ownKeys() { throw new Error('keys trap'); },
-    })],
-    ['extra field', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH, provider: true }],
-  ])('rejects relay fee with %s as an invalid provider result', async (_label, fee) => {
-    const { ops, gateway, wallet } = fixture();
-    vi.mocked(gateway.estimate).mockResolvedValue(fee as never);
-    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
-
-    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
-      .rejects.toMatchObject({ kind: 'unknown' });
-    expect(prepare).not.toHaveBeenCalled();
-  });
-
   it.each(['shield', 'transfer', 'swap'] as const)(
     'rejects an out-of-u256 fee ceiling on %s before live reads or handoff',
     async (route) => {
@@ -958,7 +917,7 @@ describe('Wallet API action routes', () => {
     const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 1n }]);
 
     await expect(batch.confirm({ feeCeiling: MAX_UINT256 })).resolves.toEqual({
-      transactionHash: '0xshield',
+      transactionHash: '0x5e1d',
     });
   });
 
@@ -969,30 +928,6 @@ describe('Wallet API action routes', () => {
     const { ops } = fixture();
 
     await expect(ops.prepare([intent as never])).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('owns the live relay quote before wallet proof generation', async () => {
-    const { ops, wallet, gateway } = fixture();
-    const liveFee = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
-    vi.mocked(gateway.estimate)
-      .mockResolvedValueOnce({ ...liveFee })
-      .mockResolvedValueOnce(liveFee);
-    vi.spyOn(wallet, 'strk20PrepareInvoke').mockImplementation(async () => {
-      liveFee.authorization = 'mutated-auth';
-      return {
-        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
-        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
-      };
-    });
-    const batch = await ops.prepare([
-      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
-    ]);
-
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
-      feeAuthorization: AUTH.authorization,
-    }));
   });
 
   it('does not hand a discarded shield batch to the wallet after its fee read', async () => {
@@ -1115,7 +1050,7 @@ describe('Wallet API action routes', () => {
       expect.objectContaining({ kind: 'public-leg' }),
     ]);
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({
-      transactionHash: '0xshield',
+      transactionHash: '0x5e1d',
     });
     expect(invoked).toEqual([[{ type: 'deposit', token: TOKEN, amount: '0x14' }]]);
   });
@@ -1128,7 +1063,7 @@ describe('Wallet API action routes', () => {
 
     expect(Object.isFrozen(result)).toBe(true);
     expect(Reflect.set(result, 'transactionHash', '0xforged')).toBe(false);
-    expect(result.transactionHash).toBe('0xshield');
+    expect(result.transactionHash).toBe('0x5e1d');
   });
 
   it('reports a returned shield hash even if cancellation races with wallet settlement', async () => {
@@ -1146,117 +1081,99 @@ describe('Wallet API action routes', () => {
     })).resolves.toEqual({ transactionHash: '0xalready-submitted' });
   });
 
-  it('proves a private transfer once, includes the validated relay fee, and submits the artifact', async () => {
-    const { ops, prepared, gateway, artifact } = fixture();
+  it('has the wallet prove and submit a private transfer, with no relay-fee leg and no relay (D-082)', async () => {
+    const { ops, prepared, invoked, gateway } = fixture();
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
-    expect(batch.totalCost).toBe(POOL_FEE + 1n);
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
-      transactionHash: '0xprivate',
+    expect(batch.gasEstimate).toBe(0n);
+    expect(batch.totalCost).toBe(POOL_FEE);
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({
+      transactionHash: '0x5e1d',
     });
-    expect(prepared).toEqual([[
+    expect(invoked).toEqual([[
       { type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB },
-      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
     ]]);
-    expect(gateway.submit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        route: 'transfer',
-        artifact,
-        feeAuthorization: AUTH.authorization,
-        proofValidityBlocks: 450,
-      }),
-    );
-  });
-
-  it('rejects a whitespace-only relay authorization before a private transfer reaches the wallet', async () => {
-    const { ops, gateway, prepared } = fixture();
-    vi.mocked(gateway.estimate).mockResolvedValue({
-      token: STRK,
-      recipient: FEE_RECIPIENT,
-      amount: 1n,
-      authorization: ' \t\n',
-      expiresAtBlock: 1_450,
-    });
-
-    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
-      .rejects.toThrow(/fee authorization/i);
     expect(prepared).toEqual([]);
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
   });
 
-  it('preserves non-whitespace relay authorization bytes when validating', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.estimate).mockResolvedValue({
-      token: STRK,
-      recipient: FEE_RECIPIENT,
-      amount: 1n,
-      authorization: ' fee-auth ',
-      expiresAtBlock: 1_450,
+  it('has the wallet prove and submit an unshield as one withdrawal (D-082)', async () => {
+    const { ops, prepared, invoked, gateway } = fixture();
+    const batch = await ops.prepare([{ kind: 'unshield', token: STRK, amount: 20n, recipient: BOB }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({ transactionHash: '0x5e1d' });
+    expect(invoked).toEqual([[{ type: 'withdraw', token: STRK, amount: '0x14', recipient: BOB }]]);
+    expect(prepared).toEqual([]);
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
+  it('hands the wallet its own copy, so a mutating wallet cannot reach the reviewed actions', async () => {
+    const { ops, wallet, invoked } = fixture();
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockImplementation(async (actions) => {
+      invoked.push(structuredClone(actions));
+      (actions[0] as { amount: string }).amount = '0xdead';
+      actions.push({ type: 'withdraw', token: STRK, amount: '0x1', recipient: '0x999' });
+      return { transaction_hash: '0x5e1d' };
+    });
+    const batch = await ops.prepare([{ kind: 'unshield', token: STRK, amount: 20n, recipient: BOB }]);
+    await batch.confirm({ feeCeiling: POOL_FEE });
+
+    expect(batch.intents).toEqual([{ kind: 'unshield', token: STRK, amount: 20n, recipient: BOB }]);
+    expect(invoked).toEqual([[{ type: 'withdraw', token: STRK, amount: '0x14', recipient: BOB }]]);
+  });
+
+  it.each([
+    ['a missing hash', {}],
+    ['a non-felt hash', { transaction_hash: 'not-a-felt' }],
+    ['a zero hash', { transaction_hash: '0x0' }],
+  ])('rejects a wallet answer with %s as unknown', async (_label, answer) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockResolvedValue(answer as never);
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+    const stages: string[] = [];
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE, onProgress: ({ stage }) => stages.push(stage) }))
+      .rejects.toMatchObject({ kind: 'unknown' });
+    expect(stages.at(-1)).toBe('failed');
+  });
+
+  it('reports the progress stages the shell drives its copy from, in order', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+    const stages: string[] = [];
+
+    await batch.confirm({ feeCeiling: POOL_FEE, onProgress: ({ stage }) => stages.push(stage) });
+
+    expect(stages).toEqual(['awaiting-approval', 'proving', 'submitting', 'done']);
+  });
+
+  it('returns the wallet hash even when an abort lands while the wallet settles', async () => {
+    const { ops, wallet } = fixture();
+    const controller = new AbortController();
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockImplementation(async () => {
+      controller.abort();
+      return { transaction_hash: '0xa11' };
     });
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
-      transactionHash: '0xprivate',
+    await expect(batch.confirm({ feeCeiling: POOL_FEE, signal: controller.signal })).resolves.toEqual({
+      transactionHash: '0xa11',
     });
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ feeAuthorization: ' fee-auth ' }));
-  });
-
-  it.each([STRK_DECIMAL, STRK_UPPER_PREFIX])(
-    'rejects a noncanonical relay fee token %s before a private transfer reaches the wallet',
-    async (token) => {
-      const { ops, gateway, prepared } = fixture();
-      vi.mocked(gateway.estimate).mockResolvedValue({
-        token,
-        recipient: FEE_RECIPIENT,
-        amount: 1n,
-        ...AUTH,
-      });
-
-      await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
-        .rejects.toThrow(/fee token/i);
-      expect(prepared).toEqual([]);
-    },
-  );
-
-  it('accepts uppercase hex digits in a canonical relay fee token', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.estimate).mockResolvedValue({
-      token: STRK_UPPER_HEX,
-      recipient: FEE_RECIPIENT,
-      amount: 1n,
-      ...AUTH,
-    });
-
-    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
-      .resolves.toBeDefined();
-  });
-
-  it('returns a private receipt when the gateway throws after reporting acceptance', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.submit).mockImplementation(async (input) => {
-      input.onAccepted?.({ transactionHash: '0xsettled-private' });
-      throw new Error('response stream failed after acceptance');
-    });
-    const batch = await ops.prepare([
-      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
-    ]);
-
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
-      transactionHash: '0xsettled-private',
-    });
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).rejects.toThrow(/already confirmed/i);
-    expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
   it('allows exactly one confirmation attempt for a prepared batch', async () => {
-    const { ops, gateway } = fixture();
+    const { ops, wallet } = fixture();
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
     const batch = await ops.prepare([
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
     ]);
 
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toMatchObject({
-      transactionHash: '0xprivate',
+      transactionHash: '0x5e1d',
     });
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).rejects.toThrow(/already confirmed/i);
-    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('publishes an immutable private receipt after confirmation', async () => {
@@ -1269,43 +1186,12 @@ describe('Wallet API action routes', () => {
 
     expect(Object.isFrozen(receipt)).toBe(true);
     expect(Reflect.set(receipt, 'transactionHash', '0xforged')).toBe(false);
-    expect(receipt).toEqual({ transactionHash: '0xprivate' });
-  });
-
-  it('keeps an accepted private receipt immutable when response cleanup fails', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.submit).mockImplementation(async (input) => {
-      input.onAccepted?.({ transactionHash: '0xsettled-private' });
-      throw new Error('response stream failed after acceptance');
-    });
-    const batch = await ops.prepare([
-      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
-    ]);
-
-    const receipt = await batch.confirm({ feeCeiling: POOL_FEE + 2n });
-
-    expect(Object.isFrozen(receipt)).toBe(true);
-    expect(Reflect.set(receipt, 'transactionHash', '0xforged')).toBe(false);
-    expect(receipt).toEqual({ transactionHash: '0xsettled-private' });
-  });
-
-  it('keeps the first accepted receipt when the settled result conflicts', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.submit).mockImplementation(async (input) => {
-      input.onAccepted?.({ transactionHash: '0xaccepted' });
-      return { transactionHash: '0xdifferent' };
-    });
-    const batch = await ops.prepare([
-      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
-    ]);
-
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
-      transactionHash: '0xaccepted',
-    });
+    expect(receipt).toEqual({ transactionHash: '0x5e1d' });
   });
 
   it('does not let a throwing progress observer interrupt a financial operation', async () => {
-    const { ops, gateway } = fixture();
+    const { ops, wallet } = fixture();
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
     const batch = await ops.prepare([
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
     ]);
@@ -1313,8 +1199,8 @@ describe('Wallet API action routes', () => {
     await expect(batch.confirm({
       feeCeiling: POOL_FEE + 2n,
       onProgress: () => { throw new Error('render observer failed'); },
-    })).resolves.toMatchObject({ transactionHash: '0xprivate' });
-    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    })).resolves.toMatchObject({ transactionHash: '0x5e1d' });
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('publishes immutable progress snapshots to observers', async () => {
@@ -1339,7 +1225,7 @@ describe('Wallet API action routes', () => {
 
   it('does not prove a private transfer discarded from its progress callback', async () => {
     const { ops, wallet, gateway } = fixture();
-    const prepareInvoke = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const prepareInvoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
     const batch = await ops.prepare([
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
     ]);
@@ -1354,8 +1240,8 @@ describe('Wallet API action routes', () => {
     expect(gateway.submit).not.toHaveBeenCalled();
   });
 
-  it('does not submit a private transfer discarded after proof generation', async () => {
-    const { ops, gateway } = fixture();
+  it('keeps the wallet hash when the batch is discarded after the wallet submitted it', async () => {
+    const { ops } = fixture();
     const batch = await ops.prepare([
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
     ]);
@@ -1365,18 +1251,18 @@ describe('Wallet API action routes', () => {
       onProgress({ stage }) {
         if (stage === 'submitting') batch.discard();
       },
-    })).rejects.toMatchObject({ kind: 'unknown' });
-    expect(gateway.submit).not.toHaveBeenCalled();
+    })).resolves.toEqual({ transactionHash: '0x5e1d' });
   });
 
-  it('rechecks fees and refuses before asking the wallet to prove', async () => {
-    const { ops, gateway, prepared } = fixture();
-    vi.mocked(gateway.estimate)
-      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })
-      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 9n, ...AUTH });
+  it('rechecks the pool fee and refuses before asking the wallet to prove', async () => {
+    const { ops, pool, invoked, gateway } = fixture();
     const batch = await ops.prepare([{ kind: 'unshield', token: TOKEN, amount: 20n, recipient: BOB }]);
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 5n })).rejects.toThrow(/ceiling/i);
-    expect(prepared).toHaveLength(0);
+    vi.spyOn(pool, 'config').mockResolvedValue({
+      feeAmount: POOL_FEE + 5n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 4n })).rejects.toThrow(/ceiling/i);
+    expect(invoked).toHaveLength(0);
+    expect(gateway.estimate).not.toHaveBeenCalled();
   });
 
   it('rejects a mixed public/private batch instead of claiming one result for two transactions', async () => {
@@ -1387,17 +1273,8 @@ describe('Wallet API action routes', () => {
     ])).rejects.toThrow(/separate/i);
   });
 
-  it('fails closed on disabled or malformed relay routes', async () => {
-    const { ops, gateway } = fixture();
-    vi.mocked(gateway.estimate).mockResolvedValue({
-      token: TOKEN,
-      recipient: FEE_RECIPIENT,
-      amount: 1n,
-      ...AUTH,
-    });
-    await expect(
-      ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]),
-    ).rejects.toThrow(/fee token/i);
+  it('fails closed on disabled or unallowlisted routes', async () => {
+    const { ops } = fixture();
     await expect(
       ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 10n, minAmountOut: 1n }]),
     ).rejects.toThrow(/disabled/i);
@@ -2021,6 +1898,31 @@ describe('quote-bound swap plan admission', () => {
     const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 + 1n });
 
     await expect(ops.prepare([SWAP])).rejects.toThrow(/expected output/i);
+  });
+
+  it.each([
+    ['descriptor trap', new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
+    ['ownKeys trap', new Proxy({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, {
+      ownKeys() { throw new Error('keys trap'); },
+    })],
+    ['extra field', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH, provider: true }],
+    ['whitespace-only authorization', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: ' \t\n', expiresAtBlock: 1_450 }],
+    ['decimal fee token', { token: STRK_DECIMAL, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
+    ['0X-prefixed fee token', { token: STRK_UPPER_PREFIX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
+    ['non-pool fee token', { token: TOKEN, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
+  ])('rejects a swap relay fee with %s before returning a review', async (_label, fee) => {
+    const { ops, prepared } = swapFixture(undefined, { fee });
+
+    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepared).toEqual([]);
+  });
+
+  it('accepts uppercase hex digits in a canonical swap relay fee token', async () => {
+    const { ops } = swapFixture(undefined, {
+      fee: { token: STRK_UPPER_HEX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    });
+
+    await expect(ops.prepare([SWAP])).resolves.toBeDefined();
   });
 
   it('rejects inherited swap relay fee fields before returning a review', async () => {

@@ -6,7 +6,9 @@ The browser cannot hold a paymaster key (required for relayed routes since
 D-070, though the player still pays: each private transaction repays avnu from
 their shielded balance) or send privacy-sensitive RPC reads
 directly to a third party. This app owns the smallest server surface needed to
-submit eligible prepared Wallet API calls and proxy those reads.
+submit eligible prepared Wallet API calls and proxy those reads. Since D-082
+the wallet submits unshield, transfer and stake itself, so the browser relays
+only a swap; the relay routes for the others remain here but are not called.
 
 ## What this owns
 

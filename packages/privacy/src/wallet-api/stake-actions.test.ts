@@ -24,9 +24,9 @@ import {
 
 /**
  * Endur private staking (D-063): an open-note transfer plus an invoke of
- * Endur's anonymizer, proved by the wallet and relayed like a pool-native
- * route. These tests pin the admitted intent shape, fail-closed policy
- * behaviour and the exact action set the wallet is asked to prove.
+ * Endur's anonymizer, proved and submitted by the wallet like the pool-native
+ * spends (D-082). These tests pin the admitted intent shape, fail-closed
+ * policy behaviour and the exact action set the wallet is asked to prove.
  */
 
 const STRK = ENDUR_XSTRK_ASSET;
@@ -34,6 +34,7 @@ const XSTRK = ENDUR_XSTRK;
 const ANONYMIZER = ENDUR_DEPOSIT_ANONYMIZER;
 const TAKER = '0xabc';
 const FEE_RECIPIENT = '0x789';
+const HASH = '0x5eed';
 const OTHER = '0x123';
 const BOB = '0x456';
 const POOL_FEE = 6n * 10n ** 18n;
@@ -55,6 +56,7 @@ function stakePolicy(overrides: Partial<WalletRoutePolicy> = {}): WalletRoutePol
 }
 
 function fixture(policy: WalletRoutePolicy = stakePolicy()) {
+  const invoked: STRK20_ACTION[][] = [];
   const prepared: STRK20_ACTION[][] = [];
   const simulated: (boolean | undefined)[] = [];
   const artifact: STRK20_CALL_AND_PROOF = {
@@ -66,8 +68,9 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
     async strk20Balances(tokens) {
       return tokens.map((token) => ({ token, balance: '0x64' }));
     },
-    async strk20InvokeTransaction() {
-      return { transaction_hash: '0xshield' };
+    async strk20InvokeTransaction(actions) {
+      invoked.push(actions);
+      return { transaction_hash: HASH };
     },
     async strk20PrepareInvoke(actions, simulate) {
       prepared.push(actions);
@@ -104,14 +107,13 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
     supportedVersions: vi.fn(async () => ['0.10.3']),
     policy,
   });
-  return { ops, wallet, pool, gateway, prepared, simulated, artifact };
+  return { ops, wallet, pool, gateway, invoked, prepared, simulated, artifact };
 }
 
-/** The four-action request for `amountIn`, independently written out. */
+/** The three-action request for `amountIn`, independently written out: no relay-fee leg (D-082). */
 function expectedStakeActions(amountIn: bigint, low: string, high: string): STRK20_ACTION[] {
   return [
     { type: 'withdraw', token: STRK, amount: `0x${amountIn.toString(16)}`, recipient: ANONYMIZER },
-    { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
     { type: 'transfer', token: XSTRK, amount: 'OPEN', recipient: TAKER },
     { type: 'invoke', contract: ANONYMIZER, calldata: [STRK, XSTRK, low, high, OPEN_NOTE] },
   ];
@@ -120,9 +122,10 @@ function expectedStakeActions(amountIn: bigint, low: string, high: string): STRK
 async function provedActions(intent: Intent, policy?: WalletRoutePolicy) {
   const harness = fixture(policy);
   const batch = await harness.ops.prepare([intent]);
-  await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-  expect(harness.prepared).toHaveLength(1);
-  return { ...harness, actions: harness.prepared[0]! };
+  await batch.confirm({ feeCeiling: POOL_FEE });
+  expect(harness.invoked).toHaveLength(1);
+  expect(harness.prepared).toHaveLength(0);
+  return { ...harness, actions: harness.invoked[0]! };
 }
 
 describe('Endur stake constants (D-063)', () => {
@@ -305,24 +308,16 @@ describe('disabled stake route', () => {
 });
 
 describe('stake prepare request construction', () => {
-  it('proves the withdrawal, relay fee, open note and anonymizer invoke exactly, then relays on the stake route', async () => {
-    const { ops, wallet, gateway, artifact, prepared, simulated } = fixture();
-    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+  it('has the wallet prove and submit the withdrawal, open note and anonymizer invoke exactly, with no relay', async () => {
+    const { ops, gateway, invoked, prepared } = fixture();
     const batch = await ops.prepare([STAKE]);
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({ transactionHash: HASH });
 
     // 5 STRK = 5e18 = 0x4563918244f40000, entirely in the low limb.
-    expect(prepared).toEqual([expectedStakeActions(5n * 10n ** 18n, '0x4563918244f40000', '0x0')]);
-    expect(simulated).toEqual([false]);
-    expect(invoke).not.toHaveBeenCalled();
-    expect(gateway.submit).toHaveBeenCalledOnce();
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
-      route: 'stake',
-      artifact,
-      // The confirm-time quote, not the prepare-time one.
-      feeAuthorization: 'fee-auth-2',
-      proofValidityBlocks: 450,
-    }));
+    expect(invoked).toEqual([expectedStakeActions(5n * 10n ** 18n, '0x4563918244f40000', '0x0')]);
+    expect(prepared).toEqual([]);
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
   });
 
   it('targets the pinned anonymizer with no selector of its own, as the last and only invoke', async () => {
@@ -350,26 +345,28 @@ describe('stake prepare request construction', () => {
     const { actions } = await provedActions({ ...STAKE, amountIn } as Intent);
 
     expect(actions).toEqual(expectedStakeActions(amountIn, low, high));
-    const invoke = actions[3]!;
+    const invoke = actions[2]!;
     expect(invoke.type === 'invoke' && invoke.calldata).toEqual([STRK, XSTRK, low, high, OPEN_NOTE]);
   });
 
   it('takes note_id from the same wallet-resolved placeholder the swap uses, for the one xSTRK note owned by the account', async () => {
     const { actions } = await provedActions(STAKE);
     const openNotes = actions.filter((action) => action.type === 'transfer' && action.amount === 'OPEN');
-    const invoke = actions[3]!;
+    const invoke = actions[2]!;
 
     expect(openNotes).toEqual([{ type: 'transfer', token: XSTRK, amount: 'OPEN', recipient: TAKER }]);
     expect(invoke.type === 'invoke' && invoke.calldata.at(-1)).toBe(OPEN_NOTE);
   });
 
-  it('publishes the pool fee and the relay estimate, and no public-leg warning (D-064)', async () => {
-    const { ops } = fixture();
+  it('publishes the pool fee alone, and no public-leg warning (D-064)', async () => {
+    const { ops, gateway } = fixture();
     const batch = await ops.prepare([STAKE]);
 
     expect(batch.poolFee).toBe(POOL_FEE);
-    expect(batch.gasEstimate).toBe(1n);
-    expect(batch.totalCost).toBe(POOL_FEE + 1n);
+    // The wallet adds and prices its own network fee (D-082).
+    expect(batch.gasEstimate).toBe(0n);
+    expect(batch.totalCost).toBe(POOL_FEE);
+    expect(gateway.estimate).not.toHaveBeenCalled();
     // The lead waived the stake disclosure (D-064), and a swap carries no
     // public-leg warning either: the seam must not reintroduce one as review copy.
     expect(batch.warnings).toEqual([]);
@@ -377,48 +374,41 @@ describe('stake prepare request construction', () => {
     expect(Object.isFrozen(batch.warnings)).toBe(true);
   });
 
-  it('quotes the stake relay for the STRK operation token at prepare and again at confirm', async () => {
-    const { gateway } = await provedActions(STAKE);
-
-    expect(gateway.estimate).toHaveBeenCalledTimes(2);
-    for (const [input] of vi.mocked(gateway.estimate).mock.calls) {
-      expect(input).toMatchObject({ route: 'stake', feeToken: STRK, operationToken: STRK });
-    }
-  });
-
-  it('refuses before proving when the confirm-time fee exceeds the ceiling', async () => {
-    const { ops, prepared, gateway } = fixture();
+  it('refuses before proving when the confirm-time pool fee exceeds the ceiling', async () => {
+    const { ops, pool, invoked } = fixture();
     const batch = await ops.prepare([STAKE]);
+    vi.spyOn(pool, 'config').mockResolvedValue({
+      feeAmount: POOL_FEE + 1n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    });
 
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(/above the ceiling/);
-    expect(prepared).toEqual([]);
-    expect(gateway.submit).not.toHaveBeenCalled();
+    expect(invoked).toEqual([]);
   });
 
   it('keeps a 118 while proving a stake as this account\'s own not-registered (D-074)', async () => {
     const { ops, wallet, gateway } = fixture();
-    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
     const batch = await ops.prepare([STAKE]);
 
     // Only a transfer's 118 names another account; a stake's output note is the player's own.
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'not-registered' });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toMatchObject({ kind: 'not-registered' });
     expect(gateway.submit).not.toHaveBeenCalled();
   });
 
-  it('rejects a relay quote above the route policy before publishing a batch', async () => {
+  it('needs no relay-fee authority: a zero relay ceiling still stakes (D-082)', async () => {
     const { ops, gateway } = fixture(stakePolicy({ maxRelayFee: 0n }));
 
-    await expect(ops.prepare([STAKE])).rejects.toThrow('The relay fee exceeds the route policy.');
-    expect(gateway.estimate).toHaveBeenCalledOnce();
+    await expect(ops.prepare([STAKE])).resolves.toMatchObject({ totalCost: POOL_FEE });
+    expect(gateway.estimate).not.toHaveBeenCalled();
   });
 
-  it('returns the relay receipt once and allows a single confirmation attempt', async () => {
-    const { ops, gateway } = fixture();
+  it('returns the wallet hash once and allows a single confirmation attempt', async () => {
+    const { ops, invoked } = fixture();
     const batch = await ops.prepare([STAKE]);
 
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({ transactionHash: '0x5eed' });
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toThrow(/already confirmed or attempted/);
-    expect(gateway.submit).toHaveBeenCalledOnce();
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({ transactionHash: HASH });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(/already confirmed or attempted/);
+    expect(invoked).toHaveLength(1);
   });
 
   it('matches the deterministic fake on the published warning', async () => {
@@ -436,31 +426,25 @@ describe('existing intents under a stake-enabled policy', () => {
     allowedTokens: { shield: [STRK], unshield: [STRK], transfer: [STRK], swap: [], stake: [STRK, XSTRK] },
   });
 
-  it('keeps the private transfer action set and route unchanged', async () => {
+  it('keeps the private transfer action set, now wallet-submitted', async () => {
     const { actions, gateway } = await provedActions(
       { kind: 'transfer', token: STRK, amount: 2n, recipient: BOB },
       everything,
     );
 
-    expect(actions).toEqual([
-      { type: 'transfer', token: STRK, amount: '0x2', recipient: BOB },
-      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
-    ]);
-    expect(gateway.estimate).toHaveBeenCalledWith(expect.objectContaining({ route: 'transfer' }));
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ route: 'transfer' }));
+    expect(actions).toEqual([{ type: 'transfer', token: STRK, amount: '0x2', recipient: BOB }]);
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
   });
 
-  it('keeps the unshield action set and route unchanged', async () => {
+  it('keeps the unshield action set, now wallet-submitted', async () => {
     const { actions, gateway } = await provedActions(
       { kind: 'unshield', token: STRK, amount: 3n, recipient: BOB },
       everything,
     );
 
-    expect(actions).toEqual([
-      { type: 'withdraw', token: STRK, amount: '0x3', recipient: BOB },
-      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
-    ]);
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ route: 'unshield' }));
+    expect(actions).toEqual([{ type: 'withdraw', token: STRK, amount: '0x3', recipient: BOB }]);
+    expect(gateway.submit).not.toHaveBeenCalled();
   });
 
   it('keeps the shield on the wallet-submitted deposit path', async () => {

@@ -3013,7 +3013,7 @@ operator configuration.
 
 ## D-068 — The private relay runs gasless, with no paymaster key by default
 
-**2026-09-28 · Accepted by the user · narrows D-014's "holds the paymaster key" to "holds it if one is used" · keyless default SUPERSEDED by D-070**
+**2026-09-28 · Accepted by the user · narrows D-014's "holds the paymaster key" to "holds it if one is used" · keyless default SUPERSEDED by D-070 · superseded in part by D-082 (no player flow but swap reaches the relay)**
 
 **Context.** The backend refused to start without `AVNU_PAYMASTER_API_KEY`.
 AVNU's docs distinguish gasfree (the dapp sponsors gas, with an API key) from
@@ -3080,7 +3080,7 @@ flags unset.
 
 ## D-070 — The private relay needs an avnu Portal key
 
-**2026-09-28 · Accepted by the user (D-068's contingency) · supersedes D-068 in part (its keyless default) · extends D-036's frozen seam with a `relay-not-configured` failure kind**
+**2026-09-28 · Accepted by the user (D-068's contingency) · supersedes D-068 in part (its keyless default) · extends D-036's frozen seam with a `relay-not-configured` failure kind · superseded in part by D-082 (unshield, transfer and stake are wallet-submitted and need no key; only swap is still relayed)**
 
 **Context.** On the live test site an unshield failed at its first step:
 `POST /api/v1/private/fees` answered 502 `UPSTREAM_FAILURE`. avnu's paymaster
@@ -4326,3 +4326,112 @@ through a curated pool, strkBTC in Re7 xBTC, is the next live probe
 (`deploy/RAILWAY.md`). Rerun `node scripts/vesu-markets.mjs` after Vesu lists
 an asset or a pool changes what it lends; until the list is regenerated with
 `--write`, the run fails.
+
+---
+
+## D-082 — The wallet submits unshield, send and stake; only swap is relayed
+
+**2026-10-01 · Accepted by the user · supersedes D-070 in part (the key is no longer needed for unshield, transfer or stake) · supersedes D-068 in part (those routes no longer reach the relay) · narrows D-066 and D-063 (their relayed routes, bar swap, are wallet-submitted) · changes no D-024 disclosure and no D-036 seam type**
+
+**Context.** The lead wants every player flow gasless with no avnu API key.
+Until now unshield, send and stake were proved by the wallet
+(`wallet_strk20PrepareInvoke`) and submitted by STRKWORLD's backend relay
+through avnu's paymaster in `sponsored_private` mode, which avnu refuses
+without a Portal key (D-070, code 163). Shield (D-056) and the Vault
+(D-077, D-079) were already proved **and submitted by the wallet**
+(`wallet_strk20InvokeTransaction`), with no key, no relay and no relay fee,
+and the Vault's supply carries a pool `withdraw` leg, so a wallet-submitted
+transaction can spend from the pool. The Wallet API corpus
+(`strk20-by-example.org/llms-full.txt`) lists shield, private transfer,
+withdraw, shadow accounts and swap as wallet actions, `STRK20_ACTION` has
+five variants (`deposit`, `withdraw`, `transfer`, `invoke`,
+`shadow_account_invoke`), and its anonymizer example submits a
+transfer-OPEN plus `invoke` through `strk20InvokeTransaction`. So every
+action shape these routes use is admitted there.
+
+**The sender question.** With the relay the on-chain sender was avnu's
+relayer, never the player. Wallet submission leaves the sender to the
+wallet. Read over mainnet RPC (`api.cartridge.gg/x/starknet/mainnet`) on
+2026-09-30, the two pool transactions in which the canonical anonymizer
+emitted `ExternalContractInvoked` at the time of the lead's Vault probe,
+2026-09-29 21:37 to 21:38 UTC, were both sent by avnu relayer accounts, not
+the player:
+
+- `0x332aa46565a112430be5ef7e5ad977ebc85c50dea083d822225dae842571e8a`
+  (block 15,646,840, the vSTRK supply), `sender_address`
+  `0x056a084ebadde03908e0649dbe2eeed03d4a367bfa5f68a55f305849c87203c7`;
+- `0x057733184bdd5cedb674b9299eb67ece963178de52f02c8aa5cfdc946d74f18`
+  (block 15,646,877, the redeem), `sender_address`
+  `0x071bff06fcea361f72b21a9abc081581bb78d7282e549b2db92bfa098f2adc0d`.
+
+Both senders run one account class (`0x1a736d6e…2003`) and have sent about
+304,000 transactions each, so they are shared relayers, not a player's
+account. Each transaction's outer calls are the relayer's STRK `transfer`
+to avnu's paymaster forwarder (`0x0127021a…584f`) and the forwarder's
+execute of the pool call; the pool then withdraws 6 STRK from the player's
+notes back to that forwarder, which pays 6 STRK on to `0x056be89c…d589`,
+and the relayer pays the network fee (4.31 and 4.65 STRK) to the sequencer
+address. `0x056be89c…d589` takes the same 6 STRK from the forwarder in
+unrelated accounts' pool transactions of the same day, so it is avnu's, not
+the player's. No other address in either transaction's calldata or STRK
+transfers is an account: the rest are the pool, its fee collector, the
+anonymizer, the forwarder, vSTRK, Vesu's Prime pool, STRK and the shadow
+account. Ready's own submission is therefore an avnu gasless relay, and
+hides the player as sender exactly as STRKWORLD's relay did. Not every
+wallet does this: in the same window some pool transactions were sent by
+low-nonce accounts of another class (`0x014aa582…f0aa`, nonce 8), which
+reads as a wallet submitting from the user's own account.
+
+**Decision.**
+
+- **Unshield, transfer and stake are proved and submitted by the wallet**
+  through `wallet_strk20InvokeTransaction`, like shield and the Vault. Their
+  actions carry no relay-fee `withdraw` leg: an unshield is one `withdraw`,
+  a send one `transfer`, a stake the D-063 withdraw to Endur's anonymizer,
+  an OPEN xSTRK note and the `invoke`. The wallet adds and prices its own
+  network fee, so a prepared batch's `gasEstimate` is `0` and its
+  `totalCost` the pool fee, as for the Vault. The pool fee is still re-read
+  at confirmation and held to the caller's ceiling before the wallet is
+  asked. A transfer's 118 is still the recipient's (D-074).
+- **One submission path.** `packages/privacy/src/wallet-api/wallet-submission.ts`
+  holds the frozen-actions copy, the wallet call and its hash check, and the
+  bounded receipt wait that the Vault already used. The Vault and the pool
+  spends share it; nothing is copied.
+- **Progress and copy.** The stages stay `awaiting-approval`, `proving`,
+  `submitting`, `done`, and the Shell's copy for them is unchanged.
+  `submitting` is reported once the wallet has answered with a hash, so a
+  discard or an abort at that point cannot turn a sent transaction into a
+  failure. The connect card no longer says proofs pass through the relay,
+  and `relay-not-configured` now reads "Swaps need the private relay, which
+  isn't set up on this site yet. Nothing was sent." The register's transfer
+  `observable` names the wallet's fee leg instead of a relay fee. No D-024
+  disclosure changes.
+- **Swap stays relayed.** Its executor plan and its fee come together from
+  avnu's paymaster (`buildPrivateSwapFee`, which needs the key), the pinned
+  SDK's `buildStrk20Actions` always emits that fee leg, and the backend binds
+  the quote's executor, calls and expiry to the fee authorization and checks
+  the expiry again at submission. Moving it would mean a new keyless
+  quote endpoint and our own action builder, for a route the browser never
+  enables. Without a key the backend answers its preparation 503
+  `RELAY_NOT_CONFIGURED`, which the client maps to `relay-not-configured`,
+  never a 502.
+- **The backend relay stays** in place and tested. The browser no longer
+  calls `/v1/private/fees` or `/v1/private/submissions` for unshield,
+  transfer or stake. `AVNU_PAYMASTER_API_KEY` is optional and needed by no
+  player flow this build enables. The relay's startup line still names its
+  own refused endpoints. The `VITE_STRK20_*_MAX_RELAY_FEE` values are still
+  required, so existing environments keep parsing, but they gate no quote
+  except a swap's.
+
+**Consequences.** A deployment with no avnu key runs every enabled flow.
+Who appears as sender is now the wallet's choice, not STRKWORLD's: Ready
+relays through avnu's gasless paymaster, as above, but a wallet that
+submitted from the player's own account would name the player on every
+spend. Shield and the Vault already accepted that; Xverse is unverified.
+The pool fee and the wallet's network fee come from the player's shielded
+balance in a token the wallet picks (D-079's finding), and the review no
+longer states a network figure for a spend: the wallet's prompt does. Batch
+rules the relay used to enforce, one recipient per send (D-065) and one
+withdrawal per unshield, are kept in the accumulator. The first live
+unshield, send and stake through the wallet are the evidence for these
+routes on Ready.
