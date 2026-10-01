@@ -13,6 +13,7 @@ import type {
 } from '../operations.js';
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback, type TxResult } from '../types.js';
 import {
+  MAX_VAULT_MARKETS,
   SHADOW_ACCOUNTS_WALLET_API,
   VAULT_DAPP_NAME,
   isContractAddress,
@@ -30,7 +31,7 @@ import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Ac
 /**
  * The Vault on the Wallet API (D-077): Vesu lending from the player's STRK20
  * shadow account, in every token the policy admits that `VAULT_MARKETS` pins
- * a vault for (D-079).
+ * a vault for, in Prime or a curated pool (D-079, D-081).
  *
  * - The wallet derives the partial commitment for `VAULT_DAPP_NAME` locally;
  *   no transaction is sent and no key leaves it.
@@ -49,8 +50,8 @@ import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Ac
 const SHADOW_VERSION = parseSemver(SHADOW_ACCOUNTS_WALLET_API)!;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
-/** D-079: more rows than this in a read is a malformed answer. */
-const MAX_VAULT_ROWS = 16;
+/** D-079, D-081: more rows than the Vault can pin markets is a malformed answer. */
+const MAX_VAULT_ROWS = MAX_VAULT_MARKETS;
 /** D-079: a rate's decimal places; Vesu states 18. */
 const MAX_RATE_DECIMALS = 36;
 
@@ -162,6 +163,12 @@ export class ShadowVault {
     const { signal, onStage } = ownCallOptions(options);
     throwIfAborted(signal);
     const market = this.admittedMarket(token);
+    // D-081: a collateral-only market pays no supply interest, so nothing is
+    // supplied into it until borrowing ships. A position already there still
+    // reads and redeems.
+    if (!market.lendable) {
+      throw new PrivacyError('unknown', 'Vesu lends none of that token out, so the Vault does not supply it.');
+    }
     assertAmount(amount);
     const identity = await this.resolve(signal, onStage);
     const config = await this.poolConfig(signal);

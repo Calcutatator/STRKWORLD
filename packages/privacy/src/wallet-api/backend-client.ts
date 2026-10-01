@@ -1,5 +1,6 @@
 import { PrivacyError, type PrivacyErrorKind, type TxResult } from '../types.js';
 import type { PoolConfig } from '../operations.js';
+import { MAX_VAULT_MARKETS } from '../vault.js';
 import type {
   PoolReadClient,
   PrivateSubmissionGateway,
@@ -13,8 +14,8 @@ import type {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
-/** D-079: more vault rows than this is a malformed answer, not a longer list. */
-const MAX_VAULT_ROWS = 16;
+/** D-079, D-081: more vault rows than the Vault can pin markets is a malformed answer, not a longer list. */
+const MAX_VAULT_ROWS = MAX_VAULT_MARKETS;
 /** D-079: a rate's decimal places; Vesu states 18. */
 const MAX_RATE_DECIMALS = 36;
 /** The relay's answer when it has no avnu key, or avnu rejected it (D-070). */

@@ -83,10 +83,13 @@ export function formatStrkExact(amount: bigint): string {
  * A yearly rate stated as a fraction, `value / 10^decimals` (27351899613523568
  * with 18 is 0.0273...), as a percentage with two decimal places, truncated
  * like every shortened figure here: `"2.73%"`. D-079 shows Vesu's supply APY
- * with it.
+ * with it. A rate above zero but below 0.01% reads `"<0.01%"`, never
+ * `"0.00%"`: D-081's curated BTC markets pay that little, and zero would be a
+ * different claim.
  */
 export function formatRatePercent(value: bigint, decimals: number): string {
   const hundredths = value <= 0n ? 0n : (value * 10_000n) / 10n ** BigInt(decimals);
+  if (value > 0n && hundredths === 0n) return '<0.01%';
   const whole = hundredths / 100n;
   const fraction = (hundredths % 100n).toString().padStart(2, '0');
   return `${whole}.${fraction}%`;

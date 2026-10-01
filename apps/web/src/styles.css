@@ -2285,6 +2285,48 @@ button[data-locked="true"] {
   margin: 0 0 0.6rem;
 }
 
+/* ------------------------------------------------------------------------
+ * D-081 structure: the grouped market list, the pool lines, the pool-balance
+ * line and the collateral-only note. Layout, grouping and spacing only: no
+ * colours, fonts or type sizes, so the Vault's theme can restyle these
+ * without touching this block. Hooks for that theme:
+ * `.vault-market[aria-current="true"]` is the chosen market,
+ * `[data-curation="prime" | "curated"]` marks a market's pool, on each row
+ * and on `.vault-pool`, and `.vault-market[data-lendable="false"]` a
+ * collateral-only market, listed only while it holds a position.
+ * --------------------------------------------------------------------- */
+.panel[data-building="vault"] .vault-market-groups {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.panel[data-building="vault"] .vault-market-group {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-group > .vault-group-title {
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-group > .vault-markets {
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-head > .vault-market-pool {
+  flex: 1 1 auto;
+}
+
+.panel[data-building="vault"] :is(.vault-curated-note, .vault-pool, .vault-holding, .vault-no-choice, .panel-compose > .vault-market-note) {
+  margin: 0 0 0.6rem;
+}
+
+.panel[data-building="vault"] .vault-market > .vault-market-note {
+  margin: 0.35rem 0 0;
+}
+
 /* The stand-in address is public, and this line says so (D-079): quiet
  * product information, never styled as the register's disclosure. */
 .panel[data-building="vault"] .vault-stand-in {

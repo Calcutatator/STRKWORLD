@@ -95,16 +95,18 @@ address out of the protocol action, but the application, action, timing and
 open-note amount may remain public. AVNU already supplies its own private
 executor, so the Exchange does not need project-owned Cairo.
 
-The Vault (D-077, D-079) needs none either. It holds Vesu positions, in
-STRK, ETH, USDC, USDT and WBTC, on the player's STRK20 shadow account: a
+The Vault (D-077, D-079, D-081) needs none either. It holds Vesu positions,
+in every pinned market (twenty-three tokens, in Vesu's Prime pool and five
+curated pools, supplied only where Vesu lends the token out), on the
+player's STRK20 shadow account: a
 keyless, persistent address for the player and the
 dapp name `strkworld-vault` that only StarkWare's canonical
 `ShadowAccountAnonymizer` can execute through. The wallet derives the
 account's partial commitment and proves and submits both actions itself
 (`wallet_strk20InvokeTransaction`, no relay); the backend reads the address
 from the anonymizer's `get_shadow_accounts` view and the positions from
-every pinned Vesu Prime vault, all pinned public reads, and Vesu's supply
-APY from Vesu's public API, which only the backend calls; the browser checks
+every pinned Vesu vault in two batched requests, all pinned public reads,
+and Vesu's supply APY from Vesu's public API, which only the backend calls; the browser checks
 the address
 against the anonymizer's own derivation before sending anything there. A
 supply withdraws from the pool to that address and deposits through it; a

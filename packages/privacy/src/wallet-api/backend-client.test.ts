@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PrivacyError } from '../types.js';
+import { MAX_VAULT_MARKETS } from '../vault.js';
 import { BackendPrivacyClient } from './backend-client.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
@@ -1472,7 +1473,7 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
     ['a vault that is not a felt', { positions: [row('vSTRK')] }],
     ['a single position rather than a list', row(VSTRK)],
     ['an extra top-level field', { positions: [row(VSTRK)], account: SHADOW }],
-    ['more rows than any backend pins', { positions: Array.from({ length: 17 }, () => row(VSTRK)) }],
+    ['more rows than any backend pins', { positions: Array.from({ length: MAX_VAULT_MARKETS + 1 }, () => row(VSTRK)) }],
   ])('refuses a position answer with %s', async (_label, body) => {
     const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
     await expect(client.vaultPositions(SHADOW)).rejects.toMatchObject({ kind: 'unknown' });

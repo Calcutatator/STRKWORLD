@@ -2,6 +2,7 @@ import { shortString } from 'starknet';
 import { describe, expect, it } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import {
+  MAX_VAULT_MARKETS,
   SHADOW_ACCOUNT_ANONYMIZER,
   SHADOW_ACCOUNT_PRIMER_CLASS_HASH,
   SHADOW_ACCOUNTS_WALLET_API,
@@ -35,17 +36,54 @@ const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
 const TX = '0x5eed';
 const STRK_MARKET = VAULT_MARKETS[0]!;
 
+const PRIME = VESU_PRIME_POOL;
+/** Re7 xBTC: the BTC-focused curated pool the lead chose for strkBTC (D-081). */
+const RE7_XBTC = '0x03a8416bf20d036df5b1cf3447630a2e1cb04685f6b0c3a70ed7fb1473548ecf';
+const RE7_ECOSYSTEM = '0x0486294fe74daf3d964523e7a1f4e5d686f153934b2c183ececa0cab9dd2f3e6';
+const RE7_USDC_STABLE_CORE = '0x073702fce24aba36da1eac539bd4bae62d4d6a76747b7cdd3e016da754d7a135';
+const RE7_USDC_CORE = '0x03976cac265a12609934089004df458ea29c776d77da423c96dc761d09d24124';
+const RE7_USDC_FRONTIER = '0x05c03e7e0ccfe79c634782388eb1e6ed4e8e2a013ab0fcc055140805e46261bd';
+const POOL_NAMES: Record<string, string> = {
+  [VESU_PRIME_POOL]: 'Prime',
+  [RE7_XBTC]: 'Re7 xBTC',
+  [RE7_ECOSYSTEM]: 'Re7 Labs Starknet Ecosystem',
+  [RE7_USDC_STABLE_CORE]: 'Re7 USDC Stable Core',
+  [RE7_USDC_CORE]: 'Re7 USDC Core',
+  [RE7_USDC_FRONTIER]: 'Re7 USDC Frontier',
+};
+
 /**
- * The vaults, as read over mainnet RPC at block 15,669,141 on 2026-09-30
- * (D-079): each vault's `asset()` is the token beside it, and its
- * `pool_contract()` the Prime pool; the decimals are the token's own.
+ * The vaults, as `scripts/vesu-markets.mjs` verified them on mainnet at block
+ * 15,681,808 on 2026-09-30 (D-081): each vault is the PoolFactory's own for its
+ * pool and token, its `asset()` the token beside it and its `pool_contract()`
+ * the pool beside it; the decimals are the token's own, and the last column
+ * says whether the pool lends the token out. D-079's five keep their vaults.
+ * Order: the counter's groups, then the order within each.
  */
 const READ_ON_MAINNET = [
-  ['STRK', STRK, VESU_VSTRK, 18],
-  ['ETH', '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7', '0x006ac248c18c69e57573aa3eeccbb7f8cd29e3024561be252ee7b34b96c1043e', 18],
-  ['USDC', '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb', '0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65', 6],
-  ['USDT', '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8', '0x06be9f8980779930045b93c295105c6810d38191ec522b5175ddf7dbf9b22f9d', 6],
-  ['WBTC', '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac', '0x04ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', 8],
+  ['STRK', STRK, VESU_VSTRK, PRIME, 18, true],
+  ['ETH', '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7', '0x006ac248c18c69e57573aa3eeccbb7f8cd29e3024561be252ee7b34b96c1043e', PRIME, 18, true],
+  ['USDC', '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb', '0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65', PRIME, 6, true],
+  ['USDT', '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8', '0x06be9f8980779930045b93c295105c6810d38191ec522b5175ddf7dbf9b22f9d', PRIME, 6, true],
+  ['USDC.e', '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8', '0x00079c83c3eb20df05d9e3ebdd45990060101bd126666181de622e432948f3e9', PRIME, 6, true],
+  ['sUSN', '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17', '0x07d618b6204decead493a37f6779ee4ffee76803e8c5f3384603ce6c15e2f336', RE7_USDC_STABLE_CORE, 18, false],
+  ['mRe7YIELD', '0x04be8945e61dc3e19ebadd1579a6bd53b262f51ba89e6f8b0c4bc9a7e3c633fc', '0x0133269be4c0a147ebe2bb28b1b0dd203ea1cd43357caf5cf48bc424ccb5e7f9', RE7_USDC_STABLE_CORE, 18, false],
+  ['WBTC', '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac', '0x04ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', PRIME, 8, true],
+  ['strkBTC', '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135', '0x04269987e8971bc613be4f8161e04a4d2652f5e6ade9aa3f2820b1fc3f7ef848', RE7_XBTC, 8, true],
+  ['tBTC', '0x04daa17763b286d1e59b97c283c0b8c949994c361e426a28f743c67bdfe9a32f', '0x04cbe8b13ebadd744254b09a40f4395f580e8a4a30acb2653849f61d12bfa039', RE7_XBTC, 18, true],
+  ['SolvBTC', '0x0593e034dda23eea82d2ba9a30960ed42cf4a01502cc2351dc9b9881f9931a68', '0x0590117befc944f23b39ca5b0401e6aaa7834e90f2eb284baa2bfc475bd66190', RE7_XBTC, 18, true],
+  ['uniBTC', '0x023a312ece4a275e38c9fc169e3be7b5613a0cb55fe1bece4422b09a88434573', '0x06d656d23f38ca239877ea261ce265129cc3fae66f8e9d8948cf19a146c736c5', RE7_USDC_CORE, 8, false],
+  ['YBTC.B', '0x02cab84694e1be6af2ce65b1ae28a76009e8ec99ec4bc17047386abf20cbb688', '0x0537429e69dffba420ee66f725c685b45d540e108bc67d12721cae50bafe9568', RE7_USDC_FRONTIER, 8, false],
+  ['mRe7BTC', '0x04e4fb1a9ca7e84bae609b9dc0078ad7719e49187ae7e425bb47d131710eddac', '0x013448c4404424a534d22a46330432bd2ef5d884740e8b9fba7f4c273f85ada3', RE7_XBTC, 18, false],
+  ['xSTRK', '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a', '0x073f369a935c8d8c9c793b371c5d384988060a96e7b11fb1dd2e5718d34639ad', PRIME, 18, false],
+  ['wstETH', '0x0057912720381af14b0e5c87aa4718ed5e527eab60b3801ebf702ab09139e38b', '0x07d231447ac838f45740ed823c3ae0982d94377bc9f165f751a371a41e9c1740', PRIME, 18, true],
+  ['xWBTC', '0x06a567e68c805323525fe1649adb80b03cddf92c23d2629a6779f54192dffc13', '0x00beb129889ac800bb84a8d31dfaa39c8710ee8f6310386ee03a37e79e6d7e1f', PRIME, 8, false],
+  ['xstrkBTC', '0x047751b3532fabca89b0f2e35ca1cb45e5a7b11d5e3d3663dfa1f4406b45fd88', '0x01196b589bbc3379aa43bbba6ac40e89766d7e5242b098f47e587f2afc577c7a', RE7_XBTC, 8, false],
+  ['xtBTC', '0x043a35c1425a0125ef8c171f1a75c6f31ef8648edcc8324b55ce1917db3f9b91', '0x03d90538d9b66c7fa3e582e7af5e96018a4f8f1e43d5eace23ba820fbe06ff70', RE7_XBTC, 18, false],
+  ['LBTC', '0x036834a40984312f7f7de8d31e3f6305b325389eaeea5b1c0664b2fb936461a4', '0x073476ed5b0d781182ede4c806241a93cb47cb00b6de354855a1fc6233a13b35', RE7_XBTC, 8, true],
+  ['xLBTC', '0x07dd3c80de9fcc5545f0cb83678826819c79619ed7992cc06ff81fc67cd2efe0', '0x031e5609fee92e0bc200436449ee2cc07a141fe77859c474427fc9490f87e637', RE7_XBTC, 8, false],
+  ['xsBTC', '0x0580f3dc564a7b82f21d40d404b3842d490ae7205e6ac07b1b7af2b4a5183dc9', '0x076ea5335932dafb727f31dec684e75169e7a582478d681fe3a73494669940fb', RE7_XBTC, 18, false],
+  ['EKUBO', '0x075afe6402ad5a5c20dd25e10ec3b3986acaa647b77e4ae24b0cbc9a54a27a87', '0x04fcf9064c23d146f6921b3fd9301bbec6384b37b87c173809a79f91b4d46fc4', RE7_ECOSYSTEM, 18, false],
 ] as const;
 
 /**
@@ -106,33 +144,86 @@ describe('Vault constants (D-077)', () => {
   });
 });
 
-describe('VAULT_MARKETS: the token → vault map (D-079)', () => {
-  it('pins exactly the five vaults read on mainnet, STRK first, frozen', () => {
-    expect(VAULT_MARKETS.map((market) => [market.symbol, market.token, market.vault, market.decimals])).toEqual(READ_ON_MAINNET);
+describe('VAULT_MARKETS: the token → vault map (D-079, D-081)', () => {
+  it('pins exactly the twenty-three vaults verified on mainnet, STRK first, frozen', () => {
+    expect(VAULT_MARKETS.map((market) => [market.symbol, market.token, market.vault, market.pool, market.decimals, market.lendable])).toEqual(READ_ON_MAINNET);
     expect(Object.isFrozen(VAULT_MARKETS)).toBe(true);
     for (const market of VAULT_MARKETS) expect(Object.isFrozen(market), market.symbol).toBe(true);
+    expect(VAULT_MARKETS.length).toBeLessThanOrEqual(MAX_VAULT_MARKETS);
+    expect(MAX_VAULT_MARKETS).toBe(48);
   });
 
-  it('keeps D-077’s vSTRK as the STRK market, unchanged', () => {
-    expect(STRK_MARKET).toEqual({ token: VESU_VSTRK_ASSET, vault: VESU_VSTRK, symbol: 'STRK', decimals: VESU_VSTRK_DECIMALS });
+  it('keeps D-077’s vSTRK as the STRK market, unchanged, in Prime', () => {
+    expect(STRK_MARKET).toEqual({
+      token: VESU_VSTRK_ASSET,
+      vault: VESU_VSTRK,
+      pool: VESU_PRIME_POOL,
+      poolName: 'Prime',
+      curation: 'prime',
+      lendable: true,
+      symbol: 'STRK',
+      decimals: VESU_VSTRK_DECIMALS,
+    });
+  });
+
+  it('keeps D-079’s five vaults where they were', () => {
+    const five = ['STRK', 'ETH', 'USDC', 'USDT', 'WBTC'].map((symbol) => VAULT_MARKETS.find((market) => market.symbol === symbol)!);
+    expect(five.map((market) => [market.vault, market.pool])).toEqual([
+      [VESU_VSTRK, PRIME],
+      ['0x006ac248c18c69e57573aa3eeccbb7f8cd29e3024561be252ee7b34b96c1043e', PRIME],
+      ['0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65', PRIME],
+      ['0x06be9f8980779930045b93c295105c6810d38191ec522b5175ddf7dbf9b22f9d', PRIME],
+      ['0x04ecb0667140b9f45b067d026953ed79f22723f1cfac05a7b26c3ac06c88f56c', PRIME],
+    ]);
   });
 
   it('lends each token through one vault and each vault for one token', () => {
     const tokens = new Set(VAULT_MARKETS.map((market) => BigInt(market.token)));
     const vaults = new Set(VAULT_MARKETS.map((market) => BigInt(market.vault)));
+    const symbols = new Set(VAULT_MARKETS.map((market) => market.symbol));
     expect(tokens.size).toBe(VAULT_MARKETS.length);
     expect(vaults.size).toBe(VAULT_MARKETS.length);
+    expect(symbols.size).toBe(VAULT_MARKETS.length);
     for (const market of VAULT_MARKETS) {
       expect(isContractAddress(market.token), market.symbol).toBe(true);
       expect(isContractAddress(market.vault), market.symbol).toBe(true);
+      expect(isContractAddress(market.pool), market.symbol).toBe(true);
       expect(tokens.has(BigInt(market.vault)), market.symbol).toBe(false);
     }
   });
 
-  it('leaves strkBTC out: it has no vault in the Prime pool', () => {
-    expect(vaultMarket('0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135')).toBeUndefined();
-    // Nor the bridged USDC.e, whose own Prime vault is a different contract.
-    expect(vaultMarket('0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8')).toBeUndefined();
+  it('marks Prime as Prime and every other pool as curated, by the pool’s own name', () => {
+    for (const market of VAULT_MARKETS) {
+      const prime = BigInt(market.pool) === BigInt(VESU_PRIME_POOL);
+      expect(market.curation, market.symbol).toBe(prime ? 'prime' : 'curated');
+      expect(market.poolName, market.symbol).toBe(POOL_NAMES[market.pool]);
+    }
+  });
+
+  it('lends strkBTC through Re7 xBTC, the curated pool the lead chose, since Prime lists none (D-081)', () => {
+    const strkBtc = vaultMarket('0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135');
+    expect(strkBtc).toMatchObject({ symbol: 'strkBTC', pool: RE7_XBTC, poolName: 'Re7 xBTC', curation: 'curated', decimals: 8 });
+    // The bridged USDC.e is its own market, in Prime, beside Circle's USDC.
+    expect(vaultMarket('0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8')).toMatchObject({ symbol: 'USDC.e', curation: 'prime' });
+  });
+
+  it('pins every Vesu token, those the STRK20 pool has never held included: it keeps no token list (D-081)', () => {
+    for (const [symbol, token] of [
+      ['sUSN', '0x02411565ef1a14decfbe83d2e987cced918cd752508a3d9c55deb67148d14d17'],
+      ['uniBTC', '0x023a312ece4a275e38c9fc169e3be7b5613a0cb55fe1bece4422b09a88434573'],
+      ['mRe7BTC', '0x04e4fb1a9ca7e84bae609b9dc0078ad7719e49187ae7e425bb47d131710eddac'],
+    ] as const) {
+      expect(vaultMarket(token), symbol).toMatchObject({ symbol, lendable: false });
+    }
+    // A token Vesu does not list has no market.
+    expect(vaultMarket('0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49')).toBeUndefined();
+  });
+
+  it('marks the markets whose pool lends the token out, and the collateral-only rest (D-081)', () => {
+    expect(VAULT_MARKETS.filter((market) => market.lendable).map((market) => market.symbol)).toEqual([
+      'STRK', 'ETH', 'USDC', 'USDT', 'USDC.e', 'WBTC', 'strkBTC', 'tBTC', 'SolvBTC', 'wstETH', 'LBTC',
+    ]);
+    expect(VAULT_MARKETS.filter((market) => !market.lendable)).toHaveLength(12);
   });
 
   it('finds a market by the token’s field value, whatever its spelling', () => {

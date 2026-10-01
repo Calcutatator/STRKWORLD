@@ -304,6 +304,45 @@ export const COPY = freezeCopy({
     redeemAll: 'Redeem everything',
     /** D-079: a build whose Vault list names no token the counter can describe. */
     noToken: 'No token can be lent in this build yet.',
+    /**
+     * D-081: a collateral-only market, where Vesu lends none of the token
+     * out. It is never offered for supply; one holding a position is listed
+     * and redeemable.
+     */
+    collateralOnly: 'Collateral only: Vesu lends none of it out here, so it earns nothing, and it is not offered for supply. You can still redeem it.',
+    /** D-081: a mode with nothing to offer in this build. */
+    noSupply: 'No token here can be supplied: Vesu lends none of them out.',
+    noRedeem: 'Nothing to redeem yet. Read your positions to see what you hold.',
+    /** D-081: the picker's groups, and the headings of the market list. */
+    groups: {
+      majors: 'Majors',
+      stables: 'Stables',
+      btc: 'Bitcoin',
+      staking: 'Staking tokens',
+      ecosystem: 'Ecosystem',
+    },
+    /**
+     * D-081: where a market lends. Prime is named as it is; a curated pool
+     * reads "Re7 xBTC, curated", and one line says what curated means.
+     */
+    pools: {
+      label: 'Pool',
+      curated: 'curated',
+      curatedNote: 'Curated pools are run by their own curators, with their own risk settings.',
+    },
+    /**
+     * D-081: a supply takes the token from the pool balance. Written around
+     * the token's symbol: "Supplying USDC takes it from your pool balance."
+     * and, once a review found none there, "You have no USDC in your pool
+     * balance, so there is nothing to supply. Shield some first, or choose
+     * another token."
+     */
+    holding: {
+      neededLead: 'Supplying',
+      neededTail: 'takes it from your pool balance.',
+      noneLead: 'You have no',
+      noneTail: 'in your pool balance, so there is nothing to supply. Shield some first, or choose another token.',
+    },
     position: {
       title: 'Your Vault positions',
       unrequested: 'STRKWORLD reads your positions from the chain only when you ask. Your wallet may ask you first.',

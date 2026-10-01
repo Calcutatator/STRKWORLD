@@ -92,4 +92,13 @@ describe('formatRatePercent (D-079)', () => {
   it('never rounds a rate up', () => {
     expect(formatRatePercent(27_999_999_999_999_999n, 18)).toBe('2.79%');
   });
+
+  it('shows a rate above zero but below a hundredth of a percent as under it, never as zero (D-081)', () => {
+    // Vesu's supply APY for strkBTC in Re7 xBTC on 2026-09-30: 0.0006%.
+    expect(formatRatePercent(5_981_411_732_929n, 18)).toBe('<0.01%');
+    expect(formatRatePercent(1n, 18)).toBe('<0.01%');
+    expect(formatRatePercent(99_999_999_999_999n, 18)).toBe('<0.01%');
+    expect(formatRatePercent(100_000_000_000_000n, 18)).toBe('0.01%');
+    expect(formatRatePercent(0n, 18)).toBe('0.00%');
+  });
 });

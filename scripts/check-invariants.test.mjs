@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 /**
  * Check 8, the privacy register gate (D-020), against the Vault's two routes
- * (D-077). The script runs from a scratch copy of the repository shape holding
+ * (D-077, widened by D-079 and D-081). The script runs from a scratch copy of the repository shape holding
  * only the register and the decision log, so every other check has nothing to
  * read; only check 8's own lines are asserted.
  */
@@ -51,7 +51,7 @@ function editEntry(route, pattern, replacement) {
   };
 }
 
-describe('check 8: the privacy register gate, with the Vault routes (D-077, D-079)', () => {
+describe('check 8: the privacy register gate, with the Vault routes (D-077, D-079, D-081)', () => {
   it('passes the register as committed', async () => {
     const output = await runCheck();
     expect(output).toContain('ok   every privacy deviation is approved');
@@ -76,6 +76,28 @@ describe('check 8: the privacy register gate, with the Vault routes (D-077, D-07
       "disclosure: null,\n    disclosureWaivedBy: 'D-079',",
     ));
     expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.redeem/);
+  }, 30_000);
+
+  it('refuses a waiver citing D-081, which widens the Vault to every Vesu market and waives nothing', async () => {
+    const output = await runCheck(editEntry(
+      'vault.supply',
+      /disclosure:\s*\n\s*'[^']*',/,
+      "disclosure: null,\n    disclosureWaivedBy: 'D-081',",
+    ));
+    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.supply/);
+  }, 30_000);
+
+  it('still parses the register now its Vault observables name no token (D-081)', async () => {
+    const register = await readFile(registerPath, 'utf8');
+    for (const route of ['vault.supply', 'vault.redeem']) {
+      const start = register.indexOf(`route: '${route}'`);
+      const entry = register.slice(start, register.indexOf('\n  },', start));
+      expect(entry, route).toMatch(/in the Vesu Prime pool or a curated pool/);
+      expect(entry, route).not.toMatch(/[{}]/);
+    }
+    const output = await runCheck();
+    expect(output).not.toContain('could not parse the privacy register');
+    expect(output).toContain('ok   every privacy deviation is approved');
   }, 30_000);
 
   it('refuses a waiver the cited decision does not record for the route', async () => {

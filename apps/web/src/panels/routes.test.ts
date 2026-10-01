@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
+import { VAULT_TOKENS } from '../production/config.js';
 import {
   buildingDoor,
   disclosuresForIntents,
@@ -476,7 +477,7 @@ describe('the entry gate deposit route (D-072)', () => {
   });
 });
 
-describe('the Vault switch (D-077, D-079)', () => {
+describe('the Vault switch (D-077, D-079, D-081)', () => {
   const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
   const denyAll: WalletRoutePolicy = {
     maxIntents: 0,
@@ -507,21 +508,24 @@ describe('the Vault switch (D-077, D-079)', () => {
     expect(vaultDoorOpen(PRIVACY_REGISTER, vaultOn)).toBe(true);
   });
 
-  it('keeps the Vault shut when its list is missing, empty, or names a token with no pinned vault (D-079)', () => {
+  it('keeps the Vault shut when its list is missing, empty, or names a token with no pinned vault (D-079, D-081)', () => {
     const list = (vault: string[]): WalletRoutePolicy => ({ ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } });
     const noList: WalletRoutePolicy = { ...vaultOn, allowedTokens: denyAll.allowedTokens };
-    const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+    // LORDS: a token Vesu lists in no pool, so no vault is pinned.
+    const LORDS = '0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49';
     // A repeat by value, padded or not, is refused as the parser and the adapter refuse it.
     const repeated = list([STRK, `0x${STRK.slice(3)}`]);
-    for (const policy of [list(['0x123']), list([]), list([STRK, STRKBTC]), repeated, noList]) {
+    for (const policy of [list(['0x123']), list([]), list([STRK, LORDS]), repeated, noList]) {
       expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
     }
   });
 
-  it('opens the Vault for any list of pinned tokens, with or without STRK (D-079)', () => {
+  it('opens the Vault for any list of pinned tokens, with or without STRK, in any pool (D-079, D-081)', () => {
     const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
     const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
-    for (const vault of [[USDC], [WBTC, STRK], [STRK, USDC, WBTC]]) {
+    // strkBTC lends through the curated Re7 xBTC pool.
+    const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+    for (const vault of [[USDC], [WBTC, STRK], [STRK, USDC, WBTC], [STRKBTC], [...VAULT_TOKENS]]) {
       const policy: WalletRoutePolicy = { ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } };
       expect(vaultDoorOpen(PRIVACY_REGISTER, policy), vault.join()).toBe(true);
     }
