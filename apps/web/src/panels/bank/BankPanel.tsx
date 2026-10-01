@@ -219,7 +219,8 @@ export function BankPanel({
         ) : (
           <>
             {state.mode === 'stake' && !committing && state.flow.name !== 'submitted' ? <StakeIntro /> : null}
-            <BalanceBlock state={state} onField={balanceOnField(state)} onRefresh={() => void panel.refreshBalance()} />
+            {/* Once read, a spending mode's balance and its Refresh sit on the amount field. */}
+            {balanceOnField(state) ? null : <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />}
 
             {gateBlocked && state.flow.name === 'review' ? null : committing ? (
               <CommitBlock
@@ -238,7 +239,7 @@ export function BankPanel({
                 </button>
               </div>
             ) : blocked || gateBlocked ? null : (
-              <ComposeBlock state={state} panel={panel} experience={experience} rate={rate} />
+              <ComposeBlock state={state} panel={panel} experience={experience} rate={rate} onRefresh={() => void panel.refreshBalance()} />
             )}
 
             {state.flow.name === 'failed' ? (
@@ -316,10 +317,10 @@ function balanceOnField(state: BankState): boolean {
   return state.mode !== 'shield' && state.balance.status === 'loaded';
 }
 
-function BalanceBlock({ state, onField, onRefresh }: { state: BankState; onField: boolean; onRefresh: () => void }) {
+function BalanceBlock({ state, onRefresh }: { state: BankState; onRefresh: () => void }) {
   const { balance } = state;
   return (
-    <div className="panel-balance" data-compact={onField ? 'true' : undefined}>
+    <div className="panel-balance">
       {balance.status === 'unrequested' ? (
         <>
           <p>{COPY.balance.unrequested}</p>
@@ -338,7 +339,7 @@ function BalanceBlock({ state, onField, onRefresh }: { state: BankState; onField
         </>
       ) : (
         <>
-          {onField ? null : <p className="balance-total">{formatStrk(balance.total)}</p>}
+          <p className="balance-total">{formatStrk(balance.total)}</p>
           {balance.maturityKnown ? (
             balance.maturing > 0n ? (
               <p className="balance-maturing">
@@ -362,11 +363,13 @@ function ComposeBlock({
   panel,
   experience,
   rate,
+  onRefresh,
 }: {
   state: BankState;
   panel: BankPanelMachine;
   experience: 'menu' | 'station';
   rate: EndurRateView;
+  onRefresh: () => void;
 }) {
   const busy = state.flow.name === 'preparing' || state.adding;
   const needsRecipient = modeNeedsRecipient(state.mode);
@@ -393,6 +396,12 @@ function ComposeBlock({
       ? { label: COPY.bank.checkRecipient, disabled: true }
       : primaryAction({ check, symbol: 'STRK', ready });
   const atMax = max !== null && state.amountText === formatTokenAmountExact(max);
+  // The balance card's notes, when its figure is on the field instead.
+  const balanceNote = state.balance.status !== 'loaded' || balance === null
+    ? null
+    : !state.balance.maturityKnown
+      ? COPY.balance.maturityUnknown
+      : state.balance.maturing > 0n ? `${COPY.balance.maturing} ${formatStrk(state.balance.maturing)}` : null;
 
   return (
     <form
@@ -420,7 +429,12 @@ function ComposeBlock({
         symbol="STRK"
         balance={balance}
         max={max !== null ? () => panel.maxSpendable() : undefined}
-        hint={atMax ? COPY.balance.feeReserved : undefined}
+        balanceAction={
+          <button type="button" className="ui-chip balance-refresh" aria-label={COPY.balance.refreshLabel} disabled={busy} onClick={onRefresh}>
+            {COPY.balance.refreshShort}
+          </button>
+        }
+        hint={atMax ? COPY.balance.feeReserved : balanceNote ?? undefined}
         disabled={busy}
       />
 
@@ -452,14 +466,17 @@ function ComposeBlock({
               ? COPY.postOffice.oneAtATime
               : COPY.batch.why}
       </p>
-      <button
-        type="button"
-        className="review"
-        disabled={state.batch.length === 0 || busy}
-        onClick={() => void panel.prepare()}
-      >
-        {state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}
-      </button>
+      {/* One primary at a time: the review appears once something is queued. */}
+      {state.batch.length > 0 ? (
+        <button
+          type="button"
+          className="review"
+          disabled={busy}
+          onClick={() => void panel.prepare()}
+        >
+          {state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}
+        </button>
+      ) : null}
     </form>
   );
 }

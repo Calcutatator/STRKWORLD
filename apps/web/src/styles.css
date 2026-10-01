@@ -662,11 +662,6 @@ body {
   line-height: 1.1;
 }
 
-/* With the figure on the amount field, the card keeps only its read button and notes. */
-.panel-balance[data-compact="true"] {
-  padding: 0.55rem 0.8rem;
-}
-
 .balance-maturing,
 .balance-aggregate {
   color: var(--ui-text-dim);

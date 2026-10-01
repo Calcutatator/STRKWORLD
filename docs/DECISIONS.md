@@ -5221,12 +5221,15 @@ Paste and said nothing until Add.
 - **Bank and Post Office (one machine, D-040).** Every control uses the
   kit's `AmountField` and a `DetailRows` with the pool fee read live. In a
   mode that spends the private balance (unshield, send, stake) the read
-  total sits on the field ("Pool balance: 100 STRK") and the balance card
-  keeps only its read button and notes; the field flags an amount over it.
+  total sits on the field ("Pool balance: 100 STRK", with a small Refresh
+  beside it and the card's notes as the field's hint), and the balance card
+  is drawn only before the read; the field flags an amount over it.
   Shielding spends public STRK the Bank cannot see, so its field shows no
   balance and has no Max. The primary button follows the kit's
   `primaryAction` ("Enter an amount", "Insufficient STRK"), and a send's
-  says "Enter a recipient" or "Check the address" first. No 50%, no
+  says "Enter a recipient" or "Check the address" first. One primary at a
+  time: the review button appears only once something is queued; the batch
+  flow and its wording are unchanged. No 50%, no
   slippage, no flip.
 - **The recipient field** is the kit's new `RecipientField`: "To", the
   placeholder "Enter address", a Paste button where the browser offers

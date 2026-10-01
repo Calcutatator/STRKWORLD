@@ -24,6 +24,8 @@ export interface AmountFieldProps {
   readonly balance?: bigint | null;
   /** The balance line's words; the pool balance by default. */
   readonly balanceLabel?: string;
+  /** A small control beside the balance line, such as re-reading it. */
+  readonly balanceAction?: ReactNode;
   /**
    * Opt-in Max: absent, there is no Max button. Called at render; `null`
    * disables the button (no honest maximum, see `maxAfterReserve`).
@@ -42,7 +44,7 @@ export interface AmountFieldProps {
 }
 
 export function AmountField({
-  label, value, onChange, decimals, symbol, token, balance = null, balanceLabel = COPY.kit.poolBalance,
+  label, value, onChange, decimals, symbol, token, balance = null, balanceLabel = COPY.kit.poolBalance, balanceAction,
   max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
 }: AmountFieldProps) {
   const id = useId();
@@ -65,6 +67,7 @@ export function AmountField({
             {balanceLabel}: <span className="ui-figure">{balanceText(balance, decimals, symbol)}</span>
           </span>
         ) : null}
+        {balance !== null && balanceAction ? balanceAction : null}
         {max ? (
           <span className="ui-amount-quick">
             {half ? (

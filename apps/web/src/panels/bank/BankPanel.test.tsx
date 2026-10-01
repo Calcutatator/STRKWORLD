@@ -600,6 +600,11 @@ describe('BankPanel rendering', () => {
       const markup = render(panel, seam);
       expect(markup, mode).toContain(`<span class="ui-amount-balance">${COPY.kit.poolBalance}: <span class="ui-figure">100 STRK</span></span>`);
       expect(markup, mode).not.toContain('class="balance-total"');
+      // Its Refresh sits beside the balance line, and no empty card is left above.
+      expect(markup, mode).toContain(`aria-label="${COPY.balance.refreshLabel}">${COPY.balance.refreshShort}</button>`);
+      expect(markup, mode).not.toContain('class="panel-balance"');
+      // One primary at a time: nothing is queued, so there is no review button.
+      expect(markup, mode).not.toContain('class="review"');
       expect(markup, mode).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
       // Swap conventions stay at the Exchange.
       expect(markup, mode).not.toContain(COPY.kit.half);

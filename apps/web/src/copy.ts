@@ -159,6 +159,9 @@ export const COPY = freezeCopy({
     loading: 'Asking your wallet for your balance…',
     refresh: 'Show my balance',
     refreshAgain: 'Read it again',
+    /** D-091: beside the balance line on an amount field. */
+    refreshShort: 'Refresh',
+    refreshLabel: 'Refresh balance',
     changed:
       'Your balance has changed. Read it again whenever you want the new figure — STRKWORLD will not ask your wallet on its own.',
     /** D-091: the shipped wallet's one total per token, which Max now uses. */
