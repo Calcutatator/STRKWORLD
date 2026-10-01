@@ -11,7 +11,6 @@
   },
   "comment": "EXACT pins, all four together — the combination the official STRK20 integration skill tested. Never float one and pin the others; see AGENTS.md findings 2026-08-16. Bumped together to the Wallet API 0.10.4 set (shadow accounts) by D-077.",
   "dependencies": {
-    "@avnu/avnu-sdk": "4.2.0",
     "@starknet-io/get-starknet-discovery": "6.0.6",
     "@starknet-io/get-starknet-wallet-standard": "6.0.6",
     "@starknet-io/types-js": "0.10.4",

@@ -1,9 +1,8 @@
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from './endur.js';
 import type {
   PreparedArtifact,
-  PrivateRoute,
+  RelayRoute,
   RelayFee,
-  SwapAuthorizationBinding,
 } from './types.js';
 import { ApiFailure, isFelt, sameAddress } from './validation.js';
 
@@ -79,11 +78,10 @@ export function decodeServerActions(calldata: readonly string[]): ServerAction[]
 }
 
 export function validateServerActionRoute(
-  route: PrivateRoute,
+  route: RelayRoute,
   artifact: PreparedArtifact,
   fee: RelayFee,
   operationToken: string,
-  swap?: SwapAuthorizationBinding,
 ): void {
   const calldata = artifact.call.calldata ?? [];
   const output = artifact.proof.output;
@@ -132,36 +130,8 @@ export function validateServerActionRoute(
     if (transfers.length !== 2 || feeIndex < 0 || withdrawalIndex < 0) {
       throw new ApiFailure(400, 'Unshield route contains an unauthorized withdrawal.');
     }
-  } else if (route === 'stake') {
-    validateStakeActions(invokes, transfers, isFeeTransfer, operationToken);
   } else {
-    if (!swap) throw new ApiFailure(401, 'Swap authorization has no quote binding.');
-    if (invokes.length !== 1) {
-      throw new ApiFailure(400, 'Swap route must contain exactly one private executor call.');
-    }
-    const invoke = invokes[0]!;
-    if (!sameAddress(invoke.contract, swap.executor)) {
-      throw new ApiFailure(400, 'Swap executor does not match the authorized AVNU plan.');
-    }
-    if (
-      invoke.calldata.length !== swap.invokePrefix.length + 1 ||
-      swap.invokePrefix.some((felt, index) => !sameAddress(felt, invoke.calldata[index]!))
-    ) {
-      throw new ApiFailure(400, 'Swap calldata does not match the authorized AVNU plan.');
-    }
-    if (transfers.length !== 2) {
-      throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
-    }
-    const feeIndex = transfers.findIndex(isFeeTransfer);
-    const sellIndex = transfers.findIndex((action, index) =>
-      index !== feeIndex &&
-      sameAddress(action.to, swap.executor) &&
-      sameAddress(action.token, swap.sellToken) &&
-      action.amount === swap.sellAmount,
-    );
-    if (feeIndex < 0 || sellIndex < 0) {
-      throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
-    }
+    validateStakeActions(invokes, transfers, isFeeTransfer, operationToken);
   }
 }
 
@@ -195,8 +165,7 @@ function requireOneRecipient(actions: readonly ServerAction[]): void {
  * Endur staking (D-063). The one external invoke must be the pinned anonymizer
  * with `privacy_invoke(in_token, out_token, assets: u256, note_id)` calldata:
  * STRK — the authorized operation token — in, xSTRK out, a nonzero u256, and
- * the wallet-resolved note id, which is left unchecked as the swap leaves its
- * own. The only withdrawals allowed are the authorized relay fee and exactly
+ * the wallet-resolved note id, which is left unchecked. The only withdrawals allowed are the authorized relay fee and exactly
  * `assets` of STRK to the anonymizer, so the authorization cannot sponsor any
  * other call or move any other value.
  */

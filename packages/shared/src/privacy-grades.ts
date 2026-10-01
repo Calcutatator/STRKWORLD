@@ -151,15 +151,18 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     building: 'exchange',
     route: 'exchange.swap',
     grade: 'anonymous',
+    // D-084: the "executor" is now the player's swap stand-in address (a
+    // STRK20 shadow account for strkworld-swap), which persists across swaps.
+    // The disclosure below is D-024's frozen copy and is unchanged.
     observable:
-      'Unlinkable but not amount-confidential. The withdraw leg to the executor is a public event with a visible amount, and the swap runs on public AMM liquidity. Who traded is hidden; what and how much is not.',
+      'Unlinkable but not amount-confidential. The pool withdraws the sell amount to your swap stand-in address (a shadow account, the executor) as a public transfer with a visible amount; the stand-in approves and calls avnu\'s public exchange, and the bought amount is credited to an open note whose amount is plaintext. Every swap you make uses the same stand-in, so your swaps are linked to each other on-chain, though not to your wallet. Who traded is hidden; what and how much is not.',
     disclosure:
       'This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.',
     approvedBy: 'calc',
     approvedOn: '2026-08-16',
     rationale:
       'The AMM leg runs on public liquidity, so amounts cannot be hidden without rebuilding the DEX. Who traded is still hidden, which is the property that matters here.',
-    // AVNU's private executor creates the bought asset as an OPEN pool note.
+    // The shadow account settles the bought asset into an OPEN pool note (D-084).
     returnToPool: false,
   },
   {

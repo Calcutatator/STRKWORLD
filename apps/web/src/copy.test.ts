@@ -48,9 +48,9 @@ describe('shell copy', () => {
     expect(copy).not.toContain('Nothing was sent');
   });
 
-  it('says in plain words which actions need the unconfigured relay, and that nothing was sent (D-070, D-082)', () => {
+  it('says plainly that the unconfigured relay is needed and that nothing was sent (D-070, D-082, D-084)', () => {
     expect(COPY.errors['relay-not-configured']).toBe(
-      "Swaps need the private relay, which isn't set up on this site yet. Nothing was sent.",
+      "This needs the private relay, which isn't set up on this site yet. Nothing was sent.",
     );
     // Not a retry invitation, and not the network's fault.
     expect(COPY.errors['relay-not-configured']).not.toMatch(/try again|could not reach|wallet/i);

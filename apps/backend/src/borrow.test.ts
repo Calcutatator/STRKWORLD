@@ -684,7 +684,7 @@ describe('the Borrow read routes (D-083)', () => {
         getBorrowMarket,
         getBorrowPositions: vi.fn(),
       } as PoolRpcPort,
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     await expect(withReads.api.handle({ method: 'POST', path: BORROW_MARKET_PATH, body: { v: 1 } }))
       .resolves.toMatchObject({ status: 200 });
@@ -696,7 +696,7 @@ describe('the Borrow read routes (D-083)', () => {
     const without = createBackendRuntime(environment(), {
       paymaster: { buildFee: vi.fn(), submit: vi.fn() },
       rpc: { getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn(), getBorrowMarket: vi.fn() } as PoolRpcPort,
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     await expect(without.api.handle({ method: 'POST', path: BORROW_MARKET_PATH, body: { v: 1 } }))
       .resolves.toMatchObject({ status: 503 });
@@ -735,8 +735,6 @@ function environment(): Record<string, string> {
     BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
-    BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
   };

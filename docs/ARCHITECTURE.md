@@ -85,9 +85,9 @@ recorded approval *plus* player-facing disclosure, both stored in
 deviation renders a locked door — CI check 8 enforces this rather than
 trusting anyone to remember. A route that leaves player-held value sitting in
 public (`bridge.deposit`) must offer the next step back into the pool — the
-`returnToPool` property on the register entry (D-021). AVNU's private swap is
-the D-023 exception because its bought asset lands directly in an OPEN pool
-note.
+`returnToPool` property on the register entry (D-021). The swap is the
+exception because its bought asset lands directly in an OPEN pool note: since
+D-084 its shadow account settles it there in the same transaction.
 
 A custom anonymizer atomically receives pool input, calls the external
 protocol and returns the output to a pool note. It keeps the player's wallet

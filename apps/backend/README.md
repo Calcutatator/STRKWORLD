@@ -7,8 +7,10 @@ D-070, though the player still pays: each private transaction repays avnu from
 their shielded balance) or send privacy-sensitive RPC reads
 directly to a third party. This app owns the smallest server surface needed to
 submit eligible prepared Wallet API calls and proxy those reads. Since D-082
-the wallet submits unshield, transfer and stake itself, so the browser relays
-only a swap; the relay routes for the others remain here but are not called.
+the wallet submits unshield, transfer and stake itself, and since D-084 the
+swap too, so the browser relays nothing; the relay routes remain here but are
+not called. The swap's quote comes from avnu's keyless public API through this
+service (`POST /v1/swap/quote`).
 
 ## What this owns
 
@@ -50,7 +52,7 @@ for the building privacy-admission rule.
 ## Implemented core
 
 `BackendApi` is a framework-neutral, versioned handler for the exact seven
-operations the browser needs: pool-native fee build, quote-bound swap prepare,
+operations the browser needs: pool-native fee build, the keyless swap quote (D-084),
 prepared submission, pool config, recipient public key, receipt lookup and
 the Privacy Plaza's pool stats (D-076, below), plus the optional read-only
 degen token list (D-067, below) and the opt-in debug-log sink (D-069, below).
@@ -144,9 +146,10 @@ TTL, refreshed single-flight on its own 5 s timeout, and fails safe to the
 curated core alone, retried after a minute, whenever avnu cannot be reached.
 `GET /v1/degen/tokens` serves it; the request carries nothing (no body, and
 the edge refuses query strings), and the endpoint is shut whenever swap or
-degen mode is. A swap's tokens must be in `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS`,
-the curated core or the current list, checked at prepare and again at
-submission; a swap the static allowlist covers never consults the list.
+degen mode is. A swap quote's tokens must be in
+`BACKEND_ROUTE_SWAP_ALLOWED_TOKENS`, the curated core or the current list,
+checked on every quote; a swap the static allowlist covers never consults the
+list.
 
 Opt-in debug logs (D-069) are a test-deployment exception to D-014, off by
 default. Only `BACKEND_DEBUG_LOGS_ENABLED=true` opens `POST /v1/debug/logs`;
@@ -164,13 +167,21 @@ and ignores the private kill switch. The composition forwards only these
 lines from the backend's stdout (`deploy/fly/src/debug-lines.ts`). A launch
 never sets the flag.
 
-For AVNU swaps the server selects an exact-input quote and requests
-`quoteToCalls({ private: true })`. Its HMAC authorization additionally binds
-the sell/buy tokens, sell amount, dynamic executor, serialized executor calls
-and quote expiry. At submission the decoded proof must contain exactly that
-sell withdrawal, fee withdrawal and executor invocation; only the final
-wallet-resolved open-note id is variable. Generic fee requests cannot authorize
-the swap route.
+The swap (D-084) is never relayed: the wallet proves and submits it through
+the player's shadow account. `POST /v1/swap/quote` takes `{ v: 1, sellToken,
+buyToken, sellAmount, taker, slippageBps }`, admits the tokens as above and the
+slippage up to `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS`, and asks avnu's public
+`/swap/v3/quotes` and `/swap/v3/build` (no key, no integrator fee, no approve)
+for the taker, the player's swap stand-in (`avnu-swap-quotes.ts`). It answers
+the quote id, amounts and the one `multi_route_swap` call on the pinned
+exchange, which the browser checks again. It keeps its own aggregate window
+of 60 quotes a minute, spent only on admitted requests, besides a slot in the
+shared one, and a bucket per client (10 at once, one more every 6 s) keyed by
+a salted HMAC of the client's address (`client-key.ts`; the edge sends it as
+`x-strkworld-client`), reads avnu's answers as a stream cut off at 256 KB,
+logs and keeps
+nothing, and never touches the paymaster. The relay's fee and submission
+endpoints refuse `route: 'swap'` outright.
 
 Endur private staking (D-063) is the optional `stake` route, disabled by
 default: with no `BACKEND_ROUTE_STAKE_ENABLED` it is absent, and any other
@@ -197,8 +208,7 @@ before the queue, and startup fails unless it leaves the request deadline 5 s of
 headroom. Submissions are checked again after any wait against the current
 block, current pool proof-validity window, and current route/token allowlists;
 a stale or newly forbidden request is removed from the queue and can never
-relay later. Quote-bound swaps skip both delay and queuing: if the
-in-flight slot is unavailable they fail fast and must be re-quoted. Every
+relay later. Every
 request also has a configured deadline. The edge abort signal and deadline are
 propagated to AVNU and raw Starknet RPC, and timeout responses contain no
 request material. Kill switches, fee caps, a global aggregate rate limit and

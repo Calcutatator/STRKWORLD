@@ -51,6 +51,7 @@ describe('deterministic demo degen quotes', () => {
       minimumAmountOut: 99_500000000000000000n,
       slippageBps: 50,
       expiresAt: 4_102_444_800_000,
+      priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 0, sellUsd: 0n, expectedBuyUsd: 0n },
     });
     expect(batch.intents).toEqual([swap(STRK, LORDS, 10n * ONE_STRK, 99_500000000000000000n)]);
   });

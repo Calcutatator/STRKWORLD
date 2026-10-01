@@ -14,7 +14,7 @@ import {
   type PaymasterPort,
   type PoolRpcPort,
   type PreparedArtifact,
-  type SwapPlannerPort,
+  type SwapQuotePort,
 } from './index.js';
 import { createBackendRuntime, listenBackendServer } from './runtime.js';
 
@@ -25,17 +25,17 @@ vi.mock('@avnu/avnu-sdk', async (importOriginal) => ({
 }));
 
 /**
- * D-067 on the relay: the degen list endpoint, the swap route's widened
- * admission, and the fail-closed `BACKEND_DEGEN_*` group. The swap's own
- * checks (quote binding, protected minimum, fee authorization) are unchanged
- * and still apply to a degen swap.
+ * D-067 on the backend: the degen list endpoint, the swap route's widened
+ * admission, and the fail-closed `BACKEND_DEGEN_*` group. Since D-084 the
+ * swap is never relayed: the admission guards the keyless quote proxy, and
+ * the browser owns every other check.
  */
 
 const POOL = '0x123';
 const STRK = '0x4718';
 const OTHER = '0xabc';
 const FEE_RECIPIENT = '0x789';
-const EXECUTOR = '0x999';
+const TAKER = '0x5ad0';
 const LORDS = DEGEN_CURATED_CORE[0]!.address;
 const LIVE: DegenToken = Object.freeze({
   address: '0x075afe6402ad5a5c20dd25e10ec3b3986acaa647b77e4ae24b0cbc9a54a27a87',
@@ -78,14 +78,15 @@ function fixture(options: { degen?: DegenConfig | null; catalog?: DegenCatalogPo
     async getReceipt(hash) { return { transactionHash: hash }; },
     async getBlockNumber() { return 1_000; },
   };
-  const swapPlanner: SwapPlannerPort = {
-    prepare: vi.fn(async () => ({
+  const swapQuotes: SwapQuotePort = {
+    quote: vi.fn(async (input) => ({
       quoteId: 'quote-1',
-      buyAmount: 100n,
-      expiresAt: 2_000,
       chainId: '0x534e5f4d41494e',
-      executorAddress: EXECUTOR,
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+      sellToken: input.sellToken,
+      buyToken: input.buyToken,
+      sellAmount: input.sellAmount,
+      buyAmount: 100n,
+      calls: [{ contractAddress: '0x4270', entrypoint: 'multi_route_swap', calldata: ['0xaaa'] }],
     })),
   };
   const degen = options.degen === null ? undefined : { ...(options.degen ?? DEGEN) };
@@ -114,7 +115,7 @@ function fixture(options: { degen?: DegenConfig | null; catalog?: DegenCatalogPo
     rpc,
     authorizations: new MemoryAuthorizationCodec(),
     now: () => 1_000,
-    swapPlanner,
+    swapQuotes,
     ...(catalog ? { degenCatalog: catalog } : {}),
   });
   return {
@@ -122,7 +123,7 @@ function fixture(options: { degen?: DegenConfig | null; catalog?: DegenCatalogPo
     config,
     catalog,
     paymaster,
-    swapPlanner,
+    swapQuotes,
     submitted,
     setSnapshot(next: DegenCatalogSnapshot) { snapshot = next; },
   };
@@ -132,40 +133,11 @@ function list(api: BackendApi, body: unknown = null) {
   return api.handle({ method: 'GET', path: DEGEN_TOKENS_PATH, body });
 }
 
-function prepare(api: BackendApi, sellToken: string, buyToken: string, extra: Record<string, unknown> = {}) {
+function quote(api: BackendApi, sellToken: string, buyToken: string, extra: Record<string, unknown> = {}) {
   return api.handle({
     method: 'POST',
-    path: '/v1/private/swaps/prepare',
-    body: { v: 1, sellToken, buyToken, sellAmount: '20', minAmountOut: '90', slippageBps: 100, ...extra },
-  });
-}
-
-/** The pool call the wallet proves for an authorized swap: sell withdrawal, fee, executor invoke. */
-function swapArtifact(sellToken: string, buyToken: string): PreparedArtifact {
-  const invokeCalldata = [buyToken, '0x1', '0x111', '0x555', '0x1', '0xaaa', '0x777'];
-  const calldata = [
-    '0x3',
-    '0x3', EXECUTOR, sellToken, '0x14',
-    '0x3', FEE_RECIPIENT, STRK, '0x7',
-    '0xa', EXECUTOR, `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
-  ];
-  return {
-    call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
-    proof: { data: 'proof-data', output: ['0xc1', ...calldata], proof_facts: ['0x4'] },
-  };
-}
-
-async function preparedAuthorization(api: BackendApi, sellToken: string, buyToken: string): Promise<string> {
-  const response = await prepare(api, sellToken, buyToken);
-  expect(response.status).toBe(200);
-  return (response.body as { fee: { authorization: string } }).fee.authorization;
-}
-
-function submit(api: BackendApi, artifact: PreparedArtifact, feeAuthorization: string) {
-  return api.handle({
-    method: 'POST',
-    path: '/v1/private/submissions',
-    body: { v: 1, route: 'swap', artifact, feeAuthorization, proofValidityBlocks: 450 },
+    path: '/v1/swap/quote',
+    body: { v: 1, sellToken, buyToken, sellAmount: '20', taker: TAKER, slippageBps: 100, ...extra },
   });
 }
 
@@ -241,99 +213,72 @@ describe('the degen token list endpoint', () => {
   });
 });
 
-describe('degen swap admission', () => {
+describe('degen swap admission (D-067, on the quote proxy since D-084)', () => {
   it('admits a curated token only while degen mode is on', async () => {
     const off = fixture({ degen: null });
-    await expect(prepare(off.api, STRK, LORDS)).resolves.toMatchObject({
+    await expect(quote(off.api, STRK, LORDS)).resolves.toMatchObject({
       status: 400, body: { message: 'Swap token is not allowlisted.' },
     });
-    expect(off.swapPlanner.prepare).not.toHaveBeenCalled();
+    expect(off.swapQuotes.quote).not.toHaveBeenCalled();
 
     const on = fixture();
-    await expect(prepare(on.api, STRK, LORDS)).resolves.toMatchObject({ status: 200 });
-    await expect(prepare(on.api, LORDS, STRK)).resolves.toMatchObject({ status: 200 });
+    await expect(quote(on.api, STRK, LORDS)).resolves.toMatchObject({ status: 200 });
+    await expect(quote(on.api, LORDS, STRK)).resolves.toMatchObject({ status: 200 });
   });
 
   it('admits a token from the backend\'s own current live list, and nothing else', async () => {
-    const { api, swapPlanner } = fixture();
-    await expect(prepare(api, STRK, LIVE.address)).resolves.toMatchObject({ status: 200 });
-    await expect(prepare(api, LIVE.address, LORDS)).resolves.toMatchObject({ status: 200 });
-    await expect(prepare(api, STRK, STRANGER)).resolves.toMatchObject({
+    const { api, swapQuotes } = fixture();
+    await expect(quote(api, STRK, LIVE.address)).resolves.toMatchObject({ status: 200 });
+    await expect(quote(api, LIVE.address, LORDS)).resolves.toMatchObject({ status: 200 });
+    await expect(quote(api, STRK, STRANGER)).resolves.toMatchObject({
       status: 400, body: { message: 'Swap token is not allowlisted.' },
     });
-    await expect(prepare(api, STRANGER, LORDS)).resolves.toMatchObject({ status: 400 });
-    expect(swapPlanner.prepare).toHaveBeenCalledTimes(2);
+    await expect(quote(api, STRANGER, LORDS)).resolves.toMatchObject({ status: 400 });
+    expect(swapQuotes.quote).toHaveBeenCalledTimes(2);
   });
 
   it('lets nothing in the request widen the set', async () => {
-    const { api, swapPlanner } = fixture();
-    await expect(prepare(api, STRK, STRANGER, { degen: true })).resolves.toMatchObject({ status: 400 });
-    await expect(prepare(api, STRK, STRANGER, { allowedTokens: [STRANGER] })).resolves.toMatchObject({ status: 400 });
-    await expect(prepare(api, STRK, STRANGER, { tokens: [{ address: STRANGER, curated: true }] }))
+    const { api, swapQuotes } = fixture();
+    await expect(quote(api, STRK, STRANGER, { degen: true })).resolves.toMatchObject({ status: 400 });
+    await expect(quote(api, STRK, STRANGER, { allowedTokens: [STRANGER] })).resolves.toMatchObject({ status: 400 });
+    await expect(quote(api, STRK, STRANGER, { tokens: [{ address: STRANGER, curated: true }] }))
       .resolves.toMatchObject({ status: 400 });
-    expect(swapPlanner.prepare).not.toHaveBeenCalled();
+    expect(swapQuotes.quote).not.toHaveBeenCalled();
   });
 
   it('never consults the degen list for a swap the static allowlist already covers', async () => {
     const { api, catalog } = fixture();
-    await expect(prepare(api, STRK, OTHER)).resolves.toMatchObject({ status: 200 });
+    await expect(quote(api, STRK, OTHER)).resolves.toMatchObject({ status: 200 });
     expect(catalog.snapshot).not.toHaveBeenCalled();
   });
 
-  it('keeps every existing swap check for a degen swap', async () => {
-    const { api, swapPlanner, paymaster } = fixture();
-    // Slippage above route policy.
-    await expect(prepare(api, STRK, LORDS, { slippageBps: 301 })).resolves.toMatchObject({ status: 400 });
-    // A quote below the requested floor, the backend's protected-minimum guard.
-    vi.mocked(swapPlanner.prepare).mockResolvedValueOnce({
-      quoteId: 'thin', buyAmount: 89n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: EXECUTOR,
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
-    });
-    await expect(prepare(api, STRK, LORDS)).resolves.toMatchObject({ status: 409 });
-    // A fee over the route ceiling.
-    vi.mocked(paymaster.buildFee).mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 11n });
-    await expect(prepare(api, STRK, LORDS)).resolves.toMatchObject({ status: 400 });
-    // An expired quote.
-    vi.mocked(swapPlanner.prepare).mockResolvedValueOnce({
-      quoteId: 'stale', buyAmount: 100n, expiresAt: 1_000, chainId: '0x534e5f4d41494e', executorAddress: EXECUTOR,
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
-    });
-    await expect(prepare(api, STRK, LORDS)).resolves.toMatchObject({ status: 409 });
+  it('keeps the route\'s slippage ceiling for a degen swap', async () => {
+    const { api, swapQuotes } = fixture();
+    await expect(quote(api, STRK, LORDS, { slippageBps: 301 })).resolves.toMatchObject({ status: 400 });
+    expect(swapQuotes.quote).not.toHaveBeenCalled();
   });
 
-  it('relays an authorized degen swap in either direction', async () => {
-    const { api, submitted } = fixture();
-    const buy = await preparedAuthorization(api, STRK, LORDS);
-    await expect(submit(api, swapArtifact(STRK, LORDS), buy)).resolves.toMatchObject({ status: 200 });
-    const sell = await preparedAuthorization(api, LIVE.address, STRK);
-    await expect(submit(api, swapArtifact(LIVE.address, STRK), sell)).resolves.toMatchObject({ status: 200 });
-    expect(submitted).toHaveLength(2);
-  });
-
-  it('still binds the relay to the quoted tokens', async () => {
-    const { api, submitted } = fixture();
-    const authorization = await preparedAuthorization(api, STRK, LORDS);
-    // A proof that buys a different (even admitted) token does not match the plan.
-    await expect(submit(api, swapArtifact(STRK, LIVE.address), authorization)).resolves.toMatchObject({ status: 400 });
-    expect(submitted).toHaveLength(0);
-  });
-
-  it('refuses to relay once avnu has dropped the token, or degen mode is switched off', async () => {
+  it('quotes nothing once avnu has dropped the token, or degen mode is switched off', async () => {
     const dropped = fixture();
-    const authorization = await preparedAuthorization(dropped.api, STRK, LIVE.address);
+    await expect(quote(dropped.api, STRK, LIVE.address)).resolves.toMatchObject({ status: 200 });
     dropped.setSnapshot(liveSnapshot([]));
-    await expect(submit(dropped.api, swapArtifact(STRK, LIVE.address), authorization)).resolves.toMatchObject({
-      status: 401, body: { message: 'Fee authorization swap token is no longer allowlisted.' },
-    });
-    expect(dropped.paymaster.submit).not.toHaveBeenCalled();
+    await expect(quote(dropped.api, STRK, LIVE.address)).resolves.toMatchObject({ status: 400 });
 
     const switched = fixture();
-    const curated = await preparedAuthorization(switched.api, LORDS, STRK);
+    await expect(quote(switched.api, LORDS, STRK)).resolves.toMatchObject({ status: 200 });
     switched.config.degen!.enabled = false;
-    await expect(submit(switched.api, swapArtifact(LORDS, STRK), curated)).resolves.toMatchObject({
-      status: 401, body: { message: 'Fee authorization operation token is no longer allowlisted.' },
-    });
-    expect(switched.paymaster.submit).not.toHaveBeenCalled();
+    await expect(quote(switched.api, LORDS, STRK)).resolves.toMatchObject({ status: 400 });
+    expect(switched.swapQuotes.quote).toHaveBeenCalledTimes(1);
+  });
+
+  it('relays no swap at all, degen or not', async () => {
+    const { api, paymaster } = fixture();
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/fees',
+      body: { v: 1, route: 'swap', feeToken: STRK, operationToken: LORDS },
+    })).resolves.toMatchObject({ status: 400, body: { message: 'Swaps are not relayed.' } });
+    expect(paymaster.buildFee).not.toHaveBeenCalled();
   });
 
   it('widens the swap route only', async () => {
@@ -384,8 +329,6 @@ describe('the fail-closed BACKEND_DEGEN_* group', () => {
       BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
       BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
       BACKEND_ROUTE_SWAP_ENABLED: 'true',
-      BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-      BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
       BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
       BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
       ...overrides,
@@ -450,7 +393,7 @@ describe('the fail-closed BACKEND_DEGEN_* group', () => {
       rpc: {
         getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn(),
       },
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     const running = await listenBackendServer(runtime.server, { port: 0 });
     try {
@@ -475,7 +418,7 @@ describe('the fail-closed BACKEND_DEGEN_* group', () => {
       rpc: {
         getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn(),
       },
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     await expect(runtime.api.handle({ method: 'GET', path: DEGEN_TOKENS_PATH, body: null }))
       .resolves.toMatchObject({ status: 503, body: { message: 'Degen mode is disabled.' } });

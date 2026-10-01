@@ -157,7 +157,6 @@ function walletApiSeam() {
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission: gateway,
     supportedVersions: async () => ['0.10.3'],
     policy: {
       maxIntents: 1,

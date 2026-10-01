@@ -8,7 +8,6 @@ import {
   VESU_VSTRK_ASSET,
   WalletApiPrivacyOperations,
   type PoolReadClient,
-  type PrivateSubmissionGateway,
   type VaultPositionRow,
   type VaultRateRow,
   type VaultReadClient,
@@ -177,18 +176,9 @@ function fixture(options: {
       return state.rates as never;
     },
   };
-  const submission: PrivateSubmissionGateway = {
-    async estimate() {
-      throw new Error('the Vault is never relayed');
-    },
-    async submit() {
-      throw new Error('the Vault is never relayed');
-    },
-  };
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission,
     supportedVersions: async () => state.versions,
     policy: options.policy ?? vaultPolicy(),
     ...(options.withReads === false ? {} : { vault: reads }),
@@ -255,7 +245,6 @@ describe('Vault capability (D-077)', () => {
     const operations = new WalletApiPrivacyOperations({
       wallet: new Account() as unknown as WalletStrk20Account,
       pool: {} as PoolReadClient,
-      submission: {} as PrivateSubmissionGateway,
       supportedVersions: async () => ['0.10.4'],
       policy: vaultPolicy(),
     });

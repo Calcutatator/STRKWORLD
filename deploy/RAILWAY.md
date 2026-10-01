@@ -42,7 +42,7 @@ generated domain.
 |---|---|
 | `FEE_AUTHORIZATION_SECRET` | Required: 32+ random characters, for example the output of `openssl rand -hex 32`. |
 | `VITE_ENTRY_GATE_BYPASS` | Temporary, testing only. `true` lets a connected wallet into the city without the D-072 pool-balance check. Build arg; unset it before launch. |
-| `AVNU_PAYMASTER_API_KEY` | Optional, and unused by every player flow this build enables (D-082). Since D-082 the wallet proves and submits unshield, send and stake itself, as it does shield and the Vault, so none of them reaches the relay. Only the quote-bound swap still goes through the relay, and the browser never enables swap today; with swap enabled and no key, a swap answers `503 RELAY_NOT_CONFIGURED` (D-070). Get one at https://portal.avnu.fi: connect a deployed wallet and create a key. It is an access credential, not a budget: in private mode each transaction repays avnu itself, so Portal credits (which fund gasfree sponsorship) are not what these relays spend. |
+| `AVNU_PAYMASTER_API_KEY` | Leave unset: no player flow uses it (D-084). The wallet proves and submits shield, unshield, send, stake, the Vault and the swap itself (D-082, D-084), and the swap's quote comes from avnu's keyless public API through the backend. Only the backend's own relay endpoints, which no browser flow calls, would need it; without one they answer `503 RELAY_NOT_CONFIGURED` (D-070). |
 
 ### Runtime (public configuration)
 
@@ -64,7 +64,7 @@ generated domain.
 | `BACKEND_QUEUE_MAX_IN_FLIGHT` / `_MAX_QUEUED` | `4` / `64` |
 | `BACKEND_ROUTE_TRANSFER_ENABLED` / `_MAX_RELAY_FEE` / `_MAX_QUEUE_DELAY_MS` / `_ALLOWED_TOKENS` | `true` / `10000000000000000000` (10 STRK) / `0` / STRK |
 | `BACKEND_ROUTE_UNSHIELD_…` | the same four, with the same values |
-| `BACKEND_ROUTE_SWAP_ENABLED` / `_MAX_RELAY_FEE` / `_MAX_QUEUE_DELAY_MS` / `_ALLOWED_TOKENS` / `_MAX_SLIPPAGE_BPS` | `false` / `10000000000000000000` / `0` / STRK / `50` (the browser never enables swap today) |
+| `BACKEND_ROUTE_SWAP_ENABLED` / `_ALLOWED_TOKENS` / `_MAX_SLIPPAGE_BPS` | `false` / STRK / `50`, except for the swap probe below (D-084). These gate the keyless quote proxy only; `_MAX_RELAY_FEE` and `_MAX_QUEUE_DELAY_MS` are no longer read for swap. |
 
 Leave `BACKEND_ROUTE_STAKE_*` and `BACKEND_DEGEN_*` unset: both stay off (D-063,
 D-067).
@@ -87,8 +87,9 @@ Staking is on (D-085): the wallet submits it (D-082), so it needs no avnu
 key and no `BACKEND_ROUTE_STAKE_*` block, and its relay-fee value gates no
 quote. Unstaking is on beside it; see the Endur probe below. With shield
 enabled, the Bridge's D-061 reserve planner is on too. Leave
-`VITE_STRK20_VAULT_*` unset, except for the Vault probe below: unset, the
-Vault is the locked facade. Leave
+`VITE_STRK20_VAULT_*` and `VITE_STRK20_SWAP_*` unset, except for the Vault
+probe and the swap probe below: unset, the Vault is the locked facade and the
+Exchange stays locked. Leave
 `VITE_STRK20_BORROW_ENABLED` unset except for the Borrow counter probe below.
 
 ## After it deploys
@@ -107,7 +108,7 @@ Vault is the locked facade. Leave
    D-062's live evidence. The wallet submits the unshield itself (D-082), so
    it needs no avnu key. A `railway logs` line starting
    `[relay] AVNU_PAYMASTER_API_KEY is not set` names the backend's own relay
-   endpoints, which the browser now calls only for a swap.
+   endpoints, which no browser flow calls (D-084).
 
 ## The Vault probe (D-077, D-079, D-081)
 
@@ -228,6 +229,41 @@ its balances and the chain's clock), follows `BACKEND_GLOBAL_ENABLED`.
    amount, address or hash is logged.
 
 To switch either off, unset its variables and redeploy.
+
+## The swap probe (D-084)
+
+The Exchange swaps through the player's STRK20 shadow account for
+`strkworld-swap` (a different stand-in from the Vault's), against avnu's
+exchange contract, with avnu's keyless public quote fetched by the backend.
+No avnu key and no relay: the wallet proves and submits. Nobody has run a
+live shadow-account swap yet; this probe is that evidence.
+
+1. Set these and redeploy (the browser ones are compiled into the bundle and
+   declared as Docker build arguments):
+
+   | Variable | Value |
+   |---|---|
+   | `BACKEND_ROUTE_SWAP_ENABLED` | `true` |
+   | `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` | the same six as below |
+   | `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS` | `50` |
+   | `VITE_STRK20_SWAP_ENABLED` | `true` |
+   | `VITE_STRK20_SWAP_ALLOWED_TOKENS` | `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d,0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7,0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb,0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8,0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac,0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135` (STRK, ETH, USDC, USDT, WBTC, strkBTC) |
+   | `VITE_STRK20_SWAP_SLIPPAGE_BPS` | `50` (at most the backend's ceiling, or every quote is refused) |
+
+   Leave `VITE_STRK20_SWAP_DEGEN_ENABLED` and `BACKEND_DEGEN_*` unset for the
+   first probe; set both to open the degen floor afterwards.
+
+2. With a funded account on a wallet that reports Wallet API 0.10.4, keep
+   the pool fee (6 STRK) in the shielded balance besides the amount to sell.
+   At the Exchange: read the balance, swap a small amount of STRK for USDC,
+   check the review's protected minimum, confirm in the wallet, then read the
+   balance again: the USDC arrives as a pool note.
+3. On Voyager the transaction shows the pool withdrawing the STRK to the
+   stand-in, the stand-in's approve and `multi_route_swap` on avnu's exchange
+   (`0x04270219…b0f`), and the USDC returning to the pool. The player's wallet
+   address appears nowhere in it if the wallet relays its own submission.
+
+To lock it again, unset the variables and redeploy.
 
 ## Debug logs
 

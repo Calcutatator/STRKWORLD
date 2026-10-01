@@ -521,7 +521,7 @@ funds, and understands what was private and what was not.
 
 ## D-018 — Every financial building needs an approved private execution path
 
-**2026-08-16 · Accepted · amended by D-077 (a fourth approved route: the canonical STRK20 shadow-account anonymizer, which the Vault uses with no project-owned helper)**
+**2026-08-16 · Accepted · amended by D-077 (a fourth approved route: the canonical STRK20 shadow-account anonymizer, which the Vault uses with no project-owned helper) · the swap uses that route too since D-084**
 
 **Context.** A building is a themed interface to a wallet or protocol, not a
 separate financial system. That simplicity creates a dangerous ambiguity:
@@ -712,7 +712,7 @@ split or loses one of two transaction receipts.
 
 ## D-023 — AVNU swaps are server-planned, wallet-proven and quote-bound
 
-**2026-08-16 · Accepted · amends D-014, D-015 and D-018; partially supersedes D-021 · funded-evidence caveat qualified by D-028**
+**2026-08-16 · Accepted · amends D-014, D-015 and D-018; partially supersedes D-021 · funded-evidence caveat qualified by D-028 · superseded by D-084 (the swap is wallet-submitted through a shadow account, quoted by avnu's keyless public API through the backend; no server plan, relay or quote binding)**
 
 **Context.** The Exchange needs AVNU's dynamic private executor and paymaster,
 but the browser cannot hold the paymaster key and must never be allowed to turn
@@ -1475,7 +1475,7 @@ current registry and route state. Browser acceptance remains user-owned.
 
 ## D-041 — Prepared swaps expose sanitized quote review, not relay authority
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · narrow extension of the D-036 freeze · minimum-source rule superseded by D-042**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · narrow extension of the D-036 freeze · minimum-source rule superseded by D-042 · extended by D-084 (the review gains an oracle `priceCheck`; its quote expiry is STRKWORLD's own 30 s and is re-quoted at confirmation)**
 
 **Context.** The Exchange is the next substantive v1 Game Mode building. The
 source-derived Wallet API adapter already receives AVNU's expected buy amount
@@ -1537,7 +1537,7 @@ new decision.
 
 ## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked) · the ground floor keeps these six assets, but the degen floor's runtime catalog (a backend-fetched avnu list) is added by D-067**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked) · the ground floor keeps these six assets, but the degen floor's runtime catalog (a backend-fetched avnu list) is added by D-067 · the protected-minimum formula is kept by D-084, which sets the on-chain floor itself**
 
 **Context.** D-041 exposed the expected output, the typed intent's minimum,
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
@@ -2981,7 +2981,7 @@ in-game timing signal.
 
 ## D-067 — The degen floor swaps a curated core plus avnu's live community list
 
-**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting**
+**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting · amended by D-084 (the degen admission guards the keyless quote proxy, not a relay; the browser admits the list behind its own switch)**
 
 **Context.** The Exchange's new degen floor was asked to list "the degen mode
 listed tokens on Starknet that avnu has", and the user chose a combination of
@@ -3085,7 +3085,7 @@ flags unset.
 
 ## D-070 — The private relay needs an avnu Portal key
 
-**2026-09-28 · Accepted by the user (D-068's contingency) · supersedes D-068 in part (its keyless default) · extends D-036's frozen seam with a `relay-not-configured` failure kind · superseded in part by D-082 (unshield, transfer and stake are wallet-submitted and need no key; only swap is still relayed)**
+**2026-09-28 · Accepted by the user (D-068's contingency) · supersedes D-068 in part (its keyless default) · extends D-036's frozen seam with a `relay-not-configured` failure kind · superseded in part by D-082 (unshield, transfer and stake are wallet-submitted and need no key; only swap is still relayed) · superseded for the swap by D-084 (no player flow needs the key)**
 
 **Context.** On the live test site an unshield failed at its first step:
 `POST /api/v1/private/fees` answered 502 `UPSTREAM_FAILURE`. avnu's paymaster
@@ -4336,7 +4336,7 @@ an asset or a pool changes what it lends; until the list is regenerated with
 
 ## D-082 — The wallet submits unshield, send and stake; only swap is relayed
 
-**2026-10-01 · Accepted by the user · supersedes D-070 in part (the key is no longer needed for unshield, transfer or stake) · supersedes D-068 in part (those routes no longer reach the relay) · narrows D-066 and D-063 (their relayed routes, bar swap, are wallet-submitted) · changes no D-024 disclosure and no D-036 seam type**
+**2026-10-01 · Accepted by the user · supersedes D-070 in part (the key is no longer needed for unshield, transfer or stake) · supersedes D-068 in part (those routes no longer reach the relay) · narrows D-066 and D-063 (their relayed routes, bar swap, are wallet-submitted) · changes no D-024 disclosure and no D-036 seam type · superseded in part by D-084 (the swap is wallet-submitted too, through its own shadow account)**
 
 **Context.** The lead wants every player flow gasless with no avnu API key.
 Until now unshield, send and stake were proved by the wallet
@@ -4572,6 +4572,176 @@ on mainnet**: D-077's probe exercised vTokens only, never the pool
 contract, so the first live borrow on the Railway probe is the evidence for
 this route, and a revert there (for example the pool refusing the account as
 caller) stops it until a new decision.
+
+---
+
+## D-084 — The swap runs on its own shadow account, quoted by avnu's keyless API
+
+**2026-10-01 · Accepted by the user (the lead asked for private swaps at the Exchange and the degen floor with no avnu API key and no STRKWORLD relay) · supersedes D-023 (server-planned, relayed, quote-bound swaps) · supersedes D-082 in part (the swap is wallet-submitted too) · supersedes D-070 in part (no player flow needs the key) · amends D-067 (its admission guards the quote proxy) · keeps D-042's protected-minimum formula and D-024's swap disclosure · extends D-036's seam: `SwapReview.priceCheck`, the optional `acknowledgeUncheckedPrice` on `PreparedBatch.confirm`, and an optional `degen` on `WalletRoutePolicy.swap` · adds one public route to D-014's backend, which still logs nothing per request · D-083 is the borrowing route, which shares the shadow-account resolver**
+
+**Context.** D-082 left the swap the only relayed route: avnu's private-swap
+plan and its fee came together from avnu's paymaster, which refuses
+`sponsored_private` without a Portal key, so without one a swap answered
+`RELAY_NOT_CONFIGURED`. The lead wants every flow keyless. Read on
+2026-10-01:
+
+- avnu's public swap API needs no key. `GET
+  https://starknet.api.avnu.fi/swap/v3/quotes` (v1 and v2 answer too; the
+  pinned SDK 4.2.0 calls v3) answered 200 for STRK→USDC with
+  `takerAddress` set, `expiry: null`; `POST /swap/v3/build` with that
+  quote id, the taker, a slippage and `includeApprove: false` answered 200
+  with exactly one call, `multi_route_swap` on
+  `0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f`,
+  the taker as beneficiary. An unknown quote id is a 400. No key header was
+  sent on any request.
+- That exchange, read over `https://api.cartridge.gg/x/starknet/mainnet` at
+  block 15,726,513, runs class
+  `0x2ce861096e127f07859a9377472eb4855853b544422d1860e449dcb2ea7d236`, whose
+  ABI declares `multi_route_swap(sell_token_address, sell_token_amount:
+  u256, buy_token_address, buy_token_amount: u256, buy_token_min_amount:
+  u256, beneficiary, integrator_fee_amount_bps: u128,
+  integrator_fee_recipient, routes: Array<Route>)` and no account entry
+  point. Its source (avnu-labs/avnu-contracts-v2, `exchange.cairo`) checks
+  only that the beneficiary is the caller, pulls exactly the sell amount
+  with `transferFrom`, reverts below the floor, and asserts no residual
+  token is left in the exchange; its one callback, `locked`, is for its own
+  adapters and checks they are the caller. Nothing asks the caller for a
+  signature. avnu's own `PrivacySwapHelper` (class `0x3ff37c9d…cee`, ABI
+  `privacy_invoke` only, no account entry points) swapped through it as
+  taker and beneficiary in `0x5d3af396…dd67` (block 15,724,143,
+  SUCCEEDED). The shadow account class (`0x70e76435…78f`) exposes
+  `execute`, `initialize`, `owner` and `upgrade`. So a keyless shadow
+  account can call it. The exchange is upgradeable by its owner
+  (`upgrade_class`).
+- The anonymizer's source (starkware-libs/starknet-privacy,
+  `shadow_account_anonymizer.cairo`) snapshots each `Diff` note's balance
+  after the pool's withdraw and before the calls, applies one collect policy
+  to every open note, and asserts every note collects more than zero
+  (`ZERO_BALANCE`) and no `Diff` note goes negative (`NEGATIVE_DIFF`).
+
+**Decision.**
+
+- **The route.** A swap runs through the player's shadow account for
+  `dapp_name` `strkworld-swap`, nonce 0, through the canonical anonymizer
+  (D-018's fourth route, D-077). Its own name, never the Vault's or the Borrow
+  counter's, so swaps, Vault positions and loans are not linked on-chain; fixed for good, as it is part
+  of every player's swap stand-in address. The address is resolved exactly as
+  the Vault's and the Borrow counter's, through the one shared resolver
+  (`wallet-api/shadow-account.ts`, D-083), with its own dapp name.
+- **The actions** (`packages/privacy/src/swap.ts`): withdraw the sell amount
+  to the stand-in; one `OPEN` note of the bought token for the player; one
+  `shadow_account_invoke` that approves the exchange for exactly the sell
+  amount and calls `multi_route_swap` with the stand-in as beneficiary, no
+  integrator fee and STRKWORLD's floor, collecting `diff`. The head of the
+  calldata is built here from owned values; only avnu's route encoding comes
+  from the quote. No second note is opened for the sell token: the anonymizer
+  would refuse it when the swap spends everything (`ZERO_BALANCE`) and a
+  `diff` on it would go negative. None is needed: the exchange pulls exactly
+  the approved amount or reverts, and a reverted swap reverts the withdraw.
+- **The quote.** avnu's public `/swap/v3/quotes` and `/swap/v3/build` (no
+  key, no integrator fee, no approve), for the stand-in as taker, fetched by
+  the backend's thin proxy, `POST /v1/swap/quote`, so avnu never sees the
+  player's IP next to the stand-in and the amounts. The proxy admits the swap
+  route's tokens (its allowlist or, while on, the degen list, D-067) and a
+  slippage up to the route ceiling, checks the shape and the pinned exchange,
+  keeps its own aggregate window of 60 quotes a minute, spent only once a
+  request is admitted, besides a slot in the shared one, and a bucket per
+  client before that (10 at once, one more every 6 s), so no one client can
+  spend the window for everyone. The client key is an HMAC of the client's
+  address under a salt drawn at process start and never written: the public
+  edge computes it from the address Railway's proxy appends to
+  `X-Forwarded-For` and sends it on loopback as `x-strkworld-client` (the
+  backend trusts that header from a loopback peer only, and otherwise keys
+  the peer itself). Buckets are in memory, at most 10,000, least recently
+  used dropped, idle ones swept. It logs and keeps nothing else, and reads
+  avnu's answers as a stream, cancelled past 256 KB. The browser owns every field again
+  (`ownSwapQuote`): mainnet, its tokens and amount, one call, the pinned
+  exchange and entry point, its stand-in as beneficiary, no integrator fee,
+  a nonempty route starting at the sell token, an output a pool note holds.
+- **The independent price check.** A floor computed from avnu's own
+  expected output cannot catch a lying quote: a compromised avnu answer,
+  proxy or `AVNU_BASE_URL` could route through a pool at a fraction of fair
+  value and pass it. So before the review the expected output is held against
+  Pragma's on-chain spot price (oracle
+  `0x02a85bd6…875b`, `get_data_median(SpotEntry(pair))`), read by the browser
+  over the wallet's own RPC (`VITE_STARKNET_RPC_URL`), never through
+  STRKWORLD's backend or avnu. The read is one fixed batch of every pinned
+  pair (STRK, ETH, USDC, USDT, WBTC, wstETH, LORDS, EKUBO; read on
+  2026-10-01 with 3 to 11 sources each), so the node learns no pair, amount
+  or address; it is cached 30 s. With both tokens priced, an expected output
+  worth more than **3%** (`SWAP_PRICE_BOUND_BPS`, which covers avnu's 0.1%
+  fee, the slippage and ordinary impact) below the input is refused before
+  the player sees it. So is a floor (`minAmountOut`, what the chain lets a
+  route deliver) below the oracle value × (1 − 3% − slippage), checked
+  itself rather than inferred from the quote; with slippage capped at 3%
+  (300 bps, browser and backend), no checked swap can settle more than 6%
+  under the oracle. So is a pinned price that is missing, older than
+  30 minutes, from fewer than 3 sources, or unreadable: a token that should
+  be checked is never quietly left unchecked. A re-quote passes the same
+  check. A token with no feed (strkBTC, which answered zero, and most of the
+  degen floor) makes the swap `unchecked`: the review says "No independent
+  price check: …" and confirming needs an explicit tick, carried to the
+  adapter as `acknowledgeUncheckedPrice: true` (the adapter refuses without
+  it). That keeps the degen floor usable, which refusing would not; the
+  degen list is already the backend's curated, volume-floored set (D-067).
+  The review shows the implied rate and, where the oracle prices a side, its
+  USD value. `SwapReview` gains `priceCheck`, and `PreparedBatch.confirm`
+  the optional acknowledgement (D-036 extensions).
+- **Slippage and the floor.** The floor is D-042's protected minimum for the
+  build's fixed slippage, by exact bigint arithmetic, and is what the review
+  shows and the chain enforces. avnu's own build rounds the slippage up (a
+  live 430,588 at 1% carried 426,282; the protected minimum is 426,283), so
+  its floor is checked for shape only and not used.
+- **Expiry and re-quote.** avnu's quote has no expiry, so a quote stands for
+  30 s (`SWAP_QUOTE_TTL_MS`). Confirming an older one asks again before the
+  wallet is: the Exchange re-prepares, goes ahead when the fresh floor is at
+  or above the reviewed one, and otherwise shows the fresh figures with "The
+  quote expired and the price moved. Check the new protected minimum, then
+  confirm again." The fee the player reviewed stays the ceiling through a
+  re-quote, and the pair is the reviewed batch's. The adapter repeats the
+  check at confirmation for a quote
+  that ran out in between, and stops with nothing sent if the floor would
+  fall. The counter spaces quote requests 1.5 s apart: a press inside the
+  window waits, and a newer press replaces it.
+- **Submission.** The wallet proves and submits (`wallet_strk20InvokeTransaction`,
+  `wallet-submission.ts`), as for the Vault and every pool spend. `gasEstimate`
+  is `0` and the total the pool fee. A wallet without shadow accounts is
+  `shadow-accounts-unsupported` (now worded for the Vault and the Exchange),
+  never `unsupported-wallet`.
+- **The relayed swap is deleted**: the backend's `/v1/private/swaps/prepare`,
+  `AvnuSwapPlanner`, the authorization's swap binding and the server-action
+  swap check; the browser's `prepareSwap`, the SDK action builder and its
+  guards; the adapter's `submission` option. The relay's fee and submission
+  endpoints refuse `route: 'swap'`, its startup line no longer names swap,
+  and `BACKEND_ROUTE_SWAP_MAX_RELAY_FEE` / `_MAX_QUEUE_DELAY_MS` are no
+  longer read. The privacy package no longer depends on `@avnu/avnu-sdk`.
+  `AVNU_PAYMASTER_API_KEY` is used by no player flow.
+- **The switch.** The browser admits the swap only with
+  `VITE_STRK20_SWAP_ENABLED=true`, `VITE_STRK20_SWAP_ALLOWED_TOKENS` (1 to 16
+  tokens naming STRK) and `VITE_STRK20_SWAP_SLIPPAGE_BPS` (1 to 300, matching the backend's ceiling);
+  `VITE_STRK20_SWAP_DEGEN_ENABLED=true` also admits the degen floor's tokens,
+  which the backend vets. Anything else keeps the Exchange and the degen
+  floor locked; off in every environment file. The demo fake prices no relay
+  for a swap and refuses one from a wallet without shadow accounts.
+- **The register (D-020, D-024).** The grade stays `anonymous` and the
+  disclosure is unchanged. The `observable` now names the stand-in and that
+  every swap a player makes uses the same one.
+
+**Consequences.** A swap needs no avnu key and no STRKWORLD relay. Every
+swap a player makes sits on one public stand-in address, linked to each other
+though not to the wallet; D-024's frozen disclosure says the executor is
+visible but not that it persists, which the lead may want to amend. The
+sender is the wallet's choice, as D-082 found. avnu sees the stand-in, the
+tokens and amounts, and the backend's IP. A Pragma price that is wrong in the player's favour is not caught, and a
+pair Pragma does not price is only as good as avnu's quote, which the
+review says. The oracle read tells the wallet's RPC that someone opened the
+Exchange, at that time. The swap depends on avnu's exchange,
+which its owner can upgrade, and on avnu's public API staying keyless and
+within its rate limits; the proxy's window bounds what STRKWORLD asks of it.
+A stand-in that already held some of the bought token keeps it (`diff`).
+Unverified live: no shadow-account swap has been submitted yet; the first,
+on the Railway test deployment (`deploy/RAILWAY.md`, "The swap probe"), is
+the evidence, as the Vault's first supply was for D-077.
 
 ---
 

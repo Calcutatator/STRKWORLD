@@ -915,3 +915,104 @@ describe('Endur staking and unstaking admission (D-085)', () => {
     expect(dockerfile).toMatch(/^ARG VITE_STRK20_UNSTAKE_ENABLED$/m);
   });
 });
+
+describe('production swap admission (D-084)', () => {
+  const GROUND = EXCHANGE_CATALOG.map((asset) => asset.token);
+  const base = {
+    VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+    VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+    VITE_BACKEND_BASE_URL: '/api',
+  };
+  const swap = (overrides: Record<string, string | undefined> = {}) => ({
+    VITE_STRK20_SWAP_ENABLED: 'true',
+    VITE_STRK20_SWAP_ALLOWED_TOKENS: GROUND.join(','),
+    VITE_STRK20_SWAP_SLIPPAGE_BPS: '50',
+    ...overrides,
+  });
+  const transfer = {
+    VITE_STRK20_TRANSFER_ENABLED: 'true',
+    VITE_STRK20_TRANSFER_MAX_INTENTS: '3',
+    VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '5000000000000000',
+    VITE_STRK20_TRANSFER_ALLOWED_TOKENS: STRK_TOKEN,
+  };
+
+  it('stays denied by default', () => {
+    const { policy } = parseProductionWalletConfig(base);
+    expect(policy.enabledRoutes).not.toContain('swap');
+    expect(policy.allowedTokens.swap).toEqual([]);
+    expect(policy.swap).toBeUndefined();
+  });
+
+  it('opts into the shadow-account swap alone: mainnet, the build\'s slippage, no relay-fee authority', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...swap() });
+    expect(policy.enabledRoutes).toEqual(['swap']);
+    expect(policy.allowedTokens.swap).toEqual(GROUND);
+    expect(policy.swap).toEqual({ expectedChainId: '0x534e5f4d41494e', slippageBps: 50 });
+    expect(policy.maxRelayFee).toBe(0n);
+    expect(policy.maxIntents).toBe(1);
+    expect(Object.isFrozen(policy.swap)).toBe(true);
+    expect(Object.isFrozen(policy.allowedTokens.swap)).toBe(true);
+  });
+
+  it('admits a slippage up to the 3% cap (D-084)', () => {
+    expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_SLIPPAGE_BPS: '300' })).swap).toMatchObject({ slippageBps: 300 });
+  });
+
+  it('opens the degen floor only on the literal switch', () => {
+    expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: 'true' })).swap).toEqual({
+      expectedChainId: '0x534e5f4d41494e', slippageBps: 50, degen: true,
+    });
+    for (const value of ['false', 'TRUE', '1', undefined]) {
+      expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: value })).swap, String(value)).not.toHaveProperty('degen');
+    }
+  });
+
+  it('never narrows another route', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...swap() });
+    expect(policy.enabledRoutes).toEqual(['transfer', 'swap']);
+    expect(policy.maxIntents).toBe(3);
+    expect(policy.maxRelayFee).toBe(5_000_000_000_000_000n);
+  });
+
+  it.each([
+    ['a disabled flag', { VITE_STRK20_SWAP_ENABLED: 'false' }],
+    ['a non-literal flag', { VITE_STRK20_SWAP_ENABLED: 'TRUE' }],
+    ['missing tokens', { VITE_STRK20_SWAP_ALLOWED_TOKENS: undefined }],
+    ['a list without STRK', { VITE_STRK20_SWAP_ALLOWED_TOKENS: GROUND.slice(1).join(',') }],
+    ['a repeated token', { VITE_STRK20_SWAP_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+    ['a symbol', { VITE_STRK20_SWAP_ALLOWED_TOKENS: 'STRK' }],
+    ['an address beyond the contract range', { VITE_STRK20_SWAP_ALLOWED_TOKENS: `${STRK_TOKEN},0x${(1n << 251n).toString(16)}` }],
+    ['seventeen tokens', { VITE_STRK20_SWAP_ALLOWED_TOKENS: [STRK_TOKEN, ...Array.from({ length: 16 }, (_, index) => `0x${(index + 1).toString(16)}`)].join(',') }],
+    ['missing slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: undefined }],
+    ['zero slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '0' }],
+    ['a fractional slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '0.5' }],
+    ['a slippage above 3%', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '301' }],
+    ['the old 10% cap', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '1000' }],
+  ])('keeps the whole swap denied on %s, and touches no other route', (_label, override) => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...swap(override) });
+    expect(policy.enabledRoutes).toEqual(['transfer']);
+    expect(policy.allowedTokens.swap).toEqual([]);
+    expect(policy.swap).toBeUndefined();
+  });
+
+  it('ships the example environment with the swap denied, and documents the ground floor\'s six', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    const environment: Record<string, string> = {};
+    for (const line of example.split('\n')) {
+      const match = /^(VITE_[A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (match) environment[match[1]!] = match[2]!;
+    }
+    expect(environment.VITE_STRK20_SWAP_ENABLED).toBe('false');
+    expect(parseRoutePolicy(environment).enabledRoutes).not.toContain('swap');
+    const from = example.indexOf('# --- Browser swap admission');
+    const documented = /^# (0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+)$/m.exec(example.slice(from))?.[1];
+    expect(documented?.split(',')).toEqual(GROUND);
+  });
+
+  it('declares every swap variable as a Docker build argument, so Railway can pass them', () => {
+    const dockerfile = readFileSync(new URL('../../../../deploy/fly/Dockerfile', import.meta.url), 'utf8');
+    for (const name of ['VITE_STRK20_SWAP_ENABLED', 'VITE_STRK20_SWAP_ALLOWED_TOKENS', 'VITE_STRK20_SWAP_SLIPPAGE_BPS', 'VITE_STRK20_SWAP_DEGEN_ENABLED']) {
+      expect(dockerfile, name).toMatch(new RegExp(`^ARG ${name}$`, 'm'));
+    }
+  });
+});

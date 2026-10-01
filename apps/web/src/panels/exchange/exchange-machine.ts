@@ -26,6 +26,14 @@ export interface ExchangeReview {
   readonly networkCost: string;
   readonly total: string;
   readonly disclosures: readonly string[];
+  /** D-084: the quote's implied rate, "1 STRK ≈ 0.0431 USDC". */
+  readonly rate: string;
+  /** D-084: the oracle's USD value of each side, where the oracle prices it. */
+  readonly sellUsd: string | null;
+  readonly expectedBuyUsd: string | null;
+  /** D-084: whether an independent oracle price vouches for this quote. */
+  readonly priceCheck: 'checked' | 'unchecked';
+  readonly priceCheckNote: string;
 }
 
 export type ExchangeFlow =
@@ -58,6 +66,8 @@ export interface ExchangeState {
   readonly amountText: string;
   readonly notice: string | null;
   readonly flow: ExchangeFlow;
+  /** D-084: the player ticked "I understand" for a review with no independent price check. */
+  readonly priceAcknowledged: boolean;
 }
 
 export interface ExchangePanel {
@@ -75,6 +85,8 @@ export interface ExchangePanel {
   confirm(signal?: AbortSignal): Promise<void>;
   cancelPrepared(): void;
   acknowledge(): void;
+  /** D-084: the player's acknowledgement that the reviewed swap has no independent price check. */
+  acknowledgeUncheckedPrice(acknowledged: boolean): void;
 }
 
 export function createExchangePanel(options: {
@@ -91,12 +103,24 @@ export function createExchangePanel(options: {
    * every check below are the same.
    */
   catalog?: ExchangeCatalogPort;
+  /**
+   * D-084: the least time between two quote requests from this counter, so
+   * repeated Review presses never hammer avnu's rate-limited public API. A
+   * press inside the window waits out the rest of it, and a newer press
+   * replaces a waiting one. `QUOTE_SPACING_MS` by default.
+   */
+  quoteSpacingMs?: number;
+  /** How the counter waits out the quote spacing; a test passes its own. */
+  sleep?: (ms: number) => Promise<void>;
 }): ExchangePanel {
   const { operations, receipts, onError } = options;
   const feeTolerance = options.feeTolerance ?? 0n;
   const now = options.now ?? Date.now;
   const register = options.register ?? PRIVACY_REGISTER;
   const catalogPort = options.catalog;
+  const quoteSpacingMs = options.quoteSpacingMs ?? QUOTE_SPACING_MS;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+  let lastQuoteAt: number | null = null;
   const fresh = () => initialState(register, catalogPort !== undefined);
   const stateStore = createStore<ExchangeState>(freezeExchangeState(fresh()));
   const store: ReadableStore<ExchangeState> = Object.freeze({
@@ -167,6 +191,41 @@ export function createExchangePanel(options: {
     patch({ flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery } });
   };
 
+  /**
+   * Ask for one swap's quote and own its review, or null for a review that
+   * does not describe what was asked. The batch is the caller's to keep or
+   * discard.
+   */
+  const quote = async (sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, signal?: AbortSignal): Promise<{ batch: PreparedBatch; summary: ExchangeReview } | null> => {
+    // 1 is a request sentinel only. It never reaches the player-facing review.
+    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n }], signal);
+    const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
+    const review = batch.swapReview;
+    if (!validReview(intent, review, sell, buy, amountIn, now())) {
+      batch.discard();
+      return null;
+    }
+    const safeReview = review!;
+    const fee = (amount: bigint) => formatTokenAmountExact(amount, 18) + ' STRK';
+    const summary: ExchangeReview = {
+      sell: `${formatTokenAmountExact(intent.amountIn, sell.decimals)} ${sell.symbol}`,
+      expectedBuy: `${formatTokenAmountExact(safeReview.expectedAmountOut, buy.decimals)} ${buy.symbol}`,
+      protectedMinimum: `${formatTokenAmountExact(safeReview.minimumAmountOut, buy.decimals)} ${buy.symbol}`,
+      slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
+      expiresAt: new Date(safeReview.expiresAt).toISOString(),
+      poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
+      disclosures: disclosuresForIntents(batch.intents, register),
+      rate: `1 ${sell.symbol} ≈ ${formatRate((safeReview.expectedAmountOut * 10n ** BigInt(sell.decimals)) / intent.amountIn, buy.decimals)} ${buy.symbol}`,
+      sellUsd: formatUsd(safeReview.priceCheck.sellUsd),
+      expectedBuyUsd: formatUsd(safeReview.priceCheck.expectedBuyUsd),
+      priceCheck: safeReview.priceCheck.status,
+      priceCheckNote: safeReview.priceCheck.status === 'checked'
+        ? priceCheckedNote(safeReview.priceCheck.shortfallBps ?? 0, safeReview.priceCheck.boundBps)
+        : COPY.exchange.priceUnchecked,
+    };
+    return { batch, summary };
+  };
+
   return Object.freeze<ExchangePanel>({
     store,
     async open(signal) {
@@ -226,60 +285,80 @@ export function createExchangePanel(options: {
       if (amountIn === null || amountIn <= 0n) { patch({ notice: COPY.notices.badAmount }); return; }
       const id = start(); discard(); patch({ flow: { name: 'preparing' }, notice: null });
       try {
-        // 1 is a request sentinel only. It never reaches the player-facing review.
-        const batch = await operations.prepare([{ kind: 'swap', tokenIn: state.sell.token, tokenOut: state.buy.token, amountIn, minAmountOut: 1n }], signal);
-        if (!live(id)) { batch.discard(); return; }
-        const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
-        const review = batch.swapReview;
-        if (!validReview(intent, review, state.sell, state.buy, amountIn, now())) {
-          batch.discard();
+        // D-084: at most one quote per spacing window. A press inside it
+        // waits out the rest; a newer press replaces this one meanwhile.
+        const wait = lastQuoteAt === null ? 0 : lastQuoteAt + quoteSpacingMs - now();
+        if (wait > 0) {
+          await sleep(Math.min(wait, quoteSpacingMs));
+          if (!live(id)) return;
+        }
+        lastQuoteAt = now();
+        const quoted = await quote(state.sell, state.buy, amountIn, signal);
+        if (!live(id)) { quoted?.batch.discard(); return; }
+        if (!quoted) {
           patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
           return;
         }
-        const safeReview = review!;
-        prepared = batch;
-        const fee = (amount: bigint) => formatTokenAmountExact(amount, 18) + ' STRK';
-        const summary: ExchangeReview = {
-          sell: `${formatTokenAmountExact(intent.amountIn, state.sell.decimals)} ${state.sell.symbol}`,
-          expectedBuy: `${formatTokenAmountExact(safeReview.expectedAmountOut, state.buy.decimals)} ${state.buy.symbol}`,
-          protectedMinimum: `${formatTokenAmountExact(safeReview.minimumAmountOut, state.buy.decimals)} ${state.buy.symbol}`,
-          slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
-          expiresAt: new Date(safeReview.expiresAt).toISOString(),
-          poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
-          disclosures: disclosuresForIntents(batch.intents, register),
-        };
-        patch({ flow: { name: 'review', summary } });
+        prepared = quoted.batch;
+        patch({ flow: { name: 'review', summary: quoted.summary }, priceAcknowledged: false });
       } catch (error) { fail(error, id); }
     },
     async confirm(signal) {
       if (!gate()) return;
-      const state = store.getState(); const batch = prepared;
+      const state = store.getState(); let batch = prepared;
       if (state.flow.name !== 'review' || !batch) return;
-      const id = start(); const summary = state.flow.summary;
-      if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt) || batch.swapReview.expiresAt <= now()) {
+      if (state.flow.summary.priceCheck === 'unchecked' && !state.priceAcknowledged) {
+        patch({ notice: COPY.exchange.acknowledgeFirst });
+        return;
+      }
+      const acknowledgeUncheckedPrice = state.flow.summary.priceCheck === 'unchecked' && state.priceAcknowledged;
+      const id = start(); let summary = state.flow.summary;
+      // The fee the player reviewed stays the ceiling, even after a re-quote.
+      const reviewedTotal = batch.totalCost;
+      if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt)) {
         discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } }); return;
       }
       patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
       try {
+        if (batch.swapReview.expiresAt <= now()) {
+          // D-084: a quote that ran out is asked for again before the wallet
+          // is. A fresh floor at or above the reviewed one goes ahead; a lower
+          // one goes back to review with the new figures.
+          const reviewedFloor = batch.swapReview.minimumAmountOut;
+          const sell = store.getState().sell; const buy = store.getState().buy;
+          const intent = batch.intents[0];
+          // The pair is the reviewed batch's, never whatever the counter shows now.
+          const reviewedPair = intent?.kind === 'swap' && sell && buy
+            && sameAddress(sell.token, intent.tokenIn) && sameAddress(buy.token, intent.tokenOut);
+          lastQuoteAt = now();
+          const fresh = reviewedPair ? await quote(sell!, buy!, intent.amountIn, signal) : null;
+          if (!live(id)) { fresh?.batch.discard(); return; }
+          if (!fresh) {
+            discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } }); return;
+          }
+          discard();
+          prepared = fresh.batch;
+          if (fresh.batch.swapReview!.minimumAmountOut < reviewedFloor) {
+            patch({ flow: { name: 'review', summary: fresh.summary }, notice: COPY.exchange.requoted, priceAcknowledged: false });
+            return;
+          }
+          batch = fresh.batch; summary = fresh.summary;
+          patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
+        }
         const pool = await operations.poolConfig(signal);
         if (!live(id)) return;
-        if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt) || batch.swapReview.expiresAt <= now()) {
-          discard();
-          patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
-          return;
-        }
         if (!options.canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;
         }
-        if (pool.feeAmount + batch.gasEstimate > batch.totalCost + feeTolerance) { discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' } }); return; }
+        if (pool.feeAmount + batch.gasEstimate > reviewedTotal + feeTolerance) { discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' } }); return; }
         if (!options.canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;
         }
         signingOwner = id;
         signingBatch = batch;
-        const result = await batch.confirm({ feeCeiling: batch.totalCost + feeTolerance, signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
+        const result = await batch.confirm({ feeCeiling: reviewedTotal + feeTolerance, ...(acknowledgeUncheckedPrice ? { acknowledgeUncheckedPrice: true } : {}), signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
         if (signingOwner === id) {
           signingOwner = null;
           signingBatch = null;
@@ -308,6 +387,11 @@ export function createExchangePanel(options: {
       }
     },
     cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); },
+    acknowledgeUncheckedPrice(acknowledged) {
+      const flow = store.getState().flow;
+      if (flow.name !== 'review' || flow.summary.priceCheck !== 'unchecked') return;
+      patch({ priceAcknowledged: acknowledged === true, notice: null });
+    },
     acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); } },
   });
 
@@ -317,11 +401,18 @@ export function createExchangePanel(options: {
   }
 }
 
+/**
+ * D-084: the least time between two quote requests from one counter. avnu's
+ * public API rate-limits by caller, and the backend asks it for every player,
+ * so the counter never asks faster than this however often Review is pressed.
+ */
+export const QUOTE_SPACING_MS = 1_500;
+
 /** The ground floor's fixed six (D-042): always ready, never loaded. */
 const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });
 
 function initialState(register: readonly RouteGrade[], loaded: boolean): ExchangeState {
-  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' } };
+  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false };
 }
 
 /** The listed assets, or none until a loaded list is ready. */
@@ -424,5 +515,40 @@ function freezeExchangeState(state: ExchangeState): ExchangeState {
 }
 
 function validReview(intent: Intent | undefined, review: PreparedBatch['swapReview'], sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, now: number): intent is Extract<Intent, { kind: 'swap' }> {
-  return !!intent && intent.kind === 'swap' && !!review && sameAddress(intent.tokenIn, sell.token) && sameAddress(intent.tokenOut, buy.token) && intent.amountIn === amountIn && review.minimumAmountOut === intent.minAmountOut && intent.minAmountOut > 0n && typeof review.expectedAmountOut === 'bigint' && review.expectedAmountOut > 0n && review.minimumAmountOut <= review.expectedAmountOut && Number.isSafeInteger(review.slippageBps) && review.slippageBps > 0 && review.slippageBps <= 10_000 && Number.isSafeInteger(review.expiresAt) && review.expiresAt > now;
+  return !!intent && intent.kind === 'swap' && !!review && sameAddress(intent.tokenIn, sell.token) && sameAddress(intent.tokenOut, buy.token) && intent.amountIn === amountIn && review.minimumAmountOut === intent.minAmountOut && intent.minAmountOut > 0n && typeof review.expectedAmountOut === 'bigint' && review.expectedAmountOut > 0n && review.minimumAmountOut <= review.expectedAmountOut && Number.isSafeInteger(review.slippageBps) && review.slippageBps > 0 && review.slippageBps <= 10_000 && Number.isSafeInteger(review.expiresAt) && review.expiresAt > now && validPriceCheck(review.priceCheck);
+}
+
+/** D-084: a well-formed price check; a `checked` one sits within its own bound. */
+function validPriceCheck(check: unknown): boolean {
+  if (!check || typeof check !== 'object') return false;
+  const { status, boundBps, shortfallBps, sellUsd, expectedBuyUsd } = check as Record<string, unknown>;
+  const usd = (value: unknown) => value === undefined || (typeof value === 'bigint' && value >= 0n);
+  if (!Number.isSafeInteger(boundBps) || (boundBps as number) <= 0 || !usd(sellUsd) || !usd(expectedBuyUsd)) return false;
+  if (status === 'unchecked') return true;
+  return status === 'checked' && Number.isSafeInteger(shortfallBps) && (shortfallBps as number) <= (boundBps as number);
+}
+
+function priceCheckedNote(shortfallBps: number, boundBps: number): string {
+  if (shortfallBps <= 0) return COPY.exchange.priceCheckedAbove;
+  return COPY.exchange.priceCheckedBelow
+    .replace('{shortfall}', (shortfallBps / 100).toFixed(2))
+    .replace('{bound}', String(boundBps / 100));
+}
+
+/** At most eight decimal places of a rate, trailing zeros dropped. */
+function formatRate(value: bigint, decimals: number): string {
+  const exact = formatTokenAmountExact(value, decimals);
+  const [whole, fraction] = exact.split('.');
+  if (!fraction) return exact;
+  const trimmed = fraction.slice(0, 8).replace(/0+$/, '');
+  return trimmed ? `${whole}.${trimmed}` : whole!;
+}
+
+/** An 8-decimal USD value as "≈ $1,234.56", "< $0.01", or null when the oracle gave none. */
+function formatUsd(value: bigint | undefined): string | null {
+  if (value === undefined || value <= 0n) return null;
+  const cents = (value + 500_000n) / 1_000_000n;
+  if (cents === 0n) return '< $0.01';
+  const dollars = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `≈ $${dollars}.${(cents % 100n).toString().padStart(2, '0')}`;
 }

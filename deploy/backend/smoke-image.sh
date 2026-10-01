@@ -90,8 +90,6 @@ owned_id=$(docker container create --name "$name" --network none \
   --env BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS=1 \
   --env BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS=0x2 \
   --env BACKEND_ROUTE_SWAP_ENABLED=false \
-  --env BACKEND_ROUTE_SWAP_MAX_RELAY_FEE=0 \
-  --env BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS=0 \
   --env BACKEND_ROUTE_SWAP_ALLOWED_TOKENS=0x2 \
   --env BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS=1 \
   "$image") || fail 'container creation failed'

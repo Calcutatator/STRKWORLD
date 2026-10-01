@@ -13,6 +13,7 @@ import type {
 } from '../operations.js';
 import { PrivacyError, type Address } from '../types.js';
 import { BackendPrivacyClient } from './backend-client.js';
+import { PragmaPriceReader } from './pragma-prices.js';
 import { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
 import { mapWalletError } from './errors.js';
 import { WalletApiPrivacyOperations } from './operations.js';
@@ -596,6 +597,9 @@ export function createProductionWalletSession(
 ): WalletSession {
   const discovery = injectedDiscovery ?? productionDiscovery();
   const backend = new BackendPrivacyClient(options.backendBaseUrl);
+  // D-084: the swap's oracle check reads Pragma over the wallet's own RPC,
+  // never through the backend that also relays avnu's quote.
+  const swapPrices = new PragmaPriceReader(options.rpcUrl);
   return createWalletSession(options, {
     discovery,
     async connectWallet(handle) {
@@ -634,10 +638,14 @@ export function createProductionWalletSession(
         createOperations: (policy) => new WalletApiPrivacyOperations({
           wallet: connected,
           pool: backend,
-          submission: backend,
+          // D-084: avnu's keyless swap quotes, through the same backend, and
+          // their independent check: Pragma over the wallet's own RPC.
+          swapQuotes: backend,
+          swapPrices,
           supportedVersions: createSupportedVersionsReader(wallet),
           policy,
-          // D-077: the Vault's two public reads, through the same backend.
+          // D-077: the Vault's two public reads, through the same backend; the
+          // swap resolves its own stand-in address through the first (D-084).
           vault: backend,
           // D-083: the Borrow counter's reads, through the same backend.
           borrow: backend,
@@ -793,10 +801,15 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (swap !== undefined) {
     const expectedChainId = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId');
     const slippageBps = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps');
-    if (!isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000) {
+    // Optional (D-084): only exactly `true` opens the degen floor's tokens.
+    const degen = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>['degen']>(swap, 'degen');
+    if (
+      !isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000
+      || (degen !== undefined && typeof degen !== 'boolean')
+    ) {
       throw invalidPolicy();
     }
-    ownedSwap = Object.freeze({ expectedChainId, slippageBps });
+    ownedSwap = Object.freeze({ expectedChainId, slippageBps, ...(degen === true ? { degen: true } : {}) });
   }
   return Object.freeze({
     maxIntents,
@@ -942,7 +955,7 @@ function ownPreparedBatch(
       if (!hasOwnDataProperties(options, ['feeCeiling'])) {
         throw new PrivacyError('unknown', 'The confirmation options are invalid.');
       }
-      for (const optional of ['onProgress', 'signal'] as const) {
+      for (const optional of ['onProgress', 'signal', 'acknowledgeUncheckedPrice'] as const) {
         const descriptor = Object.getOwnPropertyDescriptor(options, optional);
         if (descriptor && !('value' in descriptor)) {
           throw new PrivacyError('unknown', 'The confirmation options are invalid.');
@@ -952,6 +965,8 @@ function ownPreparedBatch(
         feeCeiling: options.feeCeiling,
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
+        // D-084: only exactly `true` acknowledges an unchecked swap price.
+        ...(options.acknowledgeUncheckedPrice === true ? { acknowledgeUncheckedPrice: true } : {}),
       };
       if (discarded) {
         throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
@@ -1379,7 +1394,7 @@ function validWarning(value: unknown): boolean {
 }
 
 function ownSwapReview(value: unknown, prepared: PreparedBatch): NonNullable<PreparedBatch['swapReview']> {
-  if (!hasOwnDataProperties(value, ['expectedAmountOut', 'minimumAmountOut', 'slippageBps', 'expiresAt'])) {
+  if (!hasOwnDataProperties(value, ['expectedAmountOut', 'minimumAmountOut', 'slippageBps', 'expiresAt', 'priceCheck'])) {
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
   }
@@ -1394,11 +1409,24 @@ function ownSwapReview(value: unknown, prepared: PreparedBatch): NonNullable<Pre
     || review.slippageBps <= 0
     || !Number.isSafeInteger(review.expiresAt)
     || review.expiresAt <= 0
+    || !validPriceCheck(review.priceCheck)
   ) {
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
   }
-  return Object.freeze({ ...review });
+  return Object.freeze({ ...review, priceCheck: Object.freeze({ ...review.priceCheck }) });
+}
+
+/** D-084: a price check is `checked` with both USD values and a shortfall within its bound, or `unchecked`. */
+function validPriceCheck(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const check = value as Record<string, unknown>;
+  const usd = (amount: unknown) => amount === undefined || (typeof amount === 'bigint' && amount >= 0n);
+  if (!Number.isSafeInteger(check.boundBps) || (check.boundBps as number) <= 0 || !usd(check.sellUsd) || !usd(check.expectedBuyUsd)) return false;
+  if (check.status === 'unchecked') return check.shortfallBps === undefined;
+  return check.status === 'checked'
+    && typeof check.sellUsd === 'bigint' && typeof check.expectedBuyUsd === 'bigint'
+    && Number.isSafeInteger(check.shortfallBps) && (check.shortfallBps as number) <= (check.boundBps as number);
 }
 
 function denseDataArray(value: unknown): value is unknown[] {

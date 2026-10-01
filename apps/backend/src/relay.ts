@@ -1,4 +1,4 @@
-import type { BackendConfig, PrivateRoute } from './types.js';
+import type { BackendConfig, RelayRoute } from './types.js';
 
 /**
  * The private relay without an avnu Portal key (D-070).
@@ -24,8 +24,12 @@ export class RelayNotConfiguredError extends Error {
   }
 }
 
-/** Every private route goes through avnu's paymaster, for its fee and its submission. */
-export const RELAYED_ROUTES = Object.freeze(['transfer', 'unshield', 'swap', 'stake'] as const satisfies readonly PrivateRoute[]);
+/**
+ * Every route the relay serves goes through avnu's paymaster, for its fee and
+ * its submission. A swap is not one of them (D-084): the wallet submits it,
+ * and its quote comes from avnu's keyless public API through this service.
+ */
+export const RELAYED_ROUTES = Object.freeze(['transfer', 'unshield', 'stake'] as const satisfies readonly RelayRoute[]);
 
 /**
  * The enabled routes this deployment refuses for want of a key. None while a
@@ -35,7 +39,7 @@ export const RELAYED_ROUTES = Object.freeze(['transfer', 'unshield', 'swap', 'st
 export function refusedRelayRoutes(
   config: Pick<BackendConfig, 'globalEnabled' | 'routes'>,
   keyConfigured: boolean,
-): readonly PrivateRoute[] {
+): readonly RelayRoute[] {
   if (keyConfigured || !config.globalEnabled) return Object.freeze([]);
   return Object.freeze(RELAYED_ROUTES.filter((route) => config.routes[route]?.enabled === true));
 }
@@ -44,14 +48,14 @@ export function refusedRelayRoutes(
  * The one line the relay writes at startup when it will refuse routes, or null.
  * Once per process, never per request (D-014), and it names routes only.
  */
-export function relayStartupNotice(refused: readonly PrivateRoute[]): string | null {
+export function relayStartupNotice(refused: readonly RelayRoute[]): string | null {
   if (refused.length === 0) return null;
   return `[relay] AVNU_PAYMASTER_API_KEY is not set: ${refused.join(', ')} will answer 503 ${RELAY_NOT_CONFIGURED_CODE} until it is (D-070).`;
 }
 
-const ROUTE = '(?:transfer|unshield|swap|stake)';
+const ROUTE = '(?:transfer|unshield|stake)';
 const NOTICE_LINE = new RegExp(
-  `^\\[relay\\] AVNU_PAYMASTER_API_KEY is not set: ${ROUTE}(?:, ${ROUTE}){0,3} will answer 503 ${RELAY_NOT_CONFIGURED_CODE} until it is \\(D-070\\)\\.$`,
+  `^\\[relay\\] AVNU_PAYMASTER_API_KEY is not set: ${ROUTE}(?:, ${ROUTE}){0,2} will answer 503 ${RELAY_NOT_CONFIGURED_CODE} until it is \\(D-070\\)\\.$`,
 );
 
 /**

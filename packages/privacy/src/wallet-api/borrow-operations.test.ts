@@ -13,7 +13,6 @@ import {
   type BorrowPositionRow,
   type BorrowReadClient,
   type PoolReadClient,
-  type PrivateSubmissionGateway,
   type VaultReadClient,
   type VaultStage,
   type WalletRoutePolicy,
@@ -173,14 +172,9 @@ function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = 
     },
     async vaultRates() { return []; },
   };
-  const submission: PrivateSubmissionGateway = {
-    async estimate() { throw new Error('the borrow counter is never relayed'); },
-    async submit() { throw new Error('the borrow counter is never relayed'); },
-  };
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission,
     supportedVersions: async () => ['0.10.4'],
     policy: options.policy ?? borrowPolicy(),
     vault,
