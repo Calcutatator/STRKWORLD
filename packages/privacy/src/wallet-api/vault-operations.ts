@@ -22,6 +22,7 @@ import {
 import { compareSemver, parseSemver, type Semver } from './semver.js';
 import {
   ShadowAccountResolver,
+  assertAmount,
   emitStage,
   hasCommitmentMethod,
   isAbortSignalLike,
@@ -394,12 +395,6 @@ function rowFor(rows: readonly unknown[], market: VaultMarket, message: string, 
 
 function redeemableOf(read: PositionRead): bigint {
   return read.maxWithdraw < read.assets ? read.maxWithdraw : read.assets;
-}
-
-function assertAmount(amount: unknown): asserts amount is bigint {
-  if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
-    throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
-  }
 }
 
 function ownCallOptions(options: VaultCallOptions | undefined): {

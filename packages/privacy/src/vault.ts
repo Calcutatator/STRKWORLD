@@ -190,8 +190,9 @@ const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
  * a nonce (the Vault's, 0, unless told otherwise), derived as the anonymizer
  * derives it. The anonymizer's view is the authority; this is the
  * independent check that a relay or a node cannot redirect a withdraw leg to
- * an address of its choosing. The borrow counter's account (D-083) is a
- * different partial commitment, for its own dapp name, at the same nonce.
+ * an address of its choosing. The borrow counter's account (D-083) and
+ * Endur unstaking's (D-085) are different partial commitments, for their own
+ * dapp names, at the same nonce.
  */
 export function shadowAccountAddress(partialCommitment: string, nonce: string = VAULT_SHADOW_NONCE): Address {
   const commitment = hash.computePoseidonHashOnElements([partialCommitment, nonce]);

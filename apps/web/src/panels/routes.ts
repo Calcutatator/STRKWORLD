@@ -207,7 +207,17 @@ export const VAULT_ROUTES: readonly string[] = Object.freeze([VAULT_SUPPLY_ROUTE
  */
 export const VAULT_BORROW_ROUTE = 'vault.borrow';
 
-/** A policy route kind: an intent's, or the Vault's (D-077). */
+/**
+ * Endur unstaking's two routes (D-085): a request (flow A) and a claim
+ * (flow B), through the player's unstaking shadow account. Like the Vault's,
+ * they are seam methods, not intents, and one policy route, `unstake`, gates
+ * both.
+ */
+export const ENDUR_UNSTAKE_ROUTE = 'bank.unstake';
+export const ENDUR_CLAIM_ROUTE = 'bank.unstake-claim';
+export const ENDUR_UNSTAKE_ROUTES: readonly string[] = Object.freeze([ENDUR_UNSTAKE_ROUTE, ENDUR_CLAIM_ROUTE]);
+
+/** A policy route kind: an intent's, the Vault's (D-077), the Borrow counter's (D-083), or unstaking's (D-085). */
 type PolicyRouteKind = WalletRoutePolicy['enabledRoutes'][number];
 
 /**
@@ -229,6 +239,8 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, PolicyRouteKind>>> =
   [VAULT_SUPPLY_ROUTE]: 'vault',
   [VAULT_REDEEM_ROUTE]: 'vault',
   [VAULT_BORROW_ROUTE]: 'borrow',
+  [ENDUR_UNSTAKE_ROUTE]: 'unstake',
+  [ENDUR_CLAIM_ROUTE]: 'unstake',
 });
 
 /**

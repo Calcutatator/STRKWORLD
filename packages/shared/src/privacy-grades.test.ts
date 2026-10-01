@@ -73,10 +73,13 @@ describe('privacy deviation admission', () => {
     // D-063 adds a registered-but-unapproved route, so the register is no
     // longer uniformly playable; every approved route still is. D-072 adds
     // the entry gate's deposit, D-077 the Vault's two routes, and D-083 the
-    // Borrow counter's one, last.
+    // Borrow counter's one, last. D-085 adds Endur unstaking's two routes
+    // after staking.
     expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([
       ...APPROVED_ROUTES,
       'bank.stake',
+      'bank.unstake',
+      'bank.unstake-claim',
       'entry.shield',
       'vault.supply',
       'vault.redeem',

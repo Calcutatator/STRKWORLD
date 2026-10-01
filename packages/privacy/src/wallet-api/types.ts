@@ -49,6 +49,44 @@ export interface VaultReadClient {
   vaultRates(signal?: AbortSignal): Promise<readonly VaultRateRow[]>;
 }
 
+/**
+ * Unstaking's public reads (D-085), through the same backend for the same
+ * reason (D-014). The address read is the Vault's own: the anonymizer
+ * resolves any partial commitment at nonce 0, whatever its dapp name.
+ */
+export interface EndurReadClient {
+  shadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<{ address: Address; deployed: boolean }>;
+  /**
+   * What a stand-in address holds at Endur: the withdrawal requests the queue
+   * emitted for it within the backend's scan window, each as the queue's
+   * `get_request_info` records it, its STRK and xSTRK balances, how many
+   * queue NFTs it holds (unpaid requests, listed or not), and the latest
+   * block's timestamp.
+   */
+  endurUnstake(account: Address, signal?: AbortSignal): Promise<EndurUnstakeRead>;
+}
+
+/** One unstaking read, as the backend answers it (D-085). */
+export interface EndurUnstakeRead {
+  readonly chainTime: number;
+  readonly strk: bigint;
+  readonly xstrk: bigint;
+  /** The queue NFTs the address holds: every unpaid request, listed or not. */
+  readonly outstanding: bigint;
+  /** False when the backend's event scan ran out of pages: some requests may be missing. */
+  readonly complete: boolean;
+  readonly requests: readonly {
+    readonly requestId: bigint;
+    readonly assets: bigint;
+    readonly shares: bigint;
+    readonly claimed: boolean;
+    readonly requestedAt: number;
+    readonly claimableAt: number;
+    /** A read-only `claim_withdrawal` dry run succeeded: unpaid, past its wait, and funded. */
+    readonly claimableNow: boolean;
+  }[];
+}
+
 /** One vault's row in a position read (D-079): its figures, or a read that failed. */
 export type VaultPositionRow =
   | {
@@ -258,8 +296,11 @@ export interface WalletRoutePolicy {
    * `vault` (D-077) admits the Vault's supply and redeem, which the wallet
    * submits itself, like shield: no relay fee and no intent bound. `borrow`
    * (D-083) admits the Borrow counter's four actions, submitted the same way.
+   * `unstake` (D-085) admits Endur unstaking through a shadow account, the
+   * same way; its tokens are pinned (xSTRK in, STRK out), so it takes no
+   * token list.
    */
-  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault' | 'borrow')[];
+  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault' | 'borrow' | 'unstake')[];
   /**
    * Every token crossing an enabled route must be explicitly admitted.
    *

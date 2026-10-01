@@ -2022,6 +2022,33 @@ button[data-locked="true"] {
   font-size: 0.92rem;
 }
 
+/* D-085: the unstaking counter, under the stake form, set apart by a rule. */
+.panel[data-brand="endur"] .unstake-counter {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e4e4e7;
+}
+
+.panel[data-brand="endur"] .unstake-counter > h3,
+.panel[data-brand="endur"] .unstake-counter > p {
+  margin: 0;
+}
+
+.panel[data-brand="endur"] .unstake-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel[data-brand="endur"] .unstake-list li[data-status="ready"] .unstake-when {
+  color: #03624c;
+  font-weight: 700;
+}
+
 .panel[data-brand="endur"] .panel-review > .stake-note {
   margin: 0.9rem 0;
 }

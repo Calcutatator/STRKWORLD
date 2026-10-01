@@ -18,10 +18,13 @@ import type {
   BorrowPositions,
   BorrowRequest,
   DepositStatus,
+  EndurAction,
+  EndurUnstakePosition,
   Intent,
   PoolConfig,
   PreparedBatch,
   PreparedBorrowBatch,
+  PreparedEndurBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
@@ -35,7 +38,13 @@ import type {
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
-import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
+import {
+  ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
+  ENDUR_XSTRK,
+  ENDUR_XSTRK_ASSET,
+  MAX_ENDUR_CLAIMS_PER_BATCH,
+  classifyEndurRequests,
+} from '../endur.js';
 import { VAULT_MARKETS, VESU_VSTRK_ASSET, vaultMarket, type VaultMarket } from '../vault.js';
 import {
   BORROW_PAIRS,
@@ -77,6 +86,25 @@ const DEMO_VSTRK_ASSETS_PER_SHARE = { numerator: 51n, denominator: 50n } as cons
  */
 export const DEMO_VAULT_STAND_IN: Address =
   '0x000000000000000000000000000000000000000000000000000000000000de70';
+
+/**
+ * The demo player's unstaking stand-in address (D-085): a fixed placeholder,
+ * not derived from anything, and not the demo Vault's, as a real player's two
+ * stand-ins differ by dapp name.
+ */
+export const DEMO_ENDUR_STAND_IN: Address =
+  '0x000000000000000000000000000000000000000000000000000000000000e5d1';
+
+/**
+ * The demo chain's clock for unstaking (D-085), Unix seconds. Fixed so the
+ * demo and tests are deterministic; `advanceEndurClock` moves it.
+ */
+const DEMO_ENDUR_CHAIN_TIME = 1_790_000_000;
+
+/** What demo `shares` xSTRK unstake for, at the stake fixture's DEMO RATE inverted (5 STRK per 4 shares), floored. */
+function demoUnstakeAssets(shares: bigint): bigint {
+  return (shares * DEMO_XSTRK_SHARES_PER_STRK.denominator) / DEMO_XSTRK_SHARES_PER_STRK.numerator;
+}
 
 /** Shares a demo supply of `assets` mints, floored, as an ERC-4626 deposit rounds. */
 function demoVaultShares(assets: bigint): bigint {
@@ -201,6 +229,19 @@ export interface FakeConfig {
     prices?: Readonly<Record<Address, bigint>>;
     stalePrices?: readonly Address[];
   };
+  /**
+   * Demo Endur unstaking (D-085): requests already on the demo stand-in
+   * address, each with the STRK it owes, the seconds until it is past its
+   * wait (zero or less: past it), and whether demo Endur has funded it
+   * (`funded`, true by default; unfunded, a past-due request awaits funds),
+   * and STRK or xSTRK already sitting there.
+   * At the DEMO RATE and the demo clock, never Endur's.
+   */
+  endur?: {
+    requests?: readonly { assets: bigint; shares: bigint; claimableInSeconds: number; funded?: boolean }[];
+    strkHeld?: bigint;
+    xstrkHeld?: bigint;
+  };
 }
 
 /**
@@ -278,7 +319,11 @@ export interface Fault {
     | 'borrowMarket'
     | 'borrowPositions'
     | 'borrowPrepare'
-    | 'borrowConfirm';
+    | 'borrowConfirm'
+    /** D-085: unstaking's read, its two prepares, and its confirm. */
+    | 'endurPosition'
+    | 'endurPrepare'
+    | 'endurConfirm';
   message?: string;
   sticky?: boolean;
 }
@@ -331,6 +376,16 @@ export class FakePrivacyOperations implements PrivacyOperations {
   private readonly borrowStale = new Set<string>();
   private borrowDeployed = false;
   private borrowCommitted = false;
+  /** Every confirmed unstaking action, in order (D-085). */
+  readonly endurSubmitted: EndurAction[] = [];
+  /** The demo unstaking stand-in address's unpaid requests (D-085). */
+  private endurRequests: { requestId: bigint; assets: bigint; shares: bigint; requestedAt: number; claimableAt: number; funded: boolean }[] = [];
+  private endurNextId = 10_000n;
+  private endurStrkHeld = 0n;
+  private endurXstrkHeld = 0n;
+  private endurNow = DEMO_ENDUR_CHAIN_TIME;
+  private endurDeployed = false;
+  private endurCommitted = false;
 
   constructor(config: FakeConfig = {}) {
     const balances = config.balances ?? {};
@@ -412,6 +467,47 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (config.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(config.demoSwapRates);
     if (config.vault !== undefined) this.ownVaultConfig(config.vault);
     if (config.borrow !== undefined) this.ownBorrowConfig(config.borrow);
+    if (config.endur !== undefined) this.ownEndurConfig(config.endur);
+  }
+
+  /** Own the demo unstaking's starting requests and balances (D-085). */
+  private ownEndurConfig(endur: NonNullable<FakeConfig['endur']>): void {
+    const invalid = () => new PrivacyError('unknown', 'The fake unstaking configuration is invalid.');
+    const amount = (value: unknown): bigint => {
+      if (value === undefined) return 0n;
+      if (typeof value !== 'bigint' || value < 0n) throw invalid();
+      return value;
+    };
+    this.endurStrkHeld = amount(ownField(endur, 'strkHeld'));
+    this.endurXstrkHeld = amount(ownField(endur, 'xstrkHeld'));
+    const requests = ownField(endur, 'requests');
+    if (requests !== undefined) {
+      if (!Array.isArray(requests)) throw invalid();
+      for (const entry of requests) {
+        const assets = amount(ownField(entry, 'assets'));
+        const shares = amount(ownField(entry, 'shares'));
+        const claimableIn = ownField(entry, 'claimableInSeconds');
+        const funded = ownField(entry, 'funded');
+        if (typeof claimableIn !== 'number' || !Number.isSafeInteger(claimableIn)) throw invalid();
+        if (funded !== undefined && typeof funded !== 'boolean') throw invalid();
+        const claimableAt = this.endurNow + claimableIn;
+        this.endurRequests.push({
+          requestId: this.endurNextId++,
+          assets,
+          shares,
+          requestedAt: claimableAt - ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
+          claimableAt,
+          funded: funded ?? true,
+        });
+      }
+    }
+    this.endurDeployed = this.endurRequests.length > 0 || this.endurStrkHeld > 0n || this.endurXstrkHeld > 0n;
+  }
+
+  /** Move the demo unstaking clock forward by `seconds` (tests and the demo). */
+  advanceEndurClock(seconds: number): void {
+    if (!Number.isSafeInteger(seconds) || seconds < 0) throw new PrivacyError('unknown', 'The fake clock only moves forward.');
+    this.endurNow += seconds;
   }
 
   /** Own the demo Borrow counter's loans and prices, every token a pinned borrow token's (D-083). */
@@ -1043,6 +1139,147 @@ export class FakePrivacyOperations implements PrivacyOperations {
       const held = have(token);
       if (held < required) {
         throw new PrivacyError('insufficient-balance', `Needs ${required}, has ${held}. Remember the pool fee is paid in ${feeToken}.`);
+      }
+    }
+  }
+
+  // -- Endur unstaking (D-085) -----------------------------------------------
+
+  /**
+   * The demo unstaking stand-in address: its unpaid requests by the demo
+   * clock, and what sits there. The same stages as the Wallet API adapter, in
+   * the same order.
+   */
+  async endurUnstakePosition(options?: VaultCallOptions): Promise<EndurUnstakePosition> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('endurPosition', signal);
+    this.endurIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    return this.endurPositionNow();
+  }
+
+  async prepareEndurUnstake(shares: bigint, options?: VaultCallOptions): Promise<PreparedEndurBatch> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('endurPrepare', signal);
+    if (typeof shares !== 'bigint' || shares <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
+    this.endurIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    this.assertEndurFunds(shares);
+    const action: EndurAction = Object.freeze({ kind: 'request', shares, leftover: this.endurXstrkHeld });
+    const batch = this.vaultBatch(action as unknown as VaultAction, () => {
+      this.assertEndurFunds(shares);
+      this.debit(ENDUR_XSTRK, shares);
+      this.debit(this.pool.feeToken, this.pool.feeAmount);
+      if (this.endurXstrkHeld > 0n) this.mintNote(ENDUR_XSTRK, this.endurXstrkHeld);
+      this.endurXstrkHeld = 0n;
+      this.endurRequests.push({
+        requestId: this.endurNextId++,
+        assets: demoUnstakeAssets(shares),
+        shares,
+        requestedAt: this.endurNow,
+        claimableAt: this.endurNow + ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
+        funded: true,
+      });
+      this.endurDeployed = true;
+    }, { record: (submitted) => this.endurSubmitted.push(submitted as unknown as EndurAction), fault: 'endurConfirm', subject: 'unstaking' });
+    return Object.freeze({ ...batch, action }) as unknown as PreparedEndurBatch;
+  }
+
+  async prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('endurPrepare', signal);
+    this.endurIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    // As the adapter: STRK already held is collected alone; otherwise only
+    // requests whose claim would pay now are claimed.
+    const ready = this.endurStrkHeld > 0n
+      ? []
+      : this.endurPositionNow().requests.filter((entry) => entry.status === 'ready').slice(0, MAX_ENDUR_CLAIMS_PER_BATCH);
+    if (ready.length === 0 && this.endurStrkHeld === 0n) {
+      throw new PrivacyError('unknown', 'Nothing has finished unstaking yet.');
+    }
+    this.assertEndurFunds(0n);
+    const requestIds = Object.freeze(ready.map((entry) => entry.requestId));
+    const owed = ready.reduce((sum, entry) => sum + entry.assets, 0n);
+    const action: EndurAction = Object.freeze({ kind: 'claim', requestIds, owed, held: this.endurStrkHeld });
+    const batch = this.vaultBatch(action as unknown as VaultAction, () => {
+      this.assertEndurFunds(0n);
+      const paying = this.endurRequests.filter((entry) => requestIds.includes(entry.requestId));
+      if (paying.length !== requestIds.length) throw new PrivacyError('unknown', 'A request was already paid. Read again.');
+      const total = paying.reduce((sum, entry) => sum + entry.assets, 0n) + this.endurStrkHeld;
+      this.debit(this.pool.feeToken, this.pool.feeAmount);
+      this.endurRequests = this.endurRequests.filter((entry) => !requestIds.includes(entry.requestId));
+      this.endurStrkHeld = 0n;
+      if (total > 0n) this.mintNote(ENDUR_XSTRK_ASSET, total);
+    }, { record: (submitted) => this.endurSubmitted.push(submitted as unknown as EndurAction), fault: 'endurConfirm', subject: 'unstaking' });
+    return Object.freeze({ ...batch, action }) as unknown as PreparedEndurBatch;
+  }
+
+  /**
+   * Demo Endur's own service paying every ready request to the stand-in
+   * address, as the real one does once the queue is funded (D-085).
+   */
+  fundEndurRequests(): void {
+    for (const entry of this.endurRequests) entry.funded = true;
+  }
+
+  /**
+   * Demo Endur's own service paying every ready, funded request to the
+   * stand-in address (see `payReadyEndurRequests`); `fundEndurRequests` funds
+   * every request first, as the real one funds and claims together.
+   */
+  payReadyEndurRequests(): void {
+    const payable = (entry: { claimableAt: number; funded: boolean }) => entry.funded && entry.claimableAt <= this.endurNow;
+    this.endurStrkHeld += this.endurRequests.filter(payable).reduce((sum, entry) => sum + entry.assets, 0n);
+    this.endurRequests = this.endurRequests.filter((entry) => !payable(entry));
+  }
+
+  private endurPositionNow(): EndurUnstakePosition {
+    const requests = classifyEndurRequests(
+      this.endurRequests.map(({ funded, ...entry }) => ({
+        ...entry,
+        claimed: false,
+        claimableNow: funded && entry.claimableAt <= this.endurNow,
+      })),
+      this.endurNow,
+    );
+    return Object.freeze({
+      standIn: DEMO_ENDUR_STAND_IN,
+      chainTime: this.endurNow,
+      requests: Object.freeze(requests),
+      strkHeld: this.endurStrkHeld,
+      xstrkHeld: this.endurXstrkHeld,
+      unlisted: 0,
+      complete: true,
+    });
+  }
+
+  /** Capability, then the commitment (asked once), then the address: the adapter's order. */
+  private endurIdentity(onStage: VaultStageCallback | undefined): void {
+    const supported = this.cap.supportsShadowAccounts === true;
+    emitVaultStage(onStage, { stage: 'capability', supported });
+    if (!supported) {
+      throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
+    }
+    if (this.cap.registration === 'unregistered') {
+      emitVaultStage(onStage, { stage: 'commitment', ok: false, code: 118 });
+      throw new PrivacyError('not-registered', 'This wallet is not registered with the privacy pool.');
+    }
+    if (!this.endurCommitted) {
+      this.endurCommitted = true;
+      emitVaultStage(onStage, { stage: 'commitment', ok: true });
+    }
+    emitVaultStage(onStage, { stage: 'address', resolved: true, deployed: this.endurDeployed });
+  }
+
+  /** `shares` xSTRK and the pool fee in STRK, as the wallet checks at proof time. */
+  private assertEndurFunds(shares: bigint): void {
+    const have = (token: Address) => this.spendable.get(token) ?? this.lookupLoose(token);
+    const needed: Array<[Address, bigint]> = [[ENDUR_XSTRK, shares], [this.pool.feeToken, this.pool.feeAmount]];
+    for (const [token, required] of needed) {
+      const held = have(token);
+      if (held < required) {
+        throw new PrivacyError('insufficient-balance', `Needs ${required}, has ${held}. Remember the pool fee is paid in ${this.pool.feeToken}.`);
       }
     }
   }

@@ -234,6 +234,46 @@ export interface VaultRpcPort {
   getVaultPositions(account: string, signal?: AbortSignal): Promise<readonly VaultPositionRead[]>;
 }
 
+/**
+ * Endur unstaking's public chain reads (D-085), each pinned: the withdrawal
+ * queue's events and views, and the STRK and xSTRK balances of the address
+ * asked about. A caller supplies the address, never a target or a selector.
+ */
+export interface EndurRpcPort {
+  getEndurUnstake(account: string, signal?: AbortSignal): Promise<EndurUnstakeRead>;
+}
+
+export interface EndurUnstakeRead {
+  /** The latest block's timestamp, Unix seconds. */
+  readonly chainTime: number;
+  /** STRK `balance_of(account)`. */
+  readonly strk: bigint;
+  /** xSTRK `balance_of(account)`. */
+  readonly xstrk: bigint;
+  /** The queue's ERC-721 `balance_of(account)`: its unpaid requests. */
+  readonly outstanding: bigint;
+  /** Each request the queue emitted for the address in the scan window, by `get_request_info`. */
+  readonly requests: readonly EndurRequestRead[];
+  /** False when the event scan ran out of pages with more left: some requests may be missing. */
+  readonly complete: boolean;
+}
+
+export interface EndurRequestRead {
+  readonly requestId: bigint;
+  readonly assets: bigint;
+  readonly shares: bigint;
+  readonly claimed: boolean;
+  readonly requestedAt: number;
+  readonly claimableAt: number;
+  /**
+   * Whether `claim_withdrawal(requestId)` would succeed now, by a read-only
+   * dry run: unpaid, past its wait, and funded. False for every request not
+   * dry-run (paid, early, or beyond `MAX_ENDUR_CLAIM_DRY_RUNS`) and for one
+   * whose dry run reverted or could not be made.
+   */
+  readonly claimableNow: boolean;
+}
+
 export interface ShadowAccountRead {
   readonly address: string;
   readonly deployed: boolean;

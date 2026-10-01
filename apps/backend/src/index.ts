@@ -100,7 +100,22 @@ export {
   PRICE_SELECTOR,
   type BorrowPair,
 } from './borrow.js';
+// D-085: Endur unstaking's pinned reads.
+export {
+  CLAIM_WITHDRAWAL_SELECTOR,
+  ENDUR_SCAN_WINDOW_BLOCKS,
+  ENDUR_UNSTAKE_FIRST_BLOCK,
+  ENDUR_UNSTAKE_PATH,
+  ENDUR_WITHDRAWAL_QUEUE,
+  GET_REQUEST_INFO_SELECTOR,
+  MAX_ENDUR_CLAIM_DRY_RUNS,
+  MAX_ENDUR_REQUESTS,
+  WITHDRAW_QUEUE_EVENT_KEY,
+} from './endur.js';
 export type {
+  EndurRequestRead,
+  EndurRpcPort,
+  EndurUnstakeRead,
   ApiRequest,
   ApiResponse,
   AuthorizationCodec,

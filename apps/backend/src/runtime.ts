@@ -29,6 +29,7 @@ import type {
   SwapPlannerPort,
   VaultRatesPort,
   VaultRpcPort,
+  EndurRpcPort,
 } from './types.js';
 import { VesuVaultRates } from './vesu-rates.js';
 
@@ -207,6 +208,8 @@ function createBackendApi(
   // port offers them. D-079: Vesu's rates come from its public API, fetched
   // by this service alone, and only once a request asks.
   const vault = isVaultRpc(rpc) ? rpc : undefined;
+  // D-085: unstaking's pinned reads, on the same private RPC.
+  const endur = isEndurRpc(rpc) ? rpc : undefined;
   const vaultRates = overrides.vaultRates ?? new VesuVaultRates();
   // D-083: the Borrow counter's two pinned reads use the same private RPC,
   // when the port offers them.
@@ -217,6 +220,7 @@ function createBackendApi(
     rpc,
     ...(poolStats ? { poolStats } : {}),
     ...(vault ? { vault } : {}),
+    ...(endur ? { endur } : {}),
     vaultRates,
     ...(borrow ? { borrow } : {}),
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
@@ -230,6 +234,12 @@ function createBackendApi(
     // D-069: constructed either way; only BACKEND_DEBUG_LOGS_ENABLED=true routes to it.
     ...(overrides.debugLogs ? { debugLogs: overrides.debugLogs } : {}),
   });
+}
+
+/** Whether an RPC port offers unstaking's narrow read (D-085). */
+function isEndurRpc(value: unknown): value is EndurRpcPort {
+  if (!value || typeof value !== 'object') return false;
+  return typeof (value as Partial<Record<keyof EndurRpcPort, unknown>>).getEndurUnstake === 'function';
 }
 
 /** Whether an RPC port offers the Vault's narrow reads (D-077). */

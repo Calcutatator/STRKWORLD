@@ -262,7 +262,9 @@ export const COPY = freezeCopy({
   stake: {
     eyebrow: 'Liquid staking with Endur',
     intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
-    unstaking: "Unstaking isn't available in the game yet. Endur's own withdrawal queue takes 1 to 14 days.",
+    /** D-085: unstaking is now a counter of its own, below the stake form. */
+    unstaking:
+      "To unstake, use the unstaking counter below. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
     oneAtATime: 'This counter prepares and confirms one stake at a time.',
     youStake: 'You stake',
     youReceive: 'You receive',
@@ -270,6 +272,59 @@ export const COPY = freezeCopy({
     /** No figure is shown because neither the seam nor the prepared batch carries one (D-063). */
     amountAtExecution:
       "The xSTRK lands in your pool balance. Endur's vault sets the exact amount when the stake runs, so there is no figure to show before you confirm.",
+  },
+
+  /**
+   * Endur unstaking through a shadow account (D-085). Plain words for how it
+   * works: the request waits on a stand-in address that anyone can look up
+   * but that is not linked to the wallet, and claiming moves the STRK back
+   * into the pool balance. The route's approved disclosure is the register's,
+   * shown at the commit point; nothing here says amounts are hidden
+   * (`copy.test.ts` checks).
+   */
+  unstake: {
+    title: 'Unstake xSTRK',
+    intro:
+      "Send xSTRK from your pool balance into Endur's withdrawal queue. The request waits on a stand-in address: anyone can look it up, but it is not linked to your wallet. When Endur releases the STRK, claim it and it returns to your pool balance.",
+    wait: "Endur's queue holds the STRK for about seven days, sometimes longer while Endur gathers it. Endur often pays a ready request to the stand-in address on its own; claiming then just moves it into your pool balance.",
+    amount: 'xSTRK to unstake',
+    request: 'Review unstake request',
+    readRequests: 'Show my unstaking requests',
+    readAgain: 'Read my requests again',
+    readNote: 'One read, from the chain. It does not update on its own.',
+    loading: 'Reading Endur…',
+    none: 'No unstaking requests are waiting.',
+    pendingTitle: 'Waiting at Endur',
+    statusWaiting: 'left',
+    statusReady: 'Ready to claim',
+    /** D-085: past its wait, but Endur's queue cannot pay it yet, so a claim would be refused. */
+    statusAwaitingFunds: 'Waiting for Endur to fund it',
+    owedLead: 'Owed',
+    heldLead: 'Already paid to the stand-in address, ready to claim:',
+    leftoverLead: 'xSTRK still on the stand-in address, which your next request returns to your pool balance:',
+    unlisted: 'Some older requests on the stand-in address could not be listed. Endur still pays them there, and a claim collects them.',
+    incomplete: 'The chain could not list every request this time, so some may be missing here. Read again in a moment.',
+    claim: 'Review claim',
+    nothingReady: 'Nothing is ready to claim yet.',
+    standInLead: 'Your unstaking stand-in address,',
+    standInTail: 'is public: anyone can look up its requests and what it holds. It is not your wallet, and not your Vault address.',
+    feeNote: 'Each request and claim pays the pool fee from your pool balance, so keep some STRK there.',
+    reviewRequest: 'You send to Endur',
+    reviewRequestTail: "Nothing comes back yet: Endur fixes the STRK it owes when the request runs, and you claim it once Endur releases it.",
+    reviewLeftover: 'Also returns to your pool balance',
+    reviewClaim: 'You claim',
+    reviewClaimTail: 'Every STRK on the stand-in address returns to your pool balance, in one note. Endur pays only once its queue holds the STRK; if it does not yet, your wallet will refuse and nothing is sent.',
+    requestsCount: 'ready requests',
+    noXstrk: 'You have no xSTRK in your pool balance, so there is nothing to unstake. Stake some first.',
+    changed: 'Your unstaking changed. Read your requests again to see it.',
+    networkByWallet: 'Your wallet shows it',
+    voyager: 'View it on Voyager',
+    voyagerNote: 'Opens a new tab. Voyager sees your IP address when it loads.',
+    submitted: {
+      succeeded: 'Done. The network confirmed it.',
+      pending: 'Sent. The network has not confirmed it yet, so read your requests again in a moment.',
+      reverted: 'This did not go through on the network, so nothing moved.',
+    },
   },
 
   /**
@@ -760,6 +815,8 @@ export const COPY = freezeCopy({
       transfer: "Private transfer isn't switched on in this build yet.",
       swap: "Swap isn't switched on in this build yet.",
       stake: "Staking isn't switched on in this build yet.",
+      /** D-085: one policy route gates the unstake request and the claim alike. */
+      unstake: "Unstaking isn't switched on in this build yet.",
       /** D-077: the Vault's one policy route gates supply and redeem alike. */
       vault: "The Vault isn't switched on in this build yet.",
       /** D-083: the Borrow counter's one policy route gates its four actions. */

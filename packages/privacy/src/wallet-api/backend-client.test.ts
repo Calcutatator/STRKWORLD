@@ -1591,3 +1591,51 @@ describe('BackendPrivacyClient borrow reads (D-083)', () => {
     await expect(client.borrowMarket()).rejects.toThrow('The private service returned an invalid response.');
   });
 });
+
+describe('the unstaking read (D-085)', () => {
+  const ACCOUNT = '0x6ad69dce496ffd4177ffbaaa9800b18589303c62ac3ad44c08c4830cb50aba4';
+  const body = {
+    chainTime: 1_790_854_217,
+    strk: '4000000000000000000',
+    xstrk: '0',
+    outstanding: '1',
+    complete: true,
+    requests: [{ requestId: '10589', assets: '15470269360521547710', shares: '13073397411927640064', claimed: false, requestedAt: 1_790_829_525, claimableAt: 1_791_434_325, claimableNow: false }],
+  };
+
+  it('posts the address alone and parses decimal strings into bigints', async () => {
+    const fetcher = vi.fn(async () => response(body));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    await expect(client.endurUnstake(ACCOUNT)).resolves.toEqual({
+      chainTime: 1_790_854_217,
+      strk: 4n * 10n ** 18n,
+      xstrk: 0n,
+      outstanding: 1n,
+      complete: true,
+      requests: [{ requestId: 10_589n, assets: 15_470_269_360_521_547_710n, shares: 13_073_397_411_927_640_064n, claimed: false, requestedAt: 1_790_829_525, claimableAt: 1_791_434_325, claimableNow: false }],
+    });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://backend.example/v1/rpc/endur-unstake');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1, account: ACCOUNT });
+  });
+
+  it.each([
+    ['an extra field', { ...body, extra: 1 }],
+    ['a hex amount', { ...body, strk: '0x1' }],
+    ['a non-boolean claim', { ...body, requests: [{ ...body.requests[0], claimed: 'no' }] }],
+    ['a missing dry run', { ...body, requests: [{ ...body.requests[0], claimableNow: undefined }] }],
+    ['a non-boolean completeness flag', { ...body, complete: 'yes' }],
+    ['a negative time', { ...body, chainTime: -1 }],
+    ['too many rows', { ...body, requests: Array.from({ length: 65 }, () => body.requests[0]) }],
+  ])('refuses %s', async (_label, answer) => {
+    const client = new BackendPrivacyClient('https://backend.example', vi.fn(async () => response(answer)));
+    await expect(client.endurUnstake(ACCOUNT)).rejects.toThrow('The private service returned an invalid response.');
+  });
+
+  it('refuses an invalid address before any request', async () => {
+    const fetcher = vi.fn(async () => response(body));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    await expect(client.endurUnstake('0x0')).rejects.toThrow('The unstaking account is invalid.');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
