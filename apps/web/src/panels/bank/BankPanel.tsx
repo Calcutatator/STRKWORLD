@@ -15,11 +15,13 @@ import {
   modeNeedsRecipient,
   reviewedStake,
   ROUTE_BY_MODE,
+  shieldFigures,
   type BankMode,
   type BankPanel as BankPanelMachine,
   type BankState,
 } from './bank-machine.js';
 import { describeIntent, describeWarnings } from './summary-copy.js';
+import { shieldDeposits } from './shield-deposits.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
@@ -220,7 +222,15 @@ export function BankPanel({
           <>
             {state.mode === 'stake' && !committing && state.flow.name !== 'submitted' ? <StakeIntro /> : null}
             {/* Once read, a spending mode's balance and its Refresh sit on the amount field. */}
-            {balanceOnField(state) ? null : <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />}
+            {/* While the session gate holds (D-035) the card is the private balance
+                check it asks for, on every tab, Shield included. */}
+            {balanceOnField(state) && !(blocked || gateBlocked) ? null : (
+              <BalanceBlock
+                state={state}
+                privateCheck={blocked || gateBlocked}
+                onRefresh={() => void (blocked || gateBlocked ? panel.refreshBalance() : refreshFor(state, panel))}
+              />
+            )}
 
             {gateBlocked && state.flow.name === 'review' ? null : committing ? (
               <CommitBlock
@@ -234,12 +244,14 @@ export function BankPanel({
                   {state.flow.restored ? COPY.flow.receiptWaiting : COPY.flow.submitted}{' '}
                   <code>{shortenAddress(state.flow.transactionHash)}</code>
                 </p>
+                {/* D-094: a new note matures before the wallet's shielded view shows it. */}
+                {state.flow.shielded ? <p className="shield-arrives">{COPY.bank.shieldArrives}</p> : null}
                 <button type="button" onClick={() => panel.acknowledge()}>
                   {COPY.flow.back}
                 </button>
               </div>
             ) : blocked || gateBlocked ? null : (
-              <ComposeBlock state={state} panel={panel} experience={experience} rate={rate} onRefresh={() => void panel.refreshBalance()} />
+              <ComposeBlock state={state} panel={panel} experience={experience} rate={rate} onRefresh={() => void refreshFor(state, panel)} />
             )}
 
             {state.flow.name === 'failed' ? (
@@ -307,17 +319,46 @@ function ModeTabs({
   );
 }
 
-/**
- * Whether the balance figure sits on the amount field, wallet style, rather
- * than in the balance card: in a mode that spends the private balance, once
- * it is read. Shielding spends public STRK the Bank cannot see, so its card
- * keeps the private figure for reference and its field shows none.
- */
-function balanceOnField(state: BankState): boolean {
-  return state.mode !== 'shield' && state.balance.status === 'loaded';
+/** D-094: Refresh re-reads what the control spends: the wallet's public balance on Shield, the pool's elsewhere. */
+function refreshFor(state: BankState, panel: BankPanelMachine): Promise<void> {
+  return state.mode === 'shield' ? panel.refreshPublicBalance() : panel.refreshBalance();
 }
 
-function BalanceBlock({ state, onRefresh }: { state: BankState; onRefresh: () => void }) {
+/**
+ * Whether the balance figure sits on the amount field, wallet style, rather
+ * than in the balance card, once it is read: the private pool balance in a
+ * mode that spends it, and on Shield the wallet's public balance (D-094),
+ * which is what a shield spends.
+ */
+function balanceOnField(state: BankState): boolean {
+  return state.mode === 'shield' ? state.publicBalance.status === 'loaded' : state.balance.status === 'loaded';
+}
+
+/**
+ * D-094: the Shield control's card before its wallet balance is on the
+ * field: reading it, or why it could not. Never the private pool balance or
+ * its settling note, which say nothing about what a shield can spend.
+ */
+function PublicBalanceBlock({ state, onRefresh }: { state: BankState; onRefresh: () => void }) {
+  const view = state.publicBalance;
+  return (
+    <div className="panel-balance" data-balance="wallet">
+      {view.status === 'failed' ? (
+        <>
+          <p role="alert">{view.message}</p>
+          <button type="button" onClick={onRefresh}>
+            {COPY.balance.refreshAgain}
+          </button>
+        </>
+      ) : (
+        <p aria-busy="true">{COPY.balance.publicLoading}</p>
+      )}
+    </div>
+  );
+}
+
+function BalanceBlock({ state, privateCheck = false, onRefresh }: { state: BankState; privateCheck?: boolean; onRefresh: () => void }) {
+  if (state.mode === 'shield' && !privateCheck) return <PublicBalanceBlock state={state} onRefresh={onRefresh} />;
   const { balance } = state;
   return (
     <div className="panel-balance">
@@ -382,12 +423,20 @@ function ComposeBlock({
   // vocabulary would promise a shared fee that cannot happen.
   const stake = state.mode === 'stake';
   const transfer = state.mode === 'transfer';
+  const shield = state.mode === 'shield';
   const singleAction = experience === 'station' || stake || transfer;
   // The balance the field checks against and shows: the private STRK total,
   // once read, in a mode that spends it. It is a total (D-022), so "more than
   // your pool balance" is certain; less is still the wallet's to accept.
-  const balance = balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
-  const check = checkAmount(state.amountText, { decimals: 18, balance });
+  // D-094: on Shield it is the wallet's public balance, and the amount must
+  // leave room for the pool fee on top and for any shield already queued.
+  const wallet = shield && state.publicBalance.status === 'loaded' ? state.publicBalance.amount : null;
+  const queuedShields = state.batch.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n);
+  const shieldLimit = wallet !== null && state.pool ? wallet - state.pool.feeAmount - queuedShields : null;
+  const balance = shield
+    ? wallet
+    : balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
+  const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : balance });
   const recipient = state.recipientText.trim();
   const ready = singleAction ? COPY.gameMode.reviewAction : COPY.batch.add;
   const action = needsRecipient && recipient === ''
@@ -396,8 +445,9 @@ function ComposeBlock({
       ? { label: COPY.bank.checkRecipient, disabled: true }
       : primaryAction({ check, symbol: 'STRK', ready });
   const atMax = max !== null && state.amountText === formatTokenAmountExact(max);
-  // The balance card's notes, when its figure is on the field instead.
-  const balanceNote = state.balance.status !== 'loaded' || balance === null
+  // The balance card's notes, when its figure is on the field instead. The
+  // settling note is about the private balance, so Shield never shows it.
+  const balanceNote = shield || state.balance.status !== 'loaded' || balance === null
     ? null
     : !state.balance.maturityKnown
       ? COPY.balance.maturityUnknown
@@ -428,13 +478,14 @@ function ComposeBlock({
         decimals={18}
         symbol="STRK"
         balance={balance}
-        max={max !== null ? () => panel.maxSpendable() : undefined}
+        {...(shield ? { limit: shieldLimit, balanceLabel: COPY.kit.walletBalance, exceedsMessage: COPY.bank.exceedsWallet } : {})}
+        max={max !== null || shield ? () => panel.maxSpendable() : undefined}
         balanceAction={
           <button type="button" className="ui-chip balance-refresh" aria-label={COPY.balance.refreshLabel} disabled={busy} onClick={onRefresh}>
             {COPY.balance.refreshShort}
           </button>
         }
-        hint={atMax ? COPY.balance.feeReserved : balanceNote ?? undefined}
+        hint={shield ? shieldHint(state, check.amount, atMax) : atMax ? COPY.balance.feeReserved : balanceNote ?? undefined}
         disabled={busy}
       />
 
@@ -489,6 +540,20 @@ function ComposeBlock({
  */
 function composeRows(state: BankState, amount: bigint | null, rate: EndurRateView): DetailRow[] {
   const rows: DetailRow[] = [];
+  if (state.mode === 'shield' && state.pool) {
+    // D-094: what reaches the pool, the fee on top, and what leaves the
+    // wallet, for the whole visit: the fee is paid once per transaction.
+    const queued = state.batch.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n);
+    const figures = shieldFigures(queued + (amount ?? 0n), state.pool.feeAmount);
+    rows.push({ id: 'shield', label: COPY.bank.youShield, value: formatStrk(figures.amount) });
+    rows.push({
+      id: 'fee',
+      label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+      value: formatStrk(figures.fee),
+    });
+    rows.push({ id: 'total', label: COPY.bank.totalFromWallet, value: formatStrk(figures.total), tone: 'emphasis' });
+    return rows;
+  }
   if (state.mode === 'stake') {
     const estimate = rate.status === 'loaded' && amount !== null
       ? estimateText(xstrkForStrk(amount, rate.strkPerXstrk), COPY.stake.outputToken)
@@ -509,6 +574,18 @@ function composeRows(state: BankState, amount: bigint | null, rate: EndurRateVie
     });
   }
   return rows;
+}
+
+/**
+ * D-094: the Shield field's one line: why Max left some behind, that the
+ * fee is fixed when it is a large share of a small shield, or that it comes
+ * on top.
+ */
+function shieldHint(state: BankState, amount: bigint | null, atMax: boolean): string {
+  if (atMax) return COPY.bank.shieldMaxNote;
+  const fee = state.pool?.feeAmount ?? null;
+  if (fee !== null && amount !== null && amount > 0n && amount <= 2n * fee) return COPY.bank.shieldFeeNudge;
+  return COPY.bank.shieldFeeOnTop;
 }
 
 /**
@@ -570,6 +647,12 @@ function CommitBlock({
   const { summary } = flow;
   const busy = flow.name === 'submitting';
   const stake = reviewedStake(summary.intents);
+  // D-094: a shield's amount reaches the pool and the fee goes on top, so
+  // its review shows what leaves the wallet in the fee token.
+  const shieldOnly = summary.intents.length > 0 && summary.intents.every((intent) => intent.kind === 'shield');
+  const pool = state.token ? { feeToken: state.token, feeAmount: summary.poolFee } : undefined;
+  const shielded = shieldOnly ? summary.intents.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n) : 0n;
+  const fromWallet = shieldOnly && pool ? shieldDeposits(summary.intents, pool).reduce((sum, deposit) => sum + deposit, 0n) : 0n;
 
   return (
     <div className="panel-review">
@@ -585,21 +668,32 @@ function CommitBlock({
       )}
 
       {/* Exact figures: this is the number being agreed to, not an ambient one. */}
-      <dl className="review-costs">
-        <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-        <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-        <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
-        <dd>{formatStrkExact(summary.gasEstimate)}</dd>
-        <dt>{COPY.bank.total}</dt>
-        <dd>{formatStrkExact(summary.totalCost)}</dd>
-      </dl>
+      {shieldOnly && pool ? (
+        <dl className="review-costs" data-review="shield">
+          <dt>{COPY.bank.youShield}</dt>
+          <dd>{formatStrkExact(shielded)}</dd>
+          <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
+          <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
+          <dt>{COPY.bank.totalFromWallet}</dt>
+          <dd>{formatStrkExact(fromWallet)}</dd>
+        </dl>
+      ) : (
+        <dl className="review-costs">
+          <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
+          <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
+          <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
+          <dd>{formatStrkExact(summary.gasEstimate)}</dd>
+          <dt>{COPY.bank.total}</dt>
+          <dd>{formatStrkExact(summary.totalCost)}</dd>
+        </dl>
+      )}
 
       {/* How the product works, said at the moment it matters. Not a privacy disclosure (D-064). */}
       {stake ? <p className="stake-note">{COPY.stake.unstaking}</p> : null}
 
       {summary.warnings.length > 0 ? (
         <ul className="review-warnings">
-          {describeWarnings(summary.warnings, summary.intents).map((text, index) => (
+          {describeWarnings(summary.warnings, summary.intents, pool).map((text, index) => (
             <li key={`${summary.warnings[index]!.kind}-${index}`}>
               {text}
               {summary.warnings[index]!.kind === 'funds-maturing' ? (

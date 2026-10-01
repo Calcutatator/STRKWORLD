@@ -1,5 +1,6 @@
 export { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
 export { BackendPrivacyClient } from './backend-client.js';
+export { RpcPublicBalanceReader } from './public-balance.js';
 export { mapWalletError } from './errors.js';
 export {
   WalletApiPrivacyOperations,
@@ -20,6 +21,7 @@ export {
   type WalletSessionSnapshot,
 } from './session.js';
 export type {
+  PublicBalanceReader,
   BorrowAssetRow,
   BorrowMarketRead,
   BorrowPairRow,

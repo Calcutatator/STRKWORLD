@@ -275,6 +275,15 @@ export interface SwapPriceReader {
   read(signal?: AbortSignal): Promise<readonly PragmaPrice[]>;
 }
 
+/**
+ * D-094: an account's public ERC-20 balance of one token, read over the
+ * wallet's own RPC (`RpcPublicBalanceReader`), never STRKWORLD's backend:
+ * what a shield draws on. No wallet is asked.
+ */
+export interface PublicBalanceReader {
+  read(token: Address, account: Address, signal?: AbortSignal): Promise<bigint>;
+}
+
 /** The backend's keyless quote proxy (D-084). */
 export interface SwapQuoteClient {
   quoteSwap(input: {

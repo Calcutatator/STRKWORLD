@@ -1489,7 +1489,8 @@ describe('the D-072 entry reads', () => {
     ]);
     expect(batch.intents.map((intent) => intent.kind === 'shield' && intent.amount)).toEqual([5n, 7n]);
     expect(batch.warnings).toEqual([
-      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      // D-094: the STRK shield carries the pool fee on top; the other token none.
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 6000000000000000005 is public/) },
       { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
     ]);
   });
@@ -1508,5 +1509,39 @@ describe('the D-072 entry reads', () => {
       throw new Error('aborted');
     });
     await expect(ops.depositStatus(HASH, controller.signal)).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+});
+
+describe('D-094: the public balance a shield draws on, and the fee on top', () => {
+  it("reads the connected account's public balance through the injected reader, never the backend", async () => {
+    const { wallet, pool, supportedVersions } = fixture();
+    const read = vi.fn(async () => 29n * 10n ** 18n);
+    const ops = new WalletApiPrivacyOperations({
+      wallet, pool, supportedVersions, publicBalances: { read },
+      policy: { maxIntents: 8, maxRelayFee: 10n, enabledRoutes: ['shield'], allowedTokens: { shield: [STRK], unshield: [], transfer: [], swap: [] } },
+    });
+    await expect(ops.publicBalance(STRK)).resolves.toBe(29n * 10n ** 18n);
+    expect(read).toHaveBeenCalledWith(STRK, '0xabc', undefined);
+  });
+
+  it('fails closed as unreachable without a reader', async () => {
+    const { ops } = fixture();
+    await expect(ops.publicBalance(STRK)).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+
+  it('deposits the shield amount plus the pool fee, so the note is the amount', async () => {
+    const { ops, invoked } = fixture();
+    const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 9n * 10n ** 18n }]);
+    expect(batch.intents).toEqual([{ kind: 'shield', token: STRK, amount: 9n * 10n ** 18n }]);
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    expect(invoked).toEqual([[{ type: 'deposit', token: STRK, amount: `0x${(15n * 10n ** 18n).toString(16)}` }]]);
+  });
+
+  it('still refuses to sign when the live fee rose past the reviewed one', async () => {
+    const { ops, pool, invoked } = fixture();
+    const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 9n * 10n ** 18n }]);
+    vi.spyOn(pool, 'config').mockResolvedValue({ feeAmount: POOL_FEE + 1n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toBeTruthy();
+    expect(invoked).toEqual([]);
   });
 });

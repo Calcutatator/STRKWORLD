@@ -428,27 +428,19 @@ describe('the entry gate machine (D-072)', () => {
     expect(state().name).toBe('unconfirmed');
   });
 
-  it('flags a STRK deposit no larger than the pool fee, and still lets the player confirm it', async () => {
+  it('reviews a STRK deposit with the pool fee on top, and the note is the typed amount (D-094)', async () => {
     // The fake's pool fee is 6 STRK.
-    const operations = new FakePrivacyOperations();
+    const operations = new FakePrivacyOperations({ publicBalances: { [STRK]: 20n * ONE } });
     open({ operations });
     await gate!.check();
 
-    gate!.setAmount('6');
-    await gate!.review();
-    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: true, feeCeiling: 6n * ONE } });
-    gate!.cancelReview();
-
-    gate!.setAmount('6.000000000000000001');
-    await gate!.review();
-    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: false } });
-    gate!.cancelReview();
-
     gate!.setAmount('0.5');
     await gate!.review();
-    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: true } });
+    expect(state()).toMatchObject({ name: 'review', review: { amount: 5n * 10n ** 17n, poolFee: 6n * ONE, feeCeiling: 6n * ONE } });
     await gate!.confirm();
     expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 5n * 10n ** 17n }]]);
+    // 0.5 STRK reached the pool; 0.5 + 6 left the wallet.
+    expect(await operations.publicBalance(STRK)).toBe(20n * ONE - 65n * 10n ** 17n);
     expect(state().name).toBe('passed');
   });
 
@@ -459,7 +451,7 @@ describe('the entry gate machine (D-072)', () => {
     // One USDC is 1_000000 base units, far below 6 STRK in wei, and says nothing about the fee.
     gate!.setAmount('1');
     await gate!.review();
-    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: false } });
+    expect(state()).toMatchObject({ name: 'review', review: { poolFee: null } });
   });
 
   it('discards a reviewed shield the player cancels', async () => {

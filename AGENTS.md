@@ -259,6 +259,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — A Ready shield pays the pool fee out of the deposit; Shield must show the PUBLIC balance (D-094)
+
+The Bank's Shield tab showed the private pool balance ("0 STRK", and D-091's
+settling note) while the owner's wallet held 29 STRK public. A shield spends
+the public balance, so that card was the wrong figure. The fix reads the
+token's `balance_of(account)` over the wallet's own RPC, not the backend, and
+shows it as "Wallet balance".
+
+The owner then shielded 9 STRK and saw about 3 STRK arrive. Tx
+`0x6d1a6aeff1411bc1613fe74b5507ba683ae0090f0228e931662c0d194786bcb`: Deposit
+event 9 STRK; the pool withdrew 6 STRK as its fee to avnu's relayer, which
+also paid the network fee; a note of about 3 STRK opened. So for an account
+with nothing in the pool, the fee comes out of the deposit and no public STRK
+is spent on gas. D-061's "separate `get_fee_amount()` pull" reading did not
+describe this shield.
+
+Rule now: the typed amount is what reaches the pool; a STRK shield deposits
+amount + fee (`shieldDeposits`), and Max is the wallet balance less the fee.
+The new note shows in the wallet's shielded view after about 20 s. Open
+question: whether Ready takes the fee from existing STRK notes instead when
+the account already holds some (then the full deposit would arrive).
+
 ### 2026-10-01 — xSTRK's live rate is one keyless `convert_to_assets` call; the wallet's balance read is one total per token (D-091)
 
 - xSTRK (`0x028d709c…0b0a`) answers ERC-4626 `convert_to_assets(u256)`:

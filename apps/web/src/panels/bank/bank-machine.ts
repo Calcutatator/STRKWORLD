@@ -86,7 +86,9 @@ export type BankAddRefusal =
   | 'bad-amount'
   | 'bad-recipient'
   | 'recipient-unregistered'
-  | 'recipient-check-failed';
+  | 'recipient-check-failed'
+  /** D-094: the shield and the pool fee on top are more than the wallet's public balance. */
+  | 'exceeds-public-balance';
 
 /**
  * A confirm stage as the debug log names it (D-070): the seam's own stage, or
@@ -147,6 +149,48 @@ export type BalanceView =
   | { readonly status: 'failed'; readonly kind: PrivacyErrorKind; readonly message: string };
 
 /**
+ * D-094: the connected account's PUBLIC balance of the shield token, which
+ * is what a shield draws on. A public chain read over the wallet's own RPC:
+ * no wallet is asked, so the Shield control reads it when it opens, when its
+ * token changes and on Refresh, unlike the private `BalanceView`.
+ */
+export type PublicBalanceView =
+  | { readonly status: 'unrequested' }
+  | { readonly status: 'loading' }
+  | { readonly status: 'loaded'; readonly token: Address; readonly amount: bigint }
+  | { readonly status: 'failed'; readonly message: string };
+
+/**
+ * D-094: one shield's figures. The typed amount is what reaches the pool
+ * balance; the pool fee goes on top, so the wallet sends `total`.
+ */
+export interface ShieldFigures {
+  readonly amount: bigint;
+  readonly fee: bigint;
+  readonly total: bigint;
+}
+
+export function shieldFigures(amount: bigint, fee: bigint): ShieldFigures {
+  return Object.freeze({ amount, fee, total: amount + fee });
+}
+
+/**
+ * D-094: the most a player can shield from `held` public STRK: all of it
+ * but the pool fee and what the visit already queues.
+ *
+ * No network reserve is held back. On the measured Ready shield
+ * (2026-10-01) avnu's relayer paid the network fee out of the pool fee, so
+ * the deposit was the only STRK that left the wallet. A wallet that pays its
+ * own network fee would refuse a shield it cannot cover, before anything is
+ * sent; the funds stay public and nothing is lost. D-013's stranding trap no
+ * longer applies either: every private action pays its fees from the pool.
+ */
+export function shieldMax(held: bigint, fee: bigint, queued: bigint): bigint | null {
+  const left = held - fee - queued;
+  return left > 0n ? left : null;
+}
+
+/**
  * What the player agrees to. Costs come from the prepared batch, not from a
  * constant — the pool fee is governance-settable and has moved once already.
  */
@@ -194,6 +238,8 @@ export type BankFlow =
       readonly transactionHash: string;
       /** Set when this receipt was found outstanding on `open()` rather than just confirmed this session. */
       readonly restored?: boolean;
+      /** D-094: the batch was a shield, whose new note matures before the wallet shows it. */
+      readonly shielded?: boolean;
     }
   | {
       readonly name: 'failed';
@@ -220,6 +266,8 @@ export interface BankState {
   /** The game's money and its fee token, read live rather than hardcoded. */
   token: Address | null;
   balance: BalanceView;
+  /** D-094: the wallet's public balance of `token`, which the Shield control shows and spends. */
+  readonly publicBalance: PublicBalanceView;
   /**
    * Network cost **observed for a batch of exactly the shape a MAX would
    * create** — the queued intents plus one more of the current mode.
@@ -291,6 +339,11 @@ export interface BankPanel {
   setAmount(text: string): void;
   setRecipient(text: string): void;
   refreshBalance(signal?: AbortSignal): Promise<void>;
+  /**
+   * D-094: re-read the wallet's public balance the Shield control spends.
+   * A chain read that asks no wallet; nothing happens outside Shield.
+   */
+  refreshPublicBalance(signal?: AbortSignal): Promise<void>;
   /** `null` whenever a maximum would have to be guessed. See D-022. */
   maxSpendable(): bigint | null;
   applyMax(): void;
@@ -365,6 +418,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
+  /** D-094: the public balance read's own clock; a newer read, a mode or token change, or a close supersedes it. */
+  let publicRead = 0;
   /** A Clear/Remove edit owns the batch over work started from an older shape. */
   let composition = 0;
   /**
@@ -415,6 +470,32 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return false;
   }
 
+  /**
+   * D-094: read the wallet's public balance of the shield token. Only the
+   * Shield control spends it, so nothing is read in another mode.
+   */
+  async function readPublicBalance(signal?: AbortSignal): Promise<void> {
+    const { token, mode } = store.getState();
+    if (!token || mode !== 'shield') return;
+    const mySession = session;
+    const epoch = (publicRead += 1);
+    patch({ publicBalance: { status: 'loading' } });
+    try {
+      const amount = await operations.publicBalance(token, signal);
+      const now = store.getState();
+      if (!live(mySession) || publicRead !== epoch || now.mode !== 'shield' || !now.token || !sameAddress(now.token, token)) return;
+      patch({ publicBalance: { status: 'loaded', token, amount } });
+    } catch {
+      if (!live(mySession) || publicRead !== epoch) return;
+      patch({ publicBalance: { status: 'failed', message: COPY.balance.publicFailed } });
+    }
+  }
+
+  /** D-094: shields already queued, which draw on the same public balance. */
+  function queuedShield(intents: readonly Intent[]): bigint {
+    return queuedSpend(intents.filter((intent) => intent.kind === 'shield'));
+  }
+
   function setBatch(intents: readonly Intent[]): void {
     patch({
       batch: intents,
@@ -452,7 +533,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       flow: {
         name: 'failed',
         kind: failure.kind,
-        message: settlingRefusal(failure.kind) ? COPY.balance.settling : COPY.errors[failure.kind],
+        message: settlingRefusal(failure.kind)
+          ? COPY.balance.settling
+          : publicShortfall(failure.kind)
+            ? `${COPY.entry.publicShortLead} STRK ${COPY.entry.publicShortTail}`
+            : COPY.errors[failure.kind],
         recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery,
       },
     });
@@ -473,6 +558,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return spends.length > 0 && queuedSpend(spends) + state.pool.feeAmount <= state.balance.total;
   }
 
+  /** D-094: a 119 on a shield is the wallet's public balance, not the pool's. */
+  function publicShortfall(kind: PrivacyErrorKind): boolean {
+    const { batch } = store.getState();
+    return kind === 'insufficient-balance' && batch.length > 0 && batch.every((intent) => intent.kind === 'shield');
+  }
+
   function discardPrepared(): void {
     // A batch the wallet is already signing is not ours to release. Discarding
     // it cannot unring that bell, and the seam is entitled to treat a discarded
@@ -491,10 +582,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
   function computeMax(): bigint | null {
     const state = store.getState();
-    // Shielding spends public STRK, which the shell cannot see and must not
-    // guess — and D-013's stranding trap means the last of it is exactly what
-    // a player must not send.
-    if (state.mode === 'shield') return null;
+    // D-094: shielding spends the wallet's public STRK, read over its own
+    // RPC. The pool fee goes on top of the shield, so it is left behind.
+    if (state.mode === 'shield') {
+      if (state.publicBalance.status !== 'loaded' || !state.pool) return null;
+      return shieldMax(state.publicBalance.amount, state.pool.feeAmount, queuedShield(state.batch));
+    }
     if (state.balance.status !== 'loaded') return null;
     // D-091 (amending D-022): a wallet that reports one total per token and
     // no maturity split is taken at that total. The wallet itself refuses a
@@ -538,9 +631,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           pool,
           token: pool.feeToken,
           flow: outstanding
-            ? { name: 'submitted', transactionHash: outstanding.transactionHash, restored: true }
+            ? {
+                name: 'submitted',
+                transactionHash: outstanding.transactionHash,
+                restored: true,
+                ...(outstanding.intents.some((intent) => intent.kind === 'shield') ? { shielded: true } : {}),
+              }
             : { name: 'composing' },
         });
+        // D-094: the Shield control shows the wallet's public balance at once.
+        void readPublicBalance(signal);
       } catch (error) {
         fail(error, 'close', id);
       }
@@ -552,6 +652,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       begin();
       session += 1;
       invalidateReads();
+      publicRead += 1;
       discardPrepared();
       accumulator.clear();
       stateStore.setState(freezeBankState(initialState(store.getState().mode, register)));
@@ -578,6 +679,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         notice: null,
       });
       if (from !== mode) debugBank({ step: 'mode', mode, from });
+      // D-094: opening the Shield control reads the balance it spends; leaving
+      // it drops any read in flight.
+      publicRead += 1;
+      if (mode === 'shield') void readPublicBalance();
+      else patch({ publicBalance: { status: 'unrequested' } });
     },
 
     setAmount(text: string): void {
@@ -589,6 +695,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     /** Only ever called from a player action. There is no timer in this file. */
+    refreshPublicBalance: (signal?: AbortSignal) => readPublicBalance(signal),
+
     async refreshBalance(signal?: AbortSignal): Promise<void> {
       const { token } = store.getState();
       if (!token) {
@@ -669,6 +777,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         recipient = state.recipientText.trim();
         if (!looksLikeAddress(recipient)) {
           refuseAdd('bad-recipient', COPY.notices.badRecipient);
+          return;
+        }
+      }
+
+      // D-094: the shield plus the pool fee on top must fit the wallet's
+      // public balance, when it has been read. Unread, the wallet decides.
+      if (state.mode === 'shield' && state.publicBalance.status === 'loaded' && state.pool) {
+        const needed = queuedShield(state.batch) + amount + state.pool.feeAmount;
+        if (needed > state.publicBalance.amount) {
+          refuseAdd('exceeds-public-balance', COPY.kit.insufficient.replace('{symbol}', 'STRK'));
           return;
         }
       }
@@ -908,13 +1026,23 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         invalidateReads();
         if (!current(id)) return;
         setBatch(accumulator.intents);
+        const shielded = summary.intents.some((intent) => intent.kind === 'shield');
         patch({
-          flow: { name: 'submitted', transactionHash: result.transactionHash },
+          flow: {
+            name: 'submitted',
+            transactionHash: result.transactionHash,
+            ...(shielded ? { shielded: true } : {}),
+          },
           // The balance moved. It is not re-read here: the player asks.
           balance: { status: 'unrequested' },
           notice: { tone: 'info', text: COPY.balance.changed },
         });
         trace('submitted');
+        // D-094: the public balance is a chain read that asks no wallet, so
+        // the Shield control re-reads it rather than show the old figure.
+        publicRead += 1;
+        if (store.getState().mode === 'shield') void readPublicBalance();
+        else patch({ publicBalance: { status: 'unrequested' } });
       } catch (error) {
         if (signingOwner === id) {
           signingOwner = null;
@@ -1000,6 +1128,7 @@ function initialState(mode: BankMode, register: readonly RouteGrade[]): BankStat
     pool: null,
     token: null,
     balance: { status: 'unrequested' },
+    publicBalance: { status: 'unrequested' },
     quotedGasForNextIntent: null,
     amountText: '',
     recipientText: '',
@@ -1033,6 +1162,7 @@ function freezeBankState(state: BankState): BankState {
     batchDisclosures: Object.freeze([...state.batchDisclosures]),
     pool: state.pool === null ? null : Object.freeze({ ...state.pool }),
     balance,
+    publicBalance: Object.freeze({ ...state.publicBalance }) as PublicBalanceView,
     batch: Object.freeze(state.batch.map(freezeIntent)),
     notice: state.notice === null ? null : Object.freeze({ ...state.notice }),
     flow,

@@ -158,11 +158,12 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(gate()!.getAttribute('data-gate')).toBe('deposit');
     expect(gate()!.querySelector('h2')?.textContent).toBe(COPY.entry.depositTitle);
     expect(gate()!.textContent).toContain(COPY.entry.depositBody);
-    expect(gate()!.textContent).toContain(COPY.entry.feeNote);
+    // D-094: a STRK deposit pays the pool fee on top.
+    expect(gate()!.textContent).toContain(COPY.bank.shieldFeeOnTop);
     // One token, so no picker: the amount says which.
     expect(container!.querySelector('select')).toBeNull();
     expect(container!.querySelector('label')?.textContent).toContain('Amount (STRK)');
-    // No public balance: the Bank does not read one either.
+    // The gate reads no public balance (the Bank's Shield control does, D-094).
     expect(gate()!.textContent).not.toMatch(/public balance/i);
 
     await type(amountInput(), '0.5');
@@ -171,12 +172,13 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(gate()!.querySelector('.batch-list')?.textContent).toBe('Deposit 0.5 STRK');
     // The seam's public-leg warning, in the token's own units rather than wei.
     expect(gate()!.querySelector('.review-warnings')?.textContent).toBe(
-      'Depositing 0.5 STRK is public: the amount and your address are visible on-chain.',
+      // D-094: the deposit is the amount plus the 6 STRK pool fee on top.
+      'Depositing 6.5 STRK is public: the amount and your address are visible on-chain.',
     );
     expect(gate()!.textContent).not.toContain('500000000000000000');
     expect([...gate()!.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([SHIELD_DISCLOSURE]);
-    // No fee figure is promised; the note says part of it pays the fee.
-    expect(gate()!.textContent).not.toContain(COPY.bank.poolFee);
+    // D-094: the fee goes on top, and the review states it and the total.
+    expect([...gate()!.querySelectorAll('[data-review="shield"] dd')].map((dd) => dd.textContent)).toEqual(['0.5 STRK', '6 STRK', '6.5 STRK']);
 
     await click(button(COPY.flow.confirm));
     expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 5n * 10n ** 17n }]]);
@@ -300,23 +302,22 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(city()).not.toBeNull();
   });
 
-  it('warns at review when a STRK deposit is no more than the pool fee, and keeps Confirm', async () => {
+  it('reviews a STRK deposit with the pool fee on top, so the typed amount reaches the pool (D-094)', async () => {
     const operations = new FakePrivacyOperations();
     await mount({ operations });
     await click(button('Enter STRKWORLD'));
-    await type(amountInput(), '6');
+    expect(gate()!.textContent).toContain(COPY.bank.shieldFeeOnTop);
+    await type(amountInput(), '9');
     await click(button(COPY.entry.review));
 
-    const warning = gate()!.querySelector('[data-warning="fee-takes-all"]');
-    expect(warning?.textContent).toBe(COPY.entry.feeTakesAll);
+    const figures = gate()!.querySelector('[data-review="shield"]')!;
+    expect([...figures.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['9 STRK', '6 STRK', '15 STRK']);
     expect(gate()!.querySelector('.panel-review')!.textContent).not.toContain(COPY.entry.feeNote);
+    // The public leg names the deposit an observer sees: the amount and the fee.
+    expect(gate()!.querySelector('.review-warnings')?.textContent).toBe(
+      'Depositing 15 STRK is public: the amount and your address are visible on-chain.',
+    );
     expect(button(COPY.flow.confirm).disabled).toBe(false);
-
-    await click(button(COPY.flow.cancel));
-    await type(amountInput(), '7');
-    await click(button(COPY.entry.review));
-    expect(gate()!.querySelector('[data-warning="fee-takes-all"]')).toBeNull();
-    expect(gate()!.querySelector('.panel-review')!.textContent).toContain(COPY.entry.feeNote);
   });
 
   it('keeps the plain fee note for another token, whatever the amount', async () => {

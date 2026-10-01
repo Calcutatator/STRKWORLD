@@ -90,10 +90,10 @@ export const COPY = freezeCopy({
    * The entry gate (D-072): one check before the city opens, and the deposit
    * card for a player with nothing in the pool. The deposit's privacy
    * disclosure is the register's approved copy (D-024), shown at the commit
-   * point by `ConfirmGate`, and never restated here. The fee note names no
-   * figure: the wallet takes the pool's fee out of the deposit, in the
-   * deposited token. Only a STRK deposit, in the fee's own token, can be
-   * compared with it (`feeTakesAll`).
+   * point by `ConfirmGate`, and never restated here. D-094: a STRK deposit
+   * pays the pool fee on top, and its review shows the figures; the fee note
+   * stays, without a figure, for another token, whose share of the STRK fee
+   * cannot be stated.
    */
   entry: {
     title: 'One check before you enter',
@@ -106,7 +106,6 @@ export const COPY = freezeCopy({
     depositBody: 'This account has nothing in the STRK20 privacy pool yet. Deposit any amount to enter.',
     token: 'Token',
     feeNote: "Part of a first deposit pays the pool's fee, so less than you deposit reaches the pool.",
-    feeTakesAll: "This is no more than the pool's fee, which comes out of the deposit, so nothing would reach the pool.",
     review: 'Review deposit',
     deposit: 'Deposit',
     landing: 'Deposit sent. Waiting for the network to confirm it…',
@@ -173,6 +172,9 @@ export const COPY = freezeCopy({
       'The network cost depends on how much you queue, comes out of the same balance, and is only known once a visit of this shape has been costed. Review this visit once and the maximum appears.',
     maturing: 'Some of this is still maturing and cannot be spent yet.',
     feeReserved: 'The maximum leaves the pool fee behind, so you are not stranded one transaction short.',
+    /** D-094: the Shield control's wallet balance, a public chain read that asks no wallet. */
+    publicLoading: 'Reading your wallet balance…',
+    publicFailed: "Couldn't read your wallet balance. Nothing was sent.",
   },
 
   flow: {
@@ -225,6 +227,17 @@ export const COPY = freezeCopy({
     poolFeeNote: 'Read live from the pool. It is a governance setting and has moved before.',
     networkCost: 'Network cost',
     total: 'Total',
+    /**
+     * D-094: a shield's figures. The typed amount is what reaches the pool
+     * balance, and the pool fee goes on top of it.
+     */
+    youShield: 'You shield',
+    totalFromWallet: 'Total from your wallet',
+    shieldFeeOnTop: 'The pool fee is added on top, so all of what you shield reaches your pool balance.',
+    shieldFeeNudge: 'The pool fee is the same on every shield, so it costs proportionally less on a larger one.',
+    shieldMaxNote: 'Max leaves the pool fee in your wallet to pay for this shield.',
+    exceedsWallet: 'More than your wallet balance once the pool fee is added',
+    shieldArrives: "Your wallet's shielded view shows the new funds after about 20 seconds, once they mature.",
   },
 
   exchange: {
@@ -1045,6 +1058,8 @@ export const COPY = freezeCopy({
    */
   kit: {
     poolBalance: 'Pool balance',
+    /** D-094: the public balance a shield draws on, never called a pool balance. */
+    walletBalance: 'Wallet balance',
     max: 'Max',
     half: '50%',
     maxLabel: 'Fill in the most you can use',

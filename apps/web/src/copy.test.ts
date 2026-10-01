@@ -84,11 +84,12 @@ describe('shell copy', () => {
       expect(COPY.entry.checkBalance).toBe('Check my private balance');
     });
 
-    it('warns plainly when a STRK deposit is no more than the fee, with no figure', () => {
-      expect(COPY.entry.feeTakesAll).toBe(
-        "This is no more than the pool's fee, which comes out of the deposit, so nothing would reach the pool.",
+    it('says the pool fee comes on top of a shield, so all of it reaches the pool (D-094)', () => {
+      expect(COPY.bank.shieldFeeOnTop).toBe(
+        'The pool fee is added on top, so all of what you shield reaches your pool balance.',
       );
-      expect(COPY.entry.feeTakesAll).not.toMatch(/\d/);
+      expect(COPY.kit.walletBalance).toBe('Wallet balance');
+      expect(COPY.kit.walletBalance).not.toBe(COPY.kit.poolBalance);
     });
 
     it('says the network check is out of reach without calling the deposit failed or slow', () => {

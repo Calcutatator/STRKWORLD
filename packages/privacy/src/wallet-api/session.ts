@@ -14,6 +14,7 @@ import type {
 import { PrivacyError, type Address } from '../types.js';
 import { BackendPrivacyClient } from './backend-client.js';
 import { PragmaPriceReader } from './pragma-prices.js';
+import { RpcPublicBalanceReader } from './public-balance.js';
 import { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
 import { mapWalletError } from './errors.js';
 import { WalletApiPrivacyOperations } from './operations.js';
@@ -255,6 +256,9 @@ export function createWalletSession(
     prepareEndurClaim: (options) => ownedEndurBatch((owned) => owned.prepareEndurClaim(options)),
     // D-091: xSTRK's exchange rate, a public read, owned like the Vault's rates.
     endurRate: (signal) => ownedResult((owned) => owned.endurRate(signal)),
+    // D-094: the public balance a shield draws on, owned the same way: a read
+    // for a retired account is refused.
+    publicBalance: (token, signal) => ownedResult((owned) => owned.publicBalance(token, signal)),
   };
 
   async function ownedBorrowBatch(
@@ -602,6 +606,8 @@ export function createProductionWalletSession(
   // D-084: the swap's oracle check reads Pragma over the wallet's own RPC,
   // never through the backend that also relays avnu's quote.
   const swapPrices = new PragmaPriceReader(options.rpcUrl);
+  // D-094: the public balance a shield draws on, over the same RPC.
+  const publicBalances = new RpcPublicBalanceReader(options.rpcUrl);
   return createWalletSession(options, {
     discovery,
     async connectWallet(handle) {
@@ -644,6 +650,7 @@ export function createProductionWalletSession(
           // their independent check: Pragma over the wallet's own RPC.
           swapQuotes: backend,
           swapPrices,
+          publicBalances,
           supportedVersions: createSupportedVersionsReader(wallet),
           policy,
           // D-077: the Vault's two public reads, through the same backend; the
