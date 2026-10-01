@@ -15,6 +15,9 @@ import type {
   BorrowPositionRead,
   BorrowRpcPort,
   ChainHead,
+  EndurRequestRead,
+  EndurRpcPort,
+  EndurUnstakeRead,
   PoolEventsFilter,
   PoolEventsPage,
   PoolRpcPort,
@@ -32,6 +35,20 @@ import {
   SHADOW_ACCOUNT_ANONYMIZER,
   VESU_VAULTS,
 } from './vault.js';
+import {
+  ENDUR_EVENTS_CHUNK_SIZE,
+  ENDUR_SCAN_MAX_PAGES,
+  ENDUR_SCAN_WINDOW_BLOCKS,
+  ENDUR_UNSTAKE_FIRST_BLOCK,
+  ENDUR_WITHDRAWAL_QUEUE,
+  ENDUR_XSTRK,
+  ENDUR_XSTRK_ASSET,
+  CLAIM_WITHDRAWAL_SELECTOR,
+  GET_REQUEST_INFO_SELECTOR,
+  MAX_ENDUR_CLAIM_DRY_RUNS,
+  MAX_ENDUR_REQUESTS,
+  WITHDRAW_QUEUE_EVENT_KEY,
+} from './endur.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
 const PUBLIC_KEY_SELECTOR = '0x1a35984e05126dbecb7c3bb9929e7dd9106d460c59b1633739a5c733a5fb13b';
@@ -79,7 +96,7 @@ export interface StarknetRpcOptions {
 }
 
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
-export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort, BorrowRpcPort {
+export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort, BorrowRpcPort, EndurRpcPort {
   private id = 0;
   private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
@@ -279,6 +296,118 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
       if (assets === null || maxWithdraw === null || maxRedeem === null) return { vault, ok: false };
       return { vault, ok: true, shares: owned, assets, maxWithdraw, maxRedeem };
     });
+  }
+
+  /**
+   * D-085: what `account` holds at Endur's withdrawal queue. The latest
+   * block's number and timestamp; the queue's `WithdrawQueue` events whose
+   * receiver key is `account`, from `ENDUR_SCAN_WINDOW_BLOCKS` back (never
+   * before `ENDUR_UNSTAKE_FIRST_BLOCK`), at most `ENDUR_SCAN_MAX_PAGES` pages;
+   * then one batch of STRK's, xSTRK's and the queue's `balance_of(account)`
+   * and `get_request_info` for each request id found (the newest
+   * `MAX_ENDUR_REQUESTS`); then a read-only `claim_withdrawal` dry run of
+   * each unpaid request past its wait, oldest first, at most
+   * `MAX_ENDUR_CLAIM_DRY_RUNS`, whose success is `claimableNow`. An event
+   * outside its filter, or a balance or request read that fails or answers
+   * malformed, fails the whole read: half an answer could hide a request. A
+   * scan that runs out of pages answers `complete: false`. A dry run that
+   * reverts or fails is `claimableNow: false`, the safe answer.
+   */
+  async getEndurUnstake(account: string, signal?: AbortSignal): Promise<EndurUnstakeRead> {
+    if (!isFelt(account) || BigInt(account) === 0n || BigInt(account) >= CONTRACT_ADDRESS_BOUND) {
+      throw new Error('Unstaking account is invalid.');
+    }
+    const block = await this.rpc('starknet_getBlockWithTxHashes', ['latest'], signal);
+    const head = ownData(block, 'block_number');
+    const chainTime = ownData(block, 'timestamp');
+    if (
+      typeof head !== 'number' || !Number.isSafeInteger(head) || head < 0
+      || typeof chainTime !== 'number' || !Number.isSafeInteger(chainTime) || chainTime < 0
+    ) {
+      throw new Error('Starknet RPC returned an invalid block.');
+    }
+    const fromBlock = Math.max(ENDUR_UNSTAKE_FIRST_BLOCK, head - ENDUR_SCAN_WINDOW_BLOCKS);
+    const ids = new Set<bigint>();
+    let complete = true;
+    if (head >= fromBlock) {
+      const queue = BigInt(ENDUR_WITHDRAWAL_QUEUE);
+      const key = BigInt(WITHDRAW_QUEUE_EVENT_KEY);
+      const receiver = BigInt(account);
+      let token: string | null = null;
+      for (let page = 0; page < ENDUR_SCAN_MAX_PAGES; page += 1) {
+        const value = await this.rpc('starknet_getEvents', [{
+          from_block: { block_number: fromBlock },
+          to_block: { block_number: head },
+          address: ENDUR_WITHDRAWAL_QUEUE,
+          keys: [[WITHDRAW_QUEUE_EVENT_KEY], [account]],
+          chunk_size: ENDUR_EVENTS_CHUNK_SIZE,
+          ...(token !== null ? { continuation_token: token } : {}),
+        }], signal);
+        const events = ownData(value, 'events');
+        if (!Array.isArray(events) || events.length > ENDUR_EVENTS_CHUNK_SIZE) {
+          throw new Error('Starknet RPC returned an invalid events page.');
+        }
+        for (let index = 0; index < events.length; index += 1) {
+          const event = ownData(events, String(index));
+          const from = ownData(event, 'from_address');
+          const keys = ownData(event, 'keys');
+          const data = ownData(event, 'data');
+          const first = Array.isArray(keys) ? ownData(keys, '0') : undefined;
+          const second = Array.isArray(keys) ? ownData(keys, '1') : undefined;
+          const requestId = Array.isArray(data) ? ownData(data, '0') : undefined;
+          const blockNumber = ownData(event, 'block_number');
+          if (
+            typeof from !== 'string' || !isFelt(from) || BigInt(from) !== queue
+            || typeof first !== 'string' || !isFelt(first) || BigInt(first) !== key
+            || typeof second !== 'string' || !isFelt(second) || BigInt(second) !== receiver
+            || typeof requestId !== 'string' || !isFelt(requestId) || BigInt(requestId) >= (1n << 128n)
+            || typeof blockNumber !== 'number' || !Number.isSafeInteger(blockNumber) || blockNumber < fromBlock || blockNumber > head
+          ) {
+            throw new Error('Starknet RPC returned an event outside its filter.');
+          }
+          ids.add(BigInt(requestId));
+        }
+        const next = ownData(value, 'continuation_token');
+        if (next === undefined || next === null) {
+          token = null;
+          break;
+        }
+        if (typeof next !== 'string' || !isContinuationToken(next)) {
+          throw new Error('Starknet RPC returned an invalid continuation token.');
+        }
+        token = next;
+      }
+      // Pages left over: say so, rather than answer as if the list were whole.
+      complete = token === null;
+    }
+    const requestIds = [...ids].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)).slice(0, MAX_ENDUR_REQUESTS);
+    const outcomes = await this.callPinned([
+      { contract: ENDUR_XSTRK_ASSET, selector: BALANCE_OF_SELECTOR, calldata: [account] },
+      { contract: ENDUR_XSTRK, selector: BALANCE_OF_SELECTOR, calldata: [account] },
+      { contract: ENDUR_WITHDRAWAL_QUEUE, selector: BALANCE_OF_SELECTOR, calldata: [account] },
+      ...requestIds.map((requestId) => ({
+        contract: ENDUR_WITHDRAWAL_QUEUE,
+        selector: GET_REQUEST_INFO_SELECTOR,
+        calldata: [`0x${requestId.toString(16)}`],
+      })),
+    ], signal);
+    const [strk, xstrk, outstanding] = [0, 1, 2].map((index) => readU256(outcomes[index], 'balance'));
+    if (strk === null || strk === undefined || xstrk === null || xstrk === undefined || outstanding === null || outstanding === undefined) {
+      throw new Error('Starknet RPC could not read the unstaking balances.');
+    }
+    const recorded = requestIds.map((requestId, index) => endurRequestOf(requestId, outcomes[index + 3]));
+    const due = recorded
+      .filter((request) => !request.claimed && request.claimableAt <= chainTime)
+      .sort((a, b) => (a.requestId < b.requestId ? -1 : a.requestId > b.requestId ? 1 : 0))
+      .slice(0, MAX_ENDUR_CLAIM_DRY_RUNS);
+    const dryRuns = due.length === 0 ? [] : await this.callPinned(due.map((request) => ({
+      contract: ENDUR_WITHDRAWAL_QUEUE,
+      selector: CLAIM_WITHDRAWAL_SELECTOR,
+      calldata: [`0x${request.requestId.toString(16)}`],
+    })), signal);
+    const payable = new Set(due.filter((_request, index) => dryRuns[index] != null).map((request) => request.requestId));
+    const requests = recorded.map((request) => ({ ...request, claimableNow: payable.has(request.requestId) }));
+    return { chainTime, strk, xstrk, outstanding, requests, complete };
   }
 
   /**
@@ -605,6 +734,29 @@ function batchOutcome(payload: readonly unknown[], id: number): CallOutcome {
   const { result } = envelope;
   if (!Array.isArray(result) || result.some((item) => typeof item !== 'string' || !isFelt(item))) return null;
   return Object.freeze([...result as string[]]);
+}
+
+/**
+ * D-085: one `get_request_info` answer, a `WithdrawRequest`: assets (u256),
+ * shares (u256), isClaimed (bool), timestamp (u64), claimTime (u64),
+ * cumulative_requested_amount_snapshot (u256), nine felts. Anything else
+ * fails the read.
+ */
+function endurRequestOf(requestId: bigint, value: CallOutcome | undefined): Omit<EndurRequestRead, 'claimableNow'> {
+  if (!value || value.length !== 9) throw new Error('Starknet RPC could not read an unstaking request.');
+  const assets = u256Of(value.slice(0, 2), 'request assets');
+  const shares = u256Of(value.slice(2, 4), 'request shares');
+  const claimed = BigInt(value[4]!);
+  const requestedAt = BigInt(value[5]!);
+  const claimableAt = BigInt(value[6]!);
+  if (
+    (claimed !== 0n && claimed !== 1n)
+    || requestedAt > BigInt(Number.MAX_SAFE_INTEGER) || claimableAt > BigInt(Number.MAX_SAFE_INTEGER)
+    || claimableAt < requestedAt
+  ) {
+    throw new Error('Starknet RPC returned an invalid unstaking request.');
+  }
+  return { requestId, assets, shares, claimed: claimed === 1n, requestedAt: Number(requestedAt), claimableAt: Number(claimableAt) };
 }
 
 /** A u256 argument as Cairo serializes it: low 128 bits, then high. */

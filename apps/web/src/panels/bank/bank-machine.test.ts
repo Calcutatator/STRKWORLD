@@ -1337,6 +1337,11 @@ class AggregateOnlyOperations implements PrivacyOperations {
   borrowMarket: PrivacyOperations['borrowMarket'] = (signal) => this.inner.borrowMarket(signal);
   borrowPositions: PrivacyOperations['borrowPositions'] = (options) => this.inner.borrowPositions(options);
   prepareBorrow: PrivacyOperations['prepareBorrow'] = (request, options) => this.inner.prepareBorrow(request, options);
+  // D-085: Endur unstaking, passed through untouched.
+  endurUnstakePosition: PrivacyOperations['endurUnstakePosition'] = (options) => this.inner.endurUnstakePosition(options);
+  prepareEndurUnstake: PrivacyOperations['prepareEndurUnstake'] = (shares, options) =>
+    this.inner.prepareEndurUnstake(shares, options);
+  prepareEndurClaim: PrivacyOperations['prepareEndurClaim'] = (options) => this.inner.prepareEndurClaim(options);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);

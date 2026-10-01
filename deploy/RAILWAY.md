@@ -80,10 +80,15 @@ D-067).
 | `VITE_STRK20_SHIELD_ENABLED` / `_MAX_INTENTS` / `_ALLOWED_TOKENS` | `true` / `1` / STRK, ETH, USDC, USDT and WBTC, comma separated (D-072; the list is in `.env.production.example`) |
 | `VITE_STRK20_UNSHIELD_ENABLED` / `_MAX_INTENTS` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `1` / `10000000000000000000` / STRK (D-062) |
 | `VITE_STRK20_TRANSFER_ENABLED` / `_MAX_INTENTS` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `1` / `10000000000000000000` / STRK |
+| `VITE_STRK20_STAKE_ENABLED` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `10000000000000000000` / `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d,0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a` (STRK, xSTRK; D-085) |
+| `VITE_STRK20_UNSTAKE_ENABLED` | `true` (D-085) |
 
-Leave `VITE_STRK20_STAKE_*` unset. With shield enabled, the Bridge's D-061
-reserve planner is on too. Leave `VITE_STRK20_VAULT_*` unset too, except for
-the Vault probe below: unset, the Vault is the locked facade. Leave
+Staking is on (D-085): the wallet submits it (D-082), so it needs no avnu
+key and no `BACKEND_ROUTE_STAKE_*` block, and its relay-fee value gates no
+quote. Unstaking is on beside it; see the Endur probe below. With shield
+enabled, the Bridge's D-061 reserve planner is on too. Leave
+`VITE_STRK20_VAULT_*` unset, except for the Vault probe below: unset, the
+Vault is the locked facade. Leave
 `VITE_STRK20_BORROW_ENABLED` unset except for the Borrow counter probe below.
 
 ## After it deploys
@@ -195,6 +200,34 @@ shadow account has been made yet**: the first one is this probe.
    probe exists for: report it with its code rather than retrying.
 
 To lock it again, unset the variable and redeploy.
+
+## The Endur probe (D-085)
+
+Staking and unstaking are on in the table above. Staking goes through
+Endur's deposit anonymizer (D-063). Unstaking goes through the player's own
+STRK20 shadow account for `strkworld-endur`, nonce 0 (not the Vault's), via
+the canonical anonymizer: a request sends xSTRK from the pool to that
+address, which calls xSTRK's `redeem` and holds Endur's request NFT; a claim,
+about seven days later, moves the STRK back into the pool. Nothing changes on
+the backend: both are submitted by the wallet, and unstaking's one read,
+`POST /v1/rpc/endur-unstake` (the queue's requests for the stand-in address,
+its balances and the chain's clock), follows `BACKEND_GLOBAL_ENABLED`.
+
+1. With a funded account on a wallet that reports Wallet API 0.10.4, keep at
+   least the pool fee (6 STRK) in the shielded balance. At the Bank's staking
+   counter, stake a small amount of STRK; the xSTRK lands in the pool.
+2. Under it, at the unstaking counter, request a small unstake of that
+   xSTRK, then Show my unstaking requests: one request, about seven days
+   left by the chain's clock.
+3. After the wait, read the requests again. A request reads "Waiting for
+   Endur to fund it" until Endur's queue can pay it; Endur usually funds and
+   pays it to the stand-in address itself. Then claim: the STRK lands in the
+   pool; read the Bank balance to see it.
+4. With debug logs on, an unstaking failure reaches the `privacy.operation`
+   line by its kind alone; unstaking adds no probe lines of its own, and no
+   amount, address or hash is logged.
+
+To switch either off, unset its variables and redeploy.
 
 ## Debug logs
 

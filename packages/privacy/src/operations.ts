@@ -28,8 +28,10 @@ import type {
  * `vaultPosition` and returns the stand-in address, `prepareVaultRedeem`
  * takes a token, and `vaultRates` reads Vesu's supply APY) and D-083
  * (borrowing on Vesu from a second shadow account: `borrowMarket`,
- * `borrowPositions` and `prepareBorrow`, with their shapes below); every
- * other method and shape is unchanged.
+ * `borrowPositions` and `prepareBorrow`, with their shapes below) and D-085
+ * (Endur unstaking through a shadow account: `endurUnstakePosition`,
+ * `prepareEndurUnstake` and `prepareEndurClaim`); every other method and
+ * shape is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -301,6 +303,120 @@ export interface PrivacyOperations {
    * can say which, in its own words.
    */
   prepareBorrow(request: BorrowRequest, options?: VaultCallOptions): Promise<PreparedBorrowBatch>;
+
+  /**
+   * The player's Endur unstaking (D-085): the unpaid withdrawal requests on
+   * their unstaking shadow account (dapp name `strkworld-endur`, nonce 0, not
+   * the Vault's), each `waiting` or `ready` by the chain's own clock, the
+   * STRK Endur has already paid to that address, and the address itself.
+   *
+   * Resolved like the Vault's stand-in address (a commitment the wallet
+   * derives, the anonymizer's view, the same cross-check), then one public
+   * read through the backend (D-014). The commitment never leaves this
+   * package; the address is public and the shell may show it, never store,
+   * log or send it (D-079's rule). Call it from a player action: the wallet
+   * may ask first.
+   */
+  endurUnstakePosition(options?: VaultCallOptions): Promise<EndurUnstakePosition>;
+
+  /**
+   * Cost an unstake request of `shares` xSTRK from the shielded balance
+   * (D-085, flow A). The prepared batch withdraws the xSTRK to the unstaking
+   * shadow account, a public leg, and has it call xSTRK's `redeem`, which
+   * queues the STRK at Endur and mints the request to that address. Nothing
+   * returns now; xSTRK already left on the address returns to the pool.
+   * The wallet proves and submits it (`wallet_strk20InvokeTransaction`).
+   */
+  prepareEndurUnstake(shares: bigint, options?: VaultCallOptions): Promise<PreparedEndurBatch>;
+
+  /**
+   * Cost moving unstaked STRK into the shielded balance (D-085, flow B). When
+   * the stand-in already holds STRK (Endur paid it there), the batch only
+   * collects it: a claim in the same batch could revert if Endur's relayer
+   * claims first. Otherwise the shadow account claims each request a dry run
+   * found payable now (at most `MAX_ENDUR_CLAIMS_PER_BATCH`). Either way every
+   * STRK on it lands in one pool note for this account. Refuses when nothing
+   * is held and nothing is payable.
+   */
+  prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch>;
+}
+
+// ---------------------------------------------------------------------------
+// Endur unstaking — D-085
+// ---------------------------------------------------------------------------
+
+/** One unpaid Endur withdrawal request on the unstaking stand-in address. */
+export interface EndurWithdrawalRequest {
+  /** Endur's request id, the queue NFT's token id. */
+  readonly requestId: bigint;
+  /** The STRK Endur owes for it, fixed when it was requested. */
+  readonly assets: bigint;
+  /** The xSTRK it burned. */
+  readonly shares: bigint;
+  /** Unix seconds, from the chain. */
+  readonly requestedAt: number;
+  /** Unix seconds after which Endur lets it be claimed (`claimTime`). */
+  readonly claimableAt: number;
+  /**
+   * `waiting` before `claimableAt` by the chain's clock; then
+   * `awaiting-funds` while a dry run of its claim reverts (Endur has not
+   * funded its queue yet); `ready` once that dry run succeeds, until paid.
+   */
+  readonly status: 'waiting' | 'awaiting-funds' | 'ready';
+  /** Seconds left by the chain's clock; zero once past its wait. */
+  readonly secondsLeft: number;
+}
+
+/** What one unstaking read answers (D-085). */
+export interface EndurUnstakePosition {
+  /** The unstaking shadow account: public on-chain, never stored, logged or sent anywhere unasked. */
+  readonly standIn: Address;
+  /** The latest block's timestamp, the clock every `status` is read by. */
+  readonly chainTime: number;
+  /** Unpaid requests, oldest first. */
+  readonly requests: readonly EndurWithdrawalRequest[];
+  /** STRK on the stand-in address: requests already paid out there, not yet moved to the pool. */
+  readonly strkHeld: bigint;
+  /** xSTRK on the stand-in address, which the next request returns to the pool. */
+  readonly xstrkHeld: bigint;
+  /** Unpaid requests the address holds that the read could not list, being older than its window. */
+  readonly unlisted: number;
+  /** False when the read's scan ran out of pages, so the list may be missing requests. */
+  readonly complete: boolean;
+}
+
+/** What a prepared unstaking batch does, for the review (D-085). */
+export type EndurAction =
+  /** Queue `shares` xSTRK at Endur; `leftover` xSTRK already on the stand-in returns to the pool. */
+  | { readonly kind: 'request'; readonly shares: bigint; readonly leftover: bigint }
+  /**
+   * Claim `requestIds` (each ready and unpaid at prepare time; empty when
+   * Endur had paid them all) and collect every STRK on the stand-in: `owed`
+   * from those requests plus `held` already there. The exact amount is
+   * whatever the address holds when it runs.
+   */
+  | { readonly kind: 'claim'; readonly requestIds: readonly bigint[]; readonly owed: bigint; readonly held: bigint };
+
+/**
+ * A costed unstaking batch (D-085), with the Vault's prepare-then-confirm
+ * contract: the wallet proves and submits it and adds its own network fee,
+ * so `gasEstimate` is zero and `totalCost` is the pool fee.
+ */
+export interface PreparedEndurBatch {
+  readonly action: EndurAction;
+  readonly poolFee: bigint;
+  readonly gasEstimate: bigint;
+  readonly totalCost: bigint;
+  readonly warnings: readonly BatchWarning[];
+  readonly promptCount: number;
+  confirm(opts: {
+    feeCeiling: bigint;
+    onProgress?: ProgressCallback;
+    onStage?: VaultStageCallback;
+    onSubmitted?: (result: TxResult) => void;
+    signal?: AbortSignal;
+  }): Promise<VaultTxResult>;
+  discard(): void;
 }
 
 // ---------------------------------------------------------------------------

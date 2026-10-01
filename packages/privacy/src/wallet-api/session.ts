@@ -3,8 +3,10 @@ import { WalletAccountV6, walletV6 } from 'starknet';
 import type {
   BorrowAction,
   BorrowHealth,
+  EndurAction,
   PreparedBatch,
   PreparedBorrowBatch,
+  PreparedEndurBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   VaultAction,
@@ -246,6 +248,10 @@ export function createWalletSession(
     borrowMarket: (signal) => ownedResult((owned) => owned.borrowMarket(signal)),
     borrowPositions: (options) => ownedResult((owned) => owned.borrowPositions(options)),
     prepareBorrow: (request, options) => ownedBorrowBatch((owned) => owned.prepareBorrow(request, options)),
+    // D-085: Endur unstaking, owned the same way as the Vault.
+    endurUnstakePosition: (options) => ownedResult((owned) => owned.endurUnstakePosition(options)),
+    prepareEndurUnstake: (shares, options) => ownedEndurBatch((owned) => owned.prepareEndurUnstake(shares, options)),
+    prepareEndurClaim: (options) => ownedEndurBatch((owned) => owned.prepareEndurClaim(options)),
   };
 
   async function ownedBorrowBatch(
@@ -268,6 +274,28 @@ export function createWalletSession(
       throw changedSessionError();
     }
     return ownPreparedBorrowBatch(prepared, () => isCurrent(owner), changedSessionError);
+  }
+
+  async function ownedEndurBatch(
+    run: (owned: PrivacyOperations) => Promise<PreparedEndurBatch>,
+  ): Promise<PreparedEndurBatch> {
+    const owner = currentOwner();
+    let prepared: PreparedEndurBatch;
+    try {
+      prepared = await run(owner.operations);
+    } catch (error) {
+      if (!isCurrent(owner)) throw changedSessionError();
+      throw error;
+    }
+    if (!isCurrent(owner)) {
+      try {
+        prepared.discard();
+      } catch {
+        // Automatic stale cleanup cannot mask the changed-session result.
+      }
+      throw changedSessionError();
+    }
+    return ownPreparedShadowBatch(prepared, ownEndurAction, {}, 'unstaking', () => isCurrent(owner), changedSessionError);
   }
 
   async function ownedVaultBatch(
@@ -613,6 +641,8 @@ export function createProductionWalletSession(
           vault: backend,
           // D-083: the Borrow counter's reads, through the same backend.
           borrow: backend,
+          // D-085: unstaking's reads, through the same backend.
+          endur: backend,
         }),
         subscribe(listener) {
           portListeners.add(listener);
@@ -748,7 +778,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
-  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake', 'vault', 'borrow']);
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake', 'vault', 'borrow', 'unstake']);
   if (
     enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
     || new Set(enabledRoutes).size !== enabledRoutes.length
@@ -1145,6 +1175,32 @@ function ownVaultAction(value: unknown): VaultAction | null {
   const all = read('all');
   if (kind === 'redeem' && Reflect.ownKeys(value).length === 4 && typeof all === 'boolean' && (all || amount > 0n)) {
     return Object.freeze({ kind, token, amount, all });
+  }
+  return null;
+}
+
+/** An unstaking action as this package builds one (D-085), owned and frozen, or null. */
+function ownEndurAction(value: unknown): EndurAction | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const read = (key: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const kind = read('kind');
+  if (kind === 'request' && Reflect.ownKeys(value).length === 3) {
+    const shares = read('shares');
+    const leftover = read('leftover');
+    if (typeof shares !== 'bigint' || shares <= 0n || typeof leftover !== 'bigint' || leftover < 0n) return null;
+    return Object.freeze({ kind, shares, leftover });
+  }
+  if (kind === 'claim' && Reflect.ownKeys(value).length === 4) {
+    const ids = read('requestIds');
+    const owed = read('owed');
+    const held = read('held');
+    if (!denseDataArray(ids) || typeof owed !== 'bigint' || owed < 0n || typeof held !== 'bigint' || held < 0n) return null;
+    const requestIds = (ids as unknown[]).map((id) => id);
+    if (!requestIds.every((id): id is bigint => typeof id === 'bigint' && id >= 0n)) return null;
+    return Object.freeze({ kind, requestIds: Object.freeze(requestIds), owed, held });
   }
   return null;
 }

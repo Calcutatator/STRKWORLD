@@ -179,14 +179,47 @@ describe('shell copy', () => {
     it('says plainly where the STRK comes from, where the xSTRK lands, and how unstaking works', () => {
       expect(COPY.stake.intro).toContain('STRK from your pool balance');
       expect(COPY.stake.intro).toMatch(/xSTRK you receive lands in your pool balance/);
+      // D-085: unstaking is a counter now; the line points at it and says how long Endur takes.
       expect(COPY.stake.unstaking).toBe(
-        "Unstaking isn't available in the game yet. Endur's own withdrawal queue takes 1 to 14 days.",
+        "To unstake, use the unstaking counter below. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
       );
     });
 
     it('never quotes an xSTRK amount or a rate at review', () => {
       expect(COPY.stake.amountAtExecution).not.toMatch(/\d/);
       expect(COPY.glossary.xstrk).not.toMatch(/\d|rate|apy|apr|yield|earn/i);
+    });
+  });
+
+  describe('the unstaking counter (D-085)', () => {
+    const unstakeCopy = [...allCopyStrings(COPY.unstake), COPY.locked.notEnabled.unstake];
+
+    it('says the request waits on a public stand-in address that is not linked to the wallet', () => {
+      expect(COPY.unstake.intro).toMatch(/stand-in address/);
+      expect(COPY.unstake.intro).toMatch(/anyone can look it up/);
+      expect(COPY.unstake.intro).toMatch(/not linked to your wallet/);
+      expect(COPY.unstake.standInTail).toMatch(/^is public/);
+    });
+
+    it('says claimed STRK returns to the pool balance', () => {
+      expect(COPY.unstake.intro).toMatch(/claim it and it returns to your pool balance/);
+      expect(COPY.unstake.reviewClaimTail).toMatch(/returns to your pool balance/);
+    });
+
+    it('claims no amount privacy, and leaves the disclosure to the register', () => {
+      const claim = /hidden|private|anonymous|confidential|invisible|untraceable|nobody can see/i;
+      expect(unstakeCopy.length).toBeGreaterThan(20);
+      for (const line of unstakeCopy) {
+        expect(line, line).not.toMatch(claim);
+      }
+      const routes = PRIVACY_REGISTER.filter((entry) => entry.route === 'bank.unstake' || entry.route === 'bank.unstake-claim');
+      expect(routes).toHaveLength(2);
+      for (const route of routes) {
+        expect(route.grade).toBe('anonymous');
+        expect(route.disclosure).toMatch(/stand-in address, not your wallet/);
+        expect(route.disclosure).toMatch(/Claimed STRK returns to your pool balance/);
+        expect(route.disclosureWaivedBy ?? null).toBeNull();
+      }
     });
   });
 

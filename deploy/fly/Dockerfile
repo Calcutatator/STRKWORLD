@@ -47,6 +47,8 @@ ARG VITE_STRK20_VAULT_ENABLED
 ARG VITE_STRK20_VAULT_ALLOWED_TOKENS
 # D-083: the Borrow counter's switch. Unset, its counter stays locked.
 ARG VITE_STRK20_BORROW_ENABLED
+# D-085: Endur unstaking through a shadow account. Unset, unstaking stays shut.
+ARG VITE_STRK20_UNSTAKE_ENABLED
 # D-069: test deployments only. Unset, as on every launch, the debug logger is
 # not compiled into the bundle at all.
 ARG VITE_DEBUG_LOGS

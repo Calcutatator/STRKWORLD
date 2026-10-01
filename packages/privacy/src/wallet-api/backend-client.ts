@@ -8,6 +8,8 @@ import type {
   BorrowPairRow,
   BorrowPositionRow,
   BorrowReadClient,
+  EndurReadClient,
+  EndurUnstakeRead,
   PoolReadClient,
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
@@ -24,11 +26,13 @@ const MAX_UINT256 = (1n << 256n) - 1n;
 const MAX_VAULT_ROWS = MAX_VAULT_MARKETS;
 /** D-079: a rate's decimal places; Vesu states 18. */
 const MAX_RATE_DECIMALS = 36;
+/** D-085: more unstaking request rows than this is a malformed answer. */
+const MAX_ENDUR_ROWS = 64;
 /** The relay's answer when it has no avnu key, or avnu rejected it (D-070). */
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient, EndurReadClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -143,6 +147,53 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         maxRedeem: asUint256(ownField(row, 'maxRedeem')),
       });
     }));
+  }
+
+  /**
+   * D-085: what a stand-in address holds at Endur's withdrawal queue, from
+   * the backend's pinned reads: its requests in the backend's scan window,
+   * its STRK and xSTRK, its count of queue NFTs, and the chain's clock. The
+   * request names the address alone; the caller classifies the rows.
+   */
+  async endurUnstake(account: string, signal?: AbortSignal): Promise<EndurUnstakeRead> {
+    if (typeof account !== 'string' || !isNonzeroFelt(account)) {
+      throw new PrivacyError('unknown', 'The unstaking account is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/endur-unstake', { v: 1, account }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    const complete = ownField(value, 'complete');
+    if (Reflect.ownKeys(value).length !== 6 || typeof complete !== 'boolean') {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const rows = asArray(ownField(value, 'requests'));
+    if (rows.length > MAX_ENDUR_ROWS) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({
+      chainTime: asIntegerAtLeast(ownField(value, 'chainTime'), 0),
+      strk: asUint256(ownField(value, 'strk')),
+      xstrk: asUint256(ownField(value, 'xstrk')),
+      outstanding: asUint256(ownField(value, 'outstanding')),
+      complete,
+      requests: Object.freeze(rows.map((item) => {
+        const row = asRecord(item);
+        const claimed = ownField(row, 'claimed');
+        const claimableNow = ownField(row, 'claimableNow');
+        if (Reflect.ownKeys(row).length !== 7 || typeof claimed !== 'boolean' || typeof claimableNow !== 'boolean') {
+          throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+        }
+        return Object.freeze({
+          requestId: asUint256(ownField(row, 'requestId')),
+          assets: asUint256(ownField(row, 'assets')),
+          shares: asUint256(ownField(row, 'shares')),
+          claimed,
+          requestedAt: asIntegerAtLeast(ownField(row, 'requestedAt'), 0),
+          claimableAt: asIntegerAtLeast(ownField(row, 'claimableAt'), 0),
+          claimableNow,
+        });
+      })),
+    });
   }
 
   /**

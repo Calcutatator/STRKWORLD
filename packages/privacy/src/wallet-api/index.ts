@@ -35,6 +35,8 @@ export type {
   PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
+  EndurReadClient,
+  EndurUnstakeRead,
   VaultPositionRow,
   VaultRateRow,
   VaultReadClient,

@@ -259,6 +259,59 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Endur's withdrawal queue mints with a plain mint, so a keyless shadow account can hold an unstake request; Endur pays ready requests itself (D-085)
+
+A shadow account (class `0x70e76435…b78f`, live at `0x6ad69dce…aba4`) has
+only `execute`, `initialize`, `owner` and `upgrade`: no SRC5,
+`supports_interface` or `on_erc721_received` (both calls answer "Requested
+entrypoint does not exist"). Endur's xSTRK withdrawal queue
+(`0x0518a66e…48b6`, class `0x6b2e1893…3f34`, an ERC-721) still works for it:
+xSTRK's `redeem(shares, receiver, owner)` calls the queue's
+`request_withdrawal(assets, shares, receiver)`, which mints the request NFT
+to `receiver` with a plain mint. A simulated `redeem` from a real xSTRK
+holder naming that shadow account as receiver succeeded, emitted
+`Transfer(0 → shadow, #10590)` and `WithdrawQueue`, and `request_withdrawal`
+made no call at all (so no receiver hook). The queue's sierra does contain
+`on_erc721_received`'s selector, but only for its `safe_transfer_from`,
+which the flow never uses. `claim_withdrawal(id)` needs no owner: Endur's
+own relayer (`0x2d6cf618…173`) claims ready, funded requests for other
+people's NFTs and the queue pays the NFT's owner, so a player's STRK usually
+lands on the stand-in address unasked, and the claim must collect what is
+already there (`collect_policy: all`, with a `balance_of` call when no claim
+is left), not only what its own calls gain. The wait is `claimTime =
+timestamp + 604,800` (seven days) on all 200 requests before #10589, not the
+"1 to 14 days" earlier copy said; a request past it can still revert
+"Insufficient funds" until the queue is funded, a claimed one reverts
+"ERC721: invalid token ID", an early one "Too early to claim". How verified:
+`starknet_getClass` on both classes (ABI and sierra selector scan),
+`starknet_call` of `supports_interface` and `on_erc721_received` on the
+shadow account, `starknet_simulateTransactions` (SKIP_VALIDATE,
+SKIP_FEE_CHARGE) of the redeem and of `claim_withdrawal` on #10582 (paid),
+#10583 (past due, unfunded) and #10584 (early), `get_request_info` over the
+last 200 ids, the
+receipts of a real request (`0x5653395f…448`) and a third-party claim
+(`0x5846a8a2…eba`), Endur's open-source relayer (`Endur-fi/relayer`,
+`cron.service.ts`), and a live run of the backend's new read against
+mainnet. Traps met on the way:
+
+- The ERC-721 is not enumerable, so a stand-in address's requests come
+  from the queue's `WithdrawQueue` events keyed by receiver
+  (`keys: [[selector], [address]]`); a node scans about 100,000 blocks a
+  page, 270 ms each, so the read keeps a 1,000,000-block window from a
+  pinned first block and reports the queue's NFT count for anything older.
+- A request id named `id` trips the forward-compatibility test's
+  wallet-identity rule (`.id` reads anywhere in `packages/privacy`): the
+  field is `requestId` everywhere.
+- A request past its wait is not necessarily payable: Endur's relayer
+  funds the queue and claims in the same transaction (#10582 still reverted
+  "Insufficient funds" one block before its claim), so "ready" needs a
+  read-only `starknet_call` of `claim_withdrawal(id)`, which answers `[]`
+  when it would pay (#10451, #10468, #10469 one block before their owners'
+  claims). A batch claiming one unfunded request reverts whole.
+- D-064's waiver check rejects its decision if the status line says
+  "superseded", so D-085 *amends* D-064 (the unstaking note) rather than
+  superseding it in part.
+
 ### 2026-10-01 — Borrowing on Vesu through a shadow account: Vesu's rules, the collect policy for a repay-all, and a render that dims (D-083)
 
 The BORROW counter (D-083) calls Vesu's Prime pool `modify_position` from the

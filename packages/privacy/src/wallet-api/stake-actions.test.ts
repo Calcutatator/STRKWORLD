@@ -570,6 +570,10 @@ describe('session admission of the stake policy', () => {
       borrowMarket: async () => { throw new Error('unused'); },
       borrowPositions: async () => { throw new Error('unused'); },
       prepareBorrow: async () => { throw new Error('unused'); },
+      // D-085: not exercised here.
+      endurUnstakePosition: async () => { throw new Error('unused'); },
+      prepareEndurUnstake: async () => { throw new Error('unused'); },
+      prepareEndurClaim: async () => { throw new Error('unused'); },
     };
   }
 
