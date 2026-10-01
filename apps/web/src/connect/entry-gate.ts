@@ -91,11 +91,12 @@ export interface DepositReview {
   /** The hard guard passed to `confirm`: never sign above the prepared fee. */
   readonly feeCeiling: bigint;
   /**
-   * A STRK deposit no larger than the prepared pool fee (D-013). The fee comes
-   * out of the deposit, so none of it would reach the pool. The review says
-   * so and still lets the player confirm: there is no minimum.
+   * D-094: the prepared pool fee a STRK deposit pays on top, so the amount
+   * reaches the pool and the wallet sends `amount + poolFee`. Null for
+   * another token: the fee is STRK, the seam adds nothing to that deposit,
+   * and the review keeps D-072's plain note.
    */
-  readonly feeTakesAll: boolean;
+  readonly poolFee: bigint | null;
 }
 
 /** Why a deposit did not land: the seam's failure, or a receipt that says it reverted. */
@@ -220,7 +221,7 @@ const CHECKABLE: ReadonlySet<EntryGateStateName> = new Set<EntryGateStateName>([
   'receipt-unreachable',
 ]);
 
-const STRK = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'STRK')!.token;
+export const STRK = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'STRK')!.token;
 
 /**
  * The tokens the gate offers: this build's shield allowlist, in its order,
@@ -567,7 +568,7 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
           disclosures,
           requiresDisclosure,
           feeCeiling: reviewed.feeCeiling,
-          feeTakesAll: reviewed.feeTakesAll,
+          poolFee: reviewed.poolFee,
         },
       });
     },
@@ -642,7 +643,7 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
 function reviewedDeposit(
   batch: PreparedBatch,
   token: EntryToken,
-): { amount: bigint; warnings: readonly BatchWarning[]; feeCeiling: bigint; feeTakesAll: boolean } | null {
+): { amount: bigint; warnings: readonly BatchWarning[]; feeCeiling: bigint; poolFee: bigint | null } | null {
   try {
     const intents = batch.intents;
     const intent = intents.length === 1 ? intents[0] : undefined;
@@ -651,10 +652,10 @@ function reviewedDeposit(
     if (typeof batch.totalCost !== 'bigint' || batch.totalCost < 0n) return null;
     if (typeof batch.poolFee !== 'bigint' || batch.poolFee < 0n) return null;
     const warnings = Object.freeze(batch.warnings.map((warning) => Object.freeze({ ...warning })));
-    // The pool's fee is STRK (D-013), taken out of a STRK deposit. Another
-    // token's share of it cannot be stated, so only STRK is compared.
-    const feeTakesAll = sameAddress(token.token, STRK) && intent.amount <= batch.poolFee;
-    return { amount: intent.amount, warnings, feeCeiling: batch.totalCost, feeTakesAll };
+    // D-094: the pool's fee is STRK (D-013), and the seam puts it on top of a
+    // STRK deposit. Another token's share of it cannot be stated.
+    const poolFee = sameAddress(token.token, STRK) ? batch.poolFee : null;
+    return { amount: intent.amount, warnings, feeCeiling: batch.totalCost, poolFee };
   } catch {
     return null;
   }

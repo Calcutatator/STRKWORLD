@@ -379,6 +379,7 @@ const ADD_REFUSALS = setOf({
   'bad-recipient': true,
   'recipient-unregistered': true,
   'recipient-check-failed': true,
+  'exceeds-public-balance': true,
 } satisfies Record<BankAddRefusal, true>);
 const CONFIRM_STAGES = setOf({
   composing: true,

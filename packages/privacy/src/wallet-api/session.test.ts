@@ -2120,6 +2120,7 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     prepareEndurUnstake: async () => { throw new Error('unused'); },
     prepareEndurClaim: async () => { throw new Error('unused'); },
     endurRate: async () => { throw new Error('unused'); },
+    publicBalance: async () => { throw new Error('unused'); },
   };
 }
 

@@ -744,7 +744,8 @@ describe('the fake owns its prepared intents too', () => {
     expect(Reflect.set(batch.warnings[0]!, 'detail', 'private')).toBe(false);
     expect(batch.warnings).toEqual([{
       kind: 'public-leg',
-      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+      // D-094: the deposit is the amount plus the 6 STRK pool fee on top.
+      detail: 'Depositing 6000000000000000001 is public: the amount and your address are visible on-chain.',
     }]);
   });
 
@@ -792,7 +793,8 @@ describe('the fake owns its prepared intents too', () => {
     expect(batch.intents).toEqual([{ kind: 'shield', token: STRK, amount: 1n }]);
     expect(batch.warnings).toEqual([{
       kind: 'public-leg',
-      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+      // D-094: the deposit is the amount plus the 6 STRK pool fee on top.
+      detail: 'Depositing 6000000000000000001 is public: the amount and your address are visible on-chain.',
     }]);
 
     await batch.confirm({ feeCeiling: CEILING });
@@ -876,7 +878,8 @@ describe('the D-072 entry reads', () => {
     const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
     const batch = await new FakePrivacyOperations().prepare([shield(5n), { kind: 'shield', token: USDC, amount: 7n }]);
     expect(batch.warnings).toEqual([
-      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      // D-094: the STRK shield carries the 6 STRK pool fee on top; USDC carries none.
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 6000000000000000005 is public/) },
       { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
     ]);
   });

@@ -3206,7 +3206,7 @@ area."
 
 ## D-072 — Entry requires funds in the privacy pool
 
-**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · supersedes D-056 in part (its STRK-only shield token) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29) · a transfer's 118 scoped to its recipient by D-074**
+**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · supersedes D-056 in part (its STRK-only shield token) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29) · a transfer's 118 scoped to its recipient by D-074 · superseded in part by D-094 (the Bank's Shield control reads the wallet's public balance, and a STRK deposit pays the pool fee on top instead of out of the deposit)**
 
 **Context.** The lead asked for one check before the app opens: a player must
 have funds in the STRK20 pool; one who does is checked and loads straight in,
@@ -5525,6 +5525,64 @@ the unreachable room. Message matching is a heuristic over English text: a
 wallet that words it otherwise, or localises it, falls back to unreachable,
 which is the old behaviour. Not verified: no live Xverse has been probed.
 
+---
+
+## D-094 — Shield shows the wallet's public balance, and the pool fee goes on top of the amount
+
+**2026-10-01 · Accepted (the owner's live test with Ready, and his rule: "if im shielding 9 strk it should shield 9 strk and then the fee should be taken separately") · supersedes D-072 in part (the Bank now reads a public balance; a STRK deposit's fee is added on top, so the "fee takes all" warning is gone) · amends D-013 (Max on Shield leaves only the pool fee behind) · extends D-036's frozen seam with `publicBalance` · changes no D-024 disclosure**
+
+**Context.** On the Bank's Shield tab the balance card showed the PRIVATE
+pool balance ("0 STRK", with D-091's settling note) while the wallet held
+29 STRK public: a shield spends public funds, so the figure was the wrong
+one. Then the owner shielded 9 STRK and thought the funds had gone. On
+mainnet (tx `0x6d1a6aeff1411bc1613fe74b5507ba683ae0090f0228e931662c0d194786bcb`)
+the account deposited 9 STRK, the pool withdrew its 6 STRK fee to avnu's
+relayer (which also paid the network fee) and opened a note of about
+3 STRK. Nothing on screen said so.
+
+**Decision.**
+
+- **The public balance (extends D-036).** `PrivacyOperations.publicBalance(token,
+  signal)` answers the connected account's ERC-20 `balance_of` in base units,
+  read over the wallet's own RPC (`VITE_STARKNET_RPC_URL`, the node the wallet
+  account and D-084's Pragma check already use) by `RpcPublicBalanceReader`:
+  never STRKWORLD's backend or the lobby, nothing cached, nothing logged. It
+  asks no wallet, so the Shield control reads it when it opens, when it is
+  reopened or its token changes, after a shield, and on Refresh. The demo
+  fake answers `publicBalances` or a DEMO 1,000-unit figure. The seam has
+  nineteen methods.
+- **The Shield tab** shows "Wallet balance: 29 STRK" on its field, never the
+  pool balance or the settling note, which stay on Unshield, Send and Stake.
+  While D-035's gate holds, the card is still the private balance check.
+- **The fee goes on top.** A shield's amount is what reaches the pool. A
+  shield in the pool's fee token deposits `amount + poolFee`
+  (`shieldDeposits`, used by the adapter at confirmation with the fee read at
+  prepare; the existing fee ceiling still refuses a fee that rose). The fee is
+  paid once per transaction, so only the first STRK shield in a batch carries
+  it. Another token's shield deposits its amount unchanged: the fee is STRK
+  and where a wallet takes it from then is not established. The form and the
+  review show "You shield 9 STRK · Pool fee 6 STRK · Total from your wallet
+  15 STRK"; the public-leg warning names the 15 STRK deposit; an amount whose
+  total exceeds the wallet reads "Insufficient STRK"; a shield no more than
+  twice the fee gets a nudge that the fee is fixed. The entry gate's STRK
+  deposit follows the same rule.
+- **Max on Shield** is the wallet balance less the pool fee and any shield
+  already queued. No network reserve is held back: on the measured shield the
+  relayer paid the network fee out of the pool fee, so only the deposit left
+  the wallet. A wallet that pays its own network fee would refuse the shield
+  before sending anything, and since every private action pays its fees from
+  the pool, D-013's stranding trap no longer applies.
+- **After a shield** the receipt adds "Your wallet's shielded view shows the
+  new funds after about 20 seconds, once they mature." (the owner's
+  observation; notes mature about ten blocks after they arrive).
+
+**Consequences.** The Bridge's planned shield (D-061) now reaches the pool
+whole; its reserve still covers the fee. Every other flow already took the
+fee from the pool balance on top of the typed amount (unshield, send, stake,
+unstake and claim, Vault supply and redeem, borrow and repay, swap), so none
+changed. Not verified: a shield from an account that already holds STRK in
+the pool (a wallet could then take the fee from those notes, and more than
+the amount would arrive), and any wallet other than Ready.
 
 ---
 

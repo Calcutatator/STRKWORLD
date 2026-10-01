@@ -270,7 +270,29 @@ The lead's "the green character's outfit clips when switching his mode" is the F
 - **Walk poses are not enough for headwear.** After the hair was cut to the helmet's rim, a square of green still showed in back and three-quarter views, between the cheek guard and the neck guard: hair hanging below the headwear passed the "outside the shell" test because nothing lay below it. The check now also looks at the head alone from every direction (sixteen yaws, level to overhead) and fails on any visible hair under headwear except `hair-face`. Count only faces seen from in front: edge-on samples leak through gaps a sample spacing wide.
 - **The camera never orbits** (camera-rig.ts), but players turn, so every side is seen; one pixel at the street camera on a 1080-pixel view is 0.011 units, the check's tolerance.
 
-*Verified:* `tools/avatar-clipping.test.ts` (20 tests: no finding in any of the sixteen looks over 36 poses, and the check catches an arm through the body, a thigh out of the hips and a head in the chest); `avatar-figure.test.ts` adds the budget (7 meshes, at most 1,100 triangles; most is `avatar-12` at 1,036) and the cat girl's (`avatar-2`/`avatar-10`, matched to the owner's screenshot) ears, face and tail. Before and after renders were made with `createFigureRenderer` (`tools/avatar-walker.ts`, now framing-configurable; the walker strip's defaults are unchanged). The regenerated walker strip is 48,664 bytes; the SHA-256 of its RGBA pixels is `5ab011357367f381473111ea61b34b07bb82d3215a84d353a8b84d6704a13eef`.
+*Verified:* `tools/avatar-clipping.test.ts` (21 tests: no finding in any of the sixteen looks over 36 poses, and the check catches an arm through the body, a thigh out of the hips, a head in the chest, and the woodsman's side hair once his cheek guards are taken away); `avatar-figure.test.ts` adds the budget (7 meshes, at most 1,100 triangles; most is `avatar-12` at 1,036) and the cat girl's (`avatar-2`/`avatar-10`, matched to the owner's screenshot) ears, face and tail. Before and after renders were made with `createFigureRenderer` (`tools/avatar-walker.ts`, now framing-configurable; the walker strip's defaults are unchanged). The regenerated walker strip is 48,664 bytes; the SHA-256 of its RGBA pixels is `5ab011357367f381473111ea61b34b07bb82d3215a84d353a8b84d6704a13eef`.
+
+### 2026-10-01 — A Ready shield pays the pool fee out of the deposit; Shield must show the PUBLIC balance (D-094)
+
+The Bank's Shield tab showed the private pool balance ("0 STRK", and D-091's
+settling note) while the owner's wallet held 29 STRK public. A shield spends
+the public balance, so that card was the wrong figure. The fix reads the
+token's `balance_of(account)` over the wallet's own RPC, not the backend, and
+shows it as "Wallet balance".
+
+The owner then shielded 9 STRK and saw about 3 STRK arrive. Tx
+`0x6d1a6aeff1411bc1613fe74b5507ba683ae0090f0228e931662c0d194786bcb`: Deposit
+event 9 STRK; the pool withdrew 6 STRK as its fee to avnu's relayer, which
+also paid the network fee; a note of about 3 STRK opened. So for an account
+with nothing in the pool, the fee comes out of the deposit and no public STRK
+is spent on gas. D-061's "separate `get_fee_amount()` pull" reading did not
+describe this shield.
+
+Rule now: the typed amount is what reaches the pool; a STRK shield deposits
+amount + fee (`shieldDeposits`), and Max is the wallet balance less the fee.
+The new note shows in the wallet's shielded view after about 20 s. Open
+question: whether Ready takes the fee from existing STRK notes instead when
+the account already holds some (then the full deposit would arrive).
 
 ### 2026-10-01 — A wallet without `wallet_supportedWalletApi` showed "Cannot reach your wallet"; it now gets the unsupported room (D-093)
 

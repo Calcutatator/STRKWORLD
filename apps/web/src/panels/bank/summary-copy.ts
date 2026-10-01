@@ -1,4 +1,5 @@
 import type { Address, BatchWarning, Intent } from '@strkworld/privacy';
+import { shieldDeposits } from './shield-deposits.js';
 import { COPY } from '../../copy.js';
 import { formatStrkExact, formatTokenAmountExact, shortenAddress } from '../../format.js';
 import { catalogAsset } from '../exchange/catalog.js';
@@ -88,17 +89,29 @@ export function describeWarning(warning: BatchWarning): string {
  * prepare), and a batch never mixes the two, so the n-th `public-leg` belongs
  * to the n-th such intent. When the counts disagree nothing is paired, and a
  * detail with no describable shield behind it is shown as the seam wrote it.
+ *
+ * D-094: a shield deposits its amount plus the pool fee on top, so with the
+ * batch's pool fee the public leg names the deposit, the figure an observer
+ * sees, rather than the amount that reaches the pool.
  */
-export function describeWarnings(warnings: readonly BatchWarning[], intents: readonly Intent[]): string[] {
-  const legs = intents.filter((intent) => intent.kind === 'shield' || intent.kind === 'unshield');
+export function describeWarnings(
+  warnings: readonly BatchWarning[],
+  intents: readonly Intent[],
+  pool?: { readonly feeToken: Address; readonly feeAmount: bigint },
+): string[] {
+  const deposits = pool ? shieldDeposits(intents, pool) : intents.map((intent) => (intent.kind === 'shield' ? intent.amount : 0n));
+  const legs = intents
+    .map((intent, index) => ({ intent, deposit: deposits[index]! }))
+    .filter(({ intent }) => intent.kind === 'shield' || intent.kind === 'unshield');
   const paired = warnings.filter((warning) => warning.kind === 'public-leg').length === legs.length;
   let leg = 0;
   return warnings.map((warning) => {
     if (warning.kind !== 'public-leg') return describeWarning(warning);
-    const intent = paired ? legs[leg] : undefined;
+    const entry = paired ? legs[leg] : undefined;
+    const intent = entry?.intent;
     leg += 1;
     return intent?.kind === 'shield' && catalogAsset(intent.token)
-      ? `${COPY.warnings.depositPublicLead} ${formatTokenFigure(intent.token, intent.amount)} ${COPY.warnings.depositPublicTail}`
+      ? `${COPY.warnings.depositPublicLead} ${formatTokenFigure(intent.token, entry!.deposit)} ${COPY.warnings.depositPublicTail}`
       : describeWarning(warning);
   });
 }
