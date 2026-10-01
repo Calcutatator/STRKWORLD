@@ -7,7 +7,7 @@ import type { ShellFailure } from '../../privacy/errors.js';
 import { BORROW_TOKENS } from '../../production/config.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createVaultPanel } from '../vault/vault-machine.js';
-import { borrowPairChoices, borrowTokenChoices, createBorrowPanel, loanFor, refusalOf } from './borrow-machine.js';
+import { borrowPairChoices, borrowTokenChoices, createBorrowPanel, loanFor, refusalOf, takesEverything } from './borrow-machine.js';
 
 /**
  * The Borrow counter's machine (D-083), against the deterministic fake:
@@ -296,5 +296,52 @@ describe('the Borrow counter (D-083)', () => {
     const { panel } = machine(fake());
     await panel.open();
     expect(borrowPairChoices(panel.store.getState()).some((pair) => pair.collateral === WBTC)).toBe(true);
+  });
+});
+
+describe('the Borrow form\'s Max (D-089)', () => {
+  it('repays everything when the amount is the debt as read, and a part otherwise', async () => {
+    const operations = fake({ positions: [{ collateral: STRK, debt: USDC, collateralAmount: 2_000n * E18, debtAmount: 20n * USDC_ONE }] });
+    const { panel } = machine(operations);
+    await panel.open();
+    await panel.refreshLoans();
+    panel.setMode('repay');
+    const state = panel.store.getState();
+    expect(takesEverything(state, state.pair, 20n * USDC_ONE)).toBe(true);
+    expect(takesEverything(state, state.pair, 19n * USDC_ONE)).toBe(false);
+
+    panel.setAmount('20');
+    await panel.prepare();
+    let flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.action).toMatchObject({ kind: 'repay', all: true });
+
+    panel.cancelPrepared();
+    panel.setAmount('5');
+    await panel.prepare();
+    flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.action).toMatchObject({ kind: 'repay', all: false, amount: 5n * USDC_ONE });
+  });
+
+  it('withdraws everything only from a loan that owes nothing', async () => {
+    const operations = fake({ positions: [
+      { collateral: STRK, debt: USDC, collateralAmount: 2_000n * E18, debtAmount: 0n },
+      { collateral: STRK, debt: USDT, collateralAmount: 3_000n * E18, debtAmount: 10n * USDC_ONE },
+    ] });
+    const { panel } = machine(operations);
+    await panel.open();
+    await panel.refreshLoans();
+    panel.setMode('withdraw-collateral');
+    panel.setPair(STRK, USDC);
+    let state = panel.store.getState();
+    expect(takesEverything(state, state.pair, 2_000n * E18)).toBe(true);
+    panel.setAmount('2000');
+    await panel.prepare();
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.action).toMatchObject({ kind: 'withdraw-collateral', all: true });
+
+    panel.cancelPrepared();
+    panel.setPair(STRK, USDT);
+    state = panel.store.getState();
+    expect(takesEverything(state, state.pair, 3_000n * E18)).toBe(false);
   });
 });
