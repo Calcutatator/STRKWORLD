@@ -35,11 +35,11 @@ runtime keys remain opaque `avatar-1` through `avatar-16`; no size, stance,
 feet, wallet, account, protocol, financial or route field is encoded in lobby
 traffic.
 
-James approved the final export topology separately from the pixels: sixteen
+calc approved the final export topology separately from the pixels: sixteen
 transparent 192x256 PNG sheets, one for each opaque key, laid out as 3 columns
 by 4 rows of 64x64 cells, plus one tagged editable Aseprite source. There is no
 mega-atlas. Frames contain no baked shadow pixels; World may draw one
-consistent shadow separately. James approved the sixteen true-resolution idle
+consistent shadow separately. calc approved the sixteen true-resolution idle
 calibrations on 2026-08-19. On 2026-08-20 he superseded the former mandatory
 pause after characters 1, 4, 6 and 7 and authorized the art lane to complete
 movement work for all eight characters and both states, produce the sixteen
@@ -58,7 +58,7 @@ runtime-ready or accepted as an in-game render by that destination choice.
 
 ## Reference handling
 
-James provided Chrono Trigger screenshots as style and pixel-resolution
+calc provided Chrono Trigger screenshots as style and pixel-resolution
 references. They were used only as mood references. No third-party pixels,
 characters, outfits, silhouettes, palettes, UI, or map elements were copied or
 committed.

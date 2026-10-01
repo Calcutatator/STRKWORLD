@@ -31,7 +31,7 @@ feet pivot.
 - No frame contains baked shadow pixels. World may render one consistent
   shadow separately; it remains outside the sprite source and gameplay body.
 
-James approved the 16 true-resolution idle calibrations on 2026-08-19. On
+calc approved the 16 true-resolution idle calibrations on 2026-08-19. On
 2026-08-20 he superseded the former mandatory pause after movement prototypes
 for characters 1, 4, 6 and 7 and authorized the art lane to carry all eight
 characters through final transparent exports, the tagged editable source,
@@ -57,7 +57,7 @@ this package.
 
 ## Files
 
-- `contact-sheet-approved-v2.png` - James-approved style direction.
+- `contact-sheet-approved-v2.png` - calc-approved style direction.
 - `master-sheet-labeled-v1.png` - labeled sprite-sheet draft for review.
 - `master-sheet-clean-review-v1.png` - cleaner no-label sheet for art review.
 - `manifest.json` - intended runtime structure and privacy-neutral pair mapping.

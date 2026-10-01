@@ -1941,7 +1941,7 @@ accepted by the user; 2026-08-20 art-production amendment authorizes all eight
 characters through final handoff and supersedes the
 interim pause after characters 1/4/6/7 · supersedes D-047's provisional 32x32
 runtime-art assumption; final `v1/` handoff committed at `86e8f5f`, independently
-QA-verified and visually approved by James for runtime integration; World
+QA-verified and visually approved by calc for runtime integration; World
 integration and rendered in-game acceptance pending**
 
 **Context.** The approved art direction deliberately includes two larger
@@ -2013,7 +2013,7 @@ sheets, the tagged editable Aseprite source, manifest and mechanical QA
 evidence. A separate independent QA review verified the fixed sheet/cell
 geometry, binary transparency, feet and body references, source round trip,
 frame vocabulary, shadow-free pixels and required character distinctions.
-James then visually approved those committed assets for runtime integration.
+calc then visually approved those committed assets for runtime integration.
 This clears the final-art gate only: it does not claim that World has loaded or
 rendered the sheets, and it does not replace the required in-game rendered
 acceptance after implementation.
@@ -2244,7 +2244,7 @@ World commit `5c8c81a` loads all 20 frames per sheet and plays columns
 integration are therefore complete and independently reviewed; only the
 user-run rendered in-game acceptance remains open.
 
-**2026-08-20 approval-flow amendment.** James delegated intermediate sprite
+**2026-08-20 approval-flow amendment.** calc delegated intermediate sprite
 direction and rejection to orchestration. Art may iterate through turnaround,
 edge, pose, movement and export gates without pausing for user approval at
 each contact sheet. Intermediate scaffolds and mechanical QA boards are not
@@ -2255,7 +2255,7 @@ amendment removes repeated approval pauses; it does not waive D-052's final
 rendered-acceptance requirement or authorize a mechanically conforming but
 visually incoherent asset.
 
-**2026-08-28 Avatar 1 cosy six-column amendment.** James explicitly approved
+**2026-08-28 Avatar 1 cosy six-column amendment.** calc explicitly approved
 only the exact Avatar 1 cosy PNG with SHA-256
 `f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb`.
 For that opaque key only, the sheet is 384x256 and each facing row uses six
@@ -2269,7 +2269,7 @@ rendering remain unchanged.
 
 The exact approved pixels use up to 29 visible RGB colours per frame: 21 of
 24 cells exceed the prior 24-colour cap and the maximum is 29. Exact-binary
-approval plus James's instruction to continue authorizes a scoped Avatar 1
+approval plus calc's instruction to continue authorizes a scoped Avatar 1
 cosy exception of 29. The default cap remains 24 for Avatar 2-16, including
 Avatar 1's paired fighting key `avatar-9`; no palette remap or broader palette
 relaxation is authorized.
@@ -2283,7 +2283,7 @@ this new sixth column, so it remains historical source for the five-column set
 and must not overwrite the source-authoritative hashed Avatar 1 PNG. Fresh
 live-browser rendered acceptance of this replacement remains required.
 
-**2026-08-28 Avatar 1 cosy rendered-acceptance status.** James accepted this
+**2026-08-28 Avatar 1 cosy rendered-acceptance status.** calc accepted this
 exact Avatar 1 cosy replacement in the live game. This supersedes only the
 historical pending status in the six-column amendment above; it does not alter
 that amendment's reasoning or accept Avatar 1 fighting or avatars 2-16.
@@ -2298,7 +2298,7 @@ functional/interactive gate accepted 2026-08-28 by [the verified D-053
 finding](../AGENTS.md#2026-08-28--the-rendered-functional-and-interactive-d-053-matrix-is-complete-subjective-art-remains-open), while subjective final-art acceptance remains open**
 
 **Context.** The implemented `F` binding currently exists only while Avatar
-Studio is active. James reported that the outfit toggle therefore appears to
+Studio is active. calc reported that the outfit toggle therefore appears to
 work nowhere else and asked for the missing global behavior to be added to the
 World todo list.
 
@@ -2494,7 +2494,7 @@ agent-owned local testing; production player custody remains unchanged**
 **Context.** Ready correctly asks the player to approve private-balance access,
 proof generation and transaction submission. STRK20 pool calls cannot use the
 ordinary account session-key path, so repeated end-to-end testing through Ready
-turns the user into a manual test runner. James explicitly requires the project
+turns the user into a manual test runner. calc explicitly requires the project
 lead to run repeated tests without asking him to approve every wallet action.
 
 Moving a tester private key, viewing key, notes or prover into STRKWORLD would

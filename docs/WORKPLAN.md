@@ -363,7 +363,7 @@ visible because the production planner capability is still absent. Subjective
 final-art acceptance remains open. These checks prove no live-wallet or funded
 behavior.
 
-James has delegated the intermediate D-052 art gates to orchestration. The Art
+calc has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export
 and independent-review gates without returning each scaffold or contact sheet
 for user approval. Orchestration owns rejection and rework until the corrected
@@ -628,7 +628,7 @@ handoff described below.
 
 **D-049 final-art gate complete; World integration ready:** The complete v1
 handoff is committed at `86e8f5f`; independent QA verified its mechanical and
-source contracts, and James visually approved the committed assets for runtime
+source contracts, and calc visually approved the committed assets for runtime
 integration. The 64×64 canvas, `(32, 56)` feet, authoritative 24×24
 gameplay/contact body, per-key 192×256 sheet topology, no mega-atlas and
 no-baked-shadow policy remain fixed. The art-owned final destination is exactly
