@@ -40,8 +40,8 @@ for the accepted boundaries.
 
 The Privacy Plaza (D-076) is not a building: an open square below the
 street's west end with two stations used with E. The monument shows public,
-pool-wide aggregates (accounts registered, deposits in the last 24 hours, what
-the pool holds) from the backend's cache, and "Where's the note?" is a
+pool-wide aggregates (accounts registered, the pool's total value in USD, its top
+holdings) from the backend's cache, and "Where's the note?" is a
 client-only shell game. No money, no wallet and no route are involved.
 
 The football pitch (D-078) is not a building either: the road's west end

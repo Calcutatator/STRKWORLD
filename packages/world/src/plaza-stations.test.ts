@@ -210,10 +210,10 @@ describe('the plaza stations (D-076)', () => {
 
   it("forwards the Shell's figures, checked", () => {
     const plaza = setup();
-    plaza.shellEmit('plaza:stats', { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] });
-    plaza.shellEmit('plaza:stats', { accounts: null, deposits24h: null, valueUsd: null, topHoldings: null });
+    plaza.shellEmit('plaza:stats', { accounts: '2,932', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] });
+    plaza.shellEmit('plaza:stats', { accounts: null, valueUsd: null, topHoldings: null });
     expect(plaza.stats).toEqual([
-      { accounts: '2,932', deposits24h: '23', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] },
+      { accounts: '2,932', valueUsd: '$1.18M', topHoldings: ['xSTRK · $453K'] },
       EMPTY_PLAZA_STATS,
     ]);
   });
@@ -243,18 +243,16 @@ describe('the monument figures (D-076; USD value D-080)', () => {
   it('reads only short strings from own data fields', () => {
     expect(normalizePlazaStats({
       accounts: ' 2,932 ',
-      deposits24h: '23',
       valueUsd: '$1.18M',
       topHoldings: ['xSTRK · $453K'],
     })).toEqual({
       accounts: '2,932',
-      deposits24h: '23',
       valueUsd: '$1.18M',
       topHoldings: ['xSTRK · $453K'],
     });
-    expect(normalizePlazaStats({ accounts: 2932, deposits24h: 23n, valueUsd: 1_177_415, topHoldings: 'xSTRK' })).toEqual(EMPTY_PLAZA_STATS);
-    expect(normalizePlazaStats({ accounts: 'x'.repeat(MAX_PLAZA_FIGURE_LENGTH + 1), deposits24h: '', valueUsd: '', topHoldings: [] })).toEqual(EMPTY_PLAZA_STATS);
-    expect(normalizePlazaStats({ accounts: 'two\nlines', deposits24h: null, valueUsd: null, topHoldings: null }).accounts).toBeNull();
+    expect(normalizePlazaStats({ accounts: 2932, valueUsd: 1_177_415, topHoldings: 'xSTRK' })).toEqual(EMPTY_PLAZA_STATS);
+    expect(normalizePlazaStats({ accounts: 'x'.repeat(MAX_PLAZA_FIGURE_LENGTH + 1), valueUsd: '', topHoldings: [] })).toEqual(EMPTY_PLAZA_STATS);
+    expect(normalizePlazaStats({ accounts: 'two\nlines', valueUsd: null, topHoldings: null }).accounts).toBeNull();
     expect(normalizePlazaStats(null)).toEqual(EMPTY_PLAZA_STATS);
   });
 

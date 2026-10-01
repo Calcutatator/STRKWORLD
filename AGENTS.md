@@ -259,6 +259,10 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — The plaza's total was already shown twice; it now has one face and one row, and the deposit count is gone from the client (D-098)
+
+The owner asked for the pool's total dollar value in place of "Deposits in the last 24 hours". The total was already on the monument (as the first frame of the die's cycling held face) and in the window (the "Held in the pool" row), so a plain swap would have shown it twice. The shaft face now carries the total ("TOTAL IN POOL"), the die cycles the top holdings alone, and the window's held row is the total row. `deposits24h` is out of `plaza:stats`, the web parser, the demo figures and the poller's incomplete check; the backend still computes it (removing it is a separate, safe change). The tests that read `deposits24h` or the old captions moved with it.
+
 ### 2026-10-01 — Four fighting looks were only a weapon; every one is now a change of clothes, and the chibi head decides what reads (D-096)
 
 The owner's "only a few of the characters in the fighting stances change clothes" was right: `avatar-10`, `11`, `13` and `14` were the everyday outfit plus a weapon (`...COSY_N`), and `avatar-9` and `16` added one piece to the same clothes. All six are new outfits, SAO-inspired archetypes; `avatar-12` and `15` already changed and are kept. Traps met on the way:
