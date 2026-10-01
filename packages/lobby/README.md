@@ -414,11 +414,15 @@ before the patch that raises the score).
 
 ## Rate and reach
 
-**Throttling.** The server accepts at most one move per session per 50ms (20/s,
-matching the patch rate). Anything earlier is dropped, never queued: a
-superseded position is worthless and queueing would only add latency. A second,
-much higher ceiling (`maxMessagesPerSecond`) disconnects a client that ignores
-the rate entirely.
+**Throttling.** The server accepts moves at one per session per 50ms on
+average (20/s, matching the patch rate), from a token bucket three deep
+(`MOVE_BURST`, D-086): after a gap, up to three may arrive closer together, so
+a move that is early only because network jitter delayed the one before it is
+kept rather than dropped. Anything beyond the bucket is dropped, never queued:
+a superseded position is worthless and queueing would only add latency. A
+burst costs no bandwidth, since a patch carries only the latest position. A
+second, much higher ceiling (`maxMessagesPerSecond`) disconnects a client that
+ignores the rate entirely.
 
 **Interest management.** An observer receives only peers inside a 640px square
 box, nearest first, capped at 24. The radius alone would not bound traffic when
@@ -471,11 +475,29 @@ sandbox is about 24 KB, and about 33.5 KB with 128 visible peers. See
 `STATE_ENCODE_BUFFER_BYTES` in `room.ts`; `sandbox-capacity.test.ts` holds the
 worst case to it.
 
-Recomputing every observer's interest set after every change is O(sessions²).
-That is fine at this size — the room caps at 48 sessions and moves are capped
-at 20/s each, so the worst case is a few tens of thousands of coordinate
-comparisons per second. It is also exactly correct, which an incremental update
-of only the mover would not be.
+**Interest sets are recomputed once per patch** (D-086), in the room's
+`onBeforePatch`, not after every change. Each recompute is O(sessions²) and
+exactly correct, which an incremental update of only the mover would not be;
+doing it per move made it O(sessions³) a second, and one room of 100 sessions
+saturated a core. Once per patch is also what keeps clients decoding: a view
+that dropped and re-added the same entry between two encodes made
+`@colyseus/schema@4.0.30` send a patch the clients could not apply (`"refId"
+not found`), and that peer froze on their screens. The joiner's own view is
+filled at once in `onJoin`, so its first full state already holds its
+neighbours; everyone else's waits for the patch.
+
+**Capacity.** A room holds 48 sessions (`MAX_CLIENTS_PER_ROOM`; operators may
+set up to 128). When it is full, Colyseus's `joinOrCreate` puts the next joiner
+into a new `street` room: nobody is refused, but the two rooms do not see each
+other and each has its own sandbox and ball.
+
+**Load test.** `npx tsx packages/lobby/tools/load-test.ts` forks a local,
+instrumented lobby (`tools/load-test-server.ts`) and drives 10, 25, 50 and 100
+real `LobbyClient` bots that walk, work the sandbox and see 20 ms of uplink
+jitter. It reports tick time, CPU, memory, bytes per client, patch size and
+rate, join latency, dropped moves, how evenly an observer sees peers move and
+any patch a client could not decode. It never takes an endpoint, so it cannot
+be pointed at production.
 
 ---
 

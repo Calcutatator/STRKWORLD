@@ -15,9 +15,7 @@
 
 import { MapSchema } from '@colyseus/schema';
 import type { Facing, FootballSnapshot, GameId, SandboxColumn, SandboxTile } from '@strkworld/shared';
-import {
-  resolveRoomConfig,
-} from './config.js';
+import { MOVE_BURST, resolveRoomConfig } from './config.js';
 import {
   UpdateThrottle,
   createGameId,
@@ -194,9 +192,9 @@ export class LobbyPresence {
     this.#maxVisiblePeers = config.maxVisiblePeers;
     this.#capacity = config.capacity;
     this.#worldLimit = config.worldLimit;
-    this.#throttle = new UpdateThrottle(
-      config.minUpdateIntervalMs,
-    );
+    // A token bucket, not a strict gap, so network jitter on a stream sent
+    // at the floor does not drop moves (D-086).
+    this.#throttle = new UpdateThrottle(config.minUpdateIntervalMs, MOVE_BURST);
     this.#random = options.random;
     this.#sandbox = new LobbySandbox(
       this.state.sandbox as MapSchema<SandboxColumnEntry>,

@@ -2596,7 +2596,8 @@ checks after the headless state and lifecycle regressions pass.
 partially supersedes D-049 and D-052 for in-World avatars · amends the Phaser
 mechanism named in D-008, D-030 and D-039 · the street and its backdrop move
 east, unchanged relative to each other, for the football pitch by D-078 · the
-2D sheets no longer feed D-058's cue, by [the 2026-09-30 finding](../AGENTS.md#2026-09-30--the-wallet-cues-figure-is-a-walk-pre-rendered-from-the-3d-model-the-2d-sheets-no-longer-ship)**
+2D sheets no longer feed D-058's cue, by [the 2026-09-30 finding](../AGENTS.md#2026-09-30--the-wallet-cues-figure-is-a-walk-pre-rendered-from-the-3d-model-the-2d-sheets-no-longer-ship) ·
+other players' interpolation is a critically damped follow by D-086**
 
 **Context.** The user asked for STRKWORLD to become a 3D-rendered, simple game
 world you can walk around in, entirely in the browser, built on the same
@@ -4567,3 +4568,96 @@ on mainnet**: D-077's probe exercised vTokens only, never the pool
 contract, so the first live borrow on the Railway probe is the evidence for
 this route, and a revert there (for example the pool refusing the account as
 caller) stops it until a new decision.
+
+---
+
+## D-086 — The lobby syncs interest once per patch, takes moves from a bucket, and remote avatars follow on a spring
+
+**2026-10-01 · Accepted under the lead's multiplayer-stability brief · technical, no product, privacy or seam change · amends the lobby's 50 ms move floor (packages/lobby/README.md, "Rate and reach") from a strict gap to a three-deep token bucket at the same rate · keeps the sandbox (D-060) and kick (D-078) floors strict · amends D-059's remote-avatar interpolation (presentation only, behind D-038's seam)**
+
+**Context.** The lead reported that multiplayer feels unoptimised, with lag
+at times "when locked into multiplayer". A reproducible load test
+(`packages/lobby/tools/load-test.ts`, which forks its own instrumented local
+lobby and drives real `LobbyClient` bots that walk at the game's speed,
+report every 16 ms frame and work the sandbox) found three server-side causes
+and one client-side one. With 20 ms of uplink jitter, one room, before this
+decision:
+
+- **A third of all moves were dropped.** The client sends at exactly the
+  server's 50 ms floor, so any jitter delivers some moves 40 ms apart, and
+  the strict floor dropped each one: 35% at 10 to 50 bots. Every observer
+  saw those peers stall for a patch: 53–55% of peer updates came 100 ms
+  apart instead of 50.
+- **Clients lost track of peers.** The room recomputed every view on every
+  accepted move, so an entry could leave and re-enter one observer's view
+  inside one patch. `@colyseus/schema@4.0.30` encodes that so the client
+  cannot apply it: the SDK logs `"refId" not found`, skips the entry's
+  updates, and that peer freezes on screen. 12 such failures in 20 s at 10
+  bots, 493 at 50, 3,575 at 100.
+- **The interest work was O(sessions³) a second.** Each recompute is
+  O(sessions²), once per move. One room of 100 used 98.5% of a core, its
+  patch rate fell from 20 to 11 a second, 56% of moves were dropped and
+  joins took 369 ms at p95. At 50 bots it was already 23% of a core.
+- **A full sandbox cost every client 0.58 ms a patch.** `LobbyClient` re-read
+  and re-froze all ~850 blocks on every 20-a-second patch, whether or not
+  the sandbox changed.
+
+And remote avatars were drawn with a first-order ease towards the latest
+snapshot, whose speed pulsed by 15% within every 50 ms patch even on a
+perfect network (coefficient of variation 0.153 in
+`packages/world/tools/remote-crowd-bench.ts --interpolation`), 0.298 when a
+move was lost.
+
+**Decision.**
+
+- **Interest sets are recomputed once per patch**, in the room's
+  `onBeforePatch`, when anything moved, joined, left, suspended or resumed
+  since the last one. The joiner's own view is filled at once in `onJoin`, so
+  its first full state already holds its neighbours, and is then left alone
+  until the client acknowledges the join: Colyseus encodes no patch for a
+  joining client, so changes queued meanwhile would all reach it in one
+  encode. The ball's timer is re-armed there too after moves. The rule itself
+  (`selectVisible`: 640 px box, nearest first, capped at 24) is unchanged.
+- **The move floor is a token bucket**: `UpdateThrottle(50, MOVE_BURST)`, a
+  GCRA with `MOVE_BURST = 3`. The long-run rate is still one move per 50 ms
+  per session; up to three may arrive close together after a gap, so 100 ms
+  of jitter costs nothing. A burst costs no bandwidth, because a patch
+  carries only the latest position. `resume` drains the bucket, so the next
+  move still waits a full interval and suspend/resume is still no
+  position-write channel. The hard ceiling (40 messages a second,
+  disconnecting) and the sandbox and kick floors are unchanged and strict.
+- **Remote avatars follow on a critically damped spring**, in its exact
+  closed form, with `REMOTE_INTERPOLATION_TIME_CONSTANT_MS` 45: the same
+  90 ms lag behind the wire as before, but at an even speed. From rest it
+  never overshoots a target that holds still; teleports still land at once.
+- **`LobbyClient` reads the sandbox only when a patch touched it.** It takes
+  the decoder's raw change hook (`getRawChangesCallback` in
+  `@colyseus/schema`) only if nothing else holds it, checks every read that
+  it still does (same decoder, same hook), and otherwise reads every patch
+  as before. Every hundredth read (5 s) is full regardless, so a patch whose
+  decode failed before reaching the hook cannot leave the sandbox stale for
+  longer. A read reuses every frozen column the patch did not change.
+  Validation is unchanged.
+- **The edge's lobby tunnel disables Nagle's algorithm** on the leg it opens
+  to the lobby (the browser leg already had it off). Unmeasured: macOS
+  loopback showed no difference, and Railway runs Linux, where Nagle with
+  delayed ACKs can hold a small frame for 40 ms.
+- **Capacity stays 48 per room.** When a room is full, Colyseus's
+  `joinOrCreate` puts the next joiner in a new `street` room: nobody is
+  refused (100 bots at capacity 48 made three rooms, none refused), but the
+  rooms do not see each other and each has its own sandbox and ball.
+
+**Consequences.** The same load test after this decision, 20 ms of jitter,
+one room: 0 moves dropped and 0 decode failures at every size; observer
+stalls 6–8% (from 53–55%); a room of 100 uses 11–13% of a core at a full 20
+patches a second, joins in 11 ms at p95. Each client receives more bytes
+(3.8 KB/s at 100, from 2.4), because it now gets every move instead of half.
+The tick itself is longer, since the interest work moved into it (p95 6 ms
+at 100, inside the 50 ms budget). A full sandbox costs a client 0.09 ms a
+patch, and the drawn walk's coefficient of variation is 0.046 on time, 0.188
+with every third move lost. One room could now hold 100 players on the
+server's side; whether to raise the cap is the lead's call, and the client
+still draws at most 24 peers at 14 draw submissions each (7 meshes, all
+casting shadows). Not measured: real browsers (GPU time, draw-call overhead,
+frame pacing), real network latency and loss, and Linux TCP behaviour on
+Railway.
