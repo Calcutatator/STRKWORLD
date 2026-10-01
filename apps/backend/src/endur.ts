@@ -98,3 +98,22 @@ export const CLAIM_WITHDRAWAL_SELECTOR =
 
 /** What a stand-in address holds at Endur (D-085). */
 export const ENDUR_UNSTAKE_PATH = '/v1/rpc/endur-unstake';
+
+// ---------------------------------------------------------------------------
+// The exchange rate (D-091)
+// ---------------------------------------------------------------------------
+
+/**
+ * `sn_keccak('convert_to_assets')`, pinned in endur-unstake.test.ts. xSTRK's
+ * ERC-4626 view: the STRK a number of shares converts to now. Read over
+ * mainnet RPC on 2026-10-01 at block 15,734,660: `convert_to_assets(10^18)`
+ * answered `0x106c70bf65979943`, 1 xSTRK = 1.18344 STRK.
+ */
+export const CONVERT_TO_ASSETS_SELECTOR =
+  '0xd98b5465896f232dc34900bfe6aa99e4ebc8a961521c6168a0664b313298c1';
+
+/** One whole xSTRK, `10^18` shares: the amount the rate read converts. */
+export const ONE_XSTRK = 10n ** 18n;
+
+/** xSTRK's exchange rate, a public read that names nobody (D-091). */
+export const ENDUR_RATE_PATH = '/v1/rpc/endur-rate';

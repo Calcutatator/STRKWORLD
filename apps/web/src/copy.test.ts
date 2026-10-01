@@ -179,9 +179,9 @@ describe('shell copy', () => {
     it('says plainly where the STRK comes from, where the xSTRK lands, and how unstaking works', () => {
       expect(COPY.stake.intro).toContain('STRK from your pool balance');
       expect(COPY.stake.intro).toMatch(/xSTRK you receive lands in your pool balance/);
-      // D-085: unstaking is a counter now; the line points at it and says how long Endur takes.
+      // D-085: unstaking is a counter now; the line points at it (D-091: its tab) and says how long Endur takes.
       expect(COPY.stake.unstaking).toBe(
-        "To unstake, use the unstaking counter below. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
+        "To unstake, use the Unstake tab. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
       );
     });
 

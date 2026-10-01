@@ -44,7 +44,7 @@ import type {
   EndurRpcPort,
 } from './types.js';
 import { VAULT_POSITION_PATH, VAULT_RATES_PATH, VAULT_SHADOW_ACCOUNT_PATH } from './vault.js';
-import { ENDUR_UNSTAKE_PATH } from './endur.js';
+import { ENDUR_RATE_PATH, ENDUR_UNSTAKE_PATH } from './endur.js';
 import {
   ApiFailure,
   isFelt,
@@ -237,6 +237,7 @@ export class BackendApi {
           case BORROW_MARKET_PATH: response = await abortable(this.borrowMarket(request.body, deadline.signal), deadline.signal); break;
           case BORROW_POSITION_PATH: response = await abortable(this.borrowPosition(request.body, deadline.signal), deadline.signal); break;
           case ENDUR_UNSTAKE_PATH: response = await abortable(this.endurUnstake(request.body, deadline.signal), deadline.signal); break;
+          case ENDUR_RATE_PATH: response = await abortable(this.endurRate(request.body, deadline.signal), deadline.signal); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -561,6 +562,18 @@ export class BackendApi {
         complete: read.complete,
       },
     };
+  }
+
+  /**
+   * D-091: xSTRK's exchange rate, the STRK one whole xSTRK converts to now,
+   * as a decimal string. The request carries a version and nothing else, and
+   * the answer holds nothing about any player.
+   */
+  private async endurRate(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    requireVersion(requireRecord(body, ['v']));
+    if (!this.endur) throw new ApiFailure(503, 'The unstaking reads are unavailable.');
+    const strkPerXstrk = await this.endur.getEndurRate(signal);
+    return { status: 200, body: { strkPerXstrk: strkPerXstrk.toString() } };
   }
 
   /**

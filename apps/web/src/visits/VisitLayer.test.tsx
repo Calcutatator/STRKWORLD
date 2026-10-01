@@ -261,7 +261,10 @@ describe('VisitLayerView', () => {
 
     expect(markup).toContain('data-experience="menu"');
     expect(markup).toContain('Private transfer');
-    expect(markup).toContain('Add to this visit');
+    // An empty form's button asks for an amount (the kit's primaryAction); the
+    // visit vocabulary is still the batch's.
+    expect(markup).toContain(COPY.kit.enterAmount);
+    expect(markup).toContain(COPY.batch.empty);
   });
 
   it('renders the shielding station as the same Bank flow limited to one action', () => {
@@ -285,7 +288,7 @@ describe('VisitLayerView', () => {
     expect(markup).toContain('Unshield');
     expect(markup).not.toContain('Private transfer');
     expect(markup).toContain('This station confirms one action at a time.');
-    expect(markup).toContain('Review this action');
+    expect(markup).toContain(COPY.kit.enterAmount);
     expect(markup).not.toContain('Add to this visit');
     expect(markup).not.toContain('Nothing queued yet');
   });
@@ -331,7 +334,8 @@ describe('VisitLayerView', () => {
     expect(markup).toContain('data-experience="menu"');
     expect(markup).toContain('Private transfer');
     expect(markup).toContain(COPY.postOffice.oneAtATime);
-    expect(markup).toContain(COPY.gameMode.reviewAction);
+    // A send's button asks for its recipient first, as a wallet's does.
+    expect(markup).toContain(COPY.bank.enterRecipient);
     // No visit vocabulary that would promise several sends for one fee.
     expect(markup).not.toContain(COPY.batch.add);
     expect(markup).not.toContain(COPY.batch.empty);

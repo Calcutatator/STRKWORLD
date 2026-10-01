@@ -1,5 +1,6 @@
 import type {
   EndurAction,
+  EndurRate,
   EndurUnstakePosition,
   PoolConfig,
   PreparedEndurBatch,
@@ -207,6 +208,36 @@ export class EndurUnstake {
       emitStage(onStage, { stage: 'position', ok: false });
       throw new PrivacyError('unknown', 'The unstaking read is invalid.');
     }
+  }
+
+  /**
+   * D-091: xSTRK's live exchange rate, one public read through the backend.
+   * No wallet is asked and no address is named. Open while the stake or the
+   * unstake route is, since only the staking counter shows it.
+   */
+  async rate(signal?: AbortSignal): Promise<EndurRate> {
+    throwIfAborted(signal);
+    const routes = this.policy.enabledRoutes;
+    if (!routes.includes('stake') && !routes.includes('unstake')) {
+      throw new PrivacyError('unknown', 'The staking routes are disabled.');
+    }
+    const reads = this.reads;
+    if (!reads) throw new PrivacyError('unknown', 'The unstaking reads are not configured.');
+    let answer: unknown;
+    try {
+      answer = await reads.endurRate(signal);
+    } catch (error) {
+      throwIfAborted(signal);
+      throw error instanceof PrivacyError
+        ? error
+        : new PrivacyError('unreachable', 'Could not read the xSTRK rate.', error);
+    }
+    throwIfAborted(signal);
+    const strkPerXstrk = ownData(answer, 'strkPerXstrk');
+    if (typeof strkPerXstrk !== 'bigint' || strkPerXstrk <= 0n || strkPerXstrk > MAX_UINT256) {
+      throw new PrivacyError('unknown', 'The xSTRK rate read is invalid.');
+    }
+    return Object.freeze({ strkPerXstrk, origin: 'chain' as const });
   }
 
   private assertEnabled(): void {

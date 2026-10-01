@@ -80,9 +80,22 @@ describe('the staking station, driven through the screen in demo', () => {
 
     // Compose from the pool balance, read only because the player asked.
     await click(button(COPY.balance.refresh));
-    expect(container.querySelector('.balance-total')?.textContent).toBe('250 STRK');
+    // Wallet style: the figure sits on the amount field it limits (D-091).
+    expect(container.querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.kit.poolBalance}: 250 STRK`);
+    expect(container.querySelector('.balance-total')).toBeNull();
     await type(container.querySelector<HTMLInputElement>('input[name="amount"]')!, '5');
     expect(container.querySelector('input[name="recipient"]')).toBeNull();
+    // D-091: Endur's preview rows, at the demo fake's rate and said to be one.
+    const rows = Object.fromEntries([...container.querySelectorAll('.panel-compose .ui-detail')].map((row) => [
+      row.querySelector('dt')!.textContent,
+      row.querySelector('dd')!.firstChild!.textContent,
+    ]));
+    expect(rows).toEqual({
+      [COPY.stake.willReceive]: '≈ 4 xSTRK',
+      [COPY.stake.exchangeRate]: '1 xSTRK = 1.25 STRK',
+      [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`]: '6 STRK',
+    });
+    expect(container.querySelector('.panel-compose')?.textContent).toContain(COPY.stake.demoRate);
     await click(button(COPY.gameMode.reviewAction));
     expect(container.querySelector('.station-action')?.textContent).toBe('Stake 5 STRK → xSTRK');
 

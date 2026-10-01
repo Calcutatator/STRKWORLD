@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { COPY } from '../../copy.js';
-import { formatStrkExact, formatTokenAmountExact, shortenAddress } from '../../format.js';
+import { formatStrk, formatStrkExact, formatTokenAmountExact, shortenAddress } from '../../format.js';
 import { useBridge } from '../../bridge/BridgeProvider.js';
 import { createBridgePanel, planDisplay, type BridgePanel as BridgeMachine, type BridgeQuoteReview } from '../../bridge/bridge-machine.js';
 import { useStore } from '../../store/use-store.js';
@@ -11,6 +11,7 @@ import { createBankPanel, type BankPanel as BankMachine } from '../bank/bank-mac
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { GlossaryTerm } from '../Glossary.js';
+import { AmountField, DetailRows, type DetailRow } from '../kit/index.js';
 
 export function BridgePanel({
   onClose,
@@ -110,9 +111,15 @@ export function BridgePanel({
                 {state.sources.assets.map((asset, index) => <option key={asset.assetId} value={index}>{asset.symbol} · {asset.chainName}</option>)}
               </select>
             </label>
-            <label>{COPY.bridge.amount}
-              <input value={amountText} onChange={(event) => setAmountText(event.target.value)} inputMode="decimal" />
-            </label>
+            {/* The source chain's balance is not something this app reads, so the
+                field shows none and offers no Max. */}
+            <AmountField
+              label={COPY.bridge.amount}
+              value={amountText}
+              onChange={setAmountText}
+              decimals={source?.decimals ?? 18}
+              symbol={source?.symbol ?? ''}
+            />
             <details className="bridge-details">
               <summary>{COPY.bridge.refundAddress}</summary>
               <p className="glossary-definition">{COPY.glossary.refundAddress}</p>
@@ -185,13 +192,19 @@ export function BridgePanel({
 }
 
 function QuoteReview({ review }: { review: BridgeQuoteReview }) {
+  // D-091: the rows a bridge shows, and no more: what is sent, what arrives,
+  // the floor the quote signs, and how long it should take.
+  const rows: DetailRow[] = [
+    { id: 'amount', label: COPY.bridge.amount, value: `${formatTokenAmountExact(review.amountIn, review.sourceDecimals)} ${review.sourceSymbol}` },
+    { id: 'receive', label: COPY.bridge.willReceive, value: `≈ ${formatStrk(review.expectedAmountOut)}`, tone: 'emphasis' },
+    { id: 'minimum', label: <GlossaryTerm term={COPY.bridge.minimum} definition={COPY.glossary.bridgeMinimum} />, value: formatStrkExact(review.minimumAmountOut) },
+  ];
+  if (review.timeEstimateSeconds !== null) {
+    rows.push({ id: 'time', label: COPY.bridge.estTime, value: estimatedTime(review.timeEstimateSeconds), note: COPY.bridge.estTimeNote });
+  }
   return (
     <>
-      <dl className="bridge-review">
-        <dt>{COPY.bridge.amount}</dt><dd>{formatTokenAmountExact(review.amountIn, review.sourceDecimals)} {review.sourceSymbol}</dd>
-        <dt>{COPY.bridge.expected}</dt><dd>{formatStrkExact(review.expectedAmountOut)}</dd>
-        <dt><GlossaryTerm term={COPY.bridge.minimum} definition={COPY.glossary.bridgeMinimum} /></dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
-      </dl>
+      <DetailRows rows={rows} label={COPY.bridge.expected} />
       <details className="bridge-details">
         <summary>Quote details</summary>
         <dl className="bridge-review">
@@ -201,6 +214,12 @@ function QuoteReview({ review }: { review: BridgeQuoteReview }) {
       </details>
     </>
   );
+}
+
+/** 1Click's seconds as a bridge shows them: "~3 min", or under a minute. */
+export function estimatedTime(seconds: number): string {
+  if (seconds < 60) return COPY.bridge.estUnderMinute;
+  return COPY.bridge.estMinutes.replace('{minutes}', String(Math.round(seconds / 60)));
 }
 
 function BridgeStatusPanel({
@@ -233,7 +252,11 @@ function BridgeStatusPanel({
   const status = record.status;
   return (
     <div className="bridge-instructions">
-      <p>{status.message}</p>
+      {/* D-091: the deposit's status, on screen for as long as the record is:
+          a bridge settles in minutes, and the player may leave and come back. */}
+      <p className="bridge-status" role="status" aria-live="polite" data-leg={status.leg}>
+        <span className="bridge-status-label">{COPY.bridge.status}</span> {status.message}
+      </p>
       <dl>
         {status.strkReceived !== undefined ? <><dt>{COPY.bridge.settled}</dt><dd>{formatStrkExact(status.strkReceived)}</dd></> : null}
         {status.leg === 'refunded' ? <>

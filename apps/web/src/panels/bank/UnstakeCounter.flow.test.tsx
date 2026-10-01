@@ -69,6 +69,9 @@ async function render(operations: FakePrivacyOperations): Promise<HTMLElement> {
     );
   });
   await settle();
+  // D-091: the unstaking counter is the staking counter's Unstake tab.
+  expect(container.querySelector('section.unstake-counter')).toBeNull();
+  await click(button(COPY.stake.tabUnstake));
   return container.querySelector<HTMLElement>('section.unstake-counter')!;
 }
 
@@ -94,6 +97,10 @@ describe('the unstaking counter, driven through the screen in demo (D-085)', () 
 
     // Request: the review names the xSTRK and shows the approved disclosure.
     await type(counter.querySelector<HTMLInputElement>('input[name="unstake-amount"]')!, '4');
+    // D-091: what comes back at the demo rate, the rate, the measured wait and the fee.
+    const rows = [...counter.querySelectorAll('.unstake-compose .ui-detail')].map((row) => row.querySelector('dd')!.firstChild!.textContent);
+    expect(rows).toEqual(['≈ 5 STRK', '1 xSTRK = 1.25 STRK', COPY.unstake.waitValue, '6 STRK']);
+    expect(counter.querySelector('.unstake-compose')?.textContent).toContain(COPY.unstake.wait);
     await click(button(COPY.unstake.request));
     const review = counter.querySelector('.panel-review')!;
     expect([...review.querySelectorAll('.stake-review dd')].map((dd) => dd.textContent)).toEqual(['4 xSTRK']);

@@ -38,7 +38,7 @@ function injectedPanel(): BridgePanelMachine {
     record,
     account: '0x123',
     accountMatchesRecord: true,
-    quote: { amountIn: 1_000_000n, sourceSymbol: 'USDC', sourceDecimals: 6, expectedAmountOut: 100n, minimumAmountOut: 90n, deadline: '2030-01-01T00:00:00.000Z', recipient: '0x123' },
+    quote: { amountIn: 1_000_000n, sourceSymbol: 'USDC', sourceDecimals: 6, expectedAmountOut: 100n, minimumAmountOut: 90n, deadline: '2030-01-01T00:00:00.000Z', recipient: '0x123', timeEstimateSeconds: 120 },
     preflightAvailable: false,
     instructionsVisible: false,
     plan,

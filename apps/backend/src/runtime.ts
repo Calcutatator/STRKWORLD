@@ -244,7 +244,8 @@ function createBackendApi(
 /** Whether an RPC port offers unstaking's narrow read (D-085). */
 function isEndurRpc(value: unknown): value is EndurRpcPort {
   if (!value || typeof value !== 'object') return false;
-  return typeof (value as Partial<Record<keyof EndurRpcPort, unknown>>).getEndurUnstake === 'function';
+  const port = value as Partial<Record<keyof EndurRpcPort, unknown>>;
+  return typeof port.getEndurUnstake === 'function' && typeof port.getEndurRate === 'function';
 }
 
 /** Whether an RPC port offers the Vault's narrow reads (D-077). */

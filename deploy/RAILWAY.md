@@ -212,7 +212,9 @@ address, which calls xSTRK's `redeem` and holds Endur's request NFT; a claim,
 about seven days later, moves the STRK back into the pool. Nothing changes on
 the backend: both are submitted by the wallet, and unstaking's one read,
 `POST /v1/rpc/endur-unstake` (the queue's requests for the stand-in address,
-its balances and the chain's clock), follows `BACKEND_GLOBAL_ENABLED`.
+its balances and the chain's clock), follows `BACKEND_GLOBAL_ENABLED`, as
+does the staking counter's `POST /v1/rpc/endur-rate` (xSTRK's exchange rate,
+D-091).
 
 1. With a funded account on a wallet that reports Wallet API 0.10.4, keep at
    least the pool fee (6 STRK) in the shielded balance. At the Bank's staking

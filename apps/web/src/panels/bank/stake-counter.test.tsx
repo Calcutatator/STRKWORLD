@@ -246,8 +246,10 @@ describe('the staking counter on screen', () => {
     expect(markup).toContain(COPY.stake.intro);
     expect(markup).toContain(escaped(COPY.stake.unstaking));
     expect(markup).toContain(COPY.stake.oneAtATime);
-    expect(markup).toContain(COPY.gameMode.reviewAction);
+    expect(markup).toContain(COPY.kit.enterAmount);
     expect(markup).toMatch(/<button[^>]*role="tab"[^>]*>Stake<\/button>/);
+    // D-091: the counter's own Stake and Unstake tabs.
+    expect(markup).toMatch(/<button[^>]*role="tab"[^>]*>Unstake<\/button>/);
     // A stake-only counter: no other grade shares the station (D-030).
     expect(markup).not.toContain('>Shield<');
     expect(markup).not.toContain('>Unshield<');

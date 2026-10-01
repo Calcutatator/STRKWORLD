@@ -110,6 +110,9 @@ export {
 // D-085: Endur unstaking's pinned reads.
 export {
   CLAIM_WITHDRAWAL_SELECTOR,
+  // D-091: xSTRK's exchange rate.
+  CONVERT_TO_ASSETS_SELECTOR,
+  ENDUR_RATE_PATH,
   ENDUR_SCAN_WINDOW_BLOCKS,
   ENDUR_UNSTAKE_FIRST_BLOCK,
   ENDUR_UNSTAKE_PATH,

@@ -4,6 +4,8 @@ import { BackendApi } from './api.js';
 import { MemoryAuthorizationCodec } from './authorization.js';
 import {
   CLAIM_WITHDRAWAL_SELECTOR,
+  CONVERT_TO_ASSETS_SELECTOR,
+  ENDUR_RATE_PATH,
   ENDUR_SCAN_MAX_PAGES,
   ENDUR_SCAN_WINDOW_BLOCKS,
   ENDUR_UNSTAKE_FIRST_BLOCK,
@@ -37,6 +39,7 @@ describe('the pinned unstaking contracts and selectors (D-085)', () => {
     expect(BigInt(WITHDRAW_QUEUE_EVENT_KEY)).toBe(BigInt(hash.getSelectorFromName('WithdrawQueue')));
     expect(BigInt(GET_REQUEST_INFO_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('get_request_info')));
     expect(BigInt(CLAIM_WITHDRAWAL_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('claim_withdrawal')));
+    expect(BigInt(CONVERT_TO_ASSETS_SELECTOR)).toBe(BigInt(hash.getSelectorFromName('convert_to_assets')));
     expect(ENDUR_WITHDRAWAL_QUEUE).toBe('0x0518a66e579f9eb1603f5ffaeff95d3f013788e9c37ee94995555026b9648b6');
     expect(ENDUR_WITHDRAWAL_QUEUE).toBe(PRIVACY_QUEUE);
   });
@@ -265,8 +268,9 @@ function apiWith(endur?: EndurRpcPort, overrides: Partial<BackendConfig> = {}) {
   });
 }
 
-function endurPort(): EndurRpcPort & { getEndurUnstake: ReturnType<typeof vi.fn> } {
+function endurPort(): EndurRpcPort & { getEndurUnstake: ReturnType<typeof vi.fn>; getEndurRate: ReturnType<typeof vi.fn> } {
   return {
+    getEndurRate: vi.fn(async () => 1_183_444_769_437_096_259n),
     getEndurUnstake: vi.fn(async () => ({
       chainTime: NOW,
       strk: 4n * ONE,
@@ -313,5 +317,49 @@ describe('the unstaking route (D-085)', () => {
     await expect(apiWith(endur, { globalEnabled: false }).handle({ method: 'POST', path: ENDUR_UNSTAKE_PATH, body: { v: 1, account: SHADOW } }))
       .resolves.toMatchObject({ status: 503 });
     expect(endur.getEndurUnstake).not.toHaveBeenCalled();
+  });
+});
+
+describe('the xSTRK rate read (D-091)', () => {
+  it('makes one pinned convert_to_assets call for one whole xSTRK', async () => {
+    const { rpc, requests } = node({ calls: () => u256(1_183_444_769_437_096_259n) });
+    await expect(rpc.getEndurRate()).resolves.toBe(1_183_444_769_437_096_259n);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.method).toBe('starknet_call');
+    expect(requests[0]!.params[0]).toEqual({
+      contract_address: ENDUR_XSTRK,
+      entry_point_selector: CONVERT_TO_ASSETS_SELECTOR,
+      calldata: ['0xde0b6b3a7640000', '0x0'],
+    });
+  });
+
+  it.each([
+    ['a zero rate', () => u256(0n)],
+    ['a short answer', () => ['0x1']],
+    ['a reverted call', () => new RpcFailure()],
+  ])('fails on %s', async (_label, calls) => {
+    const { rpc } = node({ calls });
+    await expect(rpc.getEndurRate()).rejects.toThrow(/xSTRK rate/);
+  });
+
+  it('answers a decimal string for a version alone, and nothing else', async () => {
+    const endur = endurPort();
+    await expect(apiWith(endur).handle({ method: 'POST', path: ENDUR_RATE_PATH, body: { v: 1 } })).resolves.toEqual({
+      status: 200,
+      body: { strkPerXstrk: '1183444769437096259' },
+    });
+    for (const body of [{ v: 2 }, { v: 1, account: SHADOW }, {}]) {
+      await expect(apiWith(endur).handle({ method: 'POST', path: ENDUR_RATE_PATH, body })).resolves.toMatchObject({ status: 400 });
+    }
+    expect(endur.getEndurRate).toHaveBeenCalledTimes(1);
+    expect(endur.getEndurUnstake).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 without the reads, and honours the kill switch', async () => {
+    await expect(apiWith().handle({ method: 'POST', path: ENDUR_RATE_PATH, body: { v: 1 } })).resolves.toMatchObject({ status: 503 });
+    const endur = endurPort();
+    await expect(apiWith(endur, { globalEnabled: false }).handle({ method: 'POST', path: ENDUR_RATE_PATH, body: { v: 1 } }))
+      .resolves.toMatchObject({ status: 503 });
+    expect(endur.getEndurRate).not.toHaveBeenCalled();
   });
 });

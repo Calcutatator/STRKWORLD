@@ -6,6 +6,8 @@ import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { useStore } from '../../store/use-store.js';
 import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
+import { AmountField, DetailRows, checkAmount, primaryAction, type DetailRow } from '../kit/index.js';
+import { estimateText, rateRow, strkForXstrk, type EndurRateView } from './endur-rate.js';
 import { voyagerContractUrl } from '../vault/vault-machine.js';
 import {
   XSTRK_DECIMALS,
@@ -37,10 +39,16 @@ function formatXstrkExact(amount: bigint): string {
 export function UnstakeCounter({
   panel: injected,
   register = PRIVACY_REGISTER,
+  rate = { status: 'unavailable' },
+  poolFee = null,
 }: {
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: UnstakePanel;
   register?: readonly RouteGrade[];
+  /** xSTRK's live rate, read once by the staking view (D-091). */
+  rate?: EndurRateView;
+  /** The pool fee the Bank read live, for the preview row; null hides the row. */
+  poolFee?: bigint | null;
 }) {
   const { operations, receipts, noteOperationError, submissionUncertainty } = usePrivacy();
   const owned = useMemo(
@@ -84,8 +92,6 @@ export function UnstakeCounter({
     <section className="unstake-counter" aria-label={COPY.unstake.title}>
       <h3>{COPY.unstake.title}</h3>
       <p className="panel-intro">{COPY.unstake.intro}</p>
-      <p className="stake-note">{COPY.unstake.wait}</p>
-      <p className="stake-note">{COPY.unstake.feeNote}</p>
       {state.capability.status === 'checking' ? (
         <p aria-busy="true">{COPY.vault.checking}</p>
       ) : state.capability.status === 'unsupported' ? (
@@ -97,14 +103,17 @@ export function UnstakeCounter({
         </div>
       ) : (
         <>
-          <RequestsBlock state={state} panel={panel} />
           {committing ? (
             <ReviewBlock state={state} onConfirm={() => void panel.confirm()} onCancel={() => panel.cancelPrepared()} />
           ) : state.flow.name === 'submitted' ? (
             <SubmittedBlock state={state} onBack={() => panel.acknowledge()} />
           ) : (
-            <ComposeBlock state={state} panel={panel} />
+            <ComposeBlock state={state} panel={panel} rate={rate} poolFee={poolFee} />
           )}
+          {/* The pending requests sit under the form, as Endur's withdraw log
+              does, with the claim beside them. */}
+          <RequestsBlock state={state} panel={panel} />
+          {committing || state.flow.name === 'submitted' ? null : <ClaimAction state={state} panel={panel} />}
           {state.flow.name === 'failed' ? (
             <div className="flow-failed" role="alert">
               <p>{state.flow.message}</p>
@@ -188,9 +197,12 @@ function RequestsBlock({ state, panel }: { state: UnstakeState; panel: UnstakePa
   );
 }
 
-function ComposeBlock({ state, panel }: { state: UnstakeState; panel: UnstakePanel }) {
+function ComposeBlock({ state, panel, rate, poolFee }: { state: UnstakeState; panel: UnstakePanel; rate: EndurRateView; poolFee: bigint | null }) {
   const preparing = state.flow.name === 'preparing';
-  const claimable = hasClaimable(state.position);
+  // The xSTRK balance is read only when a request is reviewed (the figure
+  // never leaves the machine), so there is no balance line and no Max here.
+  const check = checkAmount(state.amountText, { decimals: XSTRK_DECIMALS });
+  const action = primaryAction({ check, symbol: 'xSTRK', ready: COPY.unstake.request, busy: preparing ? COPY.flow.preparing : null });
   return (
     <>
       <form
@@ -200,22 +212,32 @@ function ComposeBlock({ state, panel }: { state: UnstakeState; panel: UnstakePan
           void panel.prepareRequest();
         }}
       >
-        <label>
-          {COPY.unstake.amount}
-          <input
-            name="unstake-amount"
-            inputMode="decimal"
-            autoComplete="off"
-            value={state.amountText}
-            disabled={preparing}
-            onChange={(event) => panel.setAmount(event.target.value)}
-          />
-        </label>
+        <AmountField
+          label={COPY.unstake.amount}
+          name="unstake-amount"
+          value={state.amountText}
+          onChange={(text) => panel.setAmount(text)}
+          decimals={XSTRK_DECIMALS}
+          symbol="xSTRK"
+          disabled={preparing}
+        />
         {state.noXstrk ? <p className="unstake-holding-none" role="status">{COPY.unstake.noXstrk}</p> : null}
-        <button type="submit" className="review" disabled={preparing}>
-          {preparing ? COPY.flow.preparing : COPY.unstake.request}
+        <DetailRows rows={unstakeRows(check.amount, rate, poolFee)} />
+        <p className="stake-note">{COPY.unstake.wait}</p>
+        <button type="submit" className="review" disabled={action.disabled}>
+          {action.label}
         </button>
       </form>
+    </>
+  );
+}
+
+/** The claim, once the requests are read: offered only when something is claimable (D-085). */
+function ClaimAction({ state, panel }: { state: UnstakeState; panel: UnstakePanel }) {
+  const preparing = state.flow.name === 'preparing';
+  const claimable = hasClaimable(state.position);
+  return (
+    <>
       {state.claimDoor.open && state.position.status === 'loaded' ? (
         claimable ? (
           <button type="button" className="unstake-claim" disabled={preparing} onClick={() => void panel.prepareClaim()}>
@@ -227,6 +249,31 @@ function ComposeBlock({ state, panel }: { state: UnstakeState; panel: UnstakePan
       ) : null}
     </>
   );
+}
+
+/**
+ * Endur's unstake rows (D-091): what comes back at today's rate, the rate,
+ * the wait D-085 measured on chain, and the pool fee each request pays.
+ * Estimates only: the request fixes its STRK when it runs.
+ */
+function unstakeRows(shares: bigint | null, rate: EndurRateView, poolFee: bigint | null): DetailRow[] {
+  const estimate = rate.status === 'loaded' && shares !== null
+    ? estimateText(strkForXstrk(shares, rate.strkPerXstrk), 'STRK')
+    : null;
+  const rows: DetailRow[] = [
+    { id: 'receive', label: COPY.stake.willReceive, value: estimate ?? '—', tone: 'emphasis' },
+    rateRow(rate),
+    { id: 'wait', label: COPY.unstake.waitingTime, value: COPY.unstake.waitValue },
+  ];
+  if (poolFee !== null) {
+    rows.push({
+      id: 'fee',
+      label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+      value: formatStrk(poolFee),
+      note: COPY.unstake.feeNote,
+    });
+  }
+  return rows;
 }
 
 function ReviewBlock({ state, onConfirm, onCancel }: { state: UnstakeState; onConfirm: () => void; onCancel: () => void }) {

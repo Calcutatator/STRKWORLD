@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations, ReservePublicShieldPlanner } from '@strkworld/privacy';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { BridgeProvider } from '../../bridge/BridgeProvider.js';
-import { BridgePanel } from './BridgePanel.js';
+import { BridgePanel, estimatedTime } from './BridgePanel.js';
 import { createBridgePanel } from '../../bridge/bridge-machine.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
@@ -236,5 +236,68 @@ describe('BridgePanel', () => {
     expect(handoff).toContain(COPY.bridge.shield);
     // The Bridge is never described as private.
     expect(handoff.toLowerCase()).not.toContain('private');
+  });
+});
+
+describe('the Bridge quote and status, as bridges show them (D-091)', () => {
+  function awaiting(timeEstimate?: number): BridgeRecord {
+    return {
+      v: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      source: { assetId: 'nep141:arb-usdc.omft.near', symbol: 'USDC', chainName: 'arbitrum', decimals: 6, depositMode: 'manual' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: '0x1111111111111111111111111111111111111111',
+      signedQuote: {
+        correlationId: 'rows',
+        timestamp: '2030-01-01T00:00:00.000Z',
+        signature: 'signed',
+        quoteRequest: { recipient: '0x123' },
+        quote: {
+          depositAddress: '0xdeposit',
+          amountOut: (25n * 10n ** 17n).toString(),
+          minAmountOut: (24n * 10n ** 17n).toString(),
+          deadline: '2030-01-01T00:30:00.000Z',
+          ...(timeEstimate === undefined ? {} : { timeEstimate }),
+        },
+      } as never,
+      status: { leg: 'awaiting-deposit', message: 'Waiting for your deposit', pollingStopped: false },
+    };
+  }
+
+  async function markupFor(record: BridgeRecord): Promise<string> {
+    const machine = createBridgePanel({ service: { ...service, resume: () => record }, loadSources: async () => [], readAccount: () => '0x123', planner: null, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
+    await machine.open();
+    return renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BridgeProvider service={service} account="0x123" planner={null}>
+          <BridgePanel panel={machine} onClose={() => {}} />
+        </BridgeProvider>
+      </PrivacyProvider>,
+    );
+  }
+
+  it('shows what arrives, the signed floor and the estimated time', async () => {
+    const markup = await markupFor(awaiting(180));
+    expect(markup).toContain(`<dt>${COPY.bridge.willReceive}</dt><dd>≈ 2.5 STRK</dd>`);
+    expect(markup).toContain('2.4 STRK');
+    expect(markup).toContain(`<dt>${COPY.bridge.estTime}</dt><dd>~3 min`);
+    expect(markup).toContain(COPY.bridge.estTimeNote);
+    // A bridge has no slippage setting, Max or swap rows.
+    expect(markup).not.toContain(COPY.kit.max);
+    expect(markup).not.toContain('Slippage');
+  });
+
+  it('keeps the deposit status on screen as a live line', async () => {
+    const markup = await markupFor(awaiting(30));
+    expect(markup).toMatch(/<p class="bridge-status" role="status" aria-live="polite" data-leg="awaiting-deposit"><span class="bridge-status-label">Status<\/span> (<!-- -->)?Waiting for your deposit<\/p>/);
+  });
+
+  it('formats 1Click seconds the way bridges do', () => {
+    expect(estimatedTime(0)).toBe(COPY.bridge.estUnderMinute);
+    expect(estimatedTime(59)).toBe(COPY.bridge.estUnderMinute);
+    expect(estimatedTime(60)).toBe('~1 min');
+    expect(estimatedTime(150)).toBe('~3 min');
   });
 });

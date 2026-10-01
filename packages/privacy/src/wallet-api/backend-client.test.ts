@@ -1446,3 +1446,24 @@ describe('the unstaking read (D-085)', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+describe("xSTRK's exchange rate read (D-091)", () => {
+  it('posts a version alone and parses the decimal string', async () => {
+    const fetcher = vi.fn(async () => response({ strkPerXstrk: '1183444769437096259' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    await expect(client.endurRate()).resolves.toEqual({ strkPerXstrk: 1_183_444_769_437_096_259n });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://backend.example/v1/rpc/endur-rate');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1 });
+  });
+
+  it.each([
+    ['a zero rate', { strkPerXstrk: '0' }],
+    ['a hex rate', { strkPerXstrk: '0x1' }],
+    ['an extra field', { strkPerXstrk: '1', extra: 1 }],
+    ['no rate', {}],
+  ])('refuses %s', async (_label, answer) => {
+    const client = new BackendPrivacyClient('https://backend.example', vi.fn(async () => response(answer)));
+    await expect(client.endurRate()).rejects.toThrow('The private service returned an invalid response.');
+  });
+});

@@ -198,6 +198,24 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   /**
+   * D-091: xSTRK's live exchange rate, as STRK base units per whole xSTRK.
+   * The request carries nothing but a version, and the answer one figure.
+   */
+  async endurRate(signal?: AbortSignal): Promise<{ readonly strkPerXstrk: bigint }> {
+    const raw = await this.post('/v1/rpc/endur-rate', { v: 1 }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 1) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const strkPerXstrk = asUint256(ownField(value, 'strkPerXstrk'));
+    if (strkPerXstrk === 0n) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({ strkPerXstrk });
+  }
+
+  /**
    * D-079: Vesu's supply APY for each vault the backend pins, as the backend
    * last read Vesu's public API. The request carries nothing but a version.
    */

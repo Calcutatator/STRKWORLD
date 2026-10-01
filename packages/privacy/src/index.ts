@@ -30,6 +30,7 @@ export type {
   BorrowRequest,
   DepositStatus,
   EndurAction,
+  EndurRate,
   EndurUnstakePosition,
   EndurWithdrawalRequest,
   Intent,
