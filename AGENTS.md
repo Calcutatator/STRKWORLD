@@ -259,6 +259,18 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Avatar clipping is a seam the camera can see; the green woodsman's hair came out through his helmet (D-095)
+
+The lead's "the green character's outfit clips when switching his mode" is the F toggle (D-053) to `avatar-15`: his mop hair, built to the crown as for a bare head, stood 0.15 units outside the horned helmet's tapered dome. `packages/world/tools/avatar-clipping.ts` now checks every look in every pose, and found more clips in all sixteen looks, mostly at a sprint. Traps met on the way:
+
+- **Overlap is not clipping.** Every look is built from overlapping boxes, and parts that move against each other overlap at their joints by design. What shows is a seam: where two moving boxes cross, uncovered by a third, somewhere the camera can see. Counting overlap flagged hundreds of hidden joints; counting how deep one box sits in another reported a leg's top buried in the torso as a 9 cm clip. The check samples each box's surface, takes samples just inside another moving part as seam points, and keeps them only if no third box covers them and a ray towards some camera direction leaves the figure. Its depth is how far the piercing box stands out through the pierced one's surface.
+- **Joints are sockets.** A box that holds a limb or the head (`AvatarPartBox.socket`) lets it leave through its open top or bottom face; anything coming out of another face is a clip. A shoulder cap that reaches in under a chibi head has to hold the head too.
+- **The hip band rides on the torso, not the hips.** It bobs down 0.028 at the very moment the legs swing widest, so a thigh turning about the hip line swept out of its front hem whatever the band's depth. The legs now turn about a point 0.1 below the hip line.
+- **A weapon's lean sign is per frame.** In the right arm's frame a negative z turn leans a hanging blade out but an upright shaft in; a shaft leans out with a positive one.
+- **The camera never orbits** (camera-rig.ts), but players turn, so every side is seen; one pixel at the street camera on a 1080-pixel view is 0.011 units, the check's tolerance.
+
+*Verified:* `tools/avatar-clipping.test.ts` (20 tests: no finding in any of the sixteen looks over 36 poses, and the check catches an arm through the body, a thigh out of the hips and a head in the chest); `avatar-figure.test.ts` adds the budget (7 meshes, at most 1,100 triangles; most is `avatar-14` at 1,056, from 780) and the cat girl's ears and tail. Before and after renders were made with `createFigureRenderer` (`tools/avatar-walker.ts`, now framing-configurable; the walker strip's defaults are unchanged). The regenerated walker strip is 48,664 bytes; the SHA-256 of its RGBA pixels is `5ab011357367f381473111ea61b34b07bb82d3215a84d353a8b84d6704a13eef`.
+
 ### 2026-10-01 — A wallet without `wallet_supportedWalletApi` showed "Cannot reach your wallet"; it now gets the unsupported room (D-093)
 
 - starknet.js 10.8 `walletV6.supportedWalletApi` is one bare
