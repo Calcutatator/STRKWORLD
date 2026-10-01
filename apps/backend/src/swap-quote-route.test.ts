@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AVNU_SWAP_MAX_CALLDATA,
   BackendApi,
   MemoryAuthorizationCodec,
   SWAP_QUOTE_PATH,
@@ -145,11 +146,26 @@ describe('the keyless swap quote proxy (D-084)', () => {
     const wrongChain = fixture({ quote: async (input) => ({ ...answer(input), chainId: '0x1' }) });
     await expect(ask(wrongChain.api)).resolves.toMatchObject({ status: 502 });
     const tooLong = fixture({
-      quote: async (input) => ({ ...answer(input), calls: [{ ...answer(input).calls[0]!, calldata: Array.from({ length: 129 }, () => '0x1') }] }),
+      quote: async (input) => ({ ...answer(input), calls: [{ ...answer(input).calls[0]!, calldata: Array.from({ length: AVNU_SWAP_MAX_CALLDATA + 1 }, () => '0x1') }] }),
     });
     await expect(ask(tooLong.api)).resolves.toMatchObject({ status: 502 });
     const timedOut = fixture({ quote: async () => { throw new DOMException('avnu timed out.', 'TimeoutError'); } });
     await expect(ask(timedOut.api)).resolves.toMatchObject({ status: 504 });
+  });
+
+  it('bounds the built call by the swap\'s own ceiling, never the relay\'s calldata limit (D-084)', async () => {
+    // A thin degen pair splits widely: 100 LORDS→DREAMS built 336 felts on
+    // 2026-10-01. The wallet submits a swap, so the relay's maxCalldataItems
+    // (128 here, 256 on Railway) must not refuse it.
+    const routed = (length: number) => fixture({
+      quote: async (input) => ({ ...answer(input), calls: [{ ...answer(input).calls[0]!, calldata: Array.from({ length }, () => '0x1') }] }),
+    });
+    const degenLength = routed(336);
+    const response = await ask(degenLength.api);
+    expect(response.status).toBe(200);
+    expect((response.body as { calls: Array<{ calldata: string[] }> }).calls[0]!.calldata).toHaveLength(336);
+    await expect(ask(routed(AVNU_SWAP_MAX_CALLDATA).api)).resolves.toMatchObject({ status: 200 });
+    await expect(ask(routed(AVNU_SWAP_MAX_CALLDATA + 1).api)).resolves.toMatchObject({ status: 502 });
   });
 
   it('keeps its own aggregate window besides the shared one, so avnu is asked a bounded amount', async () => {

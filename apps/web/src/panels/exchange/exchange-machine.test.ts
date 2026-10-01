@@ -147,7 +147,7 @@ describe('Exchange machine', () => {
     expect(machine.store.getState()).toMatchObject({ ...expected, flow: { name: 'composing' } });
   });
 
-  it('says plainly that a swap needs the relay when the deployment has no avnu key (D-070)', async () => {
+  it('still words a relay-not-configured failure plainly, though no swap reaches the relay since D-084 (D-070)', async () => {
     const operations = new FakePrivacyOperations({
       balances: { [strk!.token]: 100n * 10n ** 18n },
       swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture },

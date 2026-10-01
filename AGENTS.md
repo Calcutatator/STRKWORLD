@@ -259,6 +259,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — The degen floor quotes keylessly, but its thin pairs split past the relay's calldata limit, so the quote proxy bounds by the swap's own ceiling (D-067, D-084)
+
+avnu's public `/swap/v3/quotes` and `/swap/v3/build` quote the curated degen
+tokens with no key, exactly as STRK→USDC: STRK→DREAMS, LORDS, SLAY, BROTHER,
+tBTC, CASH and DOG each built one `multi_route_swap` on the pinned exchange.
+avnu's token list (`GET /v1/starknet/tokens`, through the SDK's `fetchTokens`)
+also answers without a key; `AvnuDegenCatalog` with the `.env` example's
+group (all four tags, $100 floor) gave a live snapshot of the seven curated
+tokens plus seventeen live ones, all blue chips (USDC, STRK, ETH, strkBTC,
+WBTC, ZEC, USDC.e, xWBTC, USDT, DAI, USN, sUSN, xSTRK, EKUBO, wstETH, DAIv0,
+wstETH(legacy)); a $10 floor adds only SCHIZODIO, rETH, SOL, SolvBTC and
+NSTR. The degen names come from the curated core. How verified: `curl`
+of both swap endpoints for each pair at several amounts with a dummy taker,
+and the catalog run once against avnu from a scratch test. Trap met:
+
+- **Thin pairs route widely.** 1,000 STRK→DREAMS built 266 felts over 26
+  routes, 100 LORDS→DREAMS 336 over 30 (the most seen was 338), where a
+  STRK→LORDS build is 23. The quote proxy refused any build longer than
+  `BACKEND_MAX_CALLDATA_ITEMS` (256 on Railway), a relay submission limit
+  left over from the relayed swap, so most DREAMS quotes would have answered
+  502. It now bounds by `AVNU_SWAP_MAX_CALLDATA` (512), the browser's own
+  `MAX_SWAP_CALLDATA` (`apps/backend/src/avnu-swap-quotes.ts`, `api.ts`).
+
 ### 2026-10-01 — Shared rooms overlap the street's coordinates, so area must filter before distance; rooms publish `area:moved`, never `player:moved` (D-087)
 
 The product owner's scope: interiors stay private solo instances; only the
