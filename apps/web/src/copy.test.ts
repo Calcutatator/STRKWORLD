@@ -139,7 +139,7 @@ describe('shell copy', () => {
     it('points at two wallet sites plainly, over https', () => {
       expect(COPY.connect.getWallet).toBe('Get a wallet:');
       expect(COPY.connect.installLinks).toEqual([
-        { label: 'Ready', href: 'https://www.ready.co' },
+        { label: 'Ready', href: 'https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb' },
         { label: 'Xverse', href: 'https://www.xverse.app' },
       ]);
     });

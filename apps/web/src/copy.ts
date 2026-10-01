@@ -50,7 +50,7 @@ export const COPY = freezeCopy({
      */
     getWallet: 'Get a wallet:',
     installLinks: [
-      { label: 'Ready', href: 'https://www.ready.co' },
+      { label: 'Ready', href: 'https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb' },
       { label: 'Xverse', href: 'https://www.xverse.app' },
     ],
     refreshWallets: 'Look again',
