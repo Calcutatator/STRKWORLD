@@ -300,6 +300,51 @@ describe('UpdateThrottle', () => {
     expect(throttle.accept('a', 1100)).toBe(true);
   });
 
+  it('with a burst, keeps a move that is early only because the last was late (D-086)', () => {
+    const throttle = new UpdateThrottle(50, 3);
+    // Sent every 50 ms; jitter delivers them at 0, 70, 95, 150, 190.
+    for (const at of [1000, 1070, 1095, 1150, 1190]) {
+      expect(throttle.accept('a', at)).toBe(true);
+    }
+  });
+
+  it('with a burst, still holds the long-run rate to one per interval', () => {
+    const throttle = new UpdateThrottle(50, 3);
+    let accepted = 0;
+    // A client that ignores the floor and sends every 10 ms for one second.
+    for (let at = 1000; at < 2000; at += 10) {
+      if (throttle.accept('a', at)) accepted += 1;
+    }
+    // One per 50 ms, plus the burst allowance of two.
+    expect(accepted).toBeLessThanOrEqual(1000 / 50 + 2);
+    expect(accepted).toBeGreaterThanOrEqual(1000 / 50);
+  });
+
+  it('with a burst, refuses the burst-plus-first arrival at once', () => {
+    const throttle = new UpdateThrottle(50, 3);
+    expect(throttle.accept('a', 1000)).toBe(true);
+    expect(throttle.accept('a', 1000)).toBe(true);
+    expect(throttle.accept('a', 1000)).toBe(true);
+    expect(throttle.accept('a', 1000)).toBe(false);
+    expect(throttle.accept('a', 1049)).toBe(false);
+    expect(throttle.accept('a', 1050)).toBe(true);
+  });
+
+  it('a stamp drains the burst: the next update waits a full interval', () => {
+    const throttle = new UpdateThrottle(50, 3);
+    expect(throttle.stamp('a', 1000)).toBe(true);
+    expect(throttle.accept('a', 1049)).toBe(false);
+    expect(throttle.accept('a', 1050)).toBe(true);
+  });
+
+  it('treats a nonsense burst as a strict floor', () => {
+    for (const burst of [0, -1, 1.5, Number.NaN, Infinity]) {
+      const throttle = new UpdateThrottle(50, burst);
+      expect(throttle.accept('a', 1000)).toBe(true);
+      expect(throttle.accept('a', 1049)).toBe(false);
+    }
+  });
+
   it('throttles each session independently', () => {
     const throttle = new UpdateThrottle(50);
     expect(throttle.accept('a', 1000)).toBe(true);

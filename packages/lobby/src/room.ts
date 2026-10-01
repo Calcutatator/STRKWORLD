@@ -41,7 +41,7 @@
  * session is that nothing does.
  */
 
-import { Room, ServerError, type Client, type Delayed } from '@colyseus/core';
+import { ClientState, Room, ServerError, type Client, type Delayed } from '@colyseus/core';
 import { Encoder, StateView } from '@colyseus/schema';
 import { FOOTBALL_TICK_MS, type FootballSide, type GameId, type SandboxTile } from '@strkworld/shared';
 import {
@@ -119,6 +119,18 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /** The ball's step, while anyone is on or near the pitch. D-078. */
   #footballTimer: Delayed | undefined;
 
+  /**
+   * Set when someone moved, arrived, left, stepped inside or came back out:
+   * every interest set is stale until the next patch. D-086.
+   */
+  #viewsStale = false;
+
+  /** Set by an accepted move: the ball's timer is stale until the next patch. */
+  #moved = false;
+
+  /** Scratch set for `#syncView`, reused so a sync allocates no set. */
+  readonly #wanted = new Set<PresenceEntry>();
+
   /** Aggregate counters for this room. Never per-connection. */
   get counters(): PresenceCounters {
     return this.#registry.counters();
@@ -155,6 +167,12 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
      */
     this.maxMessagesPerSecond = config.maxMessagesPerSecond;
 
+    /*
+     * The one high-rate message. An accepted move only marks the room's
+     * interest sets stale: they are recomputed once, just before the next
+     * patch is encoded (`onBeforePatch`), which is the only moment a view is
+     * read. D-086.
+     */
     this.onMessage(MESSAGE.move, (client: Client, payload: MoveRequest) => {
       const outcome = this.#registry.move(
         client.sessionId,
@@ -162,14 +180,14 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         performance.now(),
       );
       if (outcome === 'applied') {
-        this.#syncViews();
-        this.#scheduleFootball();
+        this.#viewsStale = true;
+        this.#moved = true;
       }
     });
 
     this.onMessage(MESSAGE.suspend, (client: Client) => {
       if (this.#registry.suspend(client.sessionId)) {
-        this.#syncViews();
+        this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
       }
@@ -177,7 +195,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
 
     this.onMessage(MESSAGE.resume, (client: Client, payload: PlacementRequest) => {
       if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
-        this.#syncViews();
+        this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
       }
@@ -220,11 +238,19 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     if (outcome.ok === false) {
       throw new ServerError(PRESENCE_REFUSED, outcome.reason);
     }
+    // The joiner's own view is filled at once, so the full state it is about
+    // to receive already holds its avatar and its neighbours. It is then left
+    // alone until the client acknowledges the join (`#syncViews` skips it):
+    // patches are not encoded for a joining client, so every change queued
+    // in its view meanwhile would reach it in one encode, and a peer that
+    // left and re-entered its radius in that time would be the drop-and-re-add
+    // this sync exists to prevent. Everyone else's view waits for the patch.
     client.view = new StateView();
+    this.#syncView(client);
+    this.#viewsStale = true;
     // Tell the client the identifier the server minted for it, so it can find
     // its own avatar in the shared state. Nothing about any other player.
     client.send(SERVER_MESSAGE.welcome, { gameId: outcome.gameId satisfies GameId });
-    this.#syncViews();
     this.#scheduleSpawn();
     this.#scheduleFootball();
   }
@@ -234,9 +260,43 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     // safe for a session the registry never admitted. release() is a no-op on
     // an unknown session, so it is.
     this.#registry.release(client.sessionId);
-    this.#syncViews();
+    this.#viewsStale = true;
     this.#scheduleSpawn();
     this.#scheduleFootball();
+  }
+
+  /**
+   * Bring every interest set, and the ball's timer, up to date with
+   * everything since the last patch — once, just before the patch is encoded
+   * (D-086).
+   *
+   * Once is the point, twice over. Recomputing on every accepted move made
+   * each move O(sessions²), O(sessions³) a second: one room of 100 saturated
+   * a core and its patch rate fell from 20 to about 10 a second. And a view that
+   * changes more than once between two encodes can drop and re-add the same
+   * entry inside one patch, which `@colyseus/schema@4.0.30` encodes so that
+   * clients lose track of the entry: the SDK logs `"refId" not found` and
+   * skips its updates, so that peer freezes on their screen. Syncing here
+   * makes at most one change per entry per view per patch.
+   */
+  override onBeforePatch(): void {
+    try {
+      if (this.#viewsStale) {
+        // Still stale while anyone is joining, so their view is brought up to
+        // date on the first patch after they are in; and only cleared once
+        // the sync has worked, so a failed one is retried on the next patch.
+        this.#viewsStale = !this.#syncViews();
+      }
+      if (this.#moved) {
+        this.#moved = false;
+        this.#scheduleFootball();
+      }
+    } catch {
+      // The patch interval runs this outside any handler; an escape would
+      // take the process down with every room in it. A fixed, content-free
+      // line, like the room clock's.
+      console.error('lobby: interest sync failed');
+    }
   }
 
   override onDispose(): void {
@@ -358,33 +418,48 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   }
 
   /**
-   * Recompute every observer's interest set.
-   *
-   * Run after any change to the map, including an accepted move. That is
-   * O(sessions²) per change, which sounds worse than it is: the room caps at
-   * a few dozen sessions and the per-session rate floor caps moves at 20/second,
-   * so the worst case is a few tens of thousands of coordinate comparisons per
-   * second. Recomputing everything keeps the nearest-first cap exactly
-   * correct, which an incremental update of only the mover would not.
+   * Recompute every observer's interest set. Runs from `onBeforePatch`, at
+   * most once per patch (D-086): O(sessions²) a patch, a few hundred
+   * thousand coordinate comparisons a second at the hard cap. False when a
+   * joining client was skipped and still needs its turn.
    */
-  #syncViews(): void {
+  #syncViews(): boolean {
+    let complete = true;
     for (const client of this.clients) {
-      const view = (client.view ??= new StateView());
-      const wanted = new Set<PresenceEntry>(
-        this.#registry.visibleTo(client.sessionId),
-      );
-      const own = this.#registry.entryFor(client.sessionId);
-      if (own !== undefined) wanted.add(own);
-
-      this.#registry.peers.forEach((entry) => {
-        const visible = view.has(entry);
-        if (wanted.has(entry)) {
-          if (!visible) view.add(entry);
-        } else if (visible) {
-          view.remove(entry);
-        }
-      });
+      // A joining client's view stays as `onJoin` filled it until its full
+      // state has been sent; the first patch after brings it up to date.
+      if (client.state !== ClientState.JOINED) {
+        complete = false;
+        continue;
+      }
+      this.#syncView(client);
     }
+    return complete;
+  }
+
+  /**
+   * Make one observer's view hold exactly its own entry and the entries the
+   * registry says it should see: inside the interest radius, nearest first,
+   * capped. Only the difference is written, so an unchanged view costs the
+   * encoder nothing.
+   */
+  #syncView(client: Client): void {
+    const view = (client.view ??= new StateView());
+    const wanted = this.#wanted;
+    wanted.clear();
+    for (const entry of this.#registry.visibleTo(client.sessionId)) wanted.add(entry);
+    const own = this.#registry.entryFor(client.sessionId);
+    if (own !== undefined) wanted.add(own);
+
+    this.#registry.peers.forEach((entry) => {
+      const visible = view.has(entry);
+      if (wanted.has(entry)) {
+        if (!visible) view.add(entry);
+      } else if (visible) {
+        view.remove(entry);
+      }
+    });
+    wanted.clear();
   }
 }
 

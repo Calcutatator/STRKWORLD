@@ -191,9 +191,12 @@ describe('movement', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: Number.NaN });
     const id = join(registry, 's1');
 
+    // The default floor, with the move burst (D-086): three at once, not four.
     expect(registry.move('s1', { x: 10, y: 0 }, 0)).toBe('applied');
+    expect(registry.move('s1', { x: 11, y: 0 }, 0)).toBe('applied');
+    expect(registry.move('s1', { x: 12, y: 0 }, 0)).toBe('applied');
     expect(registry.move('s1', { x: 20, y: 0 }, 0)).toBe('throttled');
-    expect(registry.peers.get(id)?.position.x).toBe(10);
+    expect(registry.peers.get(id)?.position.x).toBe(12);
   });
 
   it('applies a due update', () => {
@@ -207,14 +210,29 @@ describe('movement', () => {
     expect(entry?.facing).toBe('up');
   });
 
-  it('drops an update that arrives inside the rate floor', () => {
+  it('drops an update that arrives beyond the move burst (D-086)', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
     const id = join(registry, 's1');
     registry.move('s1', { x: 10, y: 10 }, 1000);
-    expect(registry.move('s1', { x: 20, y: 20 }, 1010)).toBe('throttled');
-    expect(registry.peers.get(id)?.position.x).toBe(10);
+    // Early, but inside the burst: kept, as a jittered stream needs.
+    expect(registry.move('s1', { x: 15, y: 15 }, 1010)).toBe('applied');
+    expect(registry.move('s1', { x: 18, y: 18 }, 1020)).toBe('applied');
+    // The fourth inside one interval is one too many.
+    expect(registry.move('s1', { x: 20, y: 20 }, 1030)).toBe('throttled');
+    expect(registry.move('s1', { x: 20, y: 20 }, 1049)).toBe('throttled');
+    expect(registry.peers.get(id)?.position.x).toBe(18);
     expect(registry.move('s1', { x: 30, y: 30 }, 1050)).toBe('applied');
     expect(registry.peers.get(id)?.position.x).toBe(30);
+  });
+
+  it('keeps a jittered 20-a-second stream whole (D-086)', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
+    join(registry, 's1');
+    // Sent every 50 ms, delivered with up to 60 ms of jitter, never reordered.
+    const arrivals = [1000, 1060, 1101, 1150, 1230, 1251, 1300, 1349, 1420, 1452];
+    for (const [index, at] of arrivals.entries()) {
+      expect(registry.move('s1', { x: index, y: 0 }, at)).toBe('applied');
+    }
   });
 
   it('keeps the server move floor through a rollback and lets it progress later', () => {
@@ -222,7 +240,12 @@ describe('movement', () => {
     const id = join(registry, 's1');
 
     expect(registry.move('s1', { x: 10, y: 10 }, 1000)).toBe('applied');
+    // Further back than the burst allows: a rollback never buys a write.
     expect(registry.move('s1', { x: 20, y: 20 }, 900)).toBe('throttled');
+    expect(registry.move('s1', { x: 20, y: 20 }, 600)).toBe('throttled');
+    // The burst is spent at the original time, then the floor holds.
+    expect(registry.move('s1', { x: 25, y: 25 }, 1000)).toBe('applied');
+    expect(registry.move('s1', { x: 28, y: 28 }, 1000)).toBe('applied');
     expect(registry.move('s1', { x: 30, y: 30 }, 1000)).toBe('throttled');
     expect(registry.move('s1', { x: 40, y: 40 }, 1050)).toBe('applied');
     expect(registry.peers.get(id)?.position.x).toBe(40);
@@ -379,7 +402,9 @@ describe('counters', () => {
     join(registry, 's2');
     registry.admit('s1', { x: 0, y: 0 }); // session-in-use → refused
     registry.move('s1', { x: 1, y: 1 }, 1000);
-    registry.move('s1', { x: 2, y: 2 }, 1001); // throttled
+    registry.move('s1', { x: 2, y: 2 }, 1001); // inside the burst (D-086)
+    registry.move('s1', { x: 3, y: 3 }, 1002); // inside the burst
+    registry.move('s1', { x: 4, y: 4 }, 1003); // throttled
     registry.suspend('s2');
     registry.resume('s2', { x: 0, y: 0 }, 2000);
     registry.release('s1');

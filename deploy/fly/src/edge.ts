@@ -5,7 +5,7 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
-import { createConnection, type Socket } from 'node:net';
+import { Socket, createConnection } from 'node:net';
 import { realpath } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { openContainedRegularFile, resolveContainedRegularFile } from './static-file.js';
@@ -494,7 +494,13 @@ function tunnelUpgrade(
     client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
     return;
   }
-  const upstream = createConnection({ host: '127.0.0.1', port });
+  // A lobby frame is tens of bytes every 50 ms each way. Nagle's algorithm
+  // would hold one back while the last is unacknowledged, and with Linux's
+  // delayed ACKs that can be 40 ms: a move arriving late and bunched with the
+  // next. The browser leg already has it off (Node's HTTP server default);
+  // the tunnel's own leg needs it said (D-086).
+  const upstream = createConnection({ host: '127.0.0.1', port, noDelay: true });
+  if (client instanceof Socket) client.setNoDelay(true);
   let connected = false;
   upstream.once('connect', () => {
     connected = true;

@@ -181,29 +181,51 @@ export function selectVisible<T extends Located>(
  * Drop, do not queue: a superseded position is worthless, and queueing would
  * turn a fast client into a laggy one. The clock is a parameter so tests are
  * deterministic and so the room can share one time source across a tick.
+ *
+ * ## Burst (D-086)
+ *
+ * With `burst` 1 (the default) this is a strict floor: an update is accepted
+ * only a full interval after the last accepted one. That is right for a key
+ * press (a sandbox action, a kick), but wrong for a stream sent at exactly
+ * the floor: network jitter delivers some of a client's 50 ms-apart moves
+ * 40 ms apart, and a strict floor drops each of those. The load test
+ * (`tools/load-test.ts`) measured a third of all moves dropped at 20 ms of
+ * jitter, and every observer saw those peers stall for a patch.
+ *
+ * `burst` B > 1 makes it a token bucket (GCRA): the long-run rate is still at
+ * most one per interval, but up to B may arrive close together after a gap,
+ * so an update that is early only because the previous one was late is
+ * accepted. Jitter up to `(B - 1) * interval` costs nothing.
  */
 export class UpdateThrottle {
   readonly #minIntervalMs: number;
-  readonly #lastAccepted = new Map<string, number>();
+  /** How early an update may arrive and still be accepted, in ms. */
+  readonly #toleranceMs: number;
+  /**
+   * Per key, the theoretical arrival time of the next update: when it would
+   * be due if every accepted update had come exactly one interval apart.
+   */
+  readonly #due = new Map<string, number>();
 
-  constructor(minIntervalMs: number) {
+  constructor(minIntervalMs: number, burst = 1) {
     this.#minIntervalMs = minIntervalMs;
+    const slots = Number.isSafeInteger(burst) && burst >= 1 ? burst : 1;
+    this.#toleranceMs = (slots - 1) * minIntervalMs;
   }
 
   /** True if this update is due; records the time when it is. */
   accept(key: string, now: number): boolean {
     if (!isValidMonotonicTime(now)) return false;
-    const previous = this.#lastAccepted.get(key);
-    if (previous !== undefined && now - previous < this.#minIntervalMs) {
-      return false;
-    }
-    this.#lastAccepted.set(key, now);
+    const due = this.#due.get(key);
+    if (due !== undefined && due - now > this.#toleranceMs) return false;
+    this.#due.set(key, Math.max(due ?? now, now) + this.#minIntervalMs);
     return true;
   }
 
   /**
-   * Record a valid `now` as the last accepted time for a session, without
-   * ever moving its floor backward.
+   * Consume the rate floor for a session at a valid `now`, without ever
+   * moving its floor backward, and drain any burst allowance: the next
+   * update must wait a full interval from `now`, whatever the burst.
    *
    * It is for a non-move event that must still consume the rate floor, so that
    * the next `move` waits a full interval from it. Used by `resume` (see
@@ -211,20 +233,19 @@ export class UpdateThrottle {
    */
   stamp(key: string, now: number): boolean {
     if (!isValidMonotonicTime(now)) return false;
-    const previous = this.#lastAccepted.get(key);
-    if (previous === undefined || now >= previous) {
-      this.#lastAccepted.set(key, now);
-    }
+    const due = this.#due.get(key);
+    const drained = now + this.#toleranceMs + this.#minIntervalMs;
+    if (due === undefined || drained > due) this.#due.set(key, drained);
     return true;
   }
 
   /** Forget a session. Called on leave so the map cannot grow unbounded. */
   forget(key: string): void {
-    this.#lastAccepted.delete(key);
+    this.#due.delete(key);
   }
 
   get tracked(): number {
-    return this.#lastAccepted.size;
+    return this.#due.size;
   }
 }
 
