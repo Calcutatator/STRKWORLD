@@ -3,7 +3,7 @@ import type { BuildingId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
-import { STRK_TOKEN, VAULT_TOKENS, detectRoutePolicy } from '../production/config.js';
+import { BORROW_TOKENS, STRK_TOKEN, VAULT_TOKENS, detectRoutePolicy } from '../production/config.js';
 
 /**
  * What the shell is allowed to open, and what it must say when it does.
@@ -198,6 +198,15 @@ export const VAULT_SUPPLY_ROUTE = 'vault.supply';
 export const VAULT_REDEEM_ROUTE = 'vault.redeem';
 export const VAULT_ROUTES: readonly string[] = Object.freeze([VAULT_SUPPLY_ROUTE, VAULT_REDEEM_ROUTE]);
 
+/**
+ * The Borrow counter's one route (D-083), for its four actions. Not an
+ * intent either: `borrowMarket`, `borrowPositions` and `prepareBorrow` are
+ * its seam methods, and the `borrow` policy route gates them. Its counter
+ * stands in the Vault's room, so it is reachable only through the Vault's
+ * door; the door itself still follows the Vault's two routes alone.
+ */
+export const VAULT_BORROW_ROUTE = 'vault.borrow';
+
 /** A policy route kind: an intent's, or the Vault's (D-077). */
 type PolicyRouteKind = WalletRoutePolicy['enabledRoutes'][number];
 
@@ -219,6 +228,7 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, PolicyRouteKind>>> =
   [ENTRY_SHIELD_ROUTE]: 'shield',
   [VAULT_SUPPLY_ROUTE]: 'vault',
   [VAULT_REDEEM_ROUTE]: 'vault',
+  [VAULT_BORROW_ROUTE]: 'borrow',
 });
 
 /**
@@ -258,6 +268,8 @@ function isPolicyEnabledRoute(routeId: string, policy: WalletRoutePolicy | null)
   // one with a pinned vault. It needs no STRK on it, whatever the pool fee is
   // set in: the wallet pays that from the pool balance.
   if (kind === 'vault') return admitsVaultTokens(policy.allowedTokens.vault ?? []);
+  // D-083: borrowing needs a pair, so at least two pinned borrow tokens, each once.
+  if (kind === 'borrow') return admitsBorrowTokens(policy.allowedTokens.borrow ?? []);
   return routeId !== ROUTE_BY_INTENT_KIND.shield || admitsStrk(policy.allowedTokens.shield);
 }
 
@@ -273,6 +285,14 @@ function admitsVaultTokens(tokens: readonly string[]): boolean {
   return Array.isArray(tokens)
     && tokens.length > 0
     && tokens.every((token, index) => VAULT_TOKENS.some((pinned) => sameAddress(pinned, token))
+      && tokens.findIndex((other) => sameAddress(other, token)) === index);
+}
+
+/** D-083: two or more tokens the Borrow counter pins, each once: at least one pair. */
+function admitsBorrowTokens(tokens: readonly string[]): boolean {
+  return Array.isArray(tokens)
+    && tokens.length >= 2
+    && tokens.every((token, index) => BORROW_TOKENS.some((pinned) => sameAddress(pinned, token))
       && tokens.findIndex((other) => sameAddress(other, token)) === index);
 }
 

@@ -1249,7 +1249,7 @@ export const DEGEN_STATION_LOOKS: StationLooks = Object.freeze({
 });
 
 /** Counter-top props: a room's decor style, or a station's own brand. */
-export type StationPropStyle = RoomDecorStyle | 'endur';
+export type StationPropStyle = RoomDecorStyle | 'endur' | 'vesu-borrow';
 
 /**
  * How one station dresses: counter, props, label and state looks. A room's
@@ -1343,6 +1343,17 @@ export const VESU_STATION_THEME: StationTheme = Object.freeze({
       lowercase: true,
     }),
   }),
+});
+
+/**
+ * The Vault's borrowing counter (D-083), dressed as the lending counter's
+ * twin so the two read as one brand: the same white desk, ink top, label and
+ * `vesu` plate, with a loan card on the desk in place of the supply card
+ * (room-builder.ts).
+ */
+export const VESU_BORROW_STATION_THEME: StationTheme = Object.freeze({
+  ...VESU_STATION_THEME,
+  props: 'vesu-borrow',
 });
 
 /** Interior palette for one fixed room. */
@@ -1465,7 +1476,8 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
   // The Vault, open on shadow accounts (D-077), in Vesu's own light pages:
   // a white floor over the page grey, white walls over a periwinkle
   // wainscot, ink capping and skirting them, the electric blue as trim and
-  // light. Its counter wears Vesu's own look (`VESU_STATION_THEME`).
+  // light. Its counters wear Vesu's own look: lending `VESU_STATION_THEME`,
+  // borrowing (D-083) its twin `VESU_BORROW_STATION_THEME`.
   vault: Object.freeze({
     decor: 'vesu',
     floorA: VESU.white,
@@ -1482,7 +1494,7 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     exitGlow: VESU.blue,
     label: VESU_LABEL,
     stationLooks: VESU_STATION_LOOKS,
-    stations: Object.freeze({ 'vault:lending': VESU_STATION_THEME }),
+    stations: Object.freeze({ 'vault:lending': VESU_STATION_THEME, 'vault:borrow': VESU_BORROW_STATION_THEME }),
   }),
 });
 

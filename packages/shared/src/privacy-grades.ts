@@ -250,6 +250,26 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     // The token collected lands in an OPEN pool note, already private.
     returnToPool: false,
   },
+  // D-083, 2026-10-01: borrowing on Vesu's Prime pool from a second STRK20
+  // shadow account, the Borrow counter in the Vault's room, behind its own
+  // fail-closed build switch. One route for its four actions (open or borrow
+  // more, add collateral, repay, withdraw collateral), graded like the Vault:
+  // who acted is hidden, what the chain shows is not, and a loan can be
+  // liquidated, which the Vault's disclosure never said, so it has its own.
+  {
+    building: 'vault',
+    route: 'vault.borrow',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable to the wallet, but public, persistent and liquidatable. Each action is one private transaction. The pool withdraws any collateral or repayment to the player borrow shadow account (dapp name strkworld-borrow, nonce 0, not the Vault address) as a public transfer with a visible token and amount, and the canonical ShadowAccountAnonymizer has that address approve the Vesu Prime pool and call modify_position on its own position, so the collateral and the debt sit on it. Borrowed or withdrawn tokens are collected into an open note for the wallet whose token and amount are plaintext, and a repay-all collects its unused buffer the same way. The address, its balances, its positions in every pair and every call are public, and every loan by the same player uses that one address, so they are linked to each other, though not to the Vault address. Anyone can liquidate the position once it is undercollateralized at the Vesu oracle price, exactly as any Vesu position. Only the link from that address to the wallet is hidden: the wallet is not the sender and never appears in the calls. The wallet fee withdrawal leaves the pool publicly, and the proof publishes the block it was built against. Matching amounts or timing around a public deposit can still link the two.',
+    disclosure:
+      'Your loans sit on a second stand-in address, not your wallet and not your Vault one. That address, its collateral, its debt and every change you make, with their amounts, are public on-chain, and like any Vesu loan anyone can liquidate it if its collateral loses too much value. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away.',
+    approvedBy: 'calc',
+    approvedOn: '2026-10-01',
+    rationale:
+      'D-083: the lead chose borrowing on Vesu through its own shadow account, so loans are not linkable to Vault supply, with a disclosure that says plainly the position is public and can be liquidated like any Vesu position. The same route as the Vault (D-077), a second Vesu entry point, no project-owned Cairo. Off by default; no live borrow through a shadow account has been made yet.',
+    returnToPool: false,
+  },
 ];
 
 /** Grades that ship without approval. Everything else is a deviation. */

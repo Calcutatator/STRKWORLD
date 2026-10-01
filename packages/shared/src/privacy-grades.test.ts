@@ -72,13 +72,15 @@ describe('privacy deviation admission', () => {
   it('keeps complete canonical approvals admitted', () => {
     // D-063 adds a registered-but-unapproved route, so the register is no
     // longer uniformly playable; every approved route still is. D-072 adds
-    // the entry gate's deposit, and D-077 the Vault's two routes, last.
+    // the entry gate's deposit, D-077 the Vault's two routes, and D-083 the
+    // Borrow counter's one, last.
     expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([
       ...APPROVED_ROUTES,
       'bank.stake',
       'entry.shield',
       'vault.supply',
       'vault.redeem',
+      'vault.borrow',
     ]);
     expect(APPROVED_ROUTES.every((route) => isRoutePlayable(registered(route)))).toBe(true);
     expect(isRoutePlayable(APPROVED_DEVIATION)).toBe(true);
@@ -278,5 +280,27 @@ describe('the Vault register entries (D-077, D-079, D-081)', () => {
         expect(text).not.toMatch(/[{}]/);
       }
     }
+  });
+});
+
+describe('The Borrow counter register entry (D-083)', () => {
+  it('grades borrowing anonymous under the Vault, approved, with its own disclosure', () => {
+    const borrow = registered('vault.borrow');
+    expect(borrow.building).toBe('vault');
+    expect(borrow.grade).toBe('anonymous');
+    expect(borrow.approvedBy).toBe('calc');
+    expect(isRoutePlayable(borrow)).toBe(true);
+    expect(borrow.disclosure).not.toBe(registered('vault.supply').disclosure);
+    expect(borrow.returnToPool).toBe(false);
+  });
+
+  it('says plainly the loan is public and can be liquidated, and claims nothing more hidden than the link', () => {
+    const { disclosure, observable } = registered('vault.borrow');
+    expect(disclosure).toMatch(/public on-chain/);
+    expect(disclosure).toMatch(/liquidate/);
+    expect(disclosure).toMatch(/not your wallet and not your Vault one/);
+    expect(disclosure).toMatch(/Only its link to your wallet is hidden/);
+    expect(observable).toMatch(/strkworld-borrow, nonce 0/);
+    expect(observable).toMatch(/liquidate/);
   });
 });

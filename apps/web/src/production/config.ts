@@ -26,6 +26,20 @@ export const MAX_SHIELD_TOKENS = 16;
 export const VAULT_TOKENS: readonly string[] = Object.freeze(VAULT_MARKET_METADATA.map(({ token }) => token));
 /** D-079, D-081: the most tokens a Vault allowlist may name: one per pinned vault, never more than 48. */
 export const MAX_VAULT_TOKENS = VAULT_TOKENS.length;
+/**
+ * D-083: the tokens the Borrow counter lends against and borrows, in order
+ * (STRK, ETH, USDC, USDT, WBTC: Vesu Prime's five majors and stables).
+ * Inlined so this file keeps type-only privacy imports; `config.test.ts`
+ * pins it to the privacy package's `BORROW_TOKENS`, token for token. A build
+ * that switches borrowing on admits exactly these.
+ */
+export const BORROW_TOKENS: readonly string[] = Object.freeze([
+  '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+  '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+  '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+  '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
+  '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
+]);
 /** Starknet contract addresses lie below 2^251, inside the field. */
 const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 
@@ -115,7 +129,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   const transfer = parseTransferRoute(environment);
   const stake = parseStakeRoute(environment);
   const vault = parseVaultRoute(environment);
-  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault'> = [];
+  const borrow = environment.VITE_STRK20_BORROW_ENABLED === 'true';
+  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault' | 'borrow'> = [];
   const shieldTokens: string[] = [];
   const unshieldTokens: string[] = [];
   const transferTokens: string[] = [];
@@ -156,6 +171,15 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
     // authority, so enabling it narrows nothing else.
     enabledRoutes.push('vault');
   }
+  if (borrow) {
+    // D-083: the Borrow counter, submitted by the wallet like the Vault and
+    // prepared one action at a time, over the pinned tokens alone: one
+    // switch, `VITE_STRK20_BORROW_ENABLED=true`, and nothing else to set.
+    // Anything but exactly `true` keeps it locked; enabling it enables
+    // nothing else, and its counter stands in the Vault's room, so it is
+    // reachable only when the Vault's door is open too.
+    enabledRoutes.push('borrow');
+  }
   if (enabledRoutes.length === 0) return denyAllPolicy();
 
   return Object.freeze({
@@ -174,6 +198,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
       // D-077: present only when the Vault is enabled; since D-079 any tokens
       // with a pinned vault, in the order given.
       ...(vault ? { vault: Object.freeze(vault.allowedTokens) } : {}),
+      // D-083: present only when borrowing is enabled, and always the pinned five.
+      ...(borrow ? { borrow: Object.freeze([...BORROW_TOKENS]) } : {}),
     }),
   });
 }

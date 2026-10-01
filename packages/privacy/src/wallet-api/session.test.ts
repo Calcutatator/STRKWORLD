@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PreparedBatch, PreparedVaultBatch, PrivacyOperations } from '../operations.js';
+import type { PreparedBatch, PreparedBorrowBatch, PreparedVaultBatch, PrivacyOperations } from '../operations.js';
 import { FakePrivacyOperations } from '../testing/fake.js';
 import { PrivacyError } from '../types.js';
 import {
@@ -2054,6 +2054,10 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     prepareVaultSupply: async () => { throw new Error('unused'); },
     prepareVaultRedeem: async () => { throw new Error('unused'); },
     vaultRates: async () => { throw new Error('unused'); },
+    // D-083: not exercised here.
+    borrowMarket: async () => { throw new Error('unused'); },
+    borrowPositions: async () => { throw new Error('unused'); },
+    prepareBorrow: async () => { throw new Error('unused'); },
   };
 }
 
@@ -2225,6 +2229,103 @@ describe('WalletSession Vault ownership (D-077)', () => {
     )).not.toThrow();
     expect(() => createWalletSession(
       { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['vault'], allowedTokens: { ...policy.allowedTokens, vault: ['0x0'] } } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+  });
+});
+
+describe('WalletSession Borrow-counter ownership (D-083)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const HASH = '0x5eed';
+  const AFTER = Object.freeze({
+    status: 'priced',
+    collateralValue: 400n,
+    debtValue: 100n,
+    ltv: 250_000_000_000_000_000n,
+    maxLtv: 680_000_000_000_000_000n,
+    healthFactor: 2_720_000_000_000_000_000n,
+    liquidationPrice: 15n,
+    band: 'safe',
+  } as const);
+
+  function borrowBatch(overrides: Record<string, unknown> = {}): PreparedBorrowBatch {
+    return {
+      action: Object.freeze({ kind: 'repay', collateral: STRK, debt: USDC, amount: 101n, all: true, buffer: 1n }),
+      after: AFTER,
+      poolFee: 6n,
+      gasEstimate: 0n,
+      totalCost: 6n,
+      warnings: [],
+      promptCount: 1,
+      confirm: vi.fn(async () => ({ transactionHash: HASH, outcome: 'succeeded' as const })),
+      discard: vi.fn(),
+      ...overrides,
+    } as PreparedBorrowBatch;
+  }
+
+  function operationsWithBorrow(prepared: PreparedBorrowBatch): PrivacyOperations {
+    return {
+      ...operationsWithBatch(batch(), '0.10.4'),
+      prepareBorrow: async () => prepared,
+      borrowPositions: (async () => ({ standIn: '0xb0a', positions: [] })) as never,
+      borrowMarket: (async () => ({ assets: [], pairs: [] })) as never,
+    };
+  }
+
+  async function connectedSession(first: PrivacyOperations) {
+    const connected = controllableConnection('0x111', first, operationsWithBorrow(borrowBatch()));
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    return { session, connected };
+  }
+
+  it('owns a prepared borrow batch: frozen action and health, and one confirm', async () => {
+    const prepared = borrowBatch();
+    const { session } = await connectedSession(operationsWithBorrow(prepared));
+    const owned = await session.operations.prepareBorrow({ kind: 'repay', collateral: STRK, debt: USDC, amount: 'all' });
+    expect(Object.isFrozen(owned)).toBe(true);
+    expect(Object.isFrozen(owned.after)).toBe(true);
+    expect(owned).toMatchObject({ action: { kind: 'repay', all: true, buffer: 1n }, after: AFTER, totalCost: 6n });
+    await expect(owned.confirm({ feeCeiling: 6n })).resolves.toEqual({ transactionHash: HASH, outcome: 'succeeded' });
+    await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('never confirms a borrow batch prepared for a retired account', async () => {
+    const prepared = borrowBatch();
+    const { session, connected } = await connectedSession(operationsWithBorrow(prepared));
+    const owned = await session.operations.prepareBorrow({ kind: 'repay', collateral: STRK, debt: USDC, amount: 'all' });
+    connected.changeAccount('0x222');
+    await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(prepared.confirm).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a partial repay with a buffer', { action: { kind: 'repay', collateral: STRK, debt: USDC, amount: 5n, all: false, buffer: 1n } }],
+    ['a borrow of nothing', { action: { kind: 'borrow', collateral: STRK, debt: USDC, collateralAmount: 1n, borrowAmount: 0n } }],
+    ['a Vault action', { action: { kind: 'supply', token: STRK, amount: 1n } }],
+    ['no health figure', { after: undefined }],
+    ['a health band nobody computes', { after: { ...AFTER, band: 'fine' } }],
+    ['a negative debt value', { after: { ...AFTER, debtValue: -1n } }],
+  ])('refuses a prepared borrow batch with %s, and releases it', async (_label, override) => {
+    const prepared = borrowBatch(override);
+    const { session } = await connectedSession(operationsWithBorrow(prepared));
+    await expect(session.operations.prepareBorrow({ kind: 'repay', collateral: STRK, debt: USDC, amount: 'all' })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepared.discard).toHaveBeenCalledTimes(1);
+  });
+
+  it('admits a borrow token list in the policy and refuses a malformed one before discovery', () => {
+    const policy = denyAllOptions().policy;
+    const discovery = discoveryWith(wallet('Ready'));
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['borrow'], allowedTokens: { ...policy.allowedTokens, borrow: [STRK, USDC] } } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['borrow'], allowedTokens: { ...policy.allowedTokens, borrow: [STRK, STRK] } } },
       { discovery, connectWallet: async () => connection('0x111') },
     )).toThrow(PrivacyError);
   });

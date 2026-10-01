@@ -9,6 +9,7 @@ import {
   VESU,
   VESU_LABEL,
   VESU_MARK,
+  VESU_BORROW_STATION_THEME,
   VESU_STATION_THEME,
   addVesuMark,
   vesuMarkColour,
@@ -45,7 +46,16 @@ describe('Vesu\'s palette', () => {
     expect(BUILDING_THEMES.vault).toMatchObject({ wall: VESU.white, wallAlt: VESU.fill, glow: VESU.blue, openPortal: VESU.blue });
     expect(BUILDING_THEMES.vault!.brand).toMatchObject({ text: 'vesu', style: { lowercase: true, foreground: '#0a0a0a' } });
     expect(ROOM_THEMES.vault).toMatchObject({ floorA: VESU.white, floorB: VESU.page, trim: VESU.blue, label: VESU_LABEL });
-    expect(ROOM_THEMES.vault!.stations).toEqual({ 'vault:lending': VESU_STATION_THEME });
+    expect(ROOM_THEMES.vault!.stations).toEqual({ 'vault:lending': VESU_STATION_THEME, 'vault:borrow': VESU_BORROW_STATION_THEME });
+    expect(ROOM_THEMES.vault!.stations!['vault:borrow']).toBe(VESU_BORROW_STATION_THEME);
+    // Borrowing (D-083) is lending's twin, so the two read as one brand: only its props differ.
+    const { props: borrowProps, ...borrowDress } = VESU_BORROW_STATION_THEME;
+    const { props: lendingProps, ...lendingDress } = VESU_STATION_THEME;
+    expect([borrowProps, lendingProps]).toEqual(['vesu-borrow', 'vesu']);
+    expect(borrowDress).toEqual(lendingDress);
+    expect(VESU_BORROW_STATION_THEME.plate).toBe(VESU_STATION_THEME.plate);
+    expect(VESU_BORROW_STATION_THEME.label).toBe(VESU_LABEL);
+    expect(Object.isFrozen(VESU_BORROW_STATION_THEME)).toBe(true);
     expect(VESU_STATION_THEME).toMatchObject({ props: 'vesu', kioskBase: VESU.white, kioskTrim: VESU.ink });
     expect(VESU_STATION_THEME.plate).toMatchObject({ text: 'vesu', style: { background: '#ffffff', foreground: '#0a0a0a', titleStretch: 1.4 } });
     expect(VESU_LABEL).toMatchObject({ foreground: '#2030b6', background: 'rgba(224,229,255,0.96)', border: '#2c41f6', font: 'sans' });

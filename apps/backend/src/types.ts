@@ -256,6 +256,88 @@ export interface VaultPositionFigures {
 }
 
 /**
+ * The Borrow counter's public chain reads (D-083), each pinned: Vesu's Prime
+ * pool, every token in `BORROW_TOKENS` and every pair in `BORROW_PAIRS`
+ * (`borrow.ts`). A caller supplies at most the account to look up, never a
+ * target, a token or a selector.
+ */
+export interface BorrowRpcPort {
+  /**
+   * `price` and `asset_config` for every pinned token, one row each in
+   * `BORROW_TOKENS` order, and `pair_config` and `pairs` for every pinned
+   * pair, one row each in `BORROW_PAIRS` order. A row whose reads fail
+   * answers `ok: false` rather than failing the others.
+   */
+  getBorrowMarket(signal?: AbortSignal): Promise<BorrowMarketRead>;
+  /**
+   * `position(collateral, debt, account)` for every pinned pair, one row each
+   * in `BORROW_PAIRS` order. A pair whose read fails answers `ok: false`.
+   */
+  getBorrowPositions(account: string, signal?: AbortSignal): Promise<readonly BorrowPositionRead[]>;
+}
+
+export interface BorrowMarketRead {
+  readonly assets: readonly BorrowAssetRead[];
+  readonly pairs: readonly BorrowPairRead[];
+}
+
+export type BorrowAssetRead = BorrowAssetFigures | { readonly token: string; readonly ok: false };
+
+export interface BorrowAssetFigures {
+  /** The pinned token this row reads. */
+  readonly token: string;
+  readonly ok: true;
+  /** `price(token).value`: the oracle price, scaled by 1e18. */
+  readonly price: bigint;
+  /** `price(token).is_valid`. */
+  readonly priceValid: boolean;
+  /** `asset_config(token).scale`: 10^decimals. */
+  readonly scale: bigint;
+  /** `asset_config(token).floor`: the least debt value a position may hold, scaled by 1e18. */
+  readonly floor: bigint;
+  /** `asset_config(token).reserve`: what the pool holds of the token, in base units. */
+  readonly reserve: bigint;
+  /** `asset_config(token).total_nominal_debt`. */
+  readonly totalNominalDebt: bigint;
+  /** `asset_config(token).last_rate_accumulator`. */
+  readonly rateAccumulator: bigint;
+  /** `asset_config(token).max_utilization`, scaled by 1e18. */
+  readonly maxUtilization: bigint;
+}
+
+export type BorrowPairRead = BorrowPairFigures | { readonly collateral: string; readonly debt: string; readonly ok: false };
+
+export interface BorrowPairFigures {
+  readonly collateral: string;
+  readonly debt: string;
+  readonly ok: true;
+  /** `pair_config(collateral, debt).max_ltv`, scaled by 1e18. */
+  readonly maxLtv: bigint;
+  /** `pair_config(collateral, debt).liquidation_factor`, scaled by 1e18. */
+  readonly liquidationFactor: bigint;
+  /** `pair_config(collateral, debt).debt_cap`. */
+  readonly debtCap: bigint;
+  /** `pairs(collateral, debt).total_nominal_debt`. */
+  readonly totalNominalDebt: bigint;
+}
+
+export type BorrowPositionRead = BorrowPositionFigures | { readonly collateral: string; readonly debt: string; readonly ok: false };
+
+export interface BorrowPositionFigures {
+  readonly collateral: string;
+  readonly debt: string;
+  readonly ok: true;
+  /** `position(...).0.collateral_shares`. */
+  readonly collateralShares: bigint;
+  /** `position(...).0.nominal_debt`. */
+  readonly nominalDebt: bigint;
+  /** `position(...).1`: the collateral, in the collateral token's base units. */
+  readonly collateralAmount: bigint;
+  /** `position(...).2`: the debt, in the debt token's base units. */
+  readonly debtAmount: bigint;
+}
+
+/**
  * Vesu's supply APY for the pinned vaults (D-079), from Vesu's public API,
  * fetched by this service and cached: no request reaches Vesu, and nothing a
  * request carries reaches the fetch.

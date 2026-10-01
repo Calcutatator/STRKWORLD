@@ -1,4 +1,19 @@
+import {
+  ASSET_CONFIG_SELECTOR,
+  BORROW_PAIRS,
+  BORROW_POOL,
+  BORROW_TOKENS,
+  PAIR_CONFIG_SELECTOR,
+  PAIRS_SELECTOR,
+  POSITION_SELECTOR,
+  PRICE_SELECTOR,
+} from './borrow.js';
 import type {
+  BorrowAssetRead,
+  BorrowMarketRead,
+  BorrowPairRead,
+  BorrowPositionRead,
+  BorrowRpcPort,
   ChainHead,
   PoolEventsFilter,
   PoolEventsPage,
@@ -64,7 +79,7 @@ export interface StarknetRpcOptions {
 }
 
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
-export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort {
+export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort, BorrowRpcPort {
   private id = 0;
   private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
@@ -267,7 +282,65 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
   }
 
   /**
-   * D-081: pinned vault calls, in batches of at most `VAULT_RPC_BATCH_SIZE`,
+   * D-083: the Borrow counter's market figures, read from the pinned Prime
+   * pool alone: `price` and `asset_config` for every token in
+   * `BORROW_TOKENS`, then `pair_config` and `pairs` for every pair in
+   * `BORROW_PAIRS`. That is fifty calls, one JSON-RPC batch
+   * (`VAULT_RPC_BATCH_SIZE`), through the same bounded path as the vault
+   * reads. A row is `ok: false` when either of its two calls fails or answers
+   * malformed (a wrong length, a non-felt, a bool that is not 0 or 1, a
+   * limb or integer out of range), so one token or pair never blocks
+   * another. A cancelled request still rejects.
+   */
+  async getBorrowMarket(signal?: AbortSignal): Promise<BorrowMarketRead> {
+    const outcomes = await this.callPinned([
+      ...BORROW_TOKENS.flatMap((token) => [
+        { contract: BORROW_POOL, selector: PRICE_SELECTOR, calldata: [token] },
+        { contract: BORROW_POOL, selector: ASSET_CONFIG_SELECTOR, calldata: [token] },
+      ]),
+      ...BORROW_PAIRS.flatMap(({ collateral, debt }) => [
+        { contract: BORROW_POOL, selector: PAIR_CONFIG_SELECTOR, calldata: [collateral, debt] },
+        { contract: BORROW_POOL, selector: PAIRS_SELECTOR, calldata: [collateral, debt] },
+      ]),
+    ], signal);
+    const assets = BORROW_TOKENS.map((token, index): BorrowAssetRead => {
+      const price = decodeRow(outcomes[index * 2], decodeAssetPrice);
+      const config = decodeRow(outcomes[index * 2 + 1], decodeAssetConfig);
+      if (!price || !config) return { token, ok: false };
+      return { token, ok: true, price: price.value, priceValid: price.isValid, ...config };
+    });
+    const offset = BORROW_TOKENS.length * 2;
+    const pairs = BORROW_PAIRS.map(({ collateral, debt }, index): BorrowPairRead => {
+      const config = decodeRow(outcomes[offset + index * 2], decodePairConfig);
+      const pair = decodeRow(outcomes[offset + index * 2 + 1], decodePair);
+      if (!config || !pair) return { collateral, debt, ok: false };
+      return { collateral, debt, ok: true, ...config, totalNominalDebt: pair.totalNominalDebt };
+    });
+    return { assets, pairs };
+  }
+
+  /**
+   * D-083: `account`'s position in every pinned pair of the Prime pool, one
+   * `position(collateral, debt, account)` call each in `BORROW_PAIRS` order:
+   * twenty calls, one JSON-RPC batch. A pair whose call fails or answers
+   * malformed is `ok: false`. A cancelled request still rejects.
+   */
+  async getBorrowPositions(account: string, signal?: AbortSignal): Promise<readonly BorrowPositionRead[]> {
+    if (!isFelt(account) || BigInt(account) === 0n) throw new Error('Borrow account is invalid.');
+    const outcomes = await this.callPinned(
+      BORROW_PAIRS.map(({ collateral, debt }) => (
+        { contract: BORROW_POOL, selector: POSITION_SELECTOR, calldata: [collateral, debt, account] }
+      )),
+      signal,
+    );
+    return BORROW_PAIRS.map(({ collateral, debt }, index): BorrowPositionRead => {
+      const position = decodeRow(outcomes[index], decodePosition);
+      return position ? { collateral, debt, ok: true, ...position } : { collateral, debt, ok: false };
+    });
+  }
+
+  /**
+   * D-081: pinned vault (and D-083 borrow) calls, in batches of at most `VAULT_RPC_BATCH_SIZE`,
    * each answered by position. A call the node failed or answered malformed
    * is null; so is every call of a batch the node could not take at all (down,
    * rate-limited, erroring), which is never retried call by call. A node that
@@ -549,4 +622,93 @@ function feltToU128(value: string | undefined, label: string): bigint {
     throw new Error(`Starknet RPC returned an invalid ${label}.`);
   }
   return parsed;
+}
+
+/**
+ * D-083: a Cairo return value read in order, each felt checked against its
+ * declared type. Anything out of range, or any felt left over, refuses the
+ * whole value.
+ */
+class FeltReader {
+  private at = 0;
+
+  constructor(private readonly felts: readonly string[]) {}
+
+  private uint(bits: bigint): bigint {
+    const felt = this.felts[this.at];
+    this.at += 1;
+    if (felt === undefined || !isFelt(felt)) throw new Error('Starknet RPC returned an invalid felt.');
+    const value = BigInt(felt);
+    if (value >= (1n << bits)) throw new Error('Starknet RPC returned an out-of-range integer.');
+    return value;
+  }
+
+  u64(): bigint { return this.uint(64n); }
+
+  u128(): bigint { return this.uint(128n); }
+
+  /** Two u128 felts, low first. */
+  u256(): bigint { return this.u128() + (this.u128() << 128n); }
+
+  bool(): boolean { return this.uint(1n) === 1n; }
+
+  end(): void {
+    if (this.at !== this.felts.length) throw new Error('Starknet RPC returned a value of the wrong length.');
+  }
+}
+
+/** D-083: a pinned call's decoded value, or null for a failed call or a malformed answer. */
+function decodeRow<T>(value: CallOutcome | undefined, decode: (reader: FeltReader) => T): T | null {
+  if (!value) return null;
+  try {
+    const reader = new FeltReader(value);
+    const decoded = decode(reader);
+    reader.end();
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+/** `price(asset) -> AssetPrice { value: u256, is_valid: bool }`. */
+function decodeAssetPrice(reader: FeltReader) {
+  return { value: reader.u256(), isValid: reader.bool() };
+}
+
+/** `asset_config(asset) -> AssetConfig`, twenty-two felts; only the figures the counter uses leave here. */
+function decodeAssetConfig(reader: FeltReader) {
+  reader.u256(); // total_collateral_shares
+  const totalNominalDebt = reader.u256();
+  const reserve = reader.u256();
+  const maxUtilization = reader.u256();
+  const floor = reader.u256();
+  const scale = reader.u256();
+  reader.bool(); // is_legacy
+  reader.u64(); // last_updated
+  const rateAccumulator = reader.u256();
+  reader.u256(); // last_full_utilization_rate
+  reader.u256(); // fee_rate
+  reader.u256(); // fee_shares
+  return { scale, floor, reserve, totalNominalDebt, rateAccumulator, maxUtilization };
+}
+
+/** `pair_config(collateral, debt) -> PairConfig { max_ltv: u64, liquidation_factor: u64, debt_cap: u128 }`. */
+function decodePairConfig(reader: FeltReader) {
+  return { maxLtv: reader.u64(), liquidationFactor: reader.u64(), debtCap: reader.u128() };
+}
+
+/** `pairs(collateral, debt) -> Pair { total_collateral_shares: u256, total_nominal_debt: u256 }`. */
+function decodePair(reader: FeltReader) {
+  reader.u256(); // total_collateral_shares
+  return { totalNominalDebt: reader.u256() };
+}
+
+/** `position(collateral, debt, user) -> (Position { collateral_shares, nominal_debt }, collateral: u256, debt: u256)`. */
+function decodePosition(reader: FeltReader) {
+  return {
+    collateralShares: reader.u256(),
+    nominalDebt: reader.u256(),
+    collateralAmount: reader.u256(),
+    debtAmount: reader.u256(),
+  };
 }

@@ -128,3 +128,42 @@ export class PrivacyError extends Error {
     this.name = 'PrivacyError';
   }
 }
+
+/**
+ * Why the Borrow counter refuses an action before asking the wallet (D-083),
+ * by the Vesu rule it would break. `borrow.ts`'s `assessBorrow` decides it.
+ */
+export type BorrowRefusal =
+  | 'amount'
+  | 'unknown-pair'
+  | 'pair-not-offered'
+  | 'stale-price'
+  | 'above-max-ltv'
+  /** The loan would end with health under `BORROW_MIN_HEALTH_AFTER`: too close to liquidation to send. */
+  | 'too-close-to-liquidation'
+  /** The prepared review is older than `BORROW_REVIEW_TTL_MS`: interest and prices may have moved. */
+  | 'review-expired'
+  | 'debt-below-floor'
+  | 'collateral-below-floor'
+  | 'debt-cap'
+  | 'utilization'
+  | 'nothing-to-repay'
+  | 'repay-exceeds-debt'
+  | 'withdraw-exceeds-collateral'
+  | 'withdraw-all-with-debt';
+
+/**
+ * A prepare the Borrow counter refused before asking the wallet (D-083). A
+ * `PrivacyError` of kind `unknown`, so anything that only knows the seam's
+ * kinds treats it as an ordinary failure, with an own `refusal` naming the
+ * rule. It carries no amount, address or figure.
+ */
+export class BorrowRefusedError extends PrivacyError {
+  readonly refusal: BorrowRefusal;
+
+  constructor(refusal: BorrowRefusal, message: string) {
+    super('unknown', message);
+    this.name = 'BorrowRefusedError';
+    this.refusal = refusal;
+  }
+}

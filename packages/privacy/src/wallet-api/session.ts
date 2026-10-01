@@ -1,6 +1,14 @@
 import type { WalletWithStarknetFeatures } from '@starknet-io/get-starknet-wallet-standard/features';
 import { WalletAccountV6, walletV6 } from 'starknet';
-import type { PreparedBatch, PreparedVaultBatch, PrivacyOperations, VaultAction } from '../operations.js';
+import type {
+  BorrowAction,
+  BorrowHealth,
+  PreparedBatch,
+  PreparedBorrowBatch,
+  PreparedVaultBatch,
+  PrivacyOperations,
+  VaultAction,
+} from '../operations.js';
 import { PrivacyError, type Address } from '../types.js';
 import { BackendPrivacyClient } from './backend-client.js';
 import { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
@@ -233,7 +241,34 @@ export function createWalletSession(
     prepareVaultSupply: (token, amount, options) => ownedVaultBatch((owned) => owned.prepareVaultSupply(token, amount, options)),
     prepareVaultRedeem: (token, amount, options) => ownedVaultBatch((owned) => owned.prepareVaultRedeem(token, amount, options)),
     vaultRates: (signal) => ownedResult((owned) => owned.vaultRates(signal)),
+    // D-083: the Borrow counter, owned the same way: a read for a retired
+    // account is refused, and a batch prepared for one never confirms.
+    borrowMarket: (signal) => ownedResult((owned) => owned.borrowMarket(signal)),
+    borrowPositions: (options) => ownedResult((owned) => owned.borrowPositions(options)),
+    prepareBorrow: (request, options) => ownedBorrowBatch((owned) => owned.prepareBorrow(request, options)),
   };
+
+  async function ownedBorrowBatch(
+    run: (owned: PrivacyOperations) => Promise<PreparedBorrowBatch>,
+  ): Promise<PreparedBorrowBatch> {
+    const owner = currentOwner();
+    let prepared: PreparedBorrowBatch;
+    try {
+      prepared = await run(owner.operations);
+    } catch (error) {
+      if (!isCurrent(owner)) throw changedSessionError();
+      throw error;
+    }
+    if (!isCurrent(owner)) {
+      try {
+        prepared.discard();
+      } catch {
+        // Automatic stale cleanup cannot mask the changed-session result.
+      }
+      throw changedSessionError();
+    }
+    return ownPreparedBorrowBatch(prepared, () => isCurrent(owner), changedSessionError);
+  }
 
   async function ownedVaultBatch(
     run: (owned: PrivacyOperations) => Promise<PreparedVaultBatch>,
@@ -576,6 +611,8 @@ export function createProductionWalletSession(
           policy,
           // D-077: the Vault's two public reads, through the same backend.
           vault: backend,
+          // D-083: the Borrow counter's reads, through the same backend.
+          borrow: backend,
         }),
         subscribe(listener) {
           portListeners.add(listener);
@@ -698,6 +735,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
     'vault',
   );
   const vaultTokens = vaultValue === undefined ? undefined : copyPolicyCollection(vaultValue);
+  // Optional (D-083) the same way: a policy without it admits no borrow token.
+  const borrowValue = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['allowedTokens']['borrow']>>(
+    allowedTokens,
+    'borrow',
+  );
+  const borrowTokens = borrowValue === undefined ? undefined : copyPolicyCollection(borrowValue);
   const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
@@ -705,14 +748,14 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
-  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake', 'vault']);
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake', 'vault', 'borrow']);
   if (
     enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
     || new Set(enabledRoutes).size !== enabledRoutes.length
   ) {
     throw invalidPolicy();
   }
-  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? [], vaultTokens ?? []]) {
+  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? [], vaultTokens ?? [], borrowTokens ?? []]) {
     validatePolicyTokens(tokens);
   }
   if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
@@ -736,6 +779,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       swap: Object.freeze(swapTokens),
       ...(stakeTokens ? { stake: Object.freeze(stakeTokens) } : {}),
       ...(vaultTokens ? { vault: Object.freeze(vaultTokens) } : {}),
+      ...(borrowTokens ? { borrow: Object.freeze(borrowTokens) } : {}),
     }),
     ...(ownedSwap
       ? { swap: ownedSwap }
@@ -938,6 +982,48 @@ function ownPreparedVaultBatch(
   isCurrent: () => boolean,
   changedSessionError: () => PrivacyError,
 ): PreparedVaultBatch {
+  return ownPreparedShadowBatch(prepared, ownVaultAction, {}, 'Vault', isCurrent, changedSessionError);
+}
+
+/**
+ * The session's own copy of a prepared Borrow-counter batch (D-083): the
+ * Vault's checks, plus an action and a health figure this package could have
+ * built.
+ */
+function ownPreparedBorrowBatch(
+  prepared: PreparedBorrowBatch,
+  isCurrent: () => boolean,
+  changedSessionError: () => PrivacyError,
+): PreparedBorrowBatch {
+  let after: BorrowHealth | null = null;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(prepared, 'after');
+    after = descriptor && 'value' in descriptor ? ownBorrowHealth(descriptor.value) : null;
+  } catch {
+    after = null;
+  }
+  if (after === null) {
+    try {
+      prepared.discard();
+    } catch {
+      // The invalid batch is refused either way.
+    }
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared borrow health.');
+  }
+  return ownPreparedShadowBatch(prepared, ownBorrowAction, { after }, 'borrow', isCurrent, changedSessionError);
+}
+
+/**
+ * The shared checks of a prepared shadow-account batch (D-077, D-083).
+ */
+function ownPreparedShadowBatch<A, B extends { readonly action: A } & Omit<PreparedVaultBatch, 'action'>, E extends object>(
+  prepared: B,
+  ownAction: (value: unknown) => A | null,
+  extra: E,
+  subject: string,
+  isCurrent: () => boolean,
+  changedSessionError: () => PrivacyError,
+): Omit<PreparedVaultBatch, 'action'> & { readonly action: A } & E {
   const required = ['action', 'poolFee', 'gasEstimate', 'totalCost', 'warnings', 'promptCount', 'confirm', 'discard'] as const;
   const invalid = (message: string): PrivacyError => {
     try {
@@ -947,7 +1033,7 @@ function ownPreparedVaultBatch(
     }
     return new PrivacyError('unknown', message);
   };
-  if (!hasOwnDataProperties(prepared, required)) throw invalid('The wallet returned an invalid prepared Vault batch.');
+  if (!hasOwnDataProperties(prepared, required)) throw invalid(`The wallet returned an invalid prepared ${subject} batch.`);
   if (
     typeof prepared.poolFee !== 'bigint'
     || prepared.poolFee < 0n
@@ -964,8 +1050,8 @@ function ownPreparedVaultBatch(
   if (!denseDataArray(prepared.warnings) || !prepared.warnings.every(validWarning)) {
     throw invalid('The wallet returned an invalid prepared warning.');
   }
-  const action = ownVaultAction(prepared.action);
-  if (action === null) throw invalid('The wallet returned an invalid prepared Vault action.');
+  const action = ownAction(prepared.action);
+  if (action === null) throw invalid(`The wallet returned an invalid prepared ${subject} action.`);
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
   let confirmationAttempted = false;
@@ -982,6 +1068,7 @@ function ownPreparedVaultBatch(
     }
   };
   return Object.freeze({
+    ...extra,
     action,
     poolFee: prepared.poolFee,
     gasEstimate: prepared.gasEstimate,
@@ -1038,7 +1125,7 @@ function ownPreparedVaultBatch(
       return Object.freeze({ transactionHash: result.transactionHash, outcome: result.outcome });
     },
     discard,
-  });
+  }) as Omit<PreparedVaultBatch, 'action'> & { readonly action: A } & E;
 }
 
 /** A Vault action as this package builds one, owned and frozen, or null. */
@@ -1060,6 +1147,75 @@ function ownVaultAction(value: unknown): VaultAction | null {
     return Object.freeze({ kind, token, amount, all });
   }
   return null;
+}
+
+/** A Borrow-counter action as this package builds one (D-083), owned and frozen, or null. */
+function ownBorrowAction(value: unknown): BorrowAction | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const read = (key: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const kind = read('kind');
+  const collateral = read('collateral');
+  const debt = read('debt');
+  if (typeof collateral !== 'string' || !isNonzeroFelt(collateral) || typeof debt !== 'string' || !isNonzeroFelt(debt)) return null;
+  const keys = Reflect.ownKeys(value).length;
+  const positive = (entry: unknown): entry is bigint => typeof entry === 'bigint' && entry > 0n;
+  const nonNegative = (entry: unknown): entry is bigint => typeof entry === 'bigint' && entry >= 0n;
+  if (kind === 'borrow') {
+    const collateralAmount = read('collateralAmount');
+    const borrowAmount = read('borrowAmount');
+    if (keys !== 5 || !nonNegative(collateralAmount) || !positive(borrowAmount)) return null;
+    return Object.freeze({ kind, collateral, debt, collateralAmount, borrowAmount });
+  }
+  const amount = read('amount');
+  if (kind === 'add-collateral') {
+    if (keys !== 4 || !positive(amount)) return null;
+    return Object.freeze({ kind, collateral, debt, amount });
+  }
+  const all = read('all');
+  if (typeof all !== 'boolean') return null;
+  if (kind === 'repay') {
+    const buffer = read('buffer');
+    if (keys !== 6 || !positive(amount) || !nonNegative(buffer) || (!all && buffer !== 0n) || buffer >= amount) return null;
+    return Object.freeze({ kind, collateral, debt, amount, all, buffer });
+  }
+  if (kind === 'withdraw-collateral') {
+    if (keys !== 5 || !positive(amount)) return null;
+    return Object.freeze({ kind, collateral, debt, amount, all });
+  }
+  return null;
+}
+
+/** A health figure as `borrow.ts` computes one (D-083), owned and frozen, or null. */
+function ownBorrowHealth(value: unknown): BorrowHealth | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const read = (key: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const status = read('status');
+  const band = read('band');
+  const collateralValue = read('collateralValue');
+  const debtValue = read('debtValue');
+  const maxLtv = read('maxLtv');
+  const optional = (entry: unknown): entry is bigint | null => entry === null || (typeof entry === 'bigint' && entry >= 0n);
+  const ltv = read('ltv');
+  const healthFactor = read('healthFactor');
+  const liquidationPrice = read('liquidationPrice');
+  if (
+    Reflect.ownKeys(value).length !== 8
+    || (status !== 'no-debt' && status !== 'stale-price' && status !== 'priced')
+    || (band !== 'none' && band !== 'safe' && band !== 'warning' && band !== 'liquidatable' && band !== 'unknown')
+    || typeof collateralValue !== 'bigint' || collateralValue < 0n
+    || typeof debtValue !== 'bigint' || debtValue < 0n
+    || typeof maxLtv !== 'bigint' || maxLtv < 0n
+    || !optional(ltv) || !optional(healthFactor) || !optional(liquidationPrice)
+  ) {
+    return null;
+  }
+  return Object.freeze({ status, collateralValue, debtValue, ltv, maxLtv, healthFactor, liquidationPrice, band });
 }
 
 function validIntent(value: unknown): boolean {

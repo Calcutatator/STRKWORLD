@@ -31,10 +31,13 @@ export type VaultDebugStep =
   | { readonly step: 'capability'; readonly supported: boolean; readonly walletApi: string | null }
   /** A stage the seam reported (`VaultStage`), passed on as it came. */
   | { readonly step: 'stage'; readonly stage: unknown }
-  /** A prepare starting: which way, and whether it is everything. */
-  | { readonly step: 'prepare'; readonly kind: 'supply' | 'redeem'; readonly all: boolean }
+  /** A prepare starting: which way, and whether it is everything. The Borrow counter's four ways too (D-083). */
+  | { readonly step: 'prepare'; readonly kind: VaultDebugKind; readonly all: boolean }
   /** A confirm stage, or how the attempt ended here. */
-  | { readonly step: 'confirm'; readonly kind: 'supply' | 'redeem'; readonly stage: string };
+  | { readonly step: 'confirm'; readonly kind: VaultDebugKind; readonly stage: string };
+
+/** A Vault action's kind, or the Borrow counter's (D-083), which stands in the Vault's room. */
+export type VaultDebugKind = 'supply' | 'redeem' | 'borrow' | 'add-collateral' | 'repay' | 'withdraw-collateral';
 
 /**
  * A moment at the football pitch (D-078): the local player kicked, a goal

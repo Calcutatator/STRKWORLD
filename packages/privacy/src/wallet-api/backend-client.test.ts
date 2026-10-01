@@ -1508,3 +1508,86 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
     await expect(down.vaultRates()).rejects.toMatchObject({ kind: 'unreachable' });
   });
 });
+
+describe('BackendPrivacyClient borrow reads (D-083)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const SHADOW = '0x24915cb456ef2876c9611af4f021747f8d9761ff2d7bc716722ce4527091ac9';
+  const assetRow = {
+    token: STRK,
+    ok: true,
+    price: '43278720000000000',
+    priceValid: true,
+    scale: '1000000000000000000',
+    floor: '10000000000000000000',
+    reserve: '4393629991301881601655583',
+    totalNominalDebt: '9496271713342081596086830',
+    rateAccumulator: '1023000000000000000',
+    maxUtilization: '950000000000000000',
+  };
+  const pairRow = {
+    collateral: STRK,
+    debt: USDC,
+    ok: true,
+    maxLtv: '680000000000000000',
+    liquidationFactor: '900000000000000000',
+    debtCap: '200000000000',
+    totalNominalDebt: '46475714863453008302364',
+  };
+
+  it('asks the market route for nothing but a version, and reads token and pair rows in decimal base units', async () => {
+    const fetcher = vi.fn(async () => response({ assets: [assetRow, { token: USDC, ok: false }], pairs: [pairRow, { collateral: USDC, debt: STRK, ok: false }] }));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    const market = await client.borrowMarket();
+    expect(market.assets).toEqual([
+      {
+        token: STRK,
+        ok: true,
+        price: 43278720000000000n,
+        priceValid: true,
+        scale: 10n ** 18n,
+        floor: 10n * 10n ** 18n,
+        reserve: 4393629991301881601655583n,
+        totalNominalDebt: 9496271713342081596086830n,
+        rateAccumulator: 1023000000000000000n,
+        maxUtilization: 950000000000000000n,
+      },
+      { token: USDC, ok: false },
+    ]);
+    expect(market.pairs).toEqual([
+      { collateral: STRK, debt: USDC, ok: true, maxLtv: 680000000000000000n, liquidationFactor: 900000000000000000n, debtCap: 200000000000n, totalNominalDebt: 46475714863453008302364n },
+      { collateral: USDC, debt: STRK, ok: false },
+    ]);
+    expect(Object.isFrozen(market.assets[0])).toBe(true);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/rpc/borrow-market');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1 });
+  });
+
+  it('asks the position route for the stand-in address alone', async () => {
+    const fetcher = vi.fn(async () => response({
+      positions: [{ collateral: STRK, debt: USDC, ok: true, collateralShares: '3', nominalDebt: '4', collateralAmount: '5', debtAmount: '6' }],
+    }));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.borrowPositions(SHADOW)).resolves.toEqual([
+      { collateral: STRK, debt: USDC, ok: true, collateralShares: 3n, nominalDebt: 4n, collateralAmount: 5n, debtAmount: 6n },
+    ]);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/rpc/borrow-position');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1, account: SHADOW });
+    await expect(client.borrowPositions('0x0')).rejects.toThrow('The borrow account is invalid.');
+  });
+
+  it.each([
+    ['an extra key', { assets: [], pairs: [], v: 1 }],
+    ['a price that is not a string', { assets: [{ ...assetRow, price: 1 }], pairs: [] }],
+    ['a non-boolean validity', { assets: [{ ...assetRow, priceValid: 'yes' }], pairs: [] }],
+    ['an extra row key', { assets: [{ ...assetRow, extra: '1' }], pairs: [] }],
+    ['a negative cap', { assets: [], pairs: [{ ...pairRow, debtCap: '-1' }] }],
+    ['a zero address', { assets: [{ ...assetRow, token: '0x0' }], pairs: [] }],
+    ['too many pairs', { assets: [], pairs: Array.from({ length: 21 }, () => pairRow) }],
+  ])('refuses a market answer with %s', async (_label, body) => {
+    const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
+    await expect(client.borrowMarket()).rejects.toThrow('The private service returned an invalid response.');
+  });
+});

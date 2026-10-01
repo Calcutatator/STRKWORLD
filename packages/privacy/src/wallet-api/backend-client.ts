@@ -1,7 +1,13 @@
 import { PrivacyError, type PrivacyErrorKind, type TxResult } from '../types.js';
 import type { PoolConfig } from '../operations.js';
 import { MAX_VAULT_MARKETS } from '../vault.js';
+import { BORROW_PAIRS, BORROW_TOKENS } from '../borrow.js';
 import type {
+  BorrowAssetRow,
+  BorrowMarketRead,
+  BorrowPairRow,
+  BorrowPositionRow,
+  BorrowReadClient,
   PoolReadClient,
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
@@ -22,7 +28,7 @@ const MAX_RATE_DECIMALS = 36;
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -172,6 +178,109 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       return Object.freeze({
         vault,
         supplyApy: Object.freeze({ value: asUint256(ownField(apy, 'value')), decimals: decimals as number }),
+      });
+    }));
+  }
+
+  /**
+   * D-083: Vesu's Prime pool as the backend read it just now, one row per
+   * token and per pair it pins, raw. The request carries nothing but a
+   * version. Which token or pair a row names is the caller's to check.
+   */
+  async borrowMarket(signal?: AbortSignal): Promise<BorrowMarketRead> {
+    const raw = await this.post('/v1/rpc/borrow-market', { v: 1 }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 2) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const assetRows = asArray(ownField(value, 'assets'));
+    const pairRows = asArray(ownField(value, 'pairs'));
+    if (assetRows.length > BORROW_TOKENS.length || pairRows.length > BORROW_PAIRS.length) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const assets = assetRows.map((item): BorrowAssetRow => {
+      const row = asRecord(item);
+      const token = asNonzeroAddress(ownField(row, 'token'));
+      const ok = ownField(row, 'ok');
+      if (typeof ok !== 'boolean' || Reflect.ownKeys(row).length !== (ok ? 10 : 2)) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      if (!ok) return Object.freeze({ token, ok: false as const });
+      const priceValid = ownField(row, 'priceValid');
+      if (typeof priceValid !== 'boolean') {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      return Object.freeze({
+        token,
+        ok: true as const,
+        price: asUint256(ownField(row, 'price')),
+        priceValid,
+        scale: asUint256(ownField(row, 'scale')),
+        floor: asUint256(ownField(row, 'floor')),
+        reserve: asUint256(ownField(row, 'reserve')),
+        totalNominalDebt: asUint256(ownField(row, 'totalNominalDebt')),
+        rateAccumulator: asUint256(ownField(row, 'rateAccumulator')),
+        maxUtilization: asUint256(ownField(row, 'maxUtilization')),
+      });
+    });
+    const pairs = pairRows.map((item): BorrowPairRow => {
+      const row = asRecord(item);
+      const collateral = asNonzeroAddress(ownField(row, 'collateral'));
+      const debt = asNonzeroAddress(ownField(row, 'debt'));
+      const ok = ownField(row, 'ok');
+      if (typeof ok !== 'boolean' || Reflect.ownKeys(row).length !== (ok ? 7 : 3)) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      if (!ok) return Object.freeze({ collateral, debt, ok: false as const });
+      return Object.freeze({
+        collateral,
+        debt,
+        ok: true as const,
+        maxLtv: asUint256(ownField(row, 'maxLtv')),
+        liquidationFactor: asUint256(ownField(row, 'liquidationFactor')),
+        debtCap: asUint256(ownField(row, 'debtCap')),
+        totalNominalDebt: asUint256(ownField(row, 'totalNominalDebt')),
+      });
+    });
+    return Object.freeze({ assets: Object.freeze(assets), pairs: Object.freeze(pairs) });
+  }
+
+  /**
+   * D-083: a stand-in address's position in every pair the backend pins, in
+   * base units, one row per pair. The request names the address alone.
+   */
+  async borrowPositions(account: string, signal?: AbortSignal): Promise<readonly BorrowPositionRow[]> {
+    if (typeof account !== 'string' || !isNonzeroFelt(account)) {
+      throw new PrivacyError('unknown', 'The borrow account is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/borrow-position', { v: 1, account }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 1) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const rows = asArray(ownField(value, 'positions'));
+    if (rows.length > BORROW_PAIRS.length) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze(rows.map((item): BorrowPositionRow => {
+      const row = asRecord(item);
+      const collateral = asNonzeroAddress(ownField(row, 'collateral'));
+      const debt = asNonzeroAddress(ownField(row, 'debt'));
+      const ok = ownField(row, 'ok');
+      if (typeof ok !== 'boolean' || Reflect.ownKeys(row).length !== (ok ? 7 : 3)) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      if (!ok) return Object.freeze({ collateral, debt, ok: false as const });
+      return Object.freeze({
+        collateral,
+        debt,
+        ok: true as const,
+        collateralShares: asUint256(ownField(row, 'collateralShares')),
+        nominalDebt: asUint256(ownField(row, 'nominalDebt')),
+        collateralAmount: asUint256(ownField(row, 'collateralAmount')),
+        debtAmount: asUint256(ownField(row, 'debtAmount')),
       });
     }));
   }
@@ -672,6 +781,12 @@ function asFelt(value: unknown): string {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return text;
+}
+
+function asNonzeroAddress(value: unknown): string {
+  const felt = asFelt(value);
+  if (BigInt(felt) === 0n) throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  return felt;
 }
 
 function asDecimalBigInt(value: unknown): bigint {

@@ -68,6 +68,68 @@ export interface VaultRateRow {
 }
 
 /**
+ * The Borrow counter's public reads (D-083), through the backend for the
+ * same reason as the Vault's (D-014). The backend pins the pool, the tokens
+ * and the pairs itself; a request names only the stand-in address, or
+ * nothing. The stand-in address itself resolves through the Vault's
+ * `shadowAccount` read: the same anonymizer view at the same nonce, for the
+ * borrow counter's own partial commitment.
+ */
+export interface BorrowReadClient extends Pick<VaultReadClient, 'shadowAccount'> {
+  /** Vesu's Prime pool now: one row per pinned token, then one per pinned pair, raw from the pool. */
+  borrowMarket(signal?: AbortSignal): Promise<BorrowMarketRead>;
+  /** A stand-in address's position in every pinned pair, one row each, in base units. */
+  borrowPositions(account: Address, signal?: AbortSignal): Promise<readonly BorrowPositionRow[]>;
+}
+
+/** One pinned token's row in a market read (D-083), raw from Vesu's `price` and `asset_config`. */
+export type BorrowAssetRow =
+  | {
+      readonly token: Address;
+      readonly ok: true;
+      readonly price: bigint;
+      readonly priceValid: boolean;
+      readonly scale: bigint;
+      readonly floor: bigint;
+      readonly reserve: bigint;
+      readonly totalNominalDebt: bigint;
+      readonly rateAccumulator: bigint;
+      readonly maxUtilization: bigint;
+    }
+  | { readonly token: Address; readonly ok: false };
+
+/** One pinned pair's row in a market read (D-083), raw from Vesu's `pair_config` and `pairs`. */
+export type BorrowPairRow =
+  | {
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly ok: true;
+      readonly maxLtv: bigint;
+      readonly liquidationFactor: bigint;
+      readonly debtCap: bigint;
+      readonly totalNominalDebt: bigint;
+    }
+  | { readonly collateral: Address; readonly debt: Address; readonly ok: false };
+
+export interface BorrowMarketRead {
+  readonly assets: readonly BorrowAssetRow[];
+  readonly pairs: readonly BorrowPairRow[];
+}
+
+/** One pinned pair's row in a position read (D-083), from Vesu's `position`. */
+export type BorrowPositionRow =
+  | {
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly ok: true;
+      readonly collateralShares: bigint;
+      readonly nominalDebt: bigint;
+      readonly collateralAmount: bigint;
+      readonly debtAmount: bigint;
+    }
+  | { readonly collateral: Address; readonly debt: Address; readonly ok: false };
+
+/**
  * Input to the optional public-shield planner.
  *
  * Bridge v1 is public STRK only: `token` identifies the denomination for
@@ -194,9 +256,10 @@ export interface WalletRoutePolicy {
   maxRelayFee: bigint;
   /**
    * `vault` (D-077) admits the Vault's supply and redeem, which the wallet
-   * submits itself, like shield: no relay fee and no intent bound.
+   * submits itself, like shield: no relay fee and no intent bound. `borrow`
+   * (D-083) admits the Borrow counter's four actions, submitted the same way.
    */
-  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault')[];
+  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault' | 'borrow')[];
   /**
    * Every token crossing an enabled route must be explicitly admitted.
    *
@@ -206,11 +269,14 @@ export interface WalletRoutePolicy {
    * of its sides. `vault` (D-077) is optional the same way; since D-079 it
    * may name any tokens the Vault pins a vault for (`VAULT_MARKETS`), each
    * once. A list with any other token, or a repeat, keeps the whole Vault
-   * shut, as the build's own parser does.
+   * shut, as the build's own parser does. `borrow` (D-083) is optional the
+   * same way and may name only tokens `BORROW_TOKENS` pins, each once; a pair
+   * is admitted when both of its tokens are listed.
    */
   allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>> & {
     readonly stake?: readonly Address[];
     readonly vault?: readonly Address[];
+    readonly borrow?: readonly Address[];
   };
   swap?: {
     expectedChainId: string;

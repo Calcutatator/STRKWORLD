@@ -31,6 +31,12 @@ export interface Receipt {
   readonly transactionHash: string;
   /** What settled. Kept so the receipt can describe itself, not just its hash. */
   readonly intents: readonly Intent[];
+  /**
+   * Which counter in the building, when it has more than one that records
+   * receipts: the Vault's room holds the Borrow counter too (D-083), and
+   * each restores only its own. Absent for every other counter.
+   */
+  readonly counter?: 'borrow';
 }
 
 export interface ReceiptLedger {
@@ -62,6 +68,7 @@ export function createReceiptLedger(): ReceiptLedger {
         building: receipt.building,
         transactionHash: receipt.transactionHash,
         intents: Object.freeze(receipt.intents.map((intent): Intent => Object.freeze({ ...intent }))),
+        ...(receipt.counter === 'borrow' ? { counter: 'borrow' as const } : {}),
       });
       ownerStore.setState((held) => Object.freeze([...held, snapshot]));
     },

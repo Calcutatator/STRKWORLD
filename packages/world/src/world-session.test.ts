@@ -2288,7 +2288,9 @@ describe('WorldSession: the Exchange tower', () => {
 // ---------------------------------------------------------------------------
 
 const VAULT_STATION = VAULT_ROOM_DEFINITION.stations[0];
-/** The tile directly south of the Vault's counter: its approach. */
+/** The Vault's borrowing counter (D-083), east of lending. */
+const VAULT_BORROW = VAULT_ROOM_DEFINITION.stations[1];
+/** The tile directly south of the Vault's lending counter: its approach. */
 const VAULT_APPROACH = { x: VAULT_STATION.x, y: VAULT_STATION.y + VAULT_STATION.height };
 
 /** From the spawn east along the road to the Vault door's column, then north into it. */
@@ -2343,7 +2345,13 @@ describe('WorldSession: the Vault (D-077)', () => {
     tick(world);
     expect(session.area).toBe('vault');
     // Every visit begins locked, until the Shell's snapshot says otherwise.
-    expect(world.view.last('renderRoom')).toEqual(['vault', [{ ...VAULT_STATION, status: 'locked', highlighted: false }]]);
+    expect(world.view.last('renderRoom')).toEqual([
+      'vault',
+      [
+        { ...VAULT_STATION, status: 'locked', highlighted: false },
+        { ...VAULT_BORROW, status: 'locked', highlighted: false },
+      ],
+    ]);
 
     world.bus.shellEmit('world:stations', {
       building: 'vault',
@@ -2355,7 +2363,11 @@ describe('WorldSession: the Vault (D-077)', () => {
     expect(world.bus.payloads('station:activated')).toEqual([{ building: 'vault', station: VAULT_LENDING_STATION }]);
     expect(world.view.last('renderRoom')).toEqual([
       'vault',
-      [{ ...VAULT_STATION, status: 'available', highlighted: true }],
+      [
+        { ...VAULT_STATION, status: 'available', highlighted: true },
+        // The borrowing counter is untouched by lending's snapshot: still locked.
+        { ...VAULT_BORROW, status: 'locked', highlighted: false },
+      ],
     ]);
 
     place(session, interiorTileCentre(VAULT_ROOM_DEFINITION.exit));

@@ -4,37 +4,37 @@ import type {
   PreparedVaultBatch,
   VaultAction,
   VaultCallOptions,
-  VaultOutcome,
   VaultPositions,
   VaultRate,
-  VaultStage,
   VaultStageCallback,
-  VaultTxResult,
 } from '../operations.js';
-import { PrivacyError, type Address, type OperationProgress, type ProgressCallback, type TxResult } from '../types.js';
+import { PrivacyError, type Address } from '../types.js';
 import {
   MAX_VAULT_MARKETS,
   SHADOW_ACCOUNTS_WALLET_API,
   VAULT_DAPP_NAME,
-  isContractAddress,
-  shadowAccountAddress,
+  VAULT_SHADOW_NONCE,
   vaultMarket,
-  vaultOutcomeFromReceipt,
   vaultRedeemActions,
   vaultSupplyActions,
   type VaultMarket,
 } from '../vault.js';
-import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import { compareSemver, parseSemver, type Semver } from './semver.js';
-import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import {
-  WALLET_RECEIPT_WAITS_MS,
-  abortableSleep,
-  freezeActions,
-  ownReceiptWaits,
-  submitThroughWallet,
-  waitForReceipt,
-} from './wallet-submission.js';
+  ShadowAccountResolver,
+  emitStage,
+  hasCommitmentMethod,
+  isAbortSignalLike,
+  ownCallOptions as ownShadowCallOptions,
+  ownData,
+  preparedShadowBatch,
+  sameAddress,
+  throwIfAborted,
+  type ShadowBatchDeps,
+  type ShadowIdentity,
+} from './shadow-account.js';
+import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
+import { WALLET_RECEIPT_WAITS_MS, abortableSleep, ownReceiptWaits } from './wallet-submission.js';
 
 /**
  * The Vault on the Wallet API (D-077): Vesu lending from the player's STRK20
@@ -58,7 +58,6 @@ import {
 
 const SHADOW_VERSION = parseSemver(SHADOW_ACCOUNTS_WALLET_API)!;
 const MAX_UINT256 = (1n << 256n) - 1n;
-const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 /** D-079, D-081: more rows than the Vault can pin markets is a malformed answer. */
 const MAX_VAULT_ROWS = MAX_VAULT_MARKETS;
 /** D-079: a rate's decimal places; Vesu states 18. */
@@ -95,11 +94,6 @@ export interface ShadowVaultOptions {
   readonly receiptWaitsMs?: readonly number[];
 }
 
-interface ShadowIdentity {
-  readonly address: Address;
-  readonly deployed: boolean;
-}
-
 interface PositionRead {
   readonly shares: bigint;
   readonly assets: bigint;
@@ -108,35 +102,38 @@ interface PositionRead {
 }
 
 export class ShadowVault {
-  private readonly wallet: WalletStrk20Account;
   private readonly walletAddress: Address;
-  private readonly pool: PoolReadClient;
   private readonly reads?: VaultReadClient;
   private readonly policy: WalletRoutePolicy;
-  private readonly supported: (signal?: AbortSignal) => Promise<boolean>;
   private readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
-  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
-  private readonly receiptWaitsMs: readonly number[];
-  /**
-   * The partial commitment, once the wallet has given it. Deterministic for
-   * this account and dapp name, so it is asked for once per connection; it
-   * never leaves this object.
-   */
-  private commitment: Promise<string> | null = null;
+  /** The Vault's stand-in address for `VAULT_DAPP_NAME`, shared logic with the borrow counter (D-083). */
+  private readonly identity: ShadowAccountResolver;
+  private readonly batchDeps: ShadowBatchDeps;
 
   constructor(options: ShadowVaultOptions) {
-    this.wallet = options.wallet;
     this.walletAddress = options.walletAddress;
-    this.pool = options.pool;
     this.reads = options.reads;
     this.policy = options.policy;
-    this.supported = options.supported;
     this.poolConfig = options.poolConfig;
-    this.sleep = options.sleep ?? abortableSleep;
-    this.receiptWaitsMs = ownReceiptWaits(
-      options.receiptWaitsMs ?? VAULT_RECEIPT_WAITS_MS,
-      'The Vault receipt schedule is invalid.',
-    );
+    this.identity = new ShadowAccountResolver({
+      wallet: options.wallet,
+      dappName: VAULT_DAPP_NAME,
+      nonce: VAULT_SHADOW_NONCE,
+      ...(options.reads ? { reads: options.reads } : {}),
+      supported: options.supported,
+      subject: 'Vault',
+    });
+    this.batchDeps = Object.freeze({
+      wallet: options.wallet,
+      pool: options.pool,
+      poolConfig: options.poolConfig,
+      sleep: options.sleep ?? abortableSleep,
+      receiptWaitsMs: ownReceiptWaits(
+        options.receiptWaitsMs ?? VAULT_RECEIPT_WAITS_MS,
+        'The Vault receipt schedule is invalid.',
+      ),
+      subject: 'Vault',
+    });
   }
 
   /**
@@ -264,76 +261,9 @@ export class ShadowVault {
     return Object.freeze(rates);
   }
 
-  /**
-   * Resolve the stand-in address: capability, then the wallet's partial
-   * commitment (once), then the anonymizer's view, cross-checked.
-   */
-  private async resolve(signal: AbortSignal | undefined, onStage: VaultStageCallback | undefined): Promise<ShadowIdentity> {
-    let supported: boolean;
-    try {
-      supported = await this.supported(signal);
-    } catch (error) {
-      throw mapWalletError(error);
-    }
-    emitStage(onStage, { stage: 'capability', supported });
-    if (!supported) {
-      throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
-    }
-    throwIfAborted(signal);
-    const partial = await this.partialCommitment(onStage);
-    throwIfAborted(signal);
-    const reads = this.reads;
-    if (!reads) {
-      emitStage(onStage, { stage: 'address', resolved: false });
-      throw new PrivacyError('unknown', 'The Vault reads are not configured.');
-    }
-    let resolved: unknown;
-    try {
-      resolved = await reads.shadowAccount(partial, signal);
-    } catch (error) {
-      emitStage(onStage, { stage: 'address', resolved: false });
-      throwIfAborted(signal);
-      throw error instanceof PrivacyError
-        ? error
-        : new PrivacyError('unreachable', 'The Vault could not read its stand-in address.', error);
-    }
-    throwIfAborted(signal);
-    const address = ownData(resolved, 'address');
-    const deployed = ownData(resolved, 'deployed');
-    if (!isContractAddress(address) || typeof deployed !== 'boolean' || !sameAddress(shadowAccountAddress(partial), address)) {
-      emitStage(onStage, { stage: 'address', resolved: false });
-      throw new PrivacyError('unknown', 'The Vault could not verify its stand-in address, so nothing was sent.');
-    }
-    emitStage(onStage, { stage: 'address', resolved: true, deployed });
-    return Object.freeze({ address: `0x${BigInt(address).toString(16)}`, deployed });
-  }
-
-  private partialCommitment(onStage: VaultStageCallback | undefined): Promise<string> {
-    if (this.commitment) return this.commitment;
-    const request = (async () => {
-      let answer: unknown;
-      try {
-        if (!hasCommitmentMethod(this.wallet)) {
-          throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
-        }
-        answer = await this.wallet.strk20ShadowAccountCommitment!(VAULT_DAPP_NAME);
-      } catch (error) {
-        emitStage(onStage, { stage: 'commitment', ok: false, code: walletErrorCode(error) });
-        throw mapShadowWalletError(error);
-      }
-      if (typeof answer !== 'string' || !isFelt(answer) || BigInt(answer) === 0n) {
-        emitStage(onStage, { stage: 'commitment', ok: false, code: null });
-        throw new PrivacyError('unknown', 'The wallet returned an invalid shadow-account commitment.');
-      }
-      emitStage(onStage, { stage: 'commitment', ok: true });
-      return answer;
-    })();
-    this.commitment = request;
-    // A refused or failed request is asked again next time.
-    request.catch(() => {
-      if (this.commitment === request) this.commitment = null;
-    });
-    return request;
+  /** The stand-in address, resolved and cross-checked (`shadow-account.ts`). */
+  private resolve(signal: AbortSignal | undefined, onStage: VaultStageCallback | undefined): Promise<ShadowIdentity> {
+    return this.identity.resolve(signal, onStage);
   }
 
   /**
@@ -391,79 +321,7 @@ export class ShadowVault {
   }
 
   private prepared(action: VaultAction, built: STRK20_ACTION[], config: PoolConfig): PreparedVaultBatch {
-    // The reviewed actions, frozen. The wallet gets its own copy at confirm,
-    // so nothing it does to its argument reaches this snapshot.
-    const reviewed = freezeActions(built);
-    const owner = this;
-    let discarded = false;
-    let attempted = false;
-    return Object.freeze({
-      action,
-      poolFee: config.feeAmount,
-      gasEstimate: 0n,
-      totalCost: config.feeAmount,
-      warnings: Object.freeze([]),
-      promptCount: 1,
-      async confirm(opts: Parameters<PreparedVaultBatch['confirm']>[0]): Promise<VaultTxResult> {
-        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
-        const { feeCeiling, onProgress, onStage, onSubmitted, signal } = ownConfirmOptions(opts);
-        if (attempted) {
-          throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
-        }
-        attempted = true;
-        throwIfAborted(signal);
-        const current = await owner.poolConfig(signal);
-        throwIfAborted(signal);
-        if (current.feeAmount > feeCeiling) {
-          throw new PrivacyError('unknown', `The current fee ${current.feeAmount} is above the ceiling ${feeCeiling}.`);
-        }
-        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
-        emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the Vault action in your wallet' });
-        let transactionHash: string;
-        try {
-          transactionHash = await submitThroughWallet(owner.wallet, reviewed);
-        } catch (error) {
-          emitStage(onStage, { stage: 'submit', ok: false, code: walletErrorCode(error) });
-          emitProgress(onProgress, { stage: 'failed', message: 'The Vault action failed' });
-          // A wallet that answers the shadow-account action as an API version
-          // or method it does not support cannot run the Vault; that must not
-          // read as the wallet lacking STRK20 altogether, which would close
-          // the city (the connect flow escalates `unsupported-wallet`).
-          throw mapShadowWalletError(error);
-        }
-        // From here a transaction exists: nothing below may reject.
-        emitStage(onStage, { stage: 'submit', ok: true });
-        const submitted: TxResult = Object.freeze({ transactionHash });
-        try {
-          onSubmitted?.(submitted);
-        } catch {
-          // An observer cannot turn a submitted transaction into a failure.
-        }
-        emitProgress(onProgress, { stage: 'confirming', message: 'Waiting for the network' });
-        const outcome = await owner.waitForReceipt(transactionHash, signal, onStage);
-        emitProgress(onProgress, { stage: 'done', message: 'Done' });
-        return Object.freeze({ transactionHash, outcome });
-      },
-      discard() { discarded = true; },
-    });
-  }
-
-  /** Read the receipt on the schedule until it settles, the schedule ends, or the caller stops waiting. */
-  private async waitForReceipt(
-    transactionHash: string,
-    signal: AbortSignal | undefined,
-    onStage: VaultStageCallback | undefined,
-  ): Promise<VaultOutcome> {
-    const { outcome, readable } = await waitForReceipt({
-      pool: this.pool,
-      transactionHash,
-      waits: this.receiptWaitsMs,
-      sleep: this.sleep,
-      ...(signal ? { signal } : {}),
-      classify: (receipt) => vaultOutcomeFromReceipt(receipt, transactionHash),
-    });
-    emitStage(onStage, { stage: 'receipt', status: outcome !== 'pending' || readable ? outcome : 'unreadable' });
-    return outcome;
+    return preparedShadowBatch(this.batchDeps, action, built, config, {});
   }
 
   /**
@@ -538,26 +396,6 @@ function redeemableOf(read: PositionRead): bigint {
   return read.maxWithdraw < read.assets ? read.maxWithdraw : read.assets;
 }
 
-/**
- * Whether the account exposes `strk20ShadowAccountCommitment` as a method: an
- * own or inherited data property holding a function, as `WalletAccountV6`
- * declares it on its prototype. An accessor is refused without being run, and
- * a throwing trap reads as absent.
- */
-function hasCommitmentMethod(wallet: WalletStrk20Account): boolean {
-  try {
-    let current: object | null = wallet;
-    for (let hops = 0; current !== null && hops < 16; hops += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(current, 'strk20ShadowAccountCommitment');
-      if (descriptor) return 'value' in descriptor && typeof descriptor.value === 'function';
-      current = Object.getPrototypeOf(current) as object | null;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 function assertAmount(amount: unknown): asserts amount is bigint {
   if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
     throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
@@ -568,103 +406,5 @@ function ownCallOptions(options: VaultCallOptions | undefined): {
   signal: AbortSignal | undefined;
   onStage: VaultStageCallback | undefined;
 } {
-  if (options === undefined) return { signal: undefined, onStage: undefined };
-  const signal = ownOptional(options, 'signal');
-  const onStage = ownOptional(options, 'onStage');
-  if ((signal !== undefined && !isAbortSignalLike(signal)) || (onStage !== undefined && typeof onStage !== 'function')) {
-    throw new PrivacyError('unknown', 'The Vault call options are invalid.');
-  }
-  return { signal: signal as AbortSignal | undefined, onStage: onStage as VaultStageCallback | undefined };
-}
-
-function ownConfirmOptions(options: unknown): {
-  feeCeiling: bigint;
-  onProgress: ProgressCallback | undefined;
-  onStage: VaultStageCallback | undefined;
-  onSubmitted: ((result: TxResult) => void) | undefined;
-  signal: AbortSignal | undefined;
-} {
-  const feeCeiling = ownOptional(options, 'feeCeiling');
-  if (typeof feeCeiling !== 'bigint' || feeCeiling < 0n || feeCeiling > MAX_UINT256) {
-    throw new PrivacyError('unknown', 'The fee ceiling must be a u256 bigint.');
-  }
-  const onProgress = ownOptional(options, 'onProgress');
-  const onStage = ownOptional(options, 'onStage');
-  const onSubmitted = ownOptional(options, 'onSubmitted');
-  const signal = ownOptional(options, 'signal');
-  if (
-    (onProgress !== undefined && typeof onProgress !== 'function')
-    || (onStage !== undefined && typeof onStage !== 'function')
-    || (onSubmitted !== undefined && typeof onSubmitted !== 'function')
-    || (signal !== undefined && !isAbortSignalLike(signal))
-  ) {
-    throw new PrivacyError('unknown', 'The confirmation options are invalid.');
-  }
-  return {
-    feeCeiling,
-    onProgress: onProgress as ProgressCallback | undefined,
-    onStage: onStage as VaultStageCallback | undefined,
-    onSubmitted: onSubmitted as ((result: TxResult) => void) | undefined,
-    signal: signal as AbortSignal | undefined,
-  };
-}
-
-/** An own data property, or undefined; an accessor or a throwing trap is refused. */
-function ownOptional(value: unknown, key: string): unknown {
-  if (!value || typeof value !== 'object') {
-    throw new PrivacyError('unknown', 'The Vault call options are invalid.');
-  }
-  let descriptor: PropertyDescriptor | undefined;
-  try {
-    descriptor = Object.getOwnPropertyDescriptor(value, key);
-  } catch {
-    throw new PrivacyError('unknown', 'The Vault call options are invalid.');
-  }
-  if (descriptor === undefined) return undefined;
-  if (!('value' in descriptor)) throw new PrivacyError('unknown', 'The Vault call options are invalid.');
-  return descriptor.value;
-}
-
-function isAbortSignalLike(value: unknown): value is AbortSignal {
-  if (typeof AbortSignal !== 'undefined' && value instanceof AbortSignal) return true;
-  return Boolean(value && typeof value === 'object' && typeof (value as { aborted?: unknown }).aborted === 'boolean');
-}
-
-/** An own data property, never a getter or an inherited value. */
-function ownData(value: unknown, key: string): unknown {
-  if (!value || typeof value !== 'object') return undefined;
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function emitStage(callback: VaultStageCallback | undefined, stage: VaultStage): void {
-  try {
-    callback?.(Object.freeze({ ...stage }) as VaultStage);
-  } catch {
-    /* Observers cannot alter a financial operation. */
-  }
-}
-
-function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
-  try {
-    callback?.(Object.freeze({ ...progress }));
-  } catch {
-    /* Observers cannot alter a financial operation. */
-  }
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.');
-}
-
-function sameAddress(a: string, b: string): boolean {
-  try { return BigInt(a) === BigInt(b); } catch { return false; }
-}
-
-function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
+  return ownShadowCallOptions(options, 'Vault');
 }

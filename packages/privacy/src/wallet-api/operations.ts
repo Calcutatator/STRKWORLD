@@ -2,10 +2,14 @@ import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
 import { num, transaction, type STRK20_ACTION } from 'starknet';
 import type {
   BatchWarning,
+  BorrowMarket,
+  BorrowPositions,
+  BorrowRequest,
   DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedBorrowBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   VaultCallOptions,
@@ -28,8 +32,10 @@ import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../end
 import { mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
+import { ShadowBorrow } from './borrow-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import type {
+  BorrowReadClient,
   PoolNativeRoute,
   PoolReadClient,
   PrivateRoute,
@@ -64,6 +70,8 @@ export interface WalletApiPrivacyOperationsOptions {
   now?: () => number;
   /** The Vault's backend reads (D-077, D-079). Absent, every Vault call fails closed. */
   vault?: VaultReadClient;
+  /** The Borrow counter's backend reads (D-083). Absent, every borrow call fails closed. */
+  borrow?: BorrowReadClient;
   /** How the Vault waits between receipt reads; a test passes its own. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The Vault's receipt-read schedule, in ms (`VAULT_RECEIPT_WAITS_MS` by default). */
@@ -79,6 +87,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly now: () => number;
   private readonly walletAddress: Address;
   private readonly vault: ShadowVault;
+  private readonly borrow: ShadowBorrow;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
@@ -100,6 +109,35 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
     });
+    // D-083: the Borrow counter, on its own shadow account, with the same
+    // capability answer and receipt schedule as the Vault.
+    this.borrow = new ShadowBorrow({
+      wallet: this.wallet,
+      walletAddress: this.walletAddress,
+      pool: this.pool,
+      ...(options.borrow ? { reads: options.borrow } : {}),
+      policy: this.policy,
+      supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+      poolConfig: (signal) => this.poolConfig(signal),
+      ...(options.sleep ? { sleep: options.sleep } : {}),
+      ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+      now: this.now,
+    });
+  }
+
+  /** D-083: Vesu's Prime pool for the admitted borrow tokens, read through the backend. See `PrivacyOperations`. */
+  borrowMarket(signal?: AbortSignal): Promise<BorrowMarket> {
+    return this.borrow.market(signal);
+  }
+
+  /** D-083: the loans on the player's borrow shadow account. See `PrivacyOperations`. */
+  borrowPositions(options?: VaultCallOptions): Promise<BorrowPositions> {
+    return this.borrow.positions(options);
+  }
+
+  /** D-083: one borrow-counter action, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareBorrow(request: BorrowRequest, options?: VaultCallOptions): Promise<PreparedBorrowBatch> {
+    return this.borrow.prepare(request, options);
   }
 
   /** D-077, D-079: the Vault positions on the player's shadow account. See `PrivacyOperations`. */
@@ -977,6 +1015,7 @@ function splitU256(value: bigint): { low: bigint; high: bigint } {
 function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   const stakeTokens = policy.allowedTokens.stake;
   const vaultTokens = policy.allowedTokens.vault;
+  const borrowTokens = policy.allowedTokens.borrow;
   return Object.freeze({
     maxIntents: policy.maxIntents,
     maxRelayFee: policy.maxRelayFee,
@@ -988,6 +1027,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       swap: Object.freeze([...policy.allowedTokens.swap]),
       ...(stakeTokens ? { stake: Object.freeze([...stakeTokens]) } : {}),
       ...(vaultTokens ? { vault: Object.freeze([...vaultTokens]) } : {}),
+      ...(borrowTokens ? { borrow: Object.freeze([...borrowTokens]) } : {}),
     }),
     ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
   });

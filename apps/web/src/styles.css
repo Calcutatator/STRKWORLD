@@ -2440,9 +2440,151 @@ button[data-locked="true"] {
   margin-top: 0.2rem;
 }
 
+/* D-083: the Borrow counter, in the same Vesu look. Its loans are rows like
+ * the Vault's markets; each carries its LTV bar against the pair's max, and
+ * the band near liquidation is Vesu's warning amber, past it Vesu's danger
+ * red, both as text on a tinted field with the 4.5:1 contrast of the rest. */
+.panel[data-building="vault"] .borrow-loan-list {
+  display: grid;
+  gap: 0;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid rgb(0 0 0 / 0.07);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel[data-building="vault"] .borrow-loan {
+  padding: 0.7rem 0.9rem;
+  background: #ffffff;
+}
+
+.panel[data-building="vault"] .borrow-loan + .borrow-loan {
+  border-top: 1px solid rgb(0 0 0 / 0.07);
+}
+
+.panel[data-building="vault"] .borrow-band {
+  margin-left: auto;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: #e0e5ff;
+  color: #2030b6;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.panel[data-building="vault"] .borrow-band[data-band="warning"] {
+  background: #fff4cc;
+  color: #806600;
+}
+
+.panel[data-building="vault"] .borrow-band[data-band="liquidatable"] {
+  background: #fde7e7;
+  color: #90090c;
+}
+
+.panel[data-building="vault"] .borrow-band[data-band="unknown"] {
+  background: #f5f5f5;
+  color: #666666;
+}
+
+.panel[data-building="vault"] .borrow-ltv-bar {
+  height: 8px;
+  margin: 0.5rem 0 0.35rem;
+  border-radius: 4px;
+  background: #e8e8e8;
+  overflow: hidden;
+}
+
+.panel[data-building="vault"] .borrow-ltv-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: #2c41f6;
+}
+
+.panel[data-building="vault"] .borrow-health[data-band="warning"] .borrow-ltv-fill {
+  background: #806600;
+}
+
+.panel[data-building="vault"] .borrow-health[data-band="liquidatable"] .borrow-ltv-fill {
+  background: #90090c;
+}
+
+.panel[data-building="vault"] :is(.borrow-liquidation-line, .borrow-max-ltv, .borrow-health-none, .borrow-market-note) {
+  margin: 0.3rem 0 0;
+  color: #666666;
+  font-size: 0.92rem;
+}
+
+.panel[data-building="vault"] .borrow-warning {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: #fff4cc;
+  color: #806600;
+  font-weight: 600;
+}
+
+.panel[data-building="vault"] .borrow-warning.borrow-danger,
+.panel[data-building="vault"] .borrow-stale {
+  background: #fde7e7;
+  color: #90090c;
+}
+
+.panel[data-building="vault"] .borrow-stale {
+  margin: 0.4rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* How a loan can be lost: Vesu's info box, deep blue on the periwinkle. */
+.panel[data-building="vault"] .borrow-risk {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.95rem;
+  border-radius: 8px;
+  background: #e0e5ff;
+  color: #2030b6;
+}
+
+.panel[data-building="vault"] .borrow-risk > h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.panel[data-building="vault"] .borrow-risk > p {
+  margin: 0.25rem 0 0;
+  font-size: 0.92rem;
+}
+
+.panel[data-building="vault"] .borrow-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.panel[data-building="vault"] .borrow-modes {
+  flex-wrap: wrap;
+}
+
+.panel[data-building="vault"] .borrow-after-title {
+  margin: 0.8rem 0 0;
+  font-size: 0.95rem;
+}
+
+.panel[data-building="vault"] .borrow-review-row {
+  display: contents;
+}
+
 @media (forced-colors: active) {
-  .panel[data-building="vault"] :is(.vault-eyebrow, .vault-market-symbol) {
+  .panel[data-building="vault"] :is(.vault-eyebrow, .vault-market-symbol, .borrow-band, .borrow-ltv-bar) {
     border: 1px solid CanvasText;
+  }
+
+  .panel[data-building="vault"] .borrow-ltv-fill {
+    background: CanvasText;
   }
 
   .panel[data-building="vault"] > .panel-card > .panel-header::after {

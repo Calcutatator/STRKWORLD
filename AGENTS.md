@@ -259,6 +259,57 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Borrowing on Vesu through a shadow account: Vesu's rules, the collect policy for a repay-all, and a render that dims (D-083)
+
+The BORROW counter (D-083) calls Vesu's Prime pool `modify_position` from the
+player's `strkworld-borrow` shadow account. What held, and how it was checked:
+
+- The pool's live ABI (`starknet_getClassAt` on
+  `0x0451fe48…c3b5`, 2026-10-01) serializes `ModifyPositionParams` as 11
+  felts: three addresses, then each `Amount` as its denomination's variant
+  index (`Native` 0, `Assets` 1) and an `i257` of `abs` (u256) and
+  `is_negative`. `borrow.test.ts` checks the hand-built calldata against
+  starknet.js `CallData.compile` from those ABI entries.
+- The twenty Prime pairs among STRK, ETH, USDC, USDT and WBTC all read a
+  nonzero max LTV (0.68 to 0.93) and debt cap at block 15,725,569; every
+  asset reads a $10 floor (`10e18`) and a 0.95 utilization ceiling.
+  `asset_config` is a view that brings the rate accumulator up to the block
+  read, so its totals are current. Script: `pair_config`, `pairs`, `price`
+  and `asset_config` over `api.cartridge.gg/x/starknet/mainnet`.
+- Vesu reads a zero `debt_cap` as uncapped (`assert_debt_cap_invariant`
+  skips it). The counter hides such a pair anyway, per the product owner's
+  rule; it never hides a loan already open.
+- A repay-all cannot collect its unused buffer with `diff`: the buffer is
+  withdrawn to the account before the invoke runs, so over the invoke that
+  token only goes down. It collects `all` instead (the borrow account holds
+  nothing of that token that is not the player's). Partial repays withdraw
+  exactly what Vesu takes and collect `exact 0`.
+- `apps/web` may not import any runtime value from `@strkworld/privacy`
+  (`architecture.test.ts`: it pulls starknet into the entry chunk), so the
+  health maths stays in the seam: each loan and each prepared batch carries
+  its `BorrowHealth`, and a refusal comes back as a `PrivacyError` with an
+  own `refusal` code the panel reads by property.
+- `forward-compatibility.test.ts` flags `this.name =` outside `types.ts` and
+  any computed `obj[key]` read in production privacy sources as a possible
+  wallet-identity read: error classes go in `types.ts`, and lookups become a
+  `switch`.
+- Offline panel renders: rendering the real panel in jsdom and saving its
+  HTML loses React's `value` on selects and inputs (they are properties),
+  so set `selected` / `value` attributes before dumping, and turn animations
+  off or headless Chrome captures the fade-in half done. Headless Chrome
+  (`--headless=new --screenshot`) can hang after writing: wrap it in
+  `perl -e 'alarm 40; exec @ARGV'`.
+
+*Verified:* `borrow.test.ts` (calldata, the four flows call for call, the
+maths and the refusals), `borrow-operations.test.ts` (the adapter end to end
+on a fake wallet and backend), `backend-client.test.ts`, `session.test.ts`,
+`fake-borrow.test.ts`, `apps/backend/src/borrow.test.ts`,
+`borrow-machine.test.ts`, `BorrowPanel.flow.test.tsx`, the room and station
+tests, and renders in the working scratchpad (`renders/borrow-room*.png`,
+`borrow-counter.png`, `borrow-panel-*.png`, not committed). **Not verified:**
+no borrow through a shadow account has been made on mainnet; nobody has
+looked at the counter in a browser.
+
 ### 2026-10-01 — Ready's own STRK20 submission is an avnu gasless relay; the sender is the wallet's choice (D-082)
 
 `wallet_strk20InvokeTransaction` in Ready does not send from the player's

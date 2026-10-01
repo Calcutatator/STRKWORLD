@@ -749,6 +749,9 @@ function stationProps(
     case 'vesu':
       vesuCounter(bin, x0, x1, z0, z1, top);
       break;
+    case 'vesu-borrow':
+      vesuBorrowCounter(bin, x0, x1, z0, z1, top);
+      break;
     case 'endur':
       endurCounter(bin, x0, x1, z0, z1, top);
       break;
@@ -818,6 +821,46 @@ function vesuCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: n
   bin.add('unlit', facePanel(face, cx - 0.1, top + 0.157, cx + 0.1, top + 0.173, 0.024, 0.008), VESU.white);
   // The V, on the desk's east end.
   addVesuMark(bin, 'unlit', { normal: 'z+', plane: (z0 + z1) / 2 }, x1 - 0.24, top, 0.34, 0, 0.05, 'light');
+}
+
+/**
+ * Vesu's borrowing counter (D-083), the lending counter's twin: the same desk
+ * with a loan card standing on it in the app's idiom, a health bar along its
+ * top (segments running Vesu's blues from pale to night, an ink marker
+ * standing on it), a collateral field over a debt field (each a token disc
+ * and a name bar, the debt's with the periwinkle tab) and the electric-blue
+ * primary button. Bars, discs and panels only: no figure, rate or symbol on it.
+ */
+function vesuBorrowCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number): void {
+  const cx = (x0 + x1) / 2 - 0.16;
+  const face: Face = { normal: 'z+', plane: z0 + 0.12 };
+  bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.12), VESU.ink);
+  bin.add('body', facePanel(face, cx - 0.46, top + 0.07, cx + 0.46, top + 0.66, 0.004, 0.08), VESU.fill);
+  bin.add('unlit', facePanel(face, cx - 0.44, top + 0.09, cx + 0.44, top + 0.64, 0.012, 0.07), VESU.white);
+  // The health bar along the top, where the status beacon never hides it:
+  // pale to night in segments, the ink marker standing on it.
+  const segments = [VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night];
+  const [b0, b1, gap] = [cx - 0.38, cx + 0.38, 0.014];
+  const step = (b1 - b0 + gap) / segments.length;
+  segments.forEach((hex, i) => {
+    bin.add('unlit', facePanel(face, b0 + i * step, top + 0.535, b0 + (i + 1) * step - gap, top + 0.57, 0.018, 0.012), hex);
+  });
+  const marker = b0 + (b1 - b0) * 0.34;
+  bin.add('unlit', facePanel(face, marker - 0.011, top + 0.515, marker + 0.011, top + 0.59, 0.026, 0.006), VESU.ink);
+  // The collateral field: a night disc, a name bar and an ink amount bar.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.375, cx + 0.38, top + 0.475, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.425, 0.018, 0.033, 0.006, 12), VESU.night);
+  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.416, cx - 0.04, top + 0.434, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.08, top + 0.416, cx + 0.32, top + 0.434, 0.024, 0.009), VESU.ink);
+  // The debt field: a blue disc, a name bar and the periwinkle tab.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.255, cx + 0.38, top + 0.355, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.305, 0.018, 0.033, 0.006, 12), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.296, cx - 0.04, top + 0.314, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.14, top + 0.28, cx + 0.34, top + 0.33, 0.024, 0.025), VESU.blueSoft);
+  bin.add('unlit', facePanel(face, cx + 0.18, top + 0.298, cx + 0.3, top + 0.312, 0.028, 0.007), VESU.blueText);
+  // The primary button.
+  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.12, cx + 0.38, top + 0.21, 0.018, 0.04), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.1, top + 0.157, cx + 0.1, top + 0.173, 0.024, 0.008), VESU.white);
 }
 
 function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y: number) => Color {
@@ -1783,10 +1826,9 @@ function vesuDecor(
       mark.dispose();
     }
   }
-  // A pool of blue light round the counter.
-  const station = map.stations[0];
-  if (station) {
-    const c = new Color(VESU.blue);
+  // A pool of blue light round each counter.
+  const c = new Color(VESU.blue);
+  for (const station of map.stations) {
     const scx = station.x + station.width / 2;
     shell.floor.addRGBA('light', flatQuad(scx - 2.4, station.y - 1.6, scx + 2.4, station.y + station.height + 2.2, 0.012), (x, _y, z) => {
       const dx = (x - scx) / 2.4;

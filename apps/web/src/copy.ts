@@ -402,6 +402,146 @@ export const COPY = freezeCopy({
   },
 
   /**
+   * The Borrow counter (D-083): Vesu loans in its Prime pool from the
+   * player's second STRK20 shadow account, at a counter in the Vault's room.
+   * What is public about it, and that a loan can be liquidated, is the
+   * register's approved disclosure, previewed while composing and shown at
+   * the commit point; nothing below says anything is hidden or private
+   * (`copy.test.ts` checks). `risk` explains how Vesu liquidates a loan, in
+   * plain words and without a privacy claim; `standIn` says the address is
+   * public, as the disclosure does. The figures are Vesu's own, from its
+   * oracle and its pool, and say so.
+   */
+  borrow: {
+    eyebrow: 'Borrowing with Vesu',
+    intro: "Borrow against collateral from your pool balance, in Vesu's Prime pool. What you borrow, and collateral you take back, lands in your pool balance.",
+    feeNote: 'Each action pays the pool fee from your pool balance, so keep enough there to come back out.',
+    feeInStrk:
+      'The pool fee is set in STRK, whichever token you move. Your wallet chooses which token in your pool balance pays it, and that can be STRK, so keep some STRK there too.',
+    checking: 'Checking what your wallet supports…',
+    recheck: 'Check again',
+    modes: {
+      borrow: 'Borrow',
+      'add-collateral': 'Add collateral',
+      repay: 'Repay',
+      'withdraw-collateral': 'Withdraw collateral',
+    },
+    collateral: 'Collateral',
+    debt: 'Borrow',
+    collateralAmount: 'Collateral to add',
+    borrowAmount: 'Amount to borrow',
+    amount: 'Amount',
+    repayAll: 'Repay everything',
+    withdrawAll: 'Withdraw all the collateral',
+    /** Written around the figure: "Max LTV 68.00%". */
+    maxLtv: 'Max LTV',
+    noPair: 'Vesu offers no loans in these tokens right now.',
+    noLoan: 'No loan to change yet. Read your loans to see what you hold.',
+    /** How Vesu liquidates a loan, said plainly. Shown beside every form. */
+    risk: {
+      title: 'How a loan can be lost',
+      lines: [
+        "Vesu prices your collateral and your debt with its own price feed. Your loan-to-value (LTV) is what you owe over what your collateral is worth.",
+        "If the LTV passes the pair's max LTV, anyone can liquidate the loan: repay some of it and take your collateral at a discount. Nothing in STRKWORLD can stop that.",
+        "If Vesu's price feed goes stale, Vesu refuses every change to the loan, repaying included, until it updates.",
+      ],
+    },
+    market: {
+      loading: "Reading Vesu's pool…",
+      failed: "Vesu's pool can't be read right now.",
+      again: 'Try again',
+      /** Vesu's figures, one read. */
+      source: "Vesu's figures, from its price feed and pool as last read.",
+    },
+    loans: {
+      title: 'Your loans',
+      unrequested: 'STRKWORLD reads your loans from the chain only when you ask. Your wallet may ask you first.',
+      show: 'Show my loans',
+      loading: 'Reading your loans…',
+      again: 'Read my loans again',
+      asOf: 'These figures are from your last read and do not update on their own. Prices move all the time.',
+      empty: 'You have no loans yet.',
+      changed: 'Your loans have changed. Read them again to see the new figures.',
+      collateral: 'Collateral',
+      debt: 'Owed now',
+      ltv: 'LTV',
+      health: 'Health',
+      liquidation: 'Liquidation price',
+      /** Written around the price and symbols: "If STRK falls to $0.0147 and USDC holds its price, anyone can liquidate this loan." */
+      liquidationLead: 'If',
+      liquidationMid: 'falls to',
+      liquidationAnd: 'and',
+      liquidationTail: 'holds its price, anyone can liquidate this loan.',
+      stale: "Vesu's price feed for this pair is stale, so no figure is shown and Vesu refuses every change until it updates.",
+    },
+    /** A loan's band, by Vesu's own rule. */
+    bands: {
+      safe: 'Healthy',
+      warning: 'Close to liquidation',
+      liquidatable: 'Can be liquidated now',
+      none: 'Nothing owed',
+      unknown: 'Price feed stale',
+    },
+    warningNote:
+      "This loan is close to its max LTV: a small fall in the collateral's price would let anyone liquidate it. Add collateral or repay some of the debt to move it back.",
+    liquidatableNote:
+      'This loan is past its max LTV, so anyone can liquidate it now. Repay or add collateral at once if you can.',
+    /**
+     * The borrow stand-in address, once a read has resolved it. Written
+     * around the shortened address. It is not the Vault's address.
+     */
+    standIn: {
+      lead: 'Your borrow stand-in address,',
+      tail: 'is public: anyone can look up its loans, and liquidate one that passes its max LTV.',
+      voyager: 'View it on Voyager',
+      voyagerNote: 'Opens a new tab. Voyager sees your IP address when it loads.',
+    },
+    /** Why the counter refused before asking the wallet (`BorrowRefusal`). */
+    refusals: {
+      amount: 'Enter an amount above zero.',
+      'unknown-pair': 'That pair is not offered here.',
+      'pair-not-offered': 'Vesu does not offer new loans in that pair right now.',
+      'stale-price': "Vesu's price feed for that pair is stale, so Vesu refuses every change to it until the feed updates.",
+      'above-max-ltv': "That would take the loan above the pair's max LTV, so Vesu would refuse it. Borrow less, or add more collateral.",
+      /** D-083: risk-adding actions keep a margin, since prices move while the wallet proves and sends. */
+      'too-close-to-liquidation':
+        "That would leave the loan too close to liquidation: Vesu's prices can move in the time your wallet takes to prove and send it. Borrow less or add more collateral; to take collateral back, withdraw less or repay some first.",
+      'review-expired': 'This review is more than two minutes old, and interest or prices may have moved since. Review it again.',
+      'debt-below-floor': "Vesu needs a debt worth more than its minimum, about $10. Borrow more, or repay everything instead.",
+      'collateral-below-floor': "Vesu needs collateral worth more than its minimum, about $10, while you owe anything.",
+      'debt-cap': "That would pass the pair's debt cap on Vesu.",
+      utilization: 'Vesu cannot lend or release that much of the token right now.',
+      'nothing-to-repay': 'There is nothing owed in that pair.',
+      'repay-exceeds-debt': 'That is the whole debt or more. Choose Repay everything instead.',
+      'withdraw-exceeds-collateral': 'That is more collateral than the loan holds.',
+      'withdraw-all-with-debt': 'Repay everything before withdrawing all the collateral.',
+    },
+    review: {
+      borrow: 'You borrow',
+      collateral: 'You add as collateral',
+      repay: 'You repay',
+      repayAll: 'You repay everything, at most',
+      withdraw: 'You withdraw',
+      withdrawAll: 'You withdraw all the collateral, about',
+      /** No figure is promised for a repay-all: Vesu fixes it when it runs. */
+      bufferNote:
+        'Vesu fixes the exact amount when the repay runs, interest included. The figure above has a small buffer in it, and whatever of the buffer Vesu does not take returns to your pool balance.',
+      withdrawAllNote: "Vesu fixes the exact amount when the withdrawal runs, so the figure above is Vesu's own count now.",
+      /** Written around the token's symbol: "The USDC lands in your pool balance." */
+      landsInLead: 'The',
+      landsInTail: 'lands in your pool balance.',
+      after: 'After this',
+      networkByWallet: 'Added and shown by your wallet when it asks',
+      feeTokenByWallet: 'Set in STRK. Your wallet chooses which token in your pool balance pays it.',
+    },
+    submitted: {
+      succeeded: 'Done. The network confirmed it.',
+      pending: 'Sent. The network has not confirmed it yet, so read your loans again in a moment.',
+      reverted: 'This did not go through on the network, so your loan did not change.',
+    },
+  },
+
+  /**
    * The Privacy Plaza (D-076): a no-money square with two windows. The
    * monument shows public, pool-wide figures only, never anything about the
    * player, and says where they come from; the shell game touches no money, no
@@ -622,6 +762,8 @@ export const COPY = freezeCopy({
       stake: "Staking isn't switched on in this build yet.",
       /** D-077: the Vault's one policy route gates supply and redeem alike. */
       vault: "The Vault isn't switched on in this build yet.",
+      /** D-083: the Borrow counter's one policy route gates its four actions. */
+      borrow: "Borrowing isn't switched on in this build yet.",
     },
   },
 

@@ -123,9 +123,13 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     const { stations } = await openCounter(operations);
 
     // The World was told the counter is open: presentation only.
+    // D-083: the Borrow counter stands beside it.
     expect(stations.at(-1)).toEqual({
       building: 'vault',
-      stations: [{ station: 'vault:lending', label: 'SUPPLY / REDEEM', status: 'available' }],
+      stations: [
+        { station: 'vault:lending', label: 'SUPPLY / REDEEM', status: 'available' },
+        { station: 'vault:borrow', label: 'BORROW', status: 'available' },
+      ],
     });
     expect(vault().querySelector('.vault-stand-in')).toBeNull();
 

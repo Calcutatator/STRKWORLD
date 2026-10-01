@@ -29,6 +29,15 @@ type VaultStationDefinition = {
   view: 'vault';
 };
 /**
+ * The Borrow counter (D-083): Vesu loans from a second shadow account, its
+ * own counter in the Vault's room because its one route carries its own
+ * grade entry and disclosure (liquidation), so no station mixes them (D-030).
+ */
+type BorrowStationDefinition = {
+  station: StationId; building: 'vault'; label: string; routes: readonly string[];
+  view: 'borrow';
+};
+/**
  * The Privacy Plaza's two windows (D-076). No money and no route: `routes`
  * is empty on purpose, so nothing here reaches the privacy register, and
  * the plaza needs no wallet. The station still resolves here before its
@@ -51,6 +60,7 @@ export type StationDefinition =
   | ExchangeStationDefinition
   | BridgeStationDefinition
   | VaultStationDefinition
+  | BorrowStationDefinition
   | PlazaStationDefinition;
 
 export interface StationCapabilities {
@@ -130,6 +140,16 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     label: 'SUPPLY / REDEEM',
     routes: ['vault.supply', 'vault.redeem'],
     view: 'vault',
+  },
+  // D-083: the Borrow counter beside it, behind its own switch
+  // (`VITE_STRK20_BORROW_ENABLED`). With the Vault open and borrowing off,
+  // the counter stands locked and says so.
+  {
+    station: 'vault:borrow',
+    building: 'vault',
+    label: 'BORROW',
+    routes: ['vault.borrow'],
+    view: 'borrow',
   },
   // The Privacy Plaza (D-076): its stations stand on the street, and open
   // with E. Client-only windows with no route, so no privacy grade applies.

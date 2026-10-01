@@ -116,6 +116,20 @@ routes' rate window, answer the kill switch, answer 503 on a service
 composed without them, and log nothing. The Vault's transactions never
 reach this service: the wallet submits them.
 
+The Borrow counter's public reads (D-083, `borrow.ts`) are pinned the same
+way, to Vesu's Prime pool, five tokens (`BORROW_TOKENS`: STRK, ETH, USDC,
+USDT, WBTC) and their twenty ordered pairs (`BORROW_PAIRS`). Its stand-in
+address comes from the unchanged `/v1/rpc/shadow-account` route.
+`POST /v1/rpc/borrow-market` with `{ "v": 1 }` reads `price` and
+`asset_config` for every token and `pair_config` and `pairs` for every pair,
+fifty calls in one JSON-RPC batch, answering `{ assets: [...], pairs: [...] }`
+as decimal strings. `POST /v1/rpc/borrow-position` with `{ "v": 1, "account" }`
+reads `position(collateral, debt, account)` for every pair, one batch of
+twenty, answering `{ positions: [...] }`. A row whose call fails or answers
+malformed is `ok: false` and fails no other row. Both share the private
+routes' rate window, answer the kill switch, answer 503 on a service composed
+without them, and log nothing. The account is never logged or kept.
+
 The degen floor's catalog (D-067) is optional and off by default: with no
 `BACKEND_DEGEN_ENABLED` it is absent, and any other `BACKEND_DEGEN_*`
 variable fails startup. Once enabled (`_TAGS`, `_MIN_DAILY_VOLUME_USD` and

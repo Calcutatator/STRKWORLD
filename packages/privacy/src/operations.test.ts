@@ -29,6 +29,10 @@ const PINNED_METHODS = [
   'prepareVaultRedeem',
   // D-079: Vesu's supply APY for each admitted token, a public read.
   'vaultRates',
+  // D-083: the Borrow counter's market and loans reads, and its prepared batch.
+  'borrowMarket',
+  'borrowPositions',
+  'prepareBorrow',
 ] as const;
 
 type PinnedMethod = (typeof PINNED_METHODS)[number];
@@ -52,8 +56,8 @@ type NoMissingMember = MustBeNever<Exclude<PinnedMethod, keyof PrivacyOperations
 type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMethod, SeamMethod>>;
 
 describe('D-036 PrivacyOperations freeze', () => {
-  it('pins eleven distinct method names', () => {
-    expect(new Set(PINNED_METHODS).size).toBe(11);
+  it('pins fourteen distinct method names', () => {
+    expect(new Set(PINNED_METHODS).size).toBe(14);
   });
 
   it('names methods the shipped test double implements', () => {

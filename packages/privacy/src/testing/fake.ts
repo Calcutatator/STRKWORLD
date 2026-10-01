@@ -10,10 +10,18 @@ import {
 } from '../types.js';
 import type {
   BatchWarning,
+  BorrowAction,
+  BorrowAsset,
+  BorrowMarket,
+  BorrowPair,
+  BorrowPosition,
+  BorrowPositions,
+  BorrowRequest,
   DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedBorrowBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
@@ -29,6 +37,16 @@ import type {
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
 import { VAULT_MARKETS, VESU_VSTRK_ASSET, vaultMarket, type VaultMarket } from '../vault.js';
+import {
+  BORROW_PAIRS,
+  BORROW_TOKEN_INFO,
+  BorrowRefusedError,
+  VESU_SCALE,
+  assessBorrow,
+  borrowHealth,
+  borrowPairKey,
+  borrowToken,
+} from '../borrow.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
@@ -74,6 +92,40 @@ function demoVaultAssets(shares: bigint): bigint {
 function demoVaultSharesToWithdraw(assets: bigint): bigint {
   const { numerator, denominator } = DEMO_VSTRK_ASSETS_PER_SHARE;
   return (assets * denominator + numerator - 1n) / numerator;
+}
+
+/**
+ * The demo player's borrow stand-in address (D-083): a fixed placeholder,
+ * not a shadow account anyone derived, and not the Vault's. It holds nothing.
+ */
+export const DEMO_BORROW_STAND_IN: Address =
+  '0x000000000000000000000000000000000000000000000000000000000000b0a0';
+
+/**
+ * DEMO PRICES, not Vesu's oracle. USD per whole token × 10^18, for STRK,
+ * ETH, USDC, USDT and WBTC, so the demo's borrow counter (D-083) has figures
+ * to show. Fixed and never read from anywhere: they must never be presented
+ * as live prices.
+ */
+export const DEMO_BORROW_PRICES: Readonly<Record<Address, bigint>> = Object.freeze({
+  [BORROW_TOKEN_INFO[0]!.token]: 40_000_000_000_000_000n, // STRK $0.04
+  [BORROW_TOKEN_INFO[1]!.token]: 2_700n * VESU_SCALE, // ETH $2,700
+  [BORROW_TOKEN_INFO[2]!.token]: VESU_SCALE, // USDC $1
+  [BORROW_TOKEN_INFO[3]!.token]: VESU_SCALE, // USDT $1
+  [BORROW_TOKEN_INFO[4]!.token]: 84_000n * VESU_SCALE, // WBTC $84,000
+});
+
+/**
+ * DEMO PAIR SETTINGS, shaped like Vesu Prime's (max LTV 0.68 to 0.93, a
+ * 0.90 liquidation factor) but fixed here: the demo's pairs, not Vesu's.
+ * Stablecoin pairs lend at 0.93, anything against STRK at 0.68, the rest at
+ * 0.78.
+ */
+function demoMaxLtv(collateral: string, debt: string): bigint {
+  const stable = (token: string) => token === BORROW_TOKEN_INFO[2]!.token || token === BORROW_TOKEN_INFO[3]!.token;
+  if (stable(collateral) && stable(debt)) return 930_000_000_000_000_000n;
+  if (collateral === BORROW_TOKEN_INFO[0]!.token || debt === BORROW_TOKEN_INFO[0]!.token) return 680_000_000_000_000_000n;
+  return 780_000_000_000_000_000n;
 }
 
 /**
@@ -136,6 +188,18 @@ export interface FakeConfig {
     liquidity?: bigint;
     markets?: Readonly<Record<Address, { shares?: bigint; liquidity?: bigint }>>;
     rates?: Readonly<Record<Address, { value: bigint; decimals: number }>>;
+  };
+  /**
+   * The demo Borrow counter (D-083). `positions` are the demo stand-in's
+   * loans by pair (collateral and debt in base units; the demo counts one
+   * share per base unit and accrues no interest), `prices` override the DEMO
+   * prices by token, and `stalePrices` lists tokens whose demo price reads
+   * invalid, as a stale Vesu feed does.
+   */
+  borrow?: {
+    positions?: ReadonlyArray<{ collateral: Address; debt: Address; collateralAmount: bigint; debtAmount: bigint }>;
+    prices?: Readonly<Record<Address, bigint>>;
+    stalePrices?: readonly Address[];
   };
 }
 
@@ -209,7 +273,12 @@ export interface Fault {
     | 'vaultPrepare'
     | 'vaultConfirm'
     /** D-079: the Vault's rates read. */
-    | 'vaultRates';
+    | 'vaultRates'
+    /** D-083: the Borrow counter's market read, loans read, prepare and confirm. */
+    | 'borrowMarket'
+    | 'borrowPositions'
+    | 'borrowPrepare'
+    | 'borrowConfirm';
   message?: string;
   sticky?: boolean;
 }
@@ -254,6 +323,14 @@ export class FakePrivacyOperations implements PrivacyOperations {
   private vaultCommitted = false;
   /** DEMO supply APYs by pinned market (D-079). */
   private readonly vaultRatesByMarket = new Map<VaultMarket, { value: bigint; decimals: number }>();
+  /** Every confirmed Borrow-counter action, in order (D-083). */
+  readonly borrowSubmitted: BorrowAction[] = [];
+  /** The demo borrow stand-in's loans, by pinned pair (D-083). */
+  private readonly borrowLoans = new Map<string, { collateral: bigint; debt: bigint }>();
+  private readonly borrowPrices = new Map<string, bigint>(Object.entries(DEMO_BORROW_PRICES));
+  private readonly borrowStale = new Set<string>();
+  private borrowDeployed = false;
+  private borrowCommitted = false;
 
   constructor(config: FakeConfig = {}) {
     const balances = config.balances ?? {};
@@ -334,6 +411,30 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
     if (config.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(config.demoSwapRates);
     if (config.vault !== undefined) this.ownVaultConfig(config.vault);
+    if (config.borrow !== undefined) this.ownBorrowConfig(config.borrow);
+  }
+
+  /** Own the demo Borrow counter's loans and prices, every token a pinned borrow token's (D-083). */
+  private ownBorrowConfig(borrow: NonNullable<FakeConfig['borrow']>): void {
+    const invalid = () => new PrivacyError('unknown', 'The fake borrow configuration is invalid.');
+    for (const entry of borrow.positions ?? []) {
+      const key = borrowPairKey(ownField(entry, 'collateral'), ownField(entry, 'debt'));
+      const collateral = ownField(entry, 'collateralAmount');
+      const debt = ownField(entry, 'debtAmount');
+      if (!key || typeof collateral !== 'bigint' || collateral < 0n || typeof debt !== 'bigint' || debt < 0n) throw invalid();
+      this.borrowLoans.set(`${key.collateral}:${key.debt}`, { collateral, debt });
+    }
+    for (const [token, price] of ownRecordEntries(borrow.prices, invalid)) {
+      const info = borrowToken(token);
+      if (!info || typeof price !== 'bigint' || price <= 0n) throw invalid();
+      this.borrowPrices.set(info.token, price);
+    }
+    for (const token of borrow.stalePrices ?? []) {
+      const info = borrowToken(token);
+      if (!info) throw invalid();
+      this.borrowStale.add(info.token);
+    }
+    this.borrowDeployed = this.borrowLoans.size > 0;
   }
 
   /** Own the demo Vault's starting positions and rates, every token a pinned market's (D-077, D-079). */
@@ -747,6 +848,205 @@ export class FakePrivacyOperations implements PrivacyOperations {
     return Object.freeze(rates);
   }
 
+  // -- The Borrow counter (D-083) --------------------------------------------
+
+  /**
+   * The demo market: every pinned token at its DEMO price, an ample demo
+   * reserve and no other borrower, and every pinned pair at its DEMO max
+   * LTV. Vesu's 0.95 utilization ceiling is kept; its $10 floor is a DEMO
+   * $1, so a demo player's 250 practice STRK can open a loan at all.
+   */
+  async borrowMarket(signal?: AbortSignal): Promise<BorrowMarket> {
+    await this.tick('borrowMarket', signal);
+    return this.demoBorrowMarket();
+  }
+
+  async borrowPositions(options?: VaultCallOptions): Promise<BorrowPositions> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('borrowPositions', signal);
+    this.borrowIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    return Object.freeze({
+      standIn: DEMO_BORROW_STAND_IN,
+      positions: Object.freeze(BORROW_PAIRS
+        .map((pair) => this.demoLoan(pair.collateral, pair.debt))
+        .filter((loan) => loan.collateralShares > 0n || loan.nominalDebt > 0n)),
+    });
+  }
+
+  async prepareBorrow(request: BorrowRequest, options?: VaultCallOptions): Promise<PreparedBorrowBatch> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('borrowPrepare', signal);
+    const key = borrowPairKey(ownField(request, 'collateral'), ownField(request, 'debt'));
+    if (!key) throw new PrivacyError('unknown', 'The borrow counter does not offer that pair in this build.');
+    this.borrowIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    const loan = this.demoLoan(key.collateral, key.debt);
+    const assessed = assessBorrow(request, this.demoBorrowMarket(), loan, demoMaxLtv(key.collateral, key.debt));
+    if (!assessed.ok) throw new BorrowRefusedError(assessed.reason, `The demo borrow counter refuses this: ${assessed.reason}.`);
+    const id = `${key.collateral}:${key.debt}`;
+    const holding = () => {
+      let entry = this.borrowLoans.get(id);
+      if (!entry) {
+        entry = { collateral: 0n, debt: 0n };
+        this.borrowLoans.set(id, entry);
+      }
+      return entry;
+    };
+    let action: BorrowAction;
+    let fromPool: { token: Address; amount: bigint } | null = null;
+    let apply: () => void;
+    switch (request.kind) {
+      case 'borrow': {
+        const { collateralAmount, borrowAmount } = request;
+        action = Object.freeze({ kind: 'borrow', collateral: key.collateral, debt: key.debt, collateralAmount, borrowAmount });
+        if (collateralAmount > 0n) fromPool = { token: key.collateral, amount: collateralAmount };
+        apply = () => {
+          const entry = holding();
+          if (collateralAmount > 0n) this.debit(key.collateral, collateralAmount);
+          entry.collateral += collateralAmount;
+          entry.debt += borrowAmount;
+          this.mintNote(key.debt, borrowAmount);
+        };
+        break;
+      }
+      case 'add-collateral': {
+        const { amount } = request;
+        action = Object.freeze({ kind: 'add-collateral', collateral: key.collateral, debt: key.debt, amount });
+        fromPool = { token: key.collateral, amount };
+        apply = () => {
+          this.debit(key.collateral, amount);
+          holding().collateral += amount;
+        };
+        break;
+      }
+      case 'repay': {
+        const all = request.amount === 'all';
+        const { fromPool: amount, buffer } = assessed;
+        action = Object.freeze({ kind: 'repay', collateral: key.collateral, debt: key.debt, amount, all, buffer });
+        fromPool = { token: key.debt, amount };
+        apply = () => {
+          const entry = holding();
+          this.debit(key.debt, amount);
+          // The demo accrues no interest, so a repay-all's whole buffer comes back.
+          if (all) {
+            entry.debt = 0n;
+            if (buffer > 0n) this.mintNote(key.debt, buffer);
+          } else {
+            entry.debt -= amount;
+          }
+        };
+        break;
+      }
+      case 'withdraw-collateral': {
+        const all = request.amount === 'all';
+        const amount = all ? loan.collateralAmount : (request.amount as bigint);
+        action = Object.freeze({ kind: 'withdraw-collateral', collateral: key.collateral, debt: key.debt, amount, all });
+        apply = () => {
+          const entry = holding();
+          entry.collateral -= amount;
+          this.mintNote(key.collateral, amount);
+        };
+        break;
+      }
+    }
+    const funds = () => this.assertBorrowFunds(fromPool);
+    funds();
+    const self = this;
+    const vault = this.vaultBatch(action as unknown as VaultAction, () => {
+      funds();
+      apply();
+      self.debit(self.pool.feeToken, self.pool.feeAmount);
+      self.borrowDeployed = true;
+    }, { record: (submitted) => self.borrowSubmitted.push(submitted as unknown as BorrowAction), fault: 'borrowConfirm', subject: 'borrow' });
+    return Object.freeze({ ...vault, action, after: assessed.after }) as PreparedBorrowBatch;
+  }
+
+  private demoBorrowMarket(): BorrowMarket {
+    const assets: BorrowAsset[] = BORROW_TOKEN_INFO.map((info) => {
+      const scale = 10n ** BigInt(info.decimals);
+      return Object.freeze({
+        token: info.token,
+        price: this.borrowPrices.get(info.token) ?? VESU_SCALE,
+        priceValid: !this.borrowStale.has(info.token),
+        scale,
+        floor: VESU_SCALE,
+        reserve: 10_000_000n * scale,
+        totalDebt: 0n,
+        maxUtilization: 950_000_000_000_000_000n,
+      });
+    });
+    const pairs: BorrowPair[] = BORROW_PAIRS.map((pair) => {
+      const debt = BORROW_TOKEN_INFO.find((info) => info.token === pair.debt)!;
+      return Object.freeze({
+        collateral: pair.collateral,
+        debt: pair.debt,
+        maxLtv: demoMaxLtv(pair.collateral, pair.debt),
+        liquidationFactor: 900_000_000_000_000_000n,
+        debtCap: 1_000_000n * 10n ** BigInt(debt.decimals),
+        totalDebt: 0n,
+      });
+    });
+    return Object.freeze({ assets: Object.freeze(assets), pairs: Object.freeze(pairs) });
+  }
+
+  private demoLoan(collateral: Address, debt: Address): BorrowPosition {
+    const entry = this.borrowLoans.get(`${collateral}:${debt}`) ?? { collateral: 0n, debt: 0n };
+    const market = this.demoBorrowMarket();
+    return Object.freeze({
+      collateral,
+      debt,
+      collateralShares: entry.collateral,
+      nominalDebt: entry.debt,
+      collateralAmount: entry.collateral,
+      debtAmount: entry.debt,
+      health: borrowHealth({
+        collateralAmount: entry.collateral,
+        debtAmount: entry.debt,
+        collateral: market.assets.find((asset) => asset.token === collateral)!,
+        debt: market.assets.find((asset) => asset.token === debt)!,
+        maxLtv: demoMaxLtv(collateral, debt),
+      }),
+    });
+  }
+
+  /** Capability, then the commitment (asked once), then the address: the adapter's order. */
+  private borrowIdentity(onStage: VaultStageCallback | undefined): void {
+    const supported = this.cap.supportsShadowAccounts === true;
+    emitVaultStage(onStage, { stage: 'capability', supported });
+    if (!supported) {
+      throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
+    }
+    if (this.cap.registration === 'unregistered') {
+      emitVaultStage(onStage, { stage: 'commitment', ok: false, code: 118 });
+      throw new PrivacyError('not-registered', 'This wallet is not registered with the privacy pool.');
+    }
+    if (!this.borrowCommitted) {
+      this.borrowCommitted = true;
+      emitVaultStage(onStage, { stage: 'commitment', ok: true });
+    }
+    emitVaultStage(onStage, { stage: 'address', resolved: true, deployed: this.borrowDeployed });
+  }
+
+  /** The shielded balance must cover what leaves the pool and the pool fee, as the wallet checks at proof time. */
+  private assertBorrowFunds(fromPool: { token: Address; amount: bigint } | null): void {
+    const have = (token: Address) => this.spendable.get(token) ?? this.lookupLoose(token);
+    const feeToken = this.pool.feeToken;
+    const needed: Array<[Address, bigint]> = [];
+    if (fromPool && sameAddress(fromPool.token, feeToken)) {
+      needed.push([feeToken, fromPool.amount + this.pool.feeAmount]);
+    } else {
+      if (fromPool) needed.push([fromPool.token, fromPool.amount]);
+      needed.push([feeToken, this.pool.feeAmount]);
+    }
+    for (const [token, required] of needed) {
+      const held = have(token);
+      if (held < required) {
+        throw new PrivacyError('insufficient-balance', `Needs ${required}, has ${held}. Remember the pool fee is paid in ${feeToken}.`);
+      }
+    }
+  }
+
   private vaultHolding(market: VaultMarket): { shares: bigint; liquidity?: bigint } {
     let holding = this.vaultHoldings.get(market);
     if (!holding) {
@@ -806,7 +1106,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
   }
 
-  private vaultBatch(action: VaultAction, apply: () => void): PreparedVaultBatch {
+  private vaultBatch(
+    action: VaultAction,
+    apply: () => void,
+    route: {
+      record: (action: VaultAction) => void;
+      fault: Fault['on'];
+      subject: string;
+    } = { record: (submitted) => this.vaultSubmitted.push(submitted), fault: 'vaultConfirm', subject: 'Vault' },
+  ): PreparedVaultBatch {
     const self = this;
     const feeAtPrepare = this.pool.feeAmount;
     let discarded = false;
@@ -831,18 +1139,18 @@ export class FakePrivacyOperations implements PrivacyOperations {
             `Private fee is now ${self.pool.feeAmount}, above the ceiling of ${feeCeiling}. Re-prepare.`,
           );
         }
-        emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the Vault action in your wallet' });
+        emitProgress(onProgress, { stage: 'awaiting-approval', message: `Confirm the ${route.subject} action in your wallet` });
         try {
-          await self.tick('vaultConfirm', signal);
+          await self.tick(route.fault, signal);
           if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
           apply();
         } catch (error) {
           const kind = error instanceof PrivacyError ? error.kind : 'unknown';
           emitVaultStage(onStage, { stage: 'submit', ok: false, code: kind === 'user-rejected' ? 113 : kind === 'insufficient-balance' ? 119 : null });
-          emitProgress(onProgress, { stage: 'failed', message: 'The Vault action failed' });
+          emitProgress(onProgress, { stage: 'failed', message: `The ${route.subject} action failed` });
           throw error;
         }
-        self.vaultSubmitted.push(action);
+        route.record(action);
         const transactionHash = `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}`;
         // A Vault receipt carries no deposit naming this account.
         self.receipts.set(transactionHash, 'failed');

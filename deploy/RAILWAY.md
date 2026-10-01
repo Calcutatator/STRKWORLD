@@ -83,7 +83,8 @@ D-067).
 
 Leave `VITE_STRK20_STAKE_*` unset. With shield enabled, the Bridge's D-061
 reserve planner is on too. Leave `VITE_STRK20_VAULT_*` unset too, except for
-the Vault probe below: unset, the Vault is the locked facade.
+the Vault probe below: unset, the Vault is the locked facade. Leave
+`VITE_STRK20_BORROW_ENABLED` unset except for the Borrow counter probe below.
 
 ## After it deploys
 
@@ -152,6 +153,49 @@ in; one in strkBTC is the first through a curated pool.
 
 To lock it again, unset both variables and redeploy.
 
+## The Borrow counter probe (D-083)
+
+The BORROW counter stands beside SUPPLY / REDEEM in the Vault's room. It
+borrows on Vesu's Prime pool from a second STRK20 shadow account (dapp name
+`strkworld-borrow`, nonce 0), never the Vault's, in every pair Vesu offers
+among STRK, ETH, USDC, USDT and WBTC (pinned in
+`packages/privacy/src/borrow.ts`; a pair whose max LTV or debt cap reads
+zero is left out). Each action, opening or adding to a loan, adding
+collateral, repaying (part, or everything with a small buffer whose unused
+part returns to the pool) and withdrawing collateral, is one private
+transaction the wallet proves and submits. **No live borrow through a
+shadow account has been made yet**: the first one is this probe.
+
+1. The Vault's door must be open (the Vault probe above). Set one more
+   browser variable and redeploy; it is compiled into the bundle, and the
+   Dockerfile declares it as a build argument. Nothing changes on the
+   backend: the counter's two public reads (Vesu's pool, the loans on the
+   stand-in address) follow `BACKEND_GLOBAL_ENABLED`, and nothing is relayed.
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_STRK20_BORROW_ENABLED` | `true` |
+
+   There is no token list: the five tokens are pinned. Any value other than
+   `true` keeps the counter locked.
+
+2. Turn on the debug logs below, and open the site with `?debug=1`.
+3. With a funded account on a wallet that reports Wallet API 0.10.4, keep the
+   pool fee (6 STRK) in the shielded balance as well as the collateral, and a
+   little of the borrowed token for repaying everything (the debt plus 0.1 %
+   and two base units). At the BORROW counter: borrow a small amount above
+   Vesu's $10 minimum against comfortably more collateral, Show my loans,
+   repay everything, then withdraw all the collateral. Vesu's oracle prices
+   each loan; the counter refuses, before the wallet is asked, anything Vesu
+   would revert, and says which rule.
+4. Read the `vault.*` lines as for the Vault: `vault.prepare kind=borrow`,
+   `kind=repay all=true` and so on, then the commitment, address, position,
+   submit and receipt stages. They carry no amount, address, balance, token
+   or hash. A `vault.submit ok=false` on the first borrow is the answer the
+   probe exists for: report it with its code rather than retrying.
+
+To lock it again, unset the variable and redeploy.
+
 ## Debug logs
 
 For a test session whose failures should reach the developer without copy and
@@ -196,8 +240,9 @@ wallet error code and message; connect-flow states; wallet-session phases,
 with the connected account; buildings entered and exited, stations activated
 and panels opened and closed; the Bank's mode switches, refused adds (reason
 code), prepares (intent kinds and count) and confirm stages, never an amount,
-balance, recipient or token (D-070); the Vault's probe steps, by yes/no,
-stage name and wallet code only (D-077); and failed `/api` calls, as path,
+balance, recipient or token (D-070); the Vault's and the Borrow counter's
+probe steps, by yes/no, kind, stage name and wallet code only (D-077, D-083);
+and failed `/api` calls, as path,
 status and error code only. It never sends wallet signatures, calldata or proof data, and
 long hex and base64 runs are redacted. It batches every 3 seconds and sends
 what is left by `sendBeacon` when the page closes.

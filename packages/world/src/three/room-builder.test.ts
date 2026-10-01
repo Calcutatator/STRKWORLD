@@ -22,6 +22,7 @@ import {
   EXCHANGE_DEGEN_LEVEL,
   EXCHANGE_DEGEN_STATION,
   FIXED_ROOM_DEFINITIONS,
+  VAULT_BORROW_STATION,
   VAULT_LENDING_STATION,
   VAULT_ROOM_DEFINITION,
   createFixedRoom,
@@ -45,6 +46,7 @@ import {
   STRK20,
   STRK20_STATION_LOOKS,
   VESU,
+  VESU_BORROW_STATION_THEME,
   VESU_MARK,
   VESU_STATION_LOOKS,
   VESU_STATION_THEME,
@@ -438,14 +440,16 @@ describe('buildFixedRoom', () => {
       exitGlow: VESU.blue,
       stationLooks: VESU_STATION_LOOKS,
     });
-    // Its counter wears Vesu's own look, as the Bank's staking counter wears Endur's.
+    // Its counters wear Vesu's own look, as the Bank's staking counter wears
+    // Endur's: lending, and borrowing as its twin (D-083).
     expect(stationTheme(theme, VAULT_LENDING_STATION)).toBe(VESU_STATION_THEME);
+    expect(stationTheme(theme, VAULT_BORROW_STATION)).toBe(VESU_BORROW_STATION_THEME);
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
     expect(room.building).toBe('vault');
     expect(room.group.name).toBe('room:vault');
-    // Its one counter, locked until the Shell opens it, under a label in the
-    // style of Vesu's secondary button.
+    // Its lending counter, locked until the Shell opens it, under a label in
+    // the style of Vesu's secondary button.
     const counter = stationGroup(room, VAULT_LENDING_STATION);
     expect(counter.userData['status']).toBe('locked');
     const label = floatingLabel(counter);
@@ -522,7 +526,16 @@ describe('buildFixedRoom', () => {
     room.group.traverse((object) => {
       if (object.userData['kind']) labels.push(object);
     });
-    expect(labels.filter((object) => object !== label).map((object) => object.userData['text'])).toEqual(['vesu', 'vesu', 'vesu']);
+    expect(labels.filter((object) => object.userData['kind'] === 'floating').map((object) => object.userData['text'])).toEqual([
+      'SUPPLY / REDEEM',
+      'BORROW',
+    ]);
+    expect(labels.filter((object) => object.userData['kind'] !== 'floating').map((object) => object.userData['text'])).toEqual([
+      'vesu',
+      'vesu',
+      'vesu',
+      'vesu',
+    ]);
     const wordmarks = labels.filter((object) => object.userData['area'] === 'vesu-wordmark');
     expect(wordmarks).toHaveLength(2);
     for (const wordmark of wordmarks) expect(wordmark.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', borderWidth: 0 });
@@ -555,6 +568,65 @@ describe('buildFixedRoom', () => {
     });
     expect(outside).toEqual([]);
     expect(marked).toBeGreaterThan(100);
+    room.dispose();
+  });
+
+  it('gives the Vault\'s borrowing its own counter in Vesu\'s look, a loan card on it (D-083)', () => {
+    const map = createFixedRoom(VAULT_ROOM_DEFINITION);
+    const room = buildFixedRoom(map, createNullLabelFactory());
+    const lending = stationGroup(room, VAULT_LENDING_STATION);
+    const borrow = stationGroup(room, VAULT_BORROW_STATION);
+    expect(borrow.userData['status']).toBe('locked');
+    // The lending counter stays where it was; borrowing stands east of it.
+    room.group.updateMatrixWorld(true);
+    const centre = (group: Object3D): Vector3 => new Box3().setFromObject(meshNamed(group, ':counter')).getCenter(new Vector3());
+    expect(centre(lending).x - OX).toBeCloseTo(9, 0);
+    expect(centre(borrow).x - OX).toBeCloseTo(15, 0);
+    // The same label and plate as lending, so the two read as one brand.
+    const label = floatingLabel(borrow);
+    expect(label.userData['text']).toBe('BORROW');
+    expect(label.userData['options']).toEqual(floatingLabel(lending).userData['options']);
+    const plate = borrow.children.find((child) => child.userData['brand'] === VAULT_BORROW_STATION)!;
+    expect(plate.userData['text']).toBe('vesu');
+    expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
+    expect(plate.position.z).toBeGreaterThan(meshNamed(borrow, ':status').geometry.boundingBox!.max.z);
+    // The same desk: white under an ink top.
+    const desk = coloursOf(meshNamed(borrow, ':counter'));
+    for (const hex of [VESU_BORROW_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
+    // The loan card: two token fields (a night and a blue disc), the health
+    // bar's blues from pale to night with its ink marker, the primary button.
+    // Only Vesu's own tokens: no V on this desk, and no orange or green.
+    const card = coloursOf(meshNamed(borrow, ':screen'));
+    const tokens = [VESU.white, VESU.page, VESU.muted, VESU.ink, VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night];
+    for (const hex of tokens) expect(card).toContain(new Color(hex).getHex());
+    expect(card.filter((hex) => !tokens.some((token) => new Color(token).getHex() === hex))).toEqual([]);
+    expect(coloursOf(meshNamed(lending, ':screen'))).not.toContain(new Color(VESU.night).getHex());
+    // The health bar runs left to right from pale to night along the card's top.
+    const screen = meshNamed(borrow, ':screen');
+    const position = screen.geometry.getAttribute('position');
+    const paint = screen.geometry.getAttribute('color');
+    const colour = new Color();
+    const segmentX = [VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night].map((hex) => {
+      const xs: number[] = [];
+      for (let i = 0; i < position.count; i++) {
+        if (colour.setRGB(paint.getX(i), paint.getY(i), paint.getZ(i)).getHex() !== new Color(hex).getHex()) continue;
+        if (position.getY(i) > 1.5) xs.push(position.getX(i));
+      }
+      expect(xs.length).toBeGreaterThan(0);
+      return Math.min(...xs);
+    });
+    expect([...segmentX].sort((a, b) => a - b)).toEqual(segmentX);
+    // It lights alone: highlighting borrowing leaves lending's halo alone.
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_BORROW_STATION)));
+    const halo = (group: Object3D): number => (meshNamed(group, ':halo').material as MeshBasicMaterial).opacity;
+    expect(halo(borrow)).toBeGreaterThan(halo(lending));
+    // It costs what the lending counter costs.
+    const meshes = (group: Object3D): number => {
+      let count = 0;
+      group.traverse((object) => object instanceof Mesh && (count += 1));
+      return count;
+    };
+    expect(meshes(borrow)).toBe(meshes(lending));
     room.dispose();
   });
 

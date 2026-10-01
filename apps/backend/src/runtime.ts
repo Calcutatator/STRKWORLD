@@ -21,6 +21,7 @@ import { HttpPoolValueSource, PoolStatsCache, isPoolStatsRpc } from './pool-stat
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type {
+  BorrowRpcPort,
   DegenCatalogPort,
   PaymasterPort,
   PoolRpcPort,
@@ -207,6 +208,9 @@ function createBackendApi(
   // by this service alone, and only once a request asks.
   const vault = isVaultRpc(rpc) ? rpc : undefined;
   const vaultRates = overrides.vaultRates ?? new VesuVaultRates();
+  // D-083: the Borrow counter's two pinned reads use the same private RPC,
+  // when the port offers them.
+  const borrow = isBorrowRpc(rpc) ? rpc : undefined;
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
@@ -214,6 +218,7 @@ function createBackendApi(
     ...(poolStats ? { poolStats } : {}),
     ...(vault ? { vault } : {}),
     vaultRates,
+    ...(borrow ? { borrow } : {}),
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
@@ -232,6 +237,13 @@ function isVaultRpc(value: unknown): value is VaultRpcPort {
   if (!value || typeof value !== 'object') return false;
   const port = value as Partial<Record<keyof VaultRpcPort, unknown>>;
   return typeof port.getShadowAccount === 'function' && typeof port.getVaultPositions === 'function';
+}
+
+/** Whether an RPC port offers the Borrow counter's narrow reads (D-083). */
+function isBorrowRpc(value: unknown): value is BorrowRpcPort {
+  if (!value || typeof value !== 'object') return false;
+  const port = value as Partial<Record<keyof BorrowRpcPort, unknown>>;
+  return typeof port.getBorrowMarket === 'function' && typeof port.getBorrowPositions === 'function';
 }
 
 type FetchHandler = (request: Request) => Promise<Response>;

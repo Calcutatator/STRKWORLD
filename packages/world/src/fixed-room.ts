@@ -440,8 +440,16 @@ export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
 export const VAULT_LENDING_STATION: StationId = 'vault:lending';
 
 /**
- * The Vault opens on shadow accounts, behind the Shell's switch (D-077): one
- * lending counter in the envelope every room shares. Locked, it is D-007's
+ * The Vault's borrowing counter (D-083): its own counter, never merged with
+ * lending, because borrowing carries a different, riskier disclosure, so each
+ * station keeps one privacy grade (D-030). The Shell supplies its label and state.
+ */
+export const VAULT_BORROW_STATION: StationId = 'vault:borrow';
+
+/**
+ * The Vault opens on shadow accounts, behind the Shell's switch (D-077): a
+ * lending counter, and east of it the borrowing counter (D-083), in the
+ * envelope every room shares. Locked, it is D-007's
  * facade and no room is built, so it stays out of `FIXED_ROOM_DEFINITIONS`,
  * whose rooms are always open; `fixedRoomDefinitionsFor` adds it when the
  * Shell says so.
@@ -457,6 +465,17 @@ export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
       station: 'vault:lending',
       label: 'SUPPLY / REDEEM',
       x: 8,
+      y: 3,
+      width: 2,
+      height: 1,
+    },
+    // Borrowing (D-083): its own counter, so each station keeps one privacy
+    // grade (D-030). East of lending, clear of the east market board, with
+    // two free columns between their approaches; the Shell supplies the label.
+    {
+      station: 'vault:borrow',
+      label: 'BORROW',
+      x: 14,
       y: 3,
       width: 2,
       height: 1,

@@ -26,8 +26,10 @@ import type {
  * `prepareVaultRedeem`, and the `supportsShadowAccounts` capability) and
  * D-079 (the Vault in several tokens: `vaultPositions` replaces
  * `vaultPosition` and returns the stand-in address, `prepareVaultRedeem`
- * takes a token, and `vaultRates` reads Vesu's supply APY); every other
- * method and shape is unchanged.
+ * takes a token, and `vaultRates` reads Vesu's supply APY) and D-083
+ * (borrowing on Vesu from a second shadow account: `borrowMarket`,
+ * `borrowPositions` and `prepareBorrow`, with their shapes below); every
+ * other method and shape is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -261,6 +263,44 @@ export interface PrivacyOperations {
    * `unreachable`.
    */
   vaultRates(signal?: AbortSignal): Promise<readonly VaultRate[]>;
+
+  /**
+   * The Borrow counter's market (D-083): Vesu's Prime pool as it stands now
+   * for every token this build admits for borrowing, and every pair of them
+   * live on-chain. One public read through the backend (D-014): no wallet,
+   * no prompt, nothing about the player. Prices are Vesu's own oracle's; a
+   * price its oracle calls invalid is reported as such, never hidden. A pair
+   * whose max LTV or debt cap reads zero is left out (D-083). A read that
+   * could not be made rejects `unreachable`.
+   */
+  borrowMarket(signal?: AbortSignal): Promise<BorrowMarket>;
+
+  /**
+   * The player's Vesu loans (D-083): every position the borrow counter's
+   * own shadow account holds in an admitted pair, and that account's
+   * address. The account is the player's second stand-in, for the dapp name
+   * `strkworld-borrow` at nonce 0, so no loan is linkable on-chain to the
+   * Vault's supply positions. Resolved and cross-checked exactly as
+   * `vaultPositions` resolves the Vault's: the wallet's partial commitment
+   * never leaves this package, and the address is public, to be shown and
+   * linked on the player's request only, never stored, logged or sent
+   * anywhere else. Call this from a player action: a wallet may ask first.
+   */
+  borrowPositions(options?: VaultCallOptions): Promise<BorrowPositions>;
+
+  /**
+   * Cost one borrow-counter action (D-083) as one private transaction the
+   * wallet proves and submits itself (`wallet_strk20InvokeTransaction`): no
+   * relay, no avnu key. Reads the market and the position first, and refuses,
+   * before the wallet is asked anything, an action Vesu would revert: a
+   * stale price, a pair not offered for new debt, a result above the pair's
+   * max LTV, a debt or collateral below Vesu's floor, the debt cap, the
+   * asset's utilization ceiling, or more than the position holds. Such a
+   * refusal rejects with a `PrivacyError` of kind `unknown` that carries an
+   * own `refusal` property naming the rule (`BorrowRefusal`), so the counter
+   * can say which, in its own words.
+   */
+  prepareBorrow(request: BorrowRequest, options?: VaultCallOptions): Promise<PreparedBorrowBatch>;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +438,191 @@ export interface PreparedVaultBatch {
   }): Promise<VaultTxResult>;
 
   /** Release the batch. Safe to call twice. */
+  discard(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Borrowing on Vesu — D-083
+// ---------------------------------------------------------------------------
+
+/**
+ * One admitted token as Vesu's Prime pool stands now (D-083). Values in USD
+ * are Vesu's own: scaled by 10^18, its `SCALE`.
+ */
+export interface BorrowAsset {
+  readonly token: Address;
+  /** Vesu's oracle price, USD per whole token × 10^18. */
+  readonly price: bigint;
+  /**
+   * Whether Vesu's oracle calls the price valid now. When it does not, Vesu
+   * reverts every action on any pair with this token, repay included, so the
+   * counter shows no health figure and offers nothing.
+   */
+  readonly priceValid: boolean;
+  /** 10^decimals: Vesu's asset scale. */
+  readonly scale: bigint;
+  /** The least value a debt in this token may have, or a collateral backing any debt, USD × 10^18. */
+  readonly floor: bigint;
+  /** What the pool holds of the token now, in its base units. */
+  readonly reserve: bigint;
+  /** Everything borrowed of it now, interest included, in its base units. */
+  readonly totalDebt: bigint;
+  /** The most of it Vesu lets be borrowed, as a fraction of all supplied × 10^18. */
+  readonly maxUtilization: bigint;
+}
+
+/** One pair Vesu offers for borrowing now (D-083): `debt` borrowed against `collateral`. */
+export interface BorrowPair {
+  readonly collateral: Address;
+  readonly debt: Address;
+  /** The most a position may owe against its collateral's value, × 10^18. Liquidatable above it. */
+  readonly maxLtv: bigint;
+  /** Vesu's liquidation factor, × 10^18: what a liquidator pays for the collateral it takes. */
+  readonly liquidationFactor: bigint;
+  /** The most of `debt` the whole pair may owe, in its base units. Above zero for every offered pair. */
+  readonly debtCap: bigint;
+  /** What the whole pair owes now, interest included, in `debt`'s base units. */
+  readonly totalDebt: bigint;
+}
+
+/** What one market read answers (D-083). */
+export interface BorrowMarket {
+  /** One per admitted token, in the build's order. */
+  readonly assets: readonly BorrowAsset[];
+  /** The admitted pairs live on-chain (max LTV and debt cap above zero), collateral-major. */
+  readonly pairs: readonly BorrowPair[];
+}
+
+/** One loan: a position in one pair, in base units of each token. */
+export interface BorrowPosition {
+  readonly collateral: Address;
+  readonly debt: Address;
+  /** Vesu's collateral shares. Not the token's units: show `collateralAmount`. */
+  readonly collateralShares: bigint;
+  /** Vesu's nominal debt. Not the token's units: show `debtAmount`. */
+  readonly nominalDebt: bigint;
+  /** What the collateral is worth now in its token, by Vesu's own view. */
+  readonly collateralAmount: bigint;
+  /** What is owed now, interest included, by Vesu's own view. */
+  readonly debtAmount: bigint;
+  /** The loan's health at Vesu's prices as read with it, by Vesu's own rule. */
+  readonly health: BorrowHealth;
+}
+
+/** What one loans read answers (D-083). */
+export interface BorrowPositions {
+  /**
+   * The borrow counter's shadow account: public on-chain, with every
+   * balance, loan and call on it, and liquidatable like any Vesu position.
+   * Not the Vault's. Shown and linked on request only; never persisted,
+   * logged or sent anywhere unasked.
+   */
+  readonly standIn: Address;
+  /** Every admitted pair the account holds collateral or debt in, collateral-major. */
+  readonly positions: readonly BorrowPosition[];
+}
+
+/**
+ * One borrow-counter action, in game terms (D-083). The shell names pairs
+ * and amounts; this package builds every call.
+ *
+ * - `borrow` opens a loan or adds to one: `collateralAmount` (zero for none)
+ *   leaves the pool balance as collateral and `borrowAmount` returns to it.
+ * - `repay` takes `amount` from the pool balance, or `'all'`: the whole debt
+ *   by Vesu's own count when the transaction runs, with a small buffer
+ *   whose unused part returns to the pool balance.
+ * - `withdraw-collateral` returns `amount` (or `'all'`, with no debt left)
+ *   to the pool balance.
+ */
+export type BorrowRequest =
+  | {
+      readonly kind: 'borrow';
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly collateralAmount: bigint;
+      readonly borrowAmount: bigint;
+    }
+  | { readonly kind: 'add-collateral'; readonly collateral: Address; readonly debt: Address; readonly amount: bigint }
+  | { readonly kind: 'repay'; readonly collateral: Address; readonly debt: Address; readonly amount: bigint | 'all' }
+  | {
+      readonly kind: 'withdraw-collateral';
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly amount: bigint | 'all';
+    };
+
+/** What a prepared borrow-counter batch does, for the review (D-083). */
+export type BorrowAction =
+  | {
+      readonly kind: 'borrow';
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly collateralAmount: bigint;
+      readonly borrowAmount: bigint;
+    }
+  | { readonly kind: 'add-collateral'; readonly collateral: Address; readonly debt: Address; readonly amount: bigint }
+  /**
+   * `amount` is what leaves the pool balance. For `all` it is the debt at
+   * prepare time plus `buffer`; the unused part of the buffer returns. A
+   * partial repay has a zero buffer.
+   */
+  | {
+      readonly kind: 'repay';
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly amount: bigint;
+      readonly all: boolean;
+      readonly buffer: bigint;
+    }
+  /** For `all`, `amount` is the collateral at prepare time: Vesu fixes the exact figure when it runs. */
+  | {
+      readonly kind: 'withdraw-collateral';
+      readonly collateral: Address;
+      readonly debt: Address;
+      readonly amount: bigint;
+      readonly all: boolean;
+    };
+
+/**
+ * A loan's health by Vesu's own rule (D-083): it is collateralised while
+ * `collateralValue × maxLtv ≥ debtValue × 10^18`, and liquidatable by anyone
+ * once it is not. Every figure × 10^18.
+ *
+ * - `no-debt`: nothing owed, nothing to liquidate.
+ * - `stale-price`: Vesu's oracle calls a price invalid; no figure is honest.
+ * - `priced`: the figures below hold, at Vesu's prices now.
+ */
+export interface BorrowHealth {
+  readonly status: 'no-debt' | 'stale-price' | 'priced';
+  /** USD × 10^18; zero when stale. */
+  readonly collateralValue: bigint;
+  readonly debtValue: bigint;
+  /** Debt over collateral value, × 10^18; null with no debt or a stale price. */
+  readonly ltv: bigint | null;
+  readonly maxLtv: bigint;
+  /** `collateralValue × maxLtv / debtValue`, × 10^18: below 1 is liquidatable. Null with no debt or a stale price. */
+  readonly healthFactor: bigint | null;
+  /** The collateral price, USD per whole token × 10^18, at which the loan turns liquidatable if the debt token holds its price. */
+  readonly liquidationPrice: bigint | null;
+  /** `warning` is the band near liquidation (`BORROW_WARNING_HEALTH`); `unknown` with a stale price. */
+  readonly band: 'none' | 'safe' | 'warning' | 'liquidatable' | 'unknown';
+}
+
+/**
+ * A costed borrow-counter action (D-083), with the Vault's prepare-then-
+ * confirm contract: the wallet proves and submits it and adds its own network
+ * fee, so `gasEstimate` is zero and `totalCost` is the pool fee, set in STRK.
+ */
+export interface PreparedBorrowBatch {
+  readonly action: BorrowAction;
+  /** The loan's health once this runs, by this package's own fresh reads at prepare time. */
+  readonly after: BorrowHealth;
+  readonly poolFee: bigint;
+  readonly gasEstimate: bigint;
+  readonly totalCost: bigint;
+  readonly warnings: readonly BatchWarning[];
+  readonly promptCount: number;
+  confirm(opts: Parameters<PreparedVaultBatch['confirm']>[0]): Promise<VaultTxResult>;
   discard(): void;
 }
 

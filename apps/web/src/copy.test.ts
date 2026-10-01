@@ -405,6 +405,47 @@ describe('shell copy', () => {
     });
   });
 
+  describe('the Borrow counter (D-083)', () => {
+    const { standIn, risk, refusals, warningNote, liquidatableNote, ...rest } = COPY.borrow;
+    const borrowCopy = allCopyStrings(rest);
+    const claim =
+      /\b(?:private\w*|privately|privacy|hidden|hides?|hiding|conceal\w*|secret\w*|anonym\w*|untraceable|unlinkable|invisible|confidential|shadow|stand-in|public|on-chain|visible)\b/i;
+
+    it('claims no privacy of its own: what is public, and that a loan can be liquidated, is the register disclosure', () => {
+      expect(borrowCopy.length).toBeGreaterThan(30);
+      for (const line of borrowCopy) expect(line, line).not.toMatch(claim);
+      for (const line of [...allCopyStrings(risk), ...allCopyStrings(refusals), warningNote, liquidatableNote]) {
+        expect(line, line).not.toMatch(claim);
+      }
+    });
+
+    it('explains liquidation plainly, and says the stand-in address is public and liquidatable', () => {
+      expect(risk.lines.join(' ')).toMatch(/anyone can liquidate the loan/);
+      expect(risk.lines.join(' ')).toMatch(/max LTV/);
+      expect(risk.lines.join(' ')).toMatch(/stale/);
+      const line = `${standIn.lead} 0x2491…91ac9, ${standIn.tail}`;
+      expect(line).toBe('Your borrow stand-in address, 0x2491…91ac9, is public: anyone can look up its loans, and liquidate one that passes its max LTV.');
+      expect(`${COPY.borrow.loans.liquidationLead} STRK ${COPY.borrow.loans.liquidationMid} $0.0147 ${COPY.borrow.loans.liquidationAnd} USDC ${COPY.borrow.loans.liquidationTail}`)
+        .toBe('If STRK falls to $0.0147 and USDC holds its price, anyone can liquidate this loan.');
+    });
+
+    it('names Vesu, says where a loan comes from and lands, and never promises a repay-all figure', () => {
+      expect(COPY.borrow.eyebrow).toBe('Borrowing with Vesu');
+      expect(COPY.borrow.intro).toMatch(/pool balance/);
+      expect(COPY.borrow.review.bufferNote).toMatch(/Vesu fixes the exact amount/);
+      expect(COPY.borrow.review.bufferNote).toMatch(/returns to your pool balance/);
+      expect(COPY.locked.notEnabled.borrow).toBe("Borrowing isn't switched on in this build yet.");
+    });
+
+    it('words every refusal the seam can name', async () => {
+      expect(Object.keys(refusals).sort()).toEqual([
+        'above-max-ltv', 'amount', 'collateral-below-floor', 'debt-below-floor', 'debt-cap', 'nothing-to-repay',
+        'pair-not-offered', 'repay-exceeds-debt', 'review-expired', 'stale-price', 'too-close-to-liquidation',
+        'unknown-pair', 'utilization', 'withdraw-all-with-debt', 'withdraw-exceeds-collateral',
+      ]);
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

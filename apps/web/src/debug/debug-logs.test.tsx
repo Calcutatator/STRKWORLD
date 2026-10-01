@@ -713,6 +713,22 @@ describe('what it captures', () => {
     expect(JSON.stringify(entries())).not.toMatch(/5000000000000000000|shares|assets/);
   });
 
+  it('records the Borrow counter\'s steps as the Vault\'s, by kind and stage only (D-083)', async () => {
+    const { entries, tick } = harness();
+    debugVault({ step: 'prepare', kind: 'borrow', all: false });
+    debugVault({ step: 'prepare', kind: 'repay', all: true });
+    debugVault({ step: 'confirm', kind: 'withdraw-collateral', stage: 'submitted' });
+    debugVault({ step: 'confirm', kind: 'add-collateral', stage: 'fee-moved' });
+    debugVault({ step: 'prepare', kind: 'liquidate', all: false } as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('vault.')).map(({ event, detail }) => [event, detail])).toEqual([
+      ['vault.prepare', 'kind=borrow all=false'],
+      ['vault.prepare', 'kind=repay all=true'],
+      ['vault.confirm', 'kind=withdraw-collateral stage=submitted'],
+      ['vault.confirm', 'kind=add-collateral stage=fee-moved'],
+    ]);
+  });
+
   it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {
     const { entries, tick } = harness();
     debugFailure('privacy.operation', new PrivacyError('relay-not-configured', 'The private relay is not configured on this deployment.'));
