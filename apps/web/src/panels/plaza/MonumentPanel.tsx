@@ -6,8 +6,8 @@ import { PanelFrame } from '../PanelFrame.js';
 
 /**
  * The Privacy Plaza monument's window (D-076): the pool's public figures —
- * accounts, deposits and, since D-080, the pool's USD value and its top
- * holdings, read by the backend from Voyager through strkprice.com — and a
+ * accounts, the pool's total USD value (D-080; D-098 dropped the 24-hour
+ * deposit count in its favour) and its top holdings, read by the backend from Voyager through strkprice.com — and a
  * few plain lines on why a bigger crowd means more privacy. No money, no
  * wallet: nothing in it is about the player, and it asks nothing of them.
  */
@@ -26,8 +26,7 @@ export function MonumentPanelView({
 }) {
   const copy = COPY.plaza.monument;
   const stats = view.stats;
-  const figure = (value: number | null | undefined): string =>
-    value === null || value === undefined ? copy.unknown : formatPlazaCount(value);
+  const accounts = stats?.accounts == null ? copy.unknown : formatPlazaCount(stats.accounts);
   const topHoldings = stats?.topHoldings ?? null;
   return (
     <PanelFrame title={copy.title} building="plaza" disclosure={null} onClose={onClose}>
@@ -40,15 +39,11 @@ export function MonumentPanelView({
       <dl className="plaza-stats" aria-busy={view.status === 'loading' ? true : undefined}>
         <div>
           <dt>{copy.accounts}</dt>
-          <dd data-stat="accounts">{figure(stats?.accounts)}</dd>
+          <dd data-stat="accounts">{accounts}</dd>
         </div>
         <div>
-          <dt>{copy.deposits24h}</dt>
-          <dd data-stat="deposits24h">{figure(stats?.deposits24h)}</dd>
-        </div>
-        <div>
-          <dt>{copy.held}</dt>
-          <dd data-stat="held">
+          <dt>{copy.total}</dt>
+          <dd data-stat="total">
             {stats?.valueUsd == null ? (
               copy.unknown
             ) : (

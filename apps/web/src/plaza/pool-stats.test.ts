@@ -20,7 +20,6 @@ import {
 
 const EMPTY = Object.freeze({
   accounts: null,
-  deposits24h: null,
   valueUsd: null,
   topHoldings: null,
   valueAsOf: null,
@@ -29,7 +28,7 @@ const EMPTY = Object.freeze({
 
 describe('reading the pool stats (D-076, D-080)', () => {
   it('posts only the version to the same-origin route', async () => {
-    const body = { ...EMPTY, accounts: 2932, deposits24h: 23 };
+    const body = { ...EMPTY, accounts: 2932 };
     const fetcher = vi.fn(async () => new Response(JSON.stringify(body)));
     const source = createBackendPoolStats({ baseUrl: '/api', fetch: fetcher });
     await expect(source.load()).resolves.toEqual(body);
@@ -51,7 +50,6 @@ describe('reading the pool stats (D-076, D-080)', () => {
   it('parses aggregates strictly, keeping null parts null', () => {
     const full = {
       accounts: 2932,
-      deposits24h: 0,
       valueUsd: 1_177_415.13,
       topHoldings: [{ symbol: 'xSTRK', usd: 453_000 }],
       valueAsOf: '2026-09-30T00:00:00.000Z',
@@ -62,7 +60,7 @@ describe('reading the pool stats (D-076, D-080)', () => {
     for (const bad of [
       null,
       [],
-      { accounts: 1, deposits24h: 1 },
+      { accounts: 1 },
       { ...EMPTY, accounts: -1 },
       { ...EMPTY, accounts: 1.5 },
       { ...EMPTY, accounts: '1' },
@@ -126,7 +124,6 @@ describe('what the plaza shows (D-076, D-080)', () => {
   it('pre-formats the monument figures, and null for anything unknown', () => {
     expect(plazaStatsEvent({
       accounts: 2932,
-      deposits24h: 23,
       valueUsd: 1_177_415.13,
       topHoldings: [
         { symbol: 'xSTRK', usd: 453_000 },
@@ -136,14 +133,12 @@ describe('what the plaza shows (D-076, D-080)', () => {
       tokenCount: 40,
     })).toEqual({
       accounts: '2,932',
-      deposits24h: '23',
       valueUsd: '$1.18M',
       topHoldings: ['xSTRK · $453K', 'USDC · $198K'],
     });
-    expect(plazaStatsEvent(null)).toEqual({ accounts: null, deposits24h: null, valueUsd: null, topHoldings: null });
+    expect(plazaStatsEvent(null)).toEqual({ accounts: null, valueUsd: null, topHoldings: null });
     expect(plazaStatsEvent({ ...EMPTY, accounts: 0, topHoldings: [] })).toEqual({
       accounts: '0',
-      deposits24h: null,
       valueUsd: null,
       topHoldings: null,
     });

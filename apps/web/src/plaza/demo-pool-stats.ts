@@ -9,7 +9,6 @@ import type { PoolStatsSnapshot, PoolStatsSource } from './pool-stats.js';
 
 export const DEMO_POOL_STATS: PoolStatsSnapshot = Object.freeze({
   accounts: 1_248,
-  deposits24h: 17,
   valueUsd: 842_000,
   topHoldings: Object.freeze([
     Object.freeze({ symbol: 'xSTRK', usd: 320_000 }),

@@ -88,14 +88,14 @@ export interface PlazaParts {
  */
 export const PLAZA_FACE_CAPTIONS = Object.freeze({
   accounts: 'ACCOUNTS\nREGISTERED',
-  deposits24h: 'DEPOSITS\nLAST 24 H',
-  held: 'HELD IN THE POOL',
+  total: 'TOTAL\nIN POOL',
+  held: 'TOP HOLDINGS',
 });
 
 /** Shown in place of a figure the Shell has not (yet) supplied. */
 export const PLAZA_UNKNOWN_FIGURE = '…';
 
-/** How long the held face shows one token before the next, in ms. */
+/** How long the held face shows one holding before the next, in ms. */
 export const PLAZA_HELD_CYCLE_MS = 3_500;
 
 /**
@@ -202,7 +202,7 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   // The monument's three faces: two on the diamond shaft, one on the die.
   const monumentPiece = fixtures.find((piece) => piece.kind === 'monument') ?? null;
   let accounts: TextLabel | null = null;
-  let deposits: TextLabel | null = null;
+  let total: TextLabel | null = null;
   let held: TextLabel | null = null;
   if (monumentPiece) {
     const { cx, cz } = centreOf(monumentPiece);
@@ -213,11 +213,11 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
       cx - out, faceY, cz + out, -Math.PI / 4,
     );
     accounts.object.userData['plaza'] = 'accounts';
-    deposits = addLabel(
-      labels.sign(plazaFaceText(null, PLAZA_FACE_CAPTIONS.deposits24h), PLAZA_THEME.face),
+    total = addLabel(
+      labels.sign(plazaFaceText(null, PLAZA_FACE_CAPTIONS.total), PLAZA_THEME.face),
       cx + out, faceY, cz + out, Math.PI / 4,
     );
-    deposits.object.userData['plaza'] = 'deposits24h';
+    total.object.userData['plaza'] = 'total';
     held = addLabel(
       labels.sign(plazaFaceText(null, PLAZA_FACE_CAPTIONS.held), HELD_STYLE),
       cx, DIE_FACE_Y, cz + DIE_HALF + 0.014,
@@ -259,15 +259,9 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   let stats: PlazaStatsPresentation = EMPTY_PLAZA_STATS;
   let heldIndex = 0;
   let highlighted: StationId | null = null;
-  // D-080: the held face's frames — the USD total first, then each of the
-  // top holdings, in the Shell's order. Whichever of the two is missing,
-  // the other still cycles (or sits alone) on its own.
-  const heldFrames = (): readonly string[] => {
-    const frames: string[] = [];
-    if (stats.valueUsd !== null) frames.push(stats.valueUsd);
-    if (stats.topHoldings) frames.push(...stats.topHoldings);
-    return frames;
-  };
+  // D-098: the total has its own shaft face, so the die's held face cycles
+  // the top holdings alone, in the Shell's order (one holding sits still).
+  const heldFrames = (): readonly string[] => stats.topHoldings ?? [];
   const drawHeld = (): void => {
     const frames = heldFrames();
     const line = frames.length > 0 ? frames[heldIndex % frames.length]! : null;
@@ -275,12 +269,12 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   };
   const draw = (): void => {
     accounts?.setText(plazaFaceText(stats.accounts, PLAZA_FACE_CAPTIONS.accounts));
-    deposits?.setText(plazaFaceText(stats.deposits24h, PLAZA_FACE_CAPTIONS.deposits24h));
+    total?.setText(plazaFaceText(stats.valueUsd, PLAZA_FACE_CAPTIONS.total));
     drawHeld();
   };
   let lastCycle = 0;
   parts.animators.push((elapsed) => {
-    // The total and each holding take turns on the held face; one frame stays put.
+    // The top holdings take turns on the held face; one frame stays put.
     const cycle = Math.floor(elapsed / PLAZA_HELD_CYCLE_MS);
     if (cycle !== lastCycle) {
       lastCycle = cycle;

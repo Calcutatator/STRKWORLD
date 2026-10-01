@@ -117,7 +117,7 @@ export function createPoolStatsPoller(options: PoolStatsPollerOptions): PoolStat
   };
 
   const incomplete = (stats: PoolStatsSnapshot): boolean =>
-    stats.accounts === null || stats.deposits24h === null || stats.valueUsd === null;
+    stats.accounts === null || stats.valueUsd === null;
 
   const cancelDeadline = (): void => {
     if (deadline === null) return;

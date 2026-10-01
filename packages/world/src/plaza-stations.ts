@@ -22,12 +22,12 @@ import { isPlazaNearby, plazaStationAtApproach } from './map/plaza.js';
 /**
  * The monument's figures as the World draws them; a null part reads "…".
  * D-080: `held`'s per-token amounts were replaced with the pool's USD value
- * and its top holdings by value, so the held face now cycles the total, then
- * each holding.
+ * and its top holdings by value. D-098: the total now has its own shaft face
+ * (where the 24-hour deposit count was), so the die's held face cycles the
+ * top holdings alone.
  */
 export interface PlazaStatsPresentation {
   readonly accounts: string | null;
-  readonly deposits24h: string | null;
   /** Compact total held in the pool, e.g. "$1.18M". */
   readonly valueUsd: string | null;
   /** Compact "SYMBOL · $usd" lines, most valuable first. */
@@ -36,7 +36,6 @@ export interface PlazaStatsPresentation {
 
 export const EMPTY_PLAZA_STATS: PlazaStatsPresentation = Object.freeze({
   accounts: null,
-  deposits24h: null,
   valueUsd: null,
   topHoldings: null,
 });
@@ -235,7 +234,6 @@ export function createPlazaController(options: PlazaControllerOptions): PlazaCon
 export function normalizePlazaStats(value: unknown): PlazaStatsPresentation {
   return Object.freeze({
     accounts: figure(ownData(value, 'accounts')),
-    deposits24h: figure(ownData(value, 'deposits24h')),
     valueUsd: figure(ownData(value, 'valueUsd')),
     topHoldings: figureLines(ownData(value, 'topHoldings')),
   });

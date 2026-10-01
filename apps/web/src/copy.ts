@@ -731,8 +731,8 @@ export const COPY = freezeCopy({
       title: 'The privacy pool, live',
       intro: 'Public figures for the whole STRK20 privacy pool, read from its own events on Starknet. Nothing here is about you.',
       accounts: 'Accounts registered',
-      deposits24h: 'Deposits in the last 24 hours',
-      held: 'Held in the pool',
+      /** D-098: the pool's total USD value, shown once; the 24-hour deposit count is gone. */
+      total: 'Total in the pool',
       topHoldings: 'Top holdings',
       /** D-080: the pool's USD value comes from Voyager through strkprice.com's public proxy, backend-only. */
       source: 'Values from Voyager via strkprice.com, updated every minute.',

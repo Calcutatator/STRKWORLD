@@ -259,6 +259,10 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — The plaza's total was already shown twice; it now has one face and one row, and the deposit count is gone from the client (D-098)
+
+The owner asked for the pool's total dollar value in place of "Deposits in the last 24 hours". The total was already on the monument (as the first frame of the die's cycling held face) and in the window (the "Held in the pool" row), so a plain swap would have shown it twice. The shaft face now carries the total ("TOTAL IN POOL"), the die cycles the top holdings alone, and the window's held row is the total row. `deposits24h` is out of `plaza:stats`, the web parser, the demo figures and the poller's incomplete check; the backend still computes it (removing it is a separate, safe change). The tests that read `deposits24h` or the old captions moved with it.
+
 ### 2026-10-02 — A cosmetic per-player event is cheapest as a byte on the presence entry, not a message (D-097)
 
 The Space jump needed peers in the same area to see it without breaking D-086's per-patch design or D-087's isolation. Traps and facts met on the way:

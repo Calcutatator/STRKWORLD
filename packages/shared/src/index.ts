@@ -503,10 +503,12 @@ export type ShellEvents = {
    * D-080: `held`'s per-pinned-token amounts were replaced with the pool's
    * USD value and its top holdings by value, read from Voyager through
    * strkprice.com (a public aggregate, no key, no user data).
+   *
+   * D-098: the 24-hour deposit count is gone from the event; `valueUsd` is
+   * the monument's total, shown once on its own face.
    */
   'plaza:stats': {
     accounts: string | null;
-    deposits24h: string | null;
     /** Compact total held in the pool, e.g. "$1.18M". */
     valueUsd: string | null;
     /** Compact "SYMBOL · $usd" lines, most valuable first, for the cycling face. */
