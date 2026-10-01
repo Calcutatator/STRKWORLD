@@ -1,3 +1,4 @@
+import { AVNU_SWAP_MAX_CALLDATA } from './avnu-swap-quotes.js';
 import { BORROW_MARKET_PATH, BORROW_POSITION_PATH } from './borrow.js';
 import { DEBUG_LOGS_PATH, DebugLogSink } from './debug-logs.js';
 import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
@@ -440,7 +441,9 @@ export class BackendApi {
       || !sameAddress(quote.sellToken, sellToken)
       || !sameAddress(quote.buyToken, buyToken)
       || quote.calls.length !== 1
-      || quote.calls.some((call) => call.calldata.length > this.config.maxCalldataItems)
+      // The swap's own bound, never the relay's maxCalldataItems: the wallet
+      // submits a swap (D-084), and degen routes run past the relay's limit.
+      || quote.calls.some((call) => call.calldata.length > AVNU_SWAP_MAX_CALLDATA)
     ) {
       throw new ApiFailure(502, 'avnu returned an invalid swap quote.');
     }

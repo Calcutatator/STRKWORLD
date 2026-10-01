@@ -66,8 +66,8 @@ generated domain.
 | `BACKEND_ROUTE_UNSHIELD_…` | the same four, with the same values |
 | `BACKEND_ROUTE_SWAP_ENABLED` / `_ALLOWED_TOKENS` / `_MAX_SLIPPAGE_BPS` | `false` / STRK / `50`, except for the swap probe below (D-084). These gate the keyless quote proxy only; `_MAX_RELAY_FEE` and `_MAX_QUEUE_DELAY_MS` are no longer read for swap. |
 
-Leave `BACKEND_ROUTE_STAKE_*` and `BACKEND_DEGEN_*` unset: both stay off (D-063,
-D-067).
+Leave `BACKEND_ROUTE_STAKE_*` unset (D-063), and `BACKEND_DEGEN_*` unset
+except for the degen floor below (D-067).
 
 ### Browser build (public, compiled into the bundle)
 
@@ -251,7 +251,7 @@ live shadow-account swap yet; this probe is that evidence.
    | `VITE_STRK20_SWAP_SLIPPAGE_BPS` | `50` (at most the backend's ceiling, or every quote is refused) |
 
    Leave `VITE_STRK20_SWAP_DEGEN_ENABLED` and `BACKEND_DEGEN_*` unset for the
-   first probe; set both to open the degen floor afterwards.
+   first probe; the degen floor below opens afterwards.
 
 2. With a funded account on a wallet that reports Wallet API 0.10.4, keep
    the pool fee (6 STRK) in the shielded balance besides the amount to sell.
@@ -264,6 +264,58 @@ live shadow-account swap yet; this probe is that evidence.
    address appears nowhere in it if the wallet relays its own submission.
 
 To lock it again, unset the variables and redeploy.
+
+## The degen floor (D-067, D-084)
+
+The Exchange tower's degen counter (DEGEN SWAP) swaps exactly as the ground
+floor does, through the same `strkworld-swap` stand-in and the same keyless
+quote proxy, over a wider list: the pinned curated core (LORDS, DREAMS, SLAY,
+BROTHER, tBTC, CASH, DOG) plus the backend's own filtered copy of avnu's
+public token list, which the backend fetches with no key. Open it only once
+the swap probe above has passed, with every swap variable from it still set.
+
+1. Add these and redeploy:
+
+   | Variable | Value | When it is read |
+   |---|---|---|
+   | `BACKEND_DEGEN_ENABLED` | `true` | runtime |
+   | `BACKEND_DEGEN_TAGS` | `Verified,Community,Unruggable,AVNU` | runtime |
+   | `BACKEND_DEGEN_MIN_DAILY_VOLUME_USD` | `100` | runtime |
+   | `BACKEND_DEGEN_CACHE_TTL_MS` | `600000` (10 minutes) | runtime |
+   | `VITE_STRK20_SWAP_DEGEN_ENABLED` | `true` | build (compiled into the bundle; the Dockerfile declares it) |
+
+   All four `BACKEND_DEGEN_*` are required together: one set without
+   `BACKEND_DEGEN_ENABLED`, a tag outside those four (`Unknown` never
+   qualifies), a floor outside 1 to 1,000,000,000 or a TTL outside 60000 to
+   86400000 stops the backend starting. Each half is useless alone: without
+   the backend group `GET /api/v1/degen/tokens` answers 503 and the counter
+   says its list is unavailable; without the build flag every degen token
+   outside the swap allowlist is listed as display only. Nothing else changes: no avnu key,
+   `AVNU_BASE_URL` stays unset, and the swap's slippage values stay as in the
+   swap probe. `BACKEND_MAX_CALLDATA_ITEMS` does not bound a swap quote: thin
+   degen pairs build up to about 340 felts and the proxy admits up to 512.
+
+   On 2026-10-01 that group listed the seven curated tokens plus seventeen
+   live ones, all blue chips (USDC, STRK, ETH, strkBTC, WBTC and the like):
+   no community token routes $100 a day on avnu, so the curated core carries
+   the floor. A quote is admitted only for a token in
+   `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS`, the curated core or the current list,
+   never for an address the browser sends; while avnu's list cannot be read
+   the curated core alone is listed and admitted.
+
+2. Check the list: `curl -s https://<domain>/api/v1/degen/tokens` answers
+   `{"source":"live","tokens":[…]}` with LORDS first (`"curated"` instead of
+   `"live"` means the backend could not reach avnu's list).
+3. With the same funded wallet and the pool fee (6 STRK) in the shielded
+   balance, at the degen counter: swap a small amount of STRK for LORDS.
+   LORDS has a Pragma feed, so the review is checked like a ground-floor
+   swap. Then swap a small amount of STRK for DREAMS: Pragma has no DREAMS
+   feed, so the review says "No independent price check" and Confirm needs
+   the acknowledgement tick (D-084). Read the balance: both arrive as pool
+   notes. Then sell the DREAMS back for STRK.
+
+To close it again, unset the five variables and redeploy; the counter then
+says its list is unavailable while the ground floor keeps swapping.
 
 ## Debug logs
 

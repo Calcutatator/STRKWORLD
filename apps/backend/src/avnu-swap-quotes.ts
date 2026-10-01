@@ -26,7 +26,15 @@ export const AVNU_EXCHANGE = '0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc9
 export const AVNU_SWAP_ENTRYPOINT = 'multi_route_swap';
 const DEFAULT_BASE_URL = 'https://starknet.api.avnu.fi';
 const DEFAULT_TIMEOUT_MS = 5_000;
-const MAX_CALLDATA = 512;
+/**
+ * The longest `multi_route_swap` calldata a quote may carry, the browser's own
+ * bound (`MAX_SWAP_CALLDATA`, `packages/privacy/src/swap.ts`). It is the
+ * swap's, not the relay's `BACKEND_MAX_CALLDATA_ITEMS`: no swap is relayed
+ * (D-084). Thin degen pairs split widely: read keylessly on 2026-10-01,
+ * 1,000 STRK→DREAMS built 266 felts over 26 routes and 100 LORDS→DREAMS 336
+ * over 30, past the relay's usual 256.
+ */
+export const AVNU_SWAP_MAX_CALLDATA = 512;
 /** The most of an avnu answer read: a quote and its build are a few kilobytes. */
 export const MAX_RESPONSE_BYTES = 256 * 1024;
 const U128_BOUND = 1n << 128n;
@@ -108,7 +116,7 @@ export class AvnuSwapQuotes implements SwapQuotePort {
       || own(call, 'entrypoint') !== AVNU_SWAP_ENTRYPOINT
       || !Array.isArray(calldata)
       || calldata.length < 13
-      || calldata.length > MAX_CALLDATA
+      || calldata.length > AVNU_SWAP_MAX_CALLDATA
       || calldata.some((felt) => typeof felt !== 'string' || !isFelt(felt))
       || !sameAddress(calldata[8] as string, input.taker)
     ) {
