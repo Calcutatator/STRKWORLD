@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { COPY } from '../../copy.js';
 import {
   formatRatePercent,
@@ -79,12 +79,15 @@ export function VaultPanel({
   panel: injected,
   experience = 'menu',
   register = PRIVACY_REGISTER,
+  counters = null,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: VaultPanelMachine;
   experience?: 'menu' | 'station';
   register?: readonly RouteGrade[];
+  /** Menu Mode's counter tabs (D-088); presentation only. */
+  counters?: ReactNode;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const owned = useMemo(
@@ -142,6 +145,7 @@ export function VaultPanel({
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
+        counters={counters}
       >
         <VaultIntro token={token} />
         <ModeTabs state={state} register={register} onSelect={(mode) => panel.setMode(mode)} />
