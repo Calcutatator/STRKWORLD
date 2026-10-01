@@ -343,3 +343,76 @@ describe("the wallet cue's walker (D-058)", () => {
     expect(css).not.toMatch(/wallet-attention-avatar-sheet|pixelated/);
   });
 });
+
+/**
+ * The panel kit (`panels/kit`) wears each window's theme rather than its own:
+ * its rules read the `--ui-*` tokens and set none, belong to no building, and
+ * put text only in tokens that pass WCAG AA in every theme.
+ */
+describe('the panel kit', () => {
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({ prelude: match[1]!.trim(), body: match[2]! }));
+  const kitRules = rules.filter((rule) => /\.ui-[a-z]/.test(rule.prelude));
+  const root = customProperties(ruleBody(':root'));
+  const themes = new Map<string, Map<string, string>>([[':root', root]]);
+  for (const rule of rules) {
+    const match = /^\.panel\[data-building="([a-z-]+)"\](\[data-brand="[a-z]+"\])?$/.exec(rule.prelude);
+    if (!match) continue;
+    const building = match[2] ? themes.get(`.panel[data-building="${match[1]}"]`) ?? new Map() : new Map();
+    themes.set(rule.prelude, new Map([...root, ...building, ...customProperties(rule.body)]));
+  }
+
+  /** `#rrggbb`, or `rgb(r g b / a)` laid over `background`, as `#rrggbb`. */
+  const solid = (value: string, background: string): string => {
+    if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+    const rgba = /^rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\)$/.exec(value);
+    if (!rgba) throw new Error(`Not a colour the kit can check: ${value}`);
+    const alpha = Number(rgba[4]);
+    return `#${[1, 3, 5].map((offset, index) => {
+      const under = Number.parseInt(background.slice(offset, offset + 2), 16);
+      const blended = Math.round(Number(rgba[index + 1]) * alpha + under * (1 - alpha));
+      return blended.toString(16).padStart(2, '0');
+    }).join('')}`;
+  };
+
+  it('finds every building theme and its own rules', () => {
+    expect(themes.size).toBeGreaterThanOrEqual(8);
+    expect(kitRules.length).toBeGreaterThan(30);
+  });
+
+  it('keeps every kit text pair at WCAG AA in every theme', () => {
+    for (const [name, theme] of themes) {
+      const surface = theme.get('--ui-surface')!;
+      for (const token of ['--ui-text', '--ui-text-dim', '--ui-heading', '--ui-warn', '--ui-danger']) {
+        expect(contrast(solid(theme.get(token)!, surface), surface), `${token} on ${name}`).toBeGreaterThanOrEqual(4.5);
+      }
+      const sunken = theme.get('--ui-surface-sunken')!;
+      expect(contrast(solid(theme.get('--ui-text')!, sunken), sunken), `field text on ${name}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('colours text only with those tokens, never the accent', () => {
+    for (const rule of kitRules) {
+      for (const match of rule.body.matchAll(/(?:^|[;\s])color:\s*([^;]+);/g)) {
+        expect(match[1]!.trim(), rule.prelude).toMatch(/^var\(--ui-(text|text-dim|heading|warn|danger)\)$/);
+      }
+    }
+  });
+
+  it('sets no theme token and belongs to no building', () => {
+    for (const rule of kitRules) {
+      expect(rule.body, rule.prelude).not.toMatch(/--ui-[a-z-]+\s*:/);
+      expect(rule.prelude).not.toMatch(/data-building|data-brand/);
+    }
+  });
+
+  it('stops its one transition when motion is reduced', () => {
+    expect(ruleBody('.ui-quote-timer-bar')).toMatch(/transition:/);
+    const reduced = atRuleBodies('@media (prefers-reduced-motion: reduce)')
+      .flatMap((body) => [...body.matchAll(/([^{}]+)\{([^{}]*)\}/g)])
+      .filter((match) => match[1]!.trim() === '.ui-quote-timer-bar');
+    expect(reduced.map((match) => match[2]!.trim())).toEqual(['transition: none;']);
+    for (const rule of kitRules.filter((candidate) => candidate.prelude !== '.ui-quote-timer-bar')) {
+      expect(rule.body, rule.prelude).not.toMatch(/(^|[;\s])(animation|transition)\s*:/);
+    }
+  });
+});

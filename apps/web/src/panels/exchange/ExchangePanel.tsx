@@ -10,7 +10,9 @@ import { PanelFrame } from '../PanelFrame.js';
 import { isSwappable, type ExchangeAsset } from './catalog.js';
 import { degenExchangeCatalog, policyAdmitsSwapToken } from './degen-catalog.js';
 import { useDegenCatalog } from './DegenCatalogProvider.js';
-import { buyChoices, createExchangePanel, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
+import { AmountField, feeReserve, maxAfterReserve } from '../kit/index.js';
+import { formatTokenAmountExact } from '../../format.js';
+import { buyChoices, createExchangePanel, holdingOf, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { ReceiptNextStep } from '../JourneyNotice.js';
@@ -85,9 +87,36 @@ function Compose({ state, onBalance, onSell, onBuy, onAmount, onReview }: { stat
   return <form className="panel-compose" onSubmit={(event) => { event.preventDefault(); onReview(); }}>
     <label>{COPY.exchange.sell}<select value={state.sell?.token ?? ''} onChange={(event) => onSell(event.target.value)}><option value="">{COPY.exchange.chooseAsset}</option>{state.sellChoices.map((asset) => <option key={asset.token} value={asset.token}>{assetLabel(asset)}</option>)}</select></label>
     <label>{COPY.exchange.buy}<select value={state.buy?.token ?? ''} onChange={(event) => onBuy(event.target.value)}>{buyChoices(state).map((asset) => <option key={asset.token} value={asset.token}>{assetLabel(asset)}</option>)}</select></label>
-    <label>{COPY.bank.amount}<input name="amount" inputMode="decimal" autoComplete="off" value={state.amountText} onChange={(event) => onAmount(event.target.value)} /></label>
+    <SellAmount state={state} onAmount={onAmount} />
     <button type="submit" disabled={!state.sell || !state.buy || state.flow.name === 'preparing'}>{state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}</button>
   </form>;
+}
+
+/**
+ * The amount to sell, with the pool balance and a Max (the kit's proof of
+ * use). Max is the spendable balance less the pool fee when the sell asset
+ * pays it (a swap's whole cost is the pool fee, D-084), and is off when the
+ * wallet reports only an aggregate, since that is not a spendable figure
+ * (D-022).
+ */
+function SellAmount({ state, onAmount }: { state: ExchangeState; onAmount: (value: string) => void }) {
+  const sell = state.sell;
+  const holding = sell ? holdingOf(state, sell.token) : null;
+  const reserve = sell ? feeReserve(sell.token, state.pool) : null;
+  const max = () => holding && holding.maturityKnown ? maxAfterReserve(holding.spendable, reserve) : null;
+  const maximum = max();
+  const reserved = maximum !== null && reserve !== null && reserve > 0n && sell !== null
+    && state.amountText === formatTokenAmountExact(maximum, sell.decimals);
+  return <AmountField
+    label={COPY.bank.amount}
+    value={state.amountText}
+    onChange={onAmount}
+    decimals={sell?.decimals ?? 18}
+    symbol={sell?.symbol ?? ''}
+    balance={holding?.total ?? null}
+    {...(sell ? { max } : {})}
+    hint={reserved ? COPY.balance.feeReserved : null}
+  />;
 }
 
 /**
