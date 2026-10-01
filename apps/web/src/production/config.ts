@@ -57,6 +57,19 @@ export function detectRoutePolicy(): WalletSessionOptions['policy'] | null {
   return routePolicyFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
 }
 
+/**
+ * A temporary testing switch: `VITE_ENTRY_GATE_BYPASS=true` lets a connected,
+ * supported wallet into the city without D-072's pool-balance check. Off
+ * unless set to exactly `true`; production launches never set it.
+ */
+export function entryGateBypassFrom(environment: WalletEnvironment | undefined): boolean {
+  return environment?.VITE_ENTRY_GATE_BYPASS === 'true';
+}
+
+export function detectEntryGateBypass(): boolean {
+  return entryGateBypassFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
+}
+
 /** Parse only public browser configuration; secrets are never accepted here. */
 export function parseProductionWalletConfig(
   environment: WalletEnvironment,

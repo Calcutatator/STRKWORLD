@@ -41,6 +41,7 @@ generated domain.
 | Variable | Value |
 |---|---|
 | `FEE_AUTHORIZATION_SECRET` | Required: 32+ random characters, for example the output of `openssl rand -hex 32`. |
+| `VITE_ENTRY_GATE_BYPASS` | Temporary, testing only. `true` lets a connected wallet into the city without the D-072 pool-balance check. Build arg; unset it before launch. |
 | `AVNU_PAYMASTER_API_KEY` | Optional, and unused by every player flow this build enables (D-082). Since D-082 the wallet proves and submits unshield, send and stake itself, as it does shield and the Vault, so none of them reaches the relay. Only the quote-bound swap still goes through the relay, and the browser never enables swap today; with swap enabled and no key, a swap answers `503 RELAY_NOT_CONFIGURED` (D-070). Get one at https://portal.avnu.fi: connect a deployed wallet and create a key. It is an access credential, not a budget: in private mode each transaction repays avnu itself, so Portal credits (which fund gasfree sponsorship) are not what these relays spend. |
 
 ### Runtime (public configuration)
