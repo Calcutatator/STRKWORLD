@@ -34,7 +34,7 @@ import { GlossaryTerm } from '../Glossary.js';
 export type ExchangeMode = 'ground' | 'degen';
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
-export function ExchangePanel({ onClose, panel: injected, experience = 'menu', mode = 'ground', register = PRIVACY_REGISTER }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station'; mode?: ExchangeMode; register?: readonly RouteGrade[] }) {
+export function ExchangePanel({ onClose, panel: injected, experience = 'menu', mode = 'ground', register = PRIVACY_REGISTER, counters = null }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station'; mode?: ExchangeMode; register?: readonly RouteGrade[]; /** Menu Mode's counter tabs (D-088); presentation only. */ counters?: ReactNode }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const degen = mode === 'degen';
   const degenSource = useDegenCatalog();
@@ -72,7 +72,7 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
   const compose = <Compose state={state} panel={panel} />;
   return <div className="exchange-experience" data-experience={experience} data-mode={mode}>
     <WalletAttentionCue active={walletAttention !== null} kind={walletAttention ?? 'confirm'} />
-    <PanelFrame title={COPY.buildings.exchange} building="exchange" brand={degen ? 'degen' : undefined} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose}>
+    <PanelFrame title={COPY.buildings.exchange} building="exchange" brand={degen ? 'degen' : undefined} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose} counters={counters}>
       {degen ? <p className="degen-eyebrow">{COPY.degen.eyebrow}</p> : null}
       <ReceiptNextStep building="exchange" transactionHash={state.flow.name === 'submitted' ? state.flow.transactionHash : null} register={register} />
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :

@@ -172,7 +172,8 @@ describe('the degen counter in demo', () => {
     expect(markup).toMatch(/<li class="degen-token" data-display-only="true"><span class="degen-token-symbol">SSTR<\/span>.*?data-tag="display-only">Display only<\/span>/);
     expect(markup).toContain(COPY.degen.displayOnlyNote);
     expect(markup).not.toMatch(new RegExp(`<option value="${SSTR}"`));
-    expect(markup).toMatch(new RegExp(`<option value="${LORDS}"( selected="")?>LORDS · Lords</option>`));
+    // D-090: the selector shows the ticker alone; the name is on the board.
+    expect(markup).toMatch(new RegExp(`<option value="${LORDS}"( selected="")?>LORDS</option>`));
     // The list scrolls on its own and can take keyboard focus.
     expect(markup).toMatch(/class="degen-board-scroll" role="region" aria-labelledby="[^"]+" tabindex="0"/);
   });
