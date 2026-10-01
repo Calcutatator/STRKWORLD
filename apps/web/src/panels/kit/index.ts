@@ -49,5 +49,5 @@ export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTon
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {
-  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, type AmountCheck,
+  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, tidyFloor, type AmountCheck,
 } from './amount-math.js';

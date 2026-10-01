@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COPY } from '../../copy.js';
-import { balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction } from './amount-math.js';
+import { balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, tidyFloor } from './amount-math.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
@@ -101,5 +101,19 @@ describe('balanceText', () => {
   it('shortens without rounding up', () => {
     expect(balanceText(12n * ONE + 5n * 10n ** 17n, 18, 'STRK')).toBe('12.5 STRK');
     expect(balanceText(1_999_999n, 6, 'USDC')).toBe('1.9999 USDC');
+  });
+});
+
+describe('tidyFloor', () => {
+  it('floors a stablecoin to cents and anything else to six significant figures, never up', () => {
+    expect(tidyFloor(157_599_999n, 6, { stable: true })).toBe(157_590_000n);
+    expect(tidyFloor(12_345_678_912_345_678_912_345n, 18)).toBe(12_345_600_000_000_000_000_000n);
+    expect(tidyFloor(123_456_789_123_456n, 18)).toBe(123_456_000_000_000n);
+    expect(tidyFloor(12_345_678n, 8)).toBe(12_345_600n);
+    // Never coarser than whole tokens, and never more places than the token has.
+    expect(tidyFloor(1_234_567_891n * ONE / 1000n, 18)).toBe(1_234_567n * ONE);
+    expect(tidyFloor(7n, 0)).toBe(7n);
+    expect(tidyFloor(4_999n, 6, { stable: true })).toBe(0n);
+    expect(tidyFloor(0n, 18)).toBe(0n);
   });
 });

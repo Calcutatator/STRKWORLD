@@ -185,13 +185,17 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
       .map((row) => [row.querySelector('dt')!.textContent, row.querySelector('dd')!.textContent]));
     // 10,000 demo STRK at $0.04 and 68% max LTV, at health 1.25: about 217.6 USDC.
     const available = rows()[COPY.borrow.form.available]!;
-    expect(available).toMatch(/^217\.\d+ USDC$/);
+    // Floored to cents for a stablecoin (D-089).
+    expect(available).toMatch(/^217\.\d{1,2} USDC$/);
     await click(button(COPY.kit.max));
     expect(counter().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.borrow.form.maxHint);
     expect(counter().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe(available.replace(' USDC', ''));
-    // Before: nothing owed. After: 1.25, with the price STRK would have to fall to.
+    // Before: nothing owed. After: 1.25, with the price STRK would have to fall to,
+    // each once, now → after (D-089).
     expect(rows()[COPY.borrow.form.health]).toBe(`${COPY.borrow.form.noDebt} →  to 1.25`);
-    expect(rows()[COPY.borrow.form.liquidation]).toMatch(/^STRK \$0\.03/);
+    expect(rows()[COPY.borrow.loans.ltv]).toMatch(/^— → {2}to 54\.[34]\d%$/);
+    expect(rows()[`${COPY.borrow.loans.liquidation} (STRK)`]).toMatch(/^— → {2}to \$0\.03/);
+    expect(counter().querySelector('.panel-compose .borrow-health')).toBeNull();
     expect(button(COPY.gameMode.reviewAction).disabled).toBe(false);
 
     // Past the 1.05 floor the button will not offer a review.

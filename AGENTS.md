@@ -283,9 +283,11 @@ held, and how it was checked:
 - `BeforeAfter` renders a visually hidden " to " between the figures, so a
   row's `textContent` reads `1.81 →  to 1.25` (two spaces). Assert on that,
   not on what the eye sees.
-- Max filling the exact figure is what makes it "everything": the machines
+- Max filling the whole figure is what makes it "everything": the machines
   turn an amount equal to the whole position (redeem), the debt as read
-  (repay) or a debt-free loan's collateral (withdraw) into the seam's `'all'`.
+  (repay) or a debt-free loan's collateral (withdraw), exact or as Max's
+  tidied floor (`tidyFloor`: cents for stables, six significant figures
+  otherwise), into the seam's `'all'`.
 
 *Verified:* `borrow-preview.test.ts`, `vault-machine.test.ts`,
 `borrow-machine.test.ts`, `VaultPanel.flow.test.tsx`,

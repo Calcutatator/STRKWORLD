@@ -51,6 +51,8 @@ export type PreviewHealth =
       readonly status: 'priced';
       /** × 10^18, truncated as the seam does. */
       readonly healthFactor: bigint;
+      /** Debt over collateral value × 10^18, rounded up as the seam does; null with no collateral value. */
+      readonly ltv: bigint | null;
       /** The collateral's USD price × 10^18 at which the loan turns liquidatable; null with no collateral. */
       readonly liquidationPrice: bigint | null;
       readonly band: PreviewBand;
@@ -95,6 +97,7 @@ export function previewHealth(loan: PreviewLoan, assets: PairAssets): PreviewHea
   const dv = debtValue(loan.debtAmount, debt);
   if (dv === 0n) return { status: 'no-debt' };
   const healthFactor = (cv * maxLtv) / dv;
+  const ltv = cv > 0n ? ceilDiv(dv * SCALE, cv) : null;
   const liquidationPrice = loan.collateralAmount > 0n
     ? ceilDiv(dv * collateral.scale * SCALE, loan.collateralAmount * maxLtv)
     : null;
@@ -103,7 +106,7 @@ export function previewHealth(loan: PreviewLoan, assets: PairAssets): PreviewHea
     : cv * maxLtv < dv * PREVIEW_MIN_HEALTH
       ? 'too-close'
       : healthFactor < PREVIEW_WARNING_HEALTH ? 'warning' : 'safe';
-  return { status: 'priced', healthFactor, liquidationPrice, band };
+  return { status: 'priced', healthFactor, ltv, liquidationPrice, band };
 }
 
 /**

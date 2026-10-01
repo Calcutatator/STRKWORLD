@@ -5236,7 +5236,7 @@ already draws them in each building's own tokens.
   supply / receive" sit under the field.
 - **Borrow.** Once the loans are read (an existing loan changes every
   figure, so nothing is shown before): "Available to borrow", a Max, the
-  health factor before → after and "Liquidation at" the collateral price.
+  LTV, health factor and liquidation price, each now → after.
   **Max aims for a health of 1.25** (LTV at 80% of the pair's max), not
   Aave's whole limit and not D-083's 1.05 floor: the collateral can lose a
   fifth of its price before the loan is liquidatable, and a Max-filled loan
@@ -5248,6 +5248,15 @@ already draws them in each building's own tokens.
   that amount is a repay-all with the seam's buffer, replacing the
   checkbox. A withdrawal's Max keeps health at 1.25, or is the whole
   collateral (a withdraw-all) when nothing is owed.
+- **Tidy Max figures.** Every Max, and "Available to borrow", is floored
+  to two decimals for a stablecoin and six significant figures otherwise
+  (kit `tidyFloor`), never rounded up; the maths beneath stays exact. A
+  tidied whole position, debt or debt-free collateral still means
+  everything.
+- **One set of loan figures in the form.** The borrow form no longer repeats
+  the loan's block from the list above; it shows LTV, health factor and
+  liquidation price once each, now → after while an amount is typed. The
+  list keeps the loan's own figures and warnings.
 - **Maths in the shell for display only.** `apps/web` may not import the
   seam's runtime, so `panels/borrow/borrow-preview.ts` restates Vesu's
   formulas in the seam's rounding; `borrow-preview.test.ts` holds its health

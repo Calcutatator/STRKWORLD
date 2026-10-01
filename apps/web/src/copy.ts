@@ -531,7 +531,6 @@ export const COPY = freezeCopy({
     form: {
       available: 'Available to borrow',
       health: 'Health factor',
-      liquidation: 'Liquidation at',
       remaining: 'Remaining debt',
       owed: 'Owed',
       held: 'Collateral',

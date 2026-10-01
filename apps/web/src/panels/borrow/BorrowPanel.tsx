@@ -28,6 +28,7 @@ import {
   loanFor,
   maxLtvFor,
   takesEverything,
+  tidyBorrowAmount,
   type BorrowMode,
   type BorrowPairChoice,
   type BorrowPanel as BorrowPanelMachine,
@@ -383,7 +384,6 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
   const collateral = tokenOf(state, pair.collateral)!;
   const debt = tokenOf(state, pair.debt)!;
   const maxLtv = maxLtvFor(state, pair);
-  const loan = loanFor(state, pair);
   const collaterals = state.tokens.filter((token) => choices.some((choice) => sameAddress(choice.collateral, token.token)));
   const debts = choices.filter((choice) => sameAddress(choice.collateral, pair.collateral));
   const amountToken = state.mode === 'borrow' || state.mode === 'repay' ? debt : collateral;
@@ -449,7 +449,6 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
         </label>
       )}
       {maxLtv !== undefined ? <p className="borrow-max-ltv">{`${COPY.borrow.maxLtv} ${formatLtv(maxLtv)}`}</p> : null}
-      {loan ? <HealthFigures health={loan.health} collateral={collateral} debt={debt} /> : null}
       {state.mode === 'borrow' ? (
         <AmountField
           label={COPY.borrow.collateralAmount}
@@ -486,6 +485,19 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
 
 function healthText(health: PreviewHealth): string {
   return health.status === 'priced' ? formatHealth(health.healthFactor) : COPY.borrow.form.noDebt;
+}
+
+function ltvText(health: PreviewHealth): string {
+  return health.status === 'priced' && health.ltv !== null ? formatLtv(health.ltv) : '—';
+}
+
+function liquidationText(health: PreviewHealth): string {
+  return health.status === 'priced' && health.liquidationPrice !== null ? formatUsd(health.liquidationPrice) : '—';
+}
+
+/** A figure now and after, or only now while nothing is typed. */
+function figure(before: string, after: string | null): ReactNode {
+  return after === null ? <span className="ui-figure">{before}</span> : <BeforeAfter before={before} after={after} />;
 }
 
 /** The after figure's tone, written out in words too (the kit's rule). */
@@ -534,10 +546,10 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   let maximum: bigint | null = null;
   if (held && market) {
     if (mode === 'borrow') {
-      maximum = maxBorrow(market, pair, { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount });
+      maximum = tidied(maxBorrow(market, pair, { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount }), debt);
       max = () => maximum;
     } else if (mode === 'withdraw-collateral' && loan) {
-      maximum = maxWithdraw(market, pair, held, loan.health.maxLtv);
+      maximum = tidied(maxWithdraw(market, pair, held, loan.health.maxLtv), collateral);
       max = () => maximum;
     }
   }
@@ -545,7 +557,8 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
     balance = loan.debtAmount;
     balanceLabel = COPY.borrow.form.owed;
     exceeds = COPY.borrow.form.overDebt;
-    max = () => loan.debtAmount;
+    const whole = tidied(loan.debtAmount, debt);
+    max = () => whole;
   }
   if (held && loan && mode === 'withdraw-collateral') {
     balance = loan.collateralAmount;
@@ -561,25 +574,31 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   }
   let tooLow = false;
   const assets = market ? pairAssets(market, pair, loan?.health.maxLtv) : null;
-  if (held && assets && (typed !== null || (mode === 'borrow' && added > 0n))) {
+  const acting = typed !== null || (mode === 'borrow' && added > 0n);
+  // One set of figures for the loan (D-089): now → after, or only now while
+  // nothing is typed. The loans list above keeps its warnings.
+  if (held && assets && (acting || held.debtAmount > 0n)) {
     const after = afterOf(mode, held, typed ?? 0n, added, everything);
     const before = previewHealth(held, assets);
-    const next = previewHealth(after, assets);
-    if (before.status !== 'stale' && next.status !== 'stale') {
-      const { tone, note } = healthTone(next);
+    const next = acting ? previewHealth(after, assets) : null;
+    if (before.status !== 'stale' && next?.status !== 'stale') {
+      const { tone, note } = next ? healthTone(next) : healthTone(before);
+      rows.push({ id: 'ltv', label: COPY.borrow.loans.ltv, value: figure(ltvText(before), next ? ltvText(next) : null) });
       rows.push({
         id: 'health',
         label: COPY.borrow.form.health,
-        value: <BeforeAfter before={healthText(before)} after={healthText(next)} />,
+        value: figure(healthText(before), next ? healthText(next) : null),
         tone,
         ...(note ? { note } : {}),
       });
-      if (next.status === 'priced' && next.liquidationPrice !== null) {
-        rows.push({ id: 'liquidation', label: COPY.borrow.form.liquidation, value: `${collateral.symbol} ${formatUsd(next.liquidationPrice)}` });
-      }
-      if (mode === 'repay') rows.push({ id: 'remaining', label: COPY.borrow.form.remaining, value: formatExact(after.debtAmount, debt) });
+      rows.push({
+        id: 'liquidation',
+        label: `${COPY.borrow.loans.liquidation} (${collateral.symbol})`,
+        value: figure(liquidationText(before), next ? liquidationText(next) : null),
+      });
+      if (mode === 'repay' && acting) rows.push({ id: 'remaining', label: COPY.borrow.form.remaining, value: formatExact(after.debtAmount, debt) });
       // Only an action that adds risk is held to the floor; repaying and adding collateral never are (D-083).
-      tooLow = (mode === 'borrow' || mode === 'withdraw-collateral') && next.status === 'priced'
+      tooLow = (mode === 'borrow' || mode === 'withdraw-collateral') && next?.status === 'priced'
         && (next.band === 'too-close' || next.band === 'liquidatable');
     }
   }
@@ -591,6 +610,13 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
         ? COPY.borrow.form.withdrawAllLine
         : null;
   return { check, collateralCheck, balance, balanceLabel, exceeds, max, hint, rows, tooLow };
+}
+
+/** A Max figure floored to a tidy precision (D-089); nothing when that leaves nothing. */
+function tidied(amount: bigint | null, token: BorrowTokenView): bigint | null {
+  if (amount === null) return null;
+  const tidy = tidyBorrowAmount(amount, token);
+  return tidy > 0n ? tidy : null;
 }
 
 /** The loan after the typed action, in the seam's conservative rounding. */

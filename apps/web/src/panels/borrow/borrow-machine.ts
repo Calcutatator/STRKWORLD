@@ -25,6 +25,7 @@ import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createStore, type ReadableStore } from '../../store/store.js';
 import { VAULT_BORROW_ROUTE, routeDisclosure, routeDoor, routeRequiresDisclosure, type DoorState } from '../routes.js';
 import { stageCopy } from '../bank/bank-machine.js';
+import { tidyFloor } from '../kit/amount-math.js';
 
 /**
  * The Borrow counter, as a state machine (D-083): Vesu loans in its Prime
@@ -248,12 +249,28 @@ export function maxLtvFor(state: Pick<BorrowState, 'market'>, pair: BorrowPairCh
  * seam's buffer covers interest since); for a withdrawal, the whole
  * collateral of a loan that owes nothing, which becomes a withdraw-all.
  */
-export function takesEverything(state: Pick<BorrowState, 'mode' | 'loans'>, pair: BorrowPairChoice | null, amount: bigint | null): boolean {
+export function takesEverything(
+  state: Pick<BorrowState, 'mode' | 'loans' | 'tokens'>,
+  pair: BorrowPairChoice | null,
+  amount: bigint | null,
+): boolean {
   const loan = loanFor(state, pair);
-  if (amount === null || loan === undefined) return false;
-  if (state.mode === 'repay') return loan.nominalDebt > 0n && amount === loan.debtAmount;
-  if (state.mode === 'withdraw-collateral') return loan.nominalDebt === 0n && loan.collateralShares > 0n && amount === loan.collateralAmount;
+  if (amount === null || loan === undefined || pair === null) return false;
+  // Max fills the figure tidied (D-089); the exact one means everything too.
+  const whole = (exact: bigint, token: Address): boolean => {
+    const view = state.tokens.find((entry) => sameAddress(entry.token, token));
+    const tidy = view ? tidyBorrowAmount(exact, view) : exact;
+    return amount === exact || (tidy > 0n && amount === tidy);
+  };
+  if (state.mode === 'repay') return loan.nominalDebt > 0n && whole(loan.debtAmount, pair.debt);
+  if (state.mode === 'withdraw-collateral') return loan.nominalDebt === 0n && loan.collateralShares > 0n && whole(loan.collateralAmount, pair.collateral);
   return false;
+}
+
+/** A Max figure for `token`, floored to a tidy precision (D-089): two decimals for a stablecoin. */
+export function tidyBorrowAmount(amount: bigint, token: Pick<BorrowTokenView, 'token' | 'decimals'>): bigint {
+  const market = VAULT_MARKET_METADATA.find((entry) => sameAddress(entry.token, token.token));
+  return tidyFloor(amount, token.decimals, { stable: market?.group === 'stables' });
 }
 
 /** A refusal the seam named (`BorrowRefusedError`), read without trusting anything else about the error. */

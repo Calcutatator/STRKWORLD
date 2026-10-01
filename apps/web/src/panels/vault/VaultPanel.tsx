@@ -28,6 +28,7 @@ import {
   poolBalanceOf,
   positionOf,
   redeemsWholePosition,
+  tidyVaultAmount,
   vaultChoices,
   vaultListedMarkets,
   voyagerContractUrl,
@@ -481,7 +482,9 @@ function amountFieldFor(state: VaultState, token: VaultTokenView): {
     const held = poolBalanceOf(state, token.token);
     const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
     const reserve = feeReserve(token.token, fee);
-    const maximum = held && held.maturityKnown ? maxAfterReserve(held.spendable, reserve) : null;
+    const exact = held && held.maturityKnown ? maxAfterReserve(held.spendable, reserve) : null;
+    const tidy = exact === null ? null : tidyVaultAmount(exact, token);
+    const maximum = tidy !== null && tidy > 0n ? tidy : null;
     return {
       balance: held?.total ?? null,
       max: held && held.maturityKnown ? () => maximum : null,
@@ -493,9 +496,10 @@ function amountFieldFor(state: VaultState, token: VaultTokenView): {
   const held = positionOf(state, token.token);
   if (held === undefined || held.shares === 0n) return { balance: null, max: null, hint: () => null };
   const short = held.redeemable < held.assets;
+  const tidy = tidyVaultAmount(held.redeemable, token);
   return {
     balance: held.assets,
-    max: held.redeemable > 0n ? () => held.redeemable : null,
+    max: tidy > 0n ? () => tidy : null,
     hint: () => (short ? `${COPY.vault.form.payoutLead} ${formatHolding(held.redeemable, token)} ${COPY.vault.form.payoutTail}` : null),
   };
 }

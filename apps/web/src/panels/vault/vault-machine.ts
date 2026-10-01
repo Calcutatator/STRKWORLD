@@ -28,6 +28,7 @@ import {
   type DoorState,
 } from '../routes.js';
 import { stageCopy } from '../bank/bank-machine.js';
+import { tidyFloor } from '../kit/amount-math.js';
 
 /**
  * The Vault's counter, as a state machine (D-077): Vesu lending from the
@@ -922,14 +923,26 @@ export function poolBalanceOf(state: Pick<VaultState, 'balances'>, token: Addres
   return state.balances.balances.find((entry) => sameAddress(entry.token, token));
 }
 
+/** A Max figure for `token`, floored to a tidy precision (D-089): two decimals for a stablecoin. */
+export function tidyVaultAmount(amount: bigint, token: Pick<VaultTokenView, 'decimals' | 'group'>): bigint {
+  return tidyFloor(amount, token.decimals, { stable: token.group === 'stables' });
+}
+
 /**
  * Whether `amount` is the whole position in `token` as last read, all of it
- * payable now (D-089): Max's figure, which redeems every share by the vault's
- * own `redeem`, so no dust of shares is left behind.
+ * payable now (D-089): Max's figure (the position tidied, or exact), which
+ * redeems every share by the vault's own `redeem`, so no dust of shares is
+ * left behind.
  */
-export function redeemsWholePosition(state: Pick<VaultState, 'position'>, token: Pick<VaultTokenView, 'token'>, amount: bigint | null): boolean {
+export function redeemsWholePosition(
+  state: Pick<VaultState, 'position'>,
+  token: Pick<VaultTokenView, 'token' | 'decimals' | 'group'>,
+  amount: bigint | null,
+): boolean {
   const held = positionOf(state, token.token);
-  return amount !== null && held !== undefined && held.shares > 0n && held.redeemable >= held.assets && amount === held.assets;
+  if (amount === null || held === undefined || held.shares === 0n || held.redeemable < held.assets) return false;
+  const tidy = tidyVaultAmount(held.assets, token);
+  return amount === held.assets || (tidy > 0n && amount === tidy);
 }
 
 /** D-081: the plain line for a supply with none of its token in the pool balance. */

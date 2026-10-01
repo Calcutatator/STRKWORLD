@@ -94,6 +94,7 @@ describe('the Borrow form preview (D-089)', () => {
       expect(preview.status).toBe('priced');
       if (preview.status !== 'priced') continue;
       expect(preview.healthFactor).toBe(seam.healthFactor);
+      expect(preview.ltv).toBe(seam.ltv);
       expect(preview.liquidationPrice).toBe(seam.liquidationPrice);
       const band = seam.band === 'liquidatable' ? 'liquidatable'
         : preview.healthFactor < BORROW_MIN_HEALTH_AFTER ? 'too-close' : seam.band;

@@ -60,6 +60,22 @@ export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null
   return left > 0n ? left : null;
 }
 
+/**
+ * `amount` floored to a tidy figure for a Max to fill in: two decimals for a
+ * stablecoin, six significant figures for anything else (never coarser than
+ * whole tokens), and never more places than the token has. Only ever rounds
+ * down, so a tidied Max is always within the exact one; the maths that
+ * produced it stays exact.
+ */
+export function tidyFloor(amount: bigint, decimals: number, options: { readonly stable?: boolean } = {}): bigint {
+  if (amount <= 0n) return 0n;
+  const integerDigits = amount.toString().length - decimals;
+  const wanted = options.stable ? 2 : 6 - integerDigits;
+  const keep = Math.max(0, Math.min(decimals, wanted));
+  const unit = 10n ** BigInt(decimals - keep);
+  return amount - (amount % unit);
+}
+
 /** `amount × numerator / denominator`, truncated towards zero. 50% is `(amount, 1n, 2n)`. */
 export function fractionOf(amount: bigint, numerator: bigint, denominator: bigint): bigint {
   if (denominator <= 0n || numerator < 0n || amount < 0n) throw new RangeError('fractionOf takes non-negative figures');
