@@ -677,7 +677,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · "the shell must not derive MAX when maturity is unknown" amended by D-089 (a Max may use the wallet's per-token total; the wallet refuses a spend counting a note still maturing, and the shell says the funds are settling)**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -5204,7 +5204,7 @@ borrowing or swapping off). Not verified: a real browser at phone width.
 
 ## D-089 — The lending counters follow Vesu's and Aave's form conventions
 
-**2026-10-01 · Accepted · direction from the product owner (simple, familiar lending touches in the Vault's Vesu style; lending conventions only, so no 50%, flip arrow or slippage), details delegated to the lane · amends D-081 (a pool balance the player reads stays in the window for the supply field) · amends D-083 (Max is how a repay or a collateral withdrawal takes everything; Max borrows to a health of 1.25) · keeps D-022 (no Max from a wallet's aggregate), D-024's disclosures and every seam check · no seam, register, World, lobby or backend change**
+**2026-10-01 · Accepted · direction from the product owner (simple, familiar lending touches in the Vault's Vesu style; lending conventions only, so no 50%, flip arrow or slippage), details delegated to the lane · amends D-081 (a pool balance the player reads stays in the window for the supply field) · amends D-022 (a Max may use the wallet's per-token total) · amends D-083 (Max is how a repay or a collateral withdrawal takes everything; Max borrows to a health of 1.25) · keeps D-024's disclosures and every seam check · no seam, register, World, lobby or backend change**
 
 **Context.** The Vault's SUPPLY / REDEEM and BORROW forms were a token
 picker, a bare number and a review button, with checkboxes for "everything".
@@ -5221,12 +5221,18 @@ already draws them in each building's own tokens.
   token, read only when the player presses "Show my pool balance" (one
   `wallet_strk20Balances` call for every lendable token, which the wallet
   may confirm, and the pool fee beside it). The figure stays in the window,
-  is never logged, and goes back to unread after a submission. Max shows
-  only when the wallet says what is spendable, and leaves the 6 STRK pool fee
-  behind in STRK. `wallet_strk20Balances` answers one `{ token, balance }`
-  total per token and no maturity split, so with a real wallet the balance
-  shows and Max does not (D-022); the fake and demo report maturity, so Max
-  shows there. Over the balance the button reads "Insufficient {token}".
+  is never logged, and goes back to unread after a submission. Max leaves
+  the 6 STRK pool fee behind in STRK. `wallet_strk20Balances` answers one
+  `{ token, balance }` total per token and no maturity split, so with a real
+  wallet **Max uses that per-token total** (amending D-022's "no MAX when
+  maturity is unknown"), the rule the counters now share: a note stays
+  maturing for 10 blocks (about 20 s) after it lands, and the wallet refuses
+  a spend that counts one (119, an insufficient balance), so no funds are at
+  risk. When that refusal comes back for a supply the read balance covers,
+  the counter says "Funds you just added are still settling; try again in a
+  few seconds." rather than calling the balance short. Where the wallet does
+  report a spendable figure (the fake and demo), Max uses it. Over the
+  balance the button reads "Insufficient {token}".
 - **Redeem.** The balance line is what is supplied, from the position read.
   Max is what the vault can pay out now; when that is the whole position,
   the redeem is of every share by the vault's own `redeem`, as the old

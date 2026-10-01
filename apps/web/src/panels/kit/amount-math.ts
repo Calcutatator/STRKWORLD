@@ -51,8 +51,10 @@ export function feeReserve(
  * The most a player can put in: what is spendable less what must stay behind.
  *
  * `null` means "no honest Max", and the button is disabled: the spendable
- * figure is unknown (D-022: a wallet reporting only an aggregate has no
- * spendable split), the reserve is unknown, or nothing is left after it.
+ * figure is unknown, the reserve is unknown, or nothing is left after it.
+ * A wallet that reports one total per token and no maturity split passes
+ * that total (D-089): the wallet refuses a spend that counts a note still
+ * maturing, so no funds are at risk, and the panel says they are settling.
  */
 export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null = 0n): bigint | null {
   if (spendable === null || reserve === null) return null;

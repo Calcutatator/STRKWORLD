@@ -442,7 +442,24 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
     prepared = null;
   }
 
-  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
+  /**
+   * D-089: the wallet refuses a spend that counts a note still maturing (about
+   * ten blocks after it arrived), and says so as an insufficient balance.
+   * When the pool balance as read covers the supply, that is what happened:
+   * say the funds are settling rather than missing.
+   */
+  function settling(kind: PrivacyErrorKind, supply: { token: Address; amount: bigint | null } | null): boolean {
+    if (kind !== 'insufficient-balance' || supply === null) return false;
+    const held = poolBalanceOf(store.getState(), supply.token);
+    return held !== undefined && supply.amount !== null && supply.amount <= held.total;
+  }
+
+  function fail(
+    error: unknown,
+    recovery: 'prepare-again' | 'close',
+    id: number,
+    supply: { token: Address; amount: bigint | null } | null = null,
+  ): void {
     const { kind } = toFailure(error);
     // An abandoned attempt writes nothing and reports nothing, as in the Bank.
     if (!current(id)) return;
@@ -453,7 +470,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       flow: {
         name: 'failed',
         kind,
-        message: COPY.errors[kind],
+        message: settling(kind, supply) ? COPY.vault.form.settling : COPY.errors[kind],
         recovery: kind === 'shadow-accounts-unsupported' ? 'close' : recovery,
       },
     });
@@ -780,7 +797,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
           },
         });
       } catch (error) {
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, state.mode === 'supply' ? { token: token.token, amount } : null);
       }
     },
 
@@ -860,7 +877,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
         trace('submitted');
       } catch (error) {
         if (signingBatch === batch) signingBatch = null;
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, summary.action.kind === 'supply' ? { token: summary.action.token, amount: summary.action.amount } : null);
         if (current(id)) trace('failed');
       }
     },

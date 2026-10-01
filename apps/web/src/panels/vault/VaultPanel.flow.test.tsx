@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEMO_VAULT_STAND_IN, FakePrivacyOperations, type PrivacyOperations } from '@strkworld/privacy';
+import { DEMO_VAULT_STAND_IN, FakePrivacyOperations, PrivacyError, type PrivacyOperations } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from '../../bus/event-bus.js';
 import type { ConnectState } from '../../connect/connect-machine.js';
@@ -414,16 +414,48 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: USDC, amount: 25n * 10n ** 6n }]);
   });
 
-  it('shows a wallet\'s one-total balance but no Max, since it says nothing of what is spendable (D-022, D-089)', async () => {
+  it('fills Max from a wallet\'s one total per token, and says funds are settling when the wallet refuses a note still maturing (D-089)', async () => {
     const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, poolConfig: { noteMaturityBlocks: 0 } });
     const read = operations.balances.bind(operations);
     // As the Wallet API adapter answers: `wallet_strk20Balances` gives one total per token.
     operations.balances = async (tokens, signal) => (await read(tokens, signal))
       .map((entry) => ({ ...entry, spendable: 0n, maturing: 0n, maturityKnown: false }));
+    // The wallet refuses a spend that counts a note still maturing, as an insufficient balance (119).
+    const prepare = operations.prepareVaultSupply.bind(operations);
+    let refuse = true;
+    operations.prepareVaultSupply = async (...args) => {
+      if (refuse) {
+        refuse = false;
+        throw new PrivacyError('insufficient-balance', 'Insufficient shielded balance.');
+      }
+      return prepare(...args);
+    };
     await openCounter(operations);
     await click(button(COPY.vault.form.showBalance));
     expect(vault().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.kit.poolBalance}: 100 STRK`);
-    expect([...vault().querySelectorAll('.panel-compose button')].some((node) => node.textContent === COPY.kit.max)).toBe(false);
+    await click(button(COPY.kit.max));
+    expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe('94');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(vault().querySelector('.flow-failed')?.textContent).toContain(COPY.vault.form.settling);
+
+    // A few seconds later the same supply goes through.
+    await click(button(COPY.flow.back));
+    await click(button(COPY.gameMode.reviewAction));
+    await click(vault().querySelector<HTMLButtonElement>('.panel-review button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: STRK, amount: 94n * 10n ** 18n }]);
+  });
+
+  it('keeps the plain message for a refusal the read balance does not cover', async () => {
+    const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, poolConfig: { noteMaturityBlocks: 0 } });
+    operations.prepareVaultSupply = async () => {
+      throw new PrivacyError('insufficient-balance', 'Insufficient shielded balance.');
+    };
+    await openCounter(operations);
+    // No balance read: nothing says the funds are there, so it is the ordinary message.
+    await type('5');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(vault().querySelector('.flow-failed')?.textContent).toContain(COPY.errors['insufficient-balance']);
+    expect(vault().textContent).not.toContain(COPY.vault.form.settling);
   });
 
   it('tells a wallet without shadow accounts so plainly, offers no form, and keeps the city open', async () => {

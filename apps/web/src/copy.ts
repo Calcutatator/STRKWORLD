@@ -393,6 +393,8 @@ export const COPY = freezeCopy({
       payoutTail: 'of it right now.',
       willSupply: 'You will supply',
       willReceive: 'You will receive',
+      /** D-089: the wallet refused a supply that counted a note still maturing (about ten blocks). */
+      settling: 'Funds you just added are still settling; try again in a few seconds.',
     },
     /** D-079: a build whose Vault list names no token the counter can describe. */
     noToken: 'No token can be lent in this build yet.',

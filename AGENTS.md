@@ -259,7 +259,7 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-10-01 — The wallet reports a per-token pool balance but no spendable split, so lending Max needs the fake; Max at 1.25 health (D-089)
+### 2026-10-01 — The wallet reports a per-token pool balance but no spendable split; Max uses that total, and a maturing note's refusal reads as "settling"; Max at 1.25 health (D-089)
 
 The Vault and Borrow forms gained Aave's and Vesu's touches (D-089). What
 held, and how it was checked:
@@ -268,12 +268,14 @@ held, and how it was checked:
   `{ token, balance }` per token (`STRK20_BALANCE_ENTRY` in
   `@starknet-io/types-js` 0.10.4 `wallet-api/components.d.ts`; the adapter's
   `balances()` in `packages/privacy/src/wallet-api/operations.ts` rejects any
-  other key). So a per-token total is known, and a balance line can show it,
-  but it says nothing of maturity: the adapter sets `maturityKnown: false`
-  and zero `spendable`, and no Max may be derived (D-022). With a real wallet
-  the supply field shows "Pool balance" and no Max; the fake reports maturity,
-  so Max shows in demo and tests. Every read is on a player's press: the
-  wallet may confirm it first.
+  other key). So a per-token total is known, but nothing of maturity: the
+  adapter sets `maturityKnown: false` and zero `spendable`. The counters now
+  give Max that total anyway (D-089, amending D-022): a note matures 10
+  blocks (about 20 s) after it lands, and the wallet refuses a spend that
+  counts one with 119 (`insufficient-balance`), so nothing is at risk. The
+  Vault turns that refusal, for a supply its read balance covers, into
+  "Funds you just added are still settling". Every read is on a player's
+  press: the wallet may confirm it first.
 - The shell cannot import the seam's runtime (`architecture.test.ts`), so the
   borrow preview restates Vesu's formulas in `panels/borrow/borrow-preview.ts`.
   Keep the seam's rounding (collateral down, debt up, a base unit more debt on

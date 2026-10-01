@@ -369,8 +369,8 @@ function StandInLine({ address }: { address: string }) {
  *
  * D-089, the lending touches (Aave's and Vesu's, nothing from a swap): one
  * amount field whose balance line is the pool balance for a supply (read when
- * the player asks) or what is supplied for a redeem; a Max only where the
- * figure is known; the market's supply APY and "You will supply / receive";
+ * the player asks) or what is supplied for a redeem; a Max once that figure
+ * is read; the market's supply APY and "You will supply / receive";
  * and a button that says what is missing ("Enter an amount", "Insufficient
  * USDC") before it offers the review.
  */
@@ -467,9 +467,10 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
 
 /**
  * The amount field's figures for the chosen token (D-089). A supply checks
- * against the pool balance the player read, and offers Max only when the
- * wallet says what is spendable (D-022: an aggregate is not), leaving the
- * pool fee behind in the fee token. A redeem checks against what is supplied,
+ * against the pool balance the player read, and its Max is what is
+ * spendable where the wallet says, else the token's total (D-089: the wallet
+ * refuses a spend of a note still maturing, and the counter says the funds
+ * are settling), leaving the pool fee behind in the fee token. A redeem checks against what is supplied,
  * and Max is what the vault can pay out now: the whole position when it can,
  * which redeems every share.
  */
@@ -482,12 +483,14 @@ function amountFieldFor(state: VaultState, token: VaultTokenView): {
     const held = poolBalanceOf(state, token.token);
     const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
     const reserve = feeReserve(token.token, fee);
-    const exact = held && held.maturityKnown ? maxAfterReserve(held.spendable, reserve) : null;
+    // D-089: a wallet that reports one total per token gives Max that total;
+    // it refuses a spend counting a note still maturing, and the counter says so.
+    const exact = held ? maxAfterReserve(held.maturityKnown ? held.spendable : held.total, reserve) : null;
     const tidy = exact === null ? null : tidyVaultAmount(exact, token);
     const maximum = tidy !== null && tidy > 0n ? tidy : null;
     return {
       balance: held?.total ?? null,
-      max: held && held.maturityKnown ? () => maximum : null,
+      max: held ? () => maximum : null,
       hint: (text) => maximum !== null && reserve !== null && reserve > 0n && text === formatTokenAmountExact(maximum, token.decimals)
         ? COPY.balance.feeReserved
         : null,
