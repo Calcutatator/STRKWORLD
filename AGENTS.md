@@ -259,6 +259,38 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — xSTRK's live rate is one keyless `convert_to_assets` call; the wallet's balance read is one total per token (D-091)
+
+- xSTRK (`0x028d709c…0b0a`) answers ERC-4626 `convert_to_assets(u256)`:
+  `starknet_call` with selector `0xd98b5465…98c1` and calldata
+  `[0xde0b6b3a7640000, 0x0]` returned `[0x106c70bf65979943, 0x0]` at block
+  15,734,660, 1 xSTRK = 1.18344 STRK. `convert_to_shares`, `preview_deposit`
+  and `preview_redeem` are in the same class ABI. The backend's
+  `/v1/rpc/endur-rate` makes exactly that one pinned call.
+- `wallet_strk20Balances` (`@starknet-io/types-js` 0.10.4,
+  `wallet-api/methods.d.ts`) takes `tokens` (empty for every shielded token)
+  and answers `STRK20_BALANCE_ENTRY[]`, `{ token, balance }`: a per-token
+  private total with no maturity split. The Bank's Max now uses that total
+  (D-091); a refusal over a still-maturing note reads as settling.
+- 1Click's `timeEstimate` (`@defuse-protocol/one-click-sdk-typescript`
+  `dist/index.d.ts`) is seconds "for the swap to be executed after the
+  deposit transaction is confirmed", so the Bridge's Est. time row says so;
+  the origin chain's confirmation is not in it.
+- Traps met: a `FakePrivacyOperations` fault with no `on` is taken by the
+  next call of any kind, and the staking view now reads `endurRate` on open,
+  so target faults with `on`. A disabled primary button with an empty form
+  means render tests that looked for the ready label in an empty form must
+  fill it first. `RecipientField`'s default clipboard is read at render:
+  pass `readClipboard={null}` in tests that want no Paste.
+
+*Verified:* the RPC calls above over `api.cartridge.gg/x/starknet/mainnet`;
+the installed type files; `endur-unstake.test.ts`, `backend-client.test.ts`,
+`endur-operations.test.ts`, `fake-endur.test.ts`, `operations.test.ts`,
+`endur-rate.test.ts`, `kit.test.tsx`, the Bank, staking, unstaking, Post
+Office and Bridge render and flow tests, and offline renders
+(`renders/bankux-*.png` in the working scratchpad, not committed).
+**Not verified:** no live wallet has shown these panels.
+
 ### 2026-10-01 — The degen floor quotes keylessly, but its thin pairs split past the relay's calldata limit, so the quote proxy bounds by the swap's own ceiling (D-067, D-084)
 
 avnu's public `/swap/v3/quotes` and `/swap/v3/build` quote the curated degen

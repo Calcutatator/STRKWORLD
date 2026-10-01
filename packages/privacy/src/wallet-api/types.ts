@@ -65,6 +65,11 @@ export interface EndurReadClient {
    * block's timestamp.
    */
   endurUnstake(account: Address, signal?: AbortSignal): Promise<EndurUnstakeRead>;
+  /**
+   * D-091: xSTRK's `convert_to_assets(10^18)` at the latest block, the STRK
+   * one whole xSTRK converts to now. The request names nobody.
+   */
+  endurRate(signal?: AbortSignal): Promise<{ readonly strkPerXstrk: bigint }>;
 }
 
 /** One unstaking read, as the backend answers it (D-085). */

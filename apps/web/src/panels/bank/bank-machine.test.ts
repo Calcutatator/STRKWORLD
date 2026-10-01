@@ -459,7 +459,7 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.maxSpendable()).toBeNull();
   });
 
-  it('never derives a maximum when the wallet reports only an aggregate (D-022)', async () => {
+  it("takes the wallet's one total per token as the maximum, once the shape is costed (D-091, amending D-022)", async () => {
     const panel = await openPanel(new AggregateOnlyOperations(fake()));
     await panel.refreshBalance();
     panel.setMode('transfer');
@@ -467,11 +467,57 @@ describe('bank panel — maturity-aware balance', () => {
     const balance = panel.store.getState().balance;
     expect(balance.status === 'loaded' && balance.maturityKnown).toBe(false);
     expect(balance.status === 'loaded' && balance.total).toBe(strk('100'));
+    // The cost-evidence rule still stands: nothing costed, no maximum.
     expect(panel.maxSpendable()).toBeNull();
-
     panel.applyMax();
     expect(panel.store.getState().amountText).toBe('');
-    expect(panel.store.getState().notice?.text).toBe(COPY.balance.maturityUnknown);
+    expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gas = quotedCost(panel);
+    panel.cancelPrepared();
+    panel.clearBatch();
+    await panel.refreshBalance();
+    expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE - gas);
+  });
+
+  it('says funds are settling when the wallet refuses a spend its reported total covers (D-091)', async () => {
+    const inner = fake();
+    const panel = await openPanel(new AggregateOnlyOperations(inner));
+    await panel.refreshBalance();
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('90');
+    await panel.addToBatch();
+    inner.injectFault({ kind: 'insufficient-balance', on: 'prepare' });
+    await panel.prepare();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'failed', kind: 'insufficient-balance', message: COPY.balance.settling });
+  });
+
+  it('keeps the plain refusal when the total does not cover the spend, or was never read', async () => {
+    const over = fake({ balances: { [STRK]: strk('95') } });
+    const panel = await openPanel(new AggregateOnlyOperations(over));
+    await panel.refreshBalance();
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('90');
+    await panel.addToBatch();
+    over.injectFault({ kind: 'insufficient-balance', on: 'prepare' });
+    await panel.prepare();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.errors['insufficient-balance'] });
+
+    const unread = fake();
+    const blind = await openPanel(new AggregateOnlyOperations(unread));
+    blind.setMode('transfer');
+    blind.setRecipient(BOB);
+    blind.setAmount('1');
+    await blind.addToBatch();
+    unread.injectFault({ kind: 'insufficient-balance', on: 'prepare' });
+    await blind.prepare();
+    expect(blind.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.errors['insufficient-balance'] });
   });
 
   it('offers no maximum for a shield — the shell cannot see public funds', async () => {
@@ -1342,6 +1388,7 @@ class AggregateOnlyOperations implements PrivacyOperations {
   prepareEndurUnstake: PrivacyOperations['prepareEndurUnstake'] = (shares, options) =>
     this.inner.prepareEndurUnstake(shares, options);
   prepareEndurClaim: PrivacyOperations['prepareEndurClaim'] = (options) => this.inner.prepareEndurClaim(options);
+  endurRate: PrivacyOperations['endurRate'] = (signal) => this.inner.endurRate(signal);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);

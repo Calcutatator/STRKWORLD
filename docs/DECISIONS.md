@@ -677,7 +677,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · its "no MAX when maturity is unknown" rule amended by D-091 for the Bank (Max takes the per-token total; a wallet refusal over a maturing note says the funds are settling)**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -1220,7 +1220,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`) · the Vault's `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and `shadow-accounts-unsupported` added by D-077 · `vaultPositions` (replacing `vaultPosition`), a token for `prepareVaultRedeem`, and `vaultRates` by D-079**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`) · the Vault's `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and `shadow-accounts-unsupported` added by D-077 · `vaultPositions` (replacing `vaultPosition`), a token for `prepareVaultRedeem`, and `vaultRates` by D-079 · `endurRate` (xSTRK's exchange rate, a public read) by D-091**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -4747,7 +4747,7 @@ the evidence, as the Vault's first supply was for D-077.
 
 ## D-085 — Endur staking is switched on, and xSTRK unstakes privately through a shadow account
 
-**2026-10-01 · Accepted by the user (the lead asked for staking on and for private unstaking through a STRK20 shadow account) · supersedes D-063 in part (staking is switched on for the test deployment; the counter is no longer stake-only, and its exit is a shadow account rather than a withdraw anonymizer) · amends D-064 (the unstaking note points at the new counter; the waiver for `bank.stake` is unchanged) · amends D-077 and builds on D-083 (the shadow-account module D-083 extracted now serves the Vault, the Borrow counter and unstaking) · extends D-036's frozen seam with `endurUnstakePosition`, `prepareEndurUnstake` and `prepareEndurClaim` · adds one pinned public read to D-014's backend · registers `bank.unstake` and `bank.unstake-claim` (approved by the lead, 2026-10-01) · adds the `unstake` policy route and `VITE_STRK20_UNSTAKE_ENABLED`**
+**2026-10-01 · Accepted by the user (the lead asked for staking on and for private unstaking through a STRK20 shadow account) · supersedes D-063 in part (staking is switched on for the test deployment; the counter is no longer stake-only, and its exit is a shadow account rather than a withdraw anonymizer) · amends D-064 (the unstaking note points at the new counter; the waiver for `bank.stake` is unchanged) · amends D-077 and builds on D-083 (the shadow-account module D-083 extracted now serves the Vault, the Borrow counter and unstaking) · extends D-036's frozen seam with `endurUnstakePosition`, `prepareEndurUnstake` and `prepareEndurClaim` · adds one pinned public read to D-014's backend · registers `bank.unstake` and `bank.unstake-claim` (approved by the lead, 2026-10-01) · adds the `unstake` policy route and `VITE_STRK20_UNSTAKE_ENABLED` · amended by D-091 (the unstaking counter is the staking counter's Unstake tab, and the staking note says so)**
 
 **Context.** D-063 built Endur staking switched off. The reason in
 `.env.production.example` was relay acceptance: "not to be enabled until
@@ -5147,3 +5147,89 @@ on the street, 2.46 in the Studio; 2.87 KB/s per client overall; tick p95
 7.7 ms, 11.0% of a core; 0 of 722,399 peer sightings in a wrong area and
 20,838 street sightings from the roof; 0 decode failures. Not verified: a
 real browser drawing the street's crowd from the roof.
+
+---
+
+## D-091 — The Bank, the Post Office and the Bridge follow their category's conventions, on the shared kit
+
+**2026-10-01 · Accepted (the lead's brief, with the owner's three principles: simple and direct, each building's own look, only what the category's leading apps do) · extends D-036's frozen seam with `endurRate` · adds one public backend read · amends D-022 for the Bank (Max takes the per-token total, per the lead's balance rule for every panel) · amends D-085 (the unstaking counter is a tab, and the staking note's wording) · keeps D-063 and D-041 (no figure at a stake's or an unstake's review), D-074's recipient check, D-061's reserve copy and every D-024 disclosure · lending is D-089 and the swap D-090**
+
+**Context.** The panel kit (`apps/web/src/panels/kit`, PR #163) gave every
+counter the same amount field and rows. The spec of each category's
+conventions (`defi-ui-patterns.md` in the lead's working notes: Lido and
+Endur for staking, Uniswap's wallet send for a send, Uniswap and StarkGate
+for a bridge) asks for a few familiar rows per panel and no swap elements
+outside the swap. The Bank's forms were a bare input with a Max beside it;
+the staking counter showed no rate and stacked the unstaking counter under
+the stake form; the Bridge showed no time; a send's recipient field had no
+Paste and said nothing until Add.
+
+**Decision.**
+
+- **Bank and Post Office (one machine, D-040).** Every control uses the
+  kit's `AmountField` and a `DetailRows` with the pool fee read live. In a
+  mode that spends the private balance (unshield, send, stake) the read
+  total sits on the field ("Pool balance: 100 STRK") and the balance card
+  keeps only its read button and notes; the field flags an amount over it.
+  Shielding spends public STRK the Bank cannot see, so its field shows no
+  balance and has no Max. The primary button follows the kit's
+  `primaryAction` ("Enter an amount", "Insufficient STRK"), and a send's
+  says "Enter a recipient" or "Check the address" first. No 50%, no
+  slippage, no flip.
+- **The recipient field** is the kit's new `RecipientField`: "To", the
+  placeholder "Enter address", a Paste button where the browser offers
+  `navigator.clipboard.readText`, and an inline "That does not look like a
+  Starknet address." checked on blur and on paste, never per keystroke.
+  Whether the address can receive is still the Bank's own check at Add
+  (D-074), with its own line.
+- **Max (amends D-022 for the Bank).** Following the lead's balance rule for
+  every panel: `wallet_strk20Balances` answers one total per token (read
+  from `@starknet-io/types-js` 0.10.4: `STRK20_BALANCE_ENTRY` is
+  `{ token, balance }`, no maturity split), and Max now takes that total
+  less the pool fee, what is queued and the costed network figure. The
+  wallet refuses a spend that counts a note still maturing (about ten
+  blocks), so a Max can fail but not misspend; when the wallet refuses a
+  spend as more than the balance and the read total covers it and the pool
+  fee, the Bank says "Funds you just added are still settling; try again in
+  a few seconds." The machine's cost-evidence rule is unchanged: Max appears
+  once a visit of that shape has been costed.
+- **Staking (Endur style).** The staking counter has Endur's two tabs,
+  Stake and Unstake; only the chosen form is mounted (D-088's rule), and
+  the tabs step aside at a stake's commit point. The stake form shows "You
+  will receive ≈ x xSTRK", "Exchange rate 1 xSTRK = x STRK" and the pool
+  fee; the unstake form shows "You will receive ≈ x STRK", the rate,
+  "Waiting time About 7 days" (D-085's measured 604,800 s, with Endur's own
+  caveat as its note) and the pool fee with its note, and the pending
+  requests sit under the form with the claim behaviour unchanged (funded,
+  awaiting funds, collect-only). The estimates say they are estimates; a
+  stake's and an unstake request's review still show no figure from the
+  rate, because Endur's vault fixes it when the transaction runs.
+- **The rate (extends D-036).** `PrivacyOperations.endurRate(signal)`
+  answers `{ strkPerXstrk, origin }`: xSTRK's `convert_to_assets(10^18)` at
+  the latest block through `POST /v1/rpc/endur-rate` (`{ v: 1 }`, answer
+  `{ strkPerXstrk }`), a pinned call on the pinned xSTRK that names nobody
+  and asks no wallet, open while the stake or the unstake route is. The
+  demo fake answers its fixed DEMO RATE (1.25) as `origin: 'demo'`, which
+  the counter labels "Demo rate, not Endur's." The staking view reads it
+  once when it opens and never on a timer. Read on 2026-10-01 at block
+  15,734,660: `0x106c70bf65979943`, 1 xSTRK = 1.18344 STRK.
+- **The Bridge.** The amount uses the kit field (no balance and no Max: the
+  source chain's balance is not read). The quote shows "You will receive ≈
+  x STRK", the signed minimum and "Est. time", from the signed quote's
+  `timeEstimate` (1Click: seconds once the deposit confirms, said in the
+  row's note). A saved deposit's status is a persistent `role="status"`
+  line at the top of its record. The 0.2% provider-fee note and every
+  recovery control stay.
+- **The staking note** (D-085's wording) now reads "To unstake, use the
+  Unstake tab. Endur's withdrawal queue holds the STRK for about seven
+  days, sometimes longer, before it can come back to your pool balance."
+
+**Consequences.** Each panel reads as its category does, in its building's
+own tokens. The seam has eighteen methods. A Max with a fresh shield may
+fail in the wallet for a few blocks and says why. Tests: the kit's
+`RecipientField`, `endur-rate.test.ts`, the Bank's render and machine
+tests, the staking and unstaking flows through the tabs, the Post Office's
+send conventions, the Bridge's rows and status, the adapter, client, fake
+and backend rate reads. Not verified: no live wallet has shown these
+panels, and the rate route has not run on Railway.
+

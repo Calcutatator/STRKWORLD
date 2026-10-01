@@ -652,6 +652,11 @@ body {
   line-height: 1.1;
 }
 
+/* With the figure on the amount field, the card keeps only its read button and notes. */
+.panel-balance[data-compact="true"] {
+  padding: 0.55rem 0.8rem;
+}
+
 .balance-maturing,
 .balance-aggregate {
   color: var(--ui-text-dim);
@@ -777,6 +782,44 @@ body {
 
 .bridge-instructions dl:empty {
   display: none;
+}
+
+/* D-091: the bridge deposit's status, a persistent line at the top of its record. */
+.bridge-status {
+  margin: 0 0 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-left: 4px solid var(--ui-line);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+}
+
+.bridge-status[data-leg="settled"] {
+  border-left-color: var(--ui-success, var(--ui-line));
+}
+
+.bridge-status[data-leg="failed"],
+.bridge-status[data-leg="expired"] {
+  border-left-color: var(--ui-danger);
+}
+
+.bridge-status-label {
+  margin-right: 0.35rem;
+  color: var(--ui-text-dim);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The kit's preview rows inside a compose form or a quote: a quiet card. */
+:where(.panel-compose, .bridge-experience) > .ui-details,
+.bridge-experience .panel-card > .ui-details {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
 }
 
 /* A deposit address is copied by hand, so it gets a full line of its own. */
@@ -2022,13 +2065,17 @@ button[data-locked="true"] {
   font-size: 0.92rem;
 }
 
-/* D-085: the unstaking counter, under the stake form, set apart by a rule. */
+/* D-085: the unstaking counter; D-091 gives it its own tab, so no rule above it. */
 .panel[data-brand="endur"] .unstake-counter {
   display: grid;
   gap: 0.6rem;
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e4e4e7;
+}
+
+/* D-091: Stake and Unstake, Endur's own two tabs, as a full-width segmented pair. */
+.panel[data-brand="endur"] .stake-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
 }
 
 .panel[data-brand="endur"] .unstake-counter > h3,
@@ -3655,6 +3702,59 @@ button.shell-start {
 }
 
 .ui-amount-message:empty {
+  display: none;
+}
+
+/* The recipient field: the amount box's frame, a mono address and a Paste chip. */
+.ui-recipient {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.ui-recipient-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  border: 1px solid var(--ui-input-border);
+  border-radius: var(--ui-radius-control);
+  background-color: var(--ui-surface-sunken);
+  color: var(--ui-text);
+}
+
+.ui-recipient-box:hover {
+  border-color: var(--ui-input-border-hover);
+}
+
+.ui-recipient-box:focus-within {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 1px;
+  border-color: var(--ui-focus);
+  box-shadow: var(--ui-input-focus-glow);
+}
+
+.ui-recipient[data-invalid="true"] .ui-recipient-box {
+  border-color: var(--ui-danger);
+}
+
+.panel .ui-recipient-box > input:not([type="checkbox"]):not([type="radio"]) {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.35rem 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--ui-number-font);
+  font-size: 0.95rem;
+  text-overflow: ellipsis;
+}
+
+.panel .ui-recipient-box > input:not([type="checkbox"]):not([type="radio"]):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-recipient > .ui-amount-message:empty {
   display: none;
 }
 

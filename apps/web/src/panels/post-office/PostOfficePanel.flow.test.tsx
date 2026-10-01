@@ -202,3 +202,67 @@ describe('a Post Office send to an unregistered recipient (D-074)', () => {
     expectRecipientFailureInPlace();
   });
 });
+
+describe('a Post Office send, wallet style (D-091)', () => {
+  const FRIEND: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
+
+  async function blur(name: 'amount' | 'recipient'): Promise<void> {
+    const input = container!.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+    await act(async () => {
+      input.focus();
+      input.blur();
+    });
+  }
+
+  function submit(): HTMLButtonElement {
+    return container!.querySelector<HTMLButtonElement>('.panel-compose button[type="submit"]')!;
+  }
+
+  it('asks for a recipient, flags a bad address inline on blur, and shows the pool fee', async () => {
+    await enterPostOffice(new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, registered: [FRIEND] }));
+    expect(submit().textContent).toBe(COPY.bank.enterRecipient);
+    expect(submit().disabled).toBe(true);
+    const fee = [...container!.querySelectorAll('.panel-compose .ui-detail')].find((row) => row.textContent?.startsWith(COPY.bank.poolFee));
+    expect(fee?.querySelector('dd')?.textContent).toBe('6 STRK');
+
+    await type('recipient', 'not an address');
+    // Not while typing: a half-typed address is not called wrong.
+    expect(container!.querySelector('.ui-recipient .ui-amount-message')?.textContent).toBe('');
+    await blur('recipient');
+    expect(container!.querySelector('.ui-recipient .ui-amount-message')?.textContent).toBe(COPY.notices.badRecipient);
+    expect(submit().textContent).toBe(COPY.bank.checkRecipient);
+    expect(submit().disabled).toBe(true);
+
+    await type('recipient', FRIEND);
+    await blur('recipient');
+    expect(container!.querySelector('.ui-recipient .ui-amount-message')?.textContent).toBe('');
+    expect(submit().textContent).toBe(COPY.kit.enterAmount);
+    await type('amount', '1');
+    expect(submit().textContent).toBe(COPY.gameMode.reviewAction);
+    expect(submit().disabled).toBe(false);
+  });
+
+  it('pastes the recipient from the clipboard when the browser offers one', async () => {
+    const clipboard = { readText: vi.fn(async () => ` ${FRIEND} `) };
+    Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true });
+    try {
+      await enterPostOffice(new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, registered: [FRIEND] }));
+      const paste = [...container!.querySelectorAll('button')].find((candidate) => candidate.getAttribute('aria-label') === COPY.kit.pasteLabel)!;
+      await click(paste);
+      expect(clipboard.readText).toHaveBeenCalledOnce();
+      expect(container!.querySelector<HTMLInputElement>('input[name="recipient"]')?.value).toBe(FRIEND);
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+  it('still refuses an unregistered recipient at Add with its own line (D-074)', async () => {
+    const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, registered: [FRIEND] });
+    await enterPostOffice(operations);
+    await type('recipient', STRANGER);
+    await type('amount', '1');
+    await click(submit());
+    expect(container!.querySelector('.panel-notice')?.textContent).toBe(COPY.notices.recipientUnregistered);
+    expect(container!.querySelector('.batch-list')).toBeNull();
+  });
+});

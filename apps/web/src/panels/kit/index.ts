@@ -26,6 +26,9 @@
  *   the button; build it with `maxAfterReserve(spendable, feeReserve(...))`
  *   so a Max of the fee token leaves the pool fee behind. Never pass a
  *   wallet's aggregate as spendable (D-022).
+ * - `RecipientField`: a send's "To" field with Paste and an inline
+ *   invalid-address message, checked on blur and paste, never per keystroke.
+ *   Whether the address can receive stays the panel's own check.
  * - `TokenSelect`: a styled native select showing "STRK · 12.5"; native for
  *   keyboard, screen readers and phone pickers.
  * - `SettingsPopover`: a cog with presets, an optional custom value and a
@@ -43,6 +46,7 @@
  * gate holds the avatar while a panel is open.
  */
 export { AmountField, type AmountFieldProps } from './AmountField.js';
+export { RecipientField, type RecipientFieldProps } from './RecipientField.js';
 export { TokenSelect, tokenOptionText, type TokenOption, type TokenSelectProps } from './TokenSelect.js';
 export { SettingsPopover, type SettingsPopoverProps, type SettingsPreset } from './SettingsPopover.js';
 export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTone } from './DetailRows.js';

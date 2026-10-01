@@ -115,6 +115,18 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().instructionsVisible).toBe(true);
   });
 
+  it("carries 1Click's time estimate into the quote review, and none when the quote's is unusable (D-091)", async () => {
+    const h = harness();
+    await h.machine.createQuote({ source: SOURCE, amountIn: 1_000_000n, refundAddress: '0x1111111111111111111111111111111111111111' });
+    expect(h.machine.store.getState().quote).toMatchObject({ expectedAmountOut: 2_000_000_000_000_000_000n, timeEstimateSeconds: 60 });
+
+    const saved = record();
+    const odd = { ...saved, signedQuote: { ...saved.signedQuote, quote: { ...saved.signedQuote.quote, timeEstimate: -1 } } } as BridgeRecord;
+    const resumed = harness(odd);
+    await resumed.machine.open();
+    expect(resumed.machine.store.getState().quote?.timeEstimateSeconds).toBeNull();
+  });
+
   it('retains signed evidence but hides executable instructions when preflight fails', async () => {
     const h = harness(null, { planMax: async () => { throw new Error('planner unavailable'); } });
     await h.machine.createQuote({ source: SOURCE, amountIn: 1_000_000n, refundAddress: '0x1111111111111111111111111111111111111111' });

@@ -19,6 +19,7 @@ import type {
   BorrowRequest,
   DepositStatus,
   EndurAction,
+  EndurRate,
   EndurUnstakePosition,
   Intent,
   PoolConfig,
@@ -313,7 +314,9 @@ export interface Fault {
     /** D-085: unstaking's read, its two prepares, and its confirm. */
     | 'endurPosition'
     | 'endurPrepare'
-    | 'endurConfirm';
+    | 'endurConfirm'
+    /** D-091: xSTRK's exchange-rate read. */
+    | 'endurRate';
   message?: string;
   sticky?: boolean;
 }
@@ -1147,6 +1150,16 @@ export class FakePrivacyOperations implements PrivacyOperations {
    * clock, and what sits there. The same stages as the Wallet API adapter, in
    * the same order.
    */
+  /**
+   * D-091: the stake fixture's DEMO RATE, 1 xSTRK = 1.25 STRK, marked `demo`
+   * so the shell labels it. It is the same fixed rate the fake stakes and
+   * unstakes at, never Endur's.
+   */
+  async endurRate(signal?: AbortSignal): Promise<EndurRate> {
+    await this.tick('endurRate', signal);
+    return Object.freeze({ strkPerXstrk: demoUnstakeAssets(10n ** 18n), origin: 'demo' as const });
+  }
+
   async endurUnstakePosition(options?: VaultCallOptions): Promise<EndurUnstakePosition> {
     const { signal, onStage } = ownVaultOptions(options);
     await this.tick('endurPosition', signal);

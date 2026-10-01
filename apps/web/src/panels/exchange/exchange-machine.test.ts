@@ -663,7 +663,7 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
 const UNUSED_VAULT: Pick<
   PrivacyOperations,
   'vaultPositions' | 'prepareVaultSupply' | 'prepareVaultRedeem' | 'vaultRates' | 'borrowMarket' | 'borrowPositions' | 'prepareBorrow'
-  | 'endurUnstakePosition' | 'prepareEndurUnstake' | 'prepareEndurClaim'
+  | 'endurUnstakePosition' | 'prepareEndurUnstake' | 'prepareEndurClaim' | 'endurRate'
 > = {
   vaultPositions: async () => { throw new Error('unused'); },
   prepareVaultSupply: async () => { throw new Error('unused'); },
@@ -676,4 +676,6 @@ const UNUSED_VAULT: Pick<
   endurUnstakePosition: async () => { throw new Error('unused'); },
   prepareEndurUnstake: async () => { throw new Error('unused'); },
   prepareEndurClaim: async () => { throw new Error('unused'); },
+  // D-091: nor its rate.
+  endurRate: async () => { throw new Error('unused'); },
 };

@@ -72,7 +72,7 @@ function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowA
   const invoked: STRK20_ACTION[][] = [];
   const commitments: string[] = [];
   const unstakeReads: string[] = [];
-  const state = { read: read() as unknown };
+  const state: { read: unknown; rate?: bigint | Error } = { read: read() as unknown };
   const wallet: WalletStrk20Account = {
     address: PLAYER,
     async strk20Balances(tokens) {
@@ -108,6 +108,10 @@ function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowA
     async endurUnstake(account) {
       unstakeReads.push(account);
       return state.read as EndurUnstakeRead;
+    },
+    async endurRate() {
+      if (state.rate instanceof Error) throw state.rate;
+      return { strkPerXstrk: state.rate ?? 1_183_444_769_437_096_259n };
     },
   };
   const operations = new WalletApiPrivacyOperations({
@@ -263,6 +267,30 @@ describe('claim, flow B (D-085)', () => {
     expect(batch.action.kind === 'claim' && batch.action.requestIds).toEqual(
       Array.from({ length: MAX_ENDUR_CLAIMS_PER_BATCH }, (_unused, index) => 19_991n + BigInt(index)),
     );
+  });
+});
+
+describe("xSTRK's exchange rate (D-091)", () => {
+  it('reads the backend once, names nobody, asks no wallet, and marks it the chain\'s', async () => {
+    const f = fixture();
+    await expect(f.operations.endurRate()).resolves.toEqual({ strkPerXstrk: 1_183_444_769_437_096_259n, origin: 'chain' });
+    expect(f.commitments).toEqual([]);
+    expect(f.unstakeReads).toEqual([]);
+  });
+
+  it('opens while either staking route is, and not otherwise', async () => {
+    await expect(fixture({ routes: ['stake'] }).operations.endurRate()).resolves.toMatchObject({ origin: 'chain' });
+    await expect(fixture({ routes: ['unstake'] }).operations.endurRate()).resolves.toMatchObject({ origin: 'chain' });
+    await expect(fixture({ routes: ['shield'] }).operations.endurRate()).rejects.toMatchObject({ kind: 'unknown', message: 'The staking routes are disabled.' });
+  });
+
+  it('refuses a zero or malformed rate, and maps a failed read to unreachable', async () => {
+    const zero = fixture();
+    zero.state.rate = 0n;
+    await expect(zero.operations.endurRate()).rejects.toMatchObject({ kind: 'unknown', message: 'The xSTRK rate read is invalid.' });
+    const down = fixture();
+    down.state.rate = new Error('socket');
+    await expect(down.operations.endurRate()).rejects.toMatchObject({ kind: 'unreachable' });
   });
 });
 

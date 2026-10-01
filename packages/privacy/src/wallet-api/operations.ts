@@ -5,6 +5,7 @@ import type {
   BorrowPositions,
   BorrowRequest,
   DepositStatus,
+  EndurRate,
   EndurUnstakePosition,
   Intent,
   PoolConfig,
@@ -191,6 +192,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   /** D-085: unstaked STRK into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
   prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch> {
     return this.endur.prepareClaim(options);
+  }
+
+  /** D-091: xSTRK's live exchange rate, read through the backend. See `PrivacyOperations`. */
+  endurRate(signal?: AbortSignal): Promise<EndurRate> {
+    return this.endur.rate(signal);
   }
 
   /** D-077, D-079: the Vault positions on the player's shadow account. See `PrivacyOperations`. */

@@ -253,6 +253,8 @@ export function createWalletSession(
     endurUnstakePosition: (options) => ownedResult((owned) => owned.endurUnstakePosition(options)),
     prepareEndurUnstake: (shares, options) => ownedEndurBatch((owned) => owned.prepareEndurUnstake(shares, options)),
     prepareEndurClaim: (options) => ownedEndurBatch((owned) => owned.prepareEndurClaim(options)),
+    // D-091: xSTRK's exchange rate, a public read, owned like the Vault's rates.
+    endurRate: (signal) => ownedResult((owned) => owned.endurRate(signal)),
   };
 
   async function ownedBorrowBatch(

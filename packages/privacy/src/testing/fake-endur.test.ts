@@ -96,3 +96,12 @@ describe('demo Endur unstaking', () => {
     await expect(unsupported.endurUnstakePosition()).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
   });
 });
+
+describe('the demo xSTRK rate (D-091)', () => {
+  it('is the fixture the fake stakes and unstakes at, marked demo, and fails like any read', async () => {
+    const fake = fresh();
+    await expect(fake.endurRate()).resolves.toEqual({ strkPerXstrk: 1_250_000_000_000_000_000n, origin: 'demo' });
+    fake.injectFault({ kind: 'unreachable', on: 'endurRate' });
+    await expect(fake.endurRate()).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+});

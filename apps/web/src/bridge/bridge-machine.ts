@@ -57,6 +57,12 @@ export interface BridgeQuoteReview {
   readonly minimumAmountOut: bigint;
   readonly deadline: string;
   readonly recipient: Address;
+  /**
+   * 1Click's estimate, in seconds, of how long the swap takes once the
+   * deposit has confirmed on its own chain (D-091). An estimate; null when
+   * the signed quote carries none usable.
+   */
+  readonly timeEstimateSeconds: number | null;
 }
 
 export interface BridgeState {
@@ -220,6 +226,10 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         minimumAmountOut,
         deadline: quote.deadline ?? '',
         recipient,
+        timeEstimateSeconds:
+          typeof quote.timeEstimate === 'number' && Number.isFinite(quote.timeEstimate) && quote.timeEstimate >= 0
+            ? quote.timeEstimate
+            : null,
       };
     } catch {
       return null;

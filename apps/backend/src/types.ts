@@ -247,6 +247,11 @@ export interface VaultRpcPort {
  */
 export interface EndurRpcPort {
   getEndurUnstake(account: string, signal?: AbortSignal): Promise<EndurUnstakeRead>;
+  /**
+   * D-091: xSTRK's `convert_to_assets(10^18)` at the latest block: the STRK,
+   * in base units, one whole xSTRK converts to now. Positive.
+   */
+  getEndurRate(signal?: AbortSignal): Promise<bigint>;
 }
 
 export interface EndurUnstakeRead {

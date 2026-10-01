@@ -30,8 +30,9 @@ import type {
  * (borrowing on Vesu from a second shadow account: `borrowMarket`,
  * `borrowPositions` and `prepareBorrow`, with their shapes below) and D-085
  * (Endur unstaking through a shadow account: `endurUnstakePosition`,
- * `prepareEndurUnstake` and `prepareEndurClaim`); every other method and
- * shape is unchanged.
+ * `prepareEndurUnstake` and `prepareEndurClaim`) and D-091 (`endurRate`,
+ * xSTRK's live exchange rate, a public read); every other method and shape
+ * is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -364,6 +365,17 @@ export interface PrivacyOperations {
    * is held and nothing is payable.
    */
   prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch>;
+
+  /**
+   * xSTRK's live exchange rate (D-091): what one xSTRK converts to in STRK
+   * now, by xSTRK's own `convert_to_assets`, read through the backend
+   * (D-014). A public read about Endur's vault, naming nobody, and no wallet
+   * is asked. It is an estimate for the staking counter's preview rows: a
+   * stake or an unstake request is priced by Endur's vault when it runs, so
+   * no review shows a figure from it (D-063, D-041). Open while the stake
+   * or the unstake route is.
+   */
+  endurRate(signal?: AbortSignal): Promise<EndurRate>;
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +402,20 @@ export interface EndurWithdrawalRequest {
   readonly status: 'waiting' | 'awaiting-funds' | 'ready';
   /** Seconds left by the chain's clock; zero once past its wait. */
   readonly secondsLeft: number;
+}
+
+/** xSTRK's exchange rate at the latest block (D-091). */
+export interface EndurRate {
+  /**
+   * STRK base units (18 decimals) that one whole xSTRK, `10^18` shares,
+   * converts to now. Positive; it grows as Endur's staking earns.
+   */
+  readonly strkPerXstrk: bigint;
+  /**
+   * `chain` for xSTRK's own answer; `demo` for the demo fake's fixed DEMO
+   * RATE, which the shell must label as such and never pass off as Endur's.
+   */
+  readonly origin: 'chain' | 'demo';
 }
 
 /** What one unstaking read answers (D-085). */

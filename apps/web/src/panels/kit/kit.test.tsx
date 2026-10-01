@@ -3,7 +3,7 @@ import { act, useState, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COPY } from '../../copy.js';
-import { AmountField, BeforeAfter, DetailRows, FlipButton, InvertibleRate, QuoteTimer, SettingsPopover, TokenSelect, feeReserve, maxAfterReserve } from './index.js';
+import { AmountField, BeforeAfter, DetailRows, FlipButton, InvertibleRate, QuoteTimer, RecipientField, SettingsPopover, TokenSelect, feeReserve, maxAfterReserve } from './index.js';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -273,5 +273,72 @@ describe('QuoteTimer', () => {
     render(<QuoteTimer expiresAt={Date.now() + 20_000} refreshing />);
     expect(container!.textContent).toBe(COPY.kit.refreshing);
     expect(container!.querySelector('.ui-quote-timer-track')).toBeNull();
+  });
+});
+
+/** A RecipientField with its own state, as a panel would hold it. */
+function Recipient(props: Partial<Parameters<typeof RecipientField>[0]>) {
+  const [value, setValue] = useState('');
+  return (
+    <RecipientField
+      label="To"
+      validate={(text) => (/^0x[0-9a-f]+$/i.test(text) ? null : 'Not an address')}
+      readClipboard={null}
+      {...props}
+      value={value}
+      onChange={setValue}
+    />
+  );
+}
+
+describe('RecipientField', () => {
+  it('says nothing while the player types, and checks the format on blur', () => {
+    const view = render(<Recipient />);
+    const input = view.querySelector<HTMLInputElement>('input[name="recipient"]')!;
+    expect(input.placeholder).toBe(COPY.kit.addressPlaceholder);
+    type(input, 'hello');
+    expect(view.querySelector('.ui-amount-message')!.textContent).toBe('');
+    act(() => {
+      input.focus();
+      input.blur();
+    });
+    expect(view.querySelector('.ui-amount-message')!.textContent).toBe('Not an address');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    // An edit clears the message until the next check.
+    type(input, '0x12');
+    expect(view.querySelector('.ui-amount-message')!.textContent).toBe('');
+  });
+
+  it('trims what it checks, so a pasted space is not an error', () => {
+    const view = render(<Recipient />);
+    const input = view.querySelector<HTMLInputElement>('input[name="recipient"]')!;
+    type(input, '  0xabc  ');
+    act(() => {
+      input.focus();
+      input.blur();
+    });
+    expect(input.value).toBe('0xabc');
+    expect(view.querySelector('.ui-amount-message')!.textContent).toBe('');
+  });
+
+  it('offers Paste only with a clipboard, fills the field and checks it at once', async () => {
+    expect(render(<Recipient />).querySelectorAll('button')).toHaveLength(0);
+    act(() => root!.unmount());
+    root = null;
+    container!.remove();
+    const view = render(<Recipient readClipboard={async () => ' nope '} />);
+    await act(async () => {
+      button(COPY.kit.pasteLabel).click();
+    });
+    expect(view.querySelector<HTMLInputElement>('input')!.value).toBe('nope');
+    expect(view.querySelector('.ui-amount-message')!.textContent).toBe('Not an address');
+  });
+
+  it('ignores a refused clipboard', async () => {
+    const view = render(<Recipient readClipboard={async () => { throw new Error('denied'); }} />);
+    await act(async () => {
+      button(COPY.kit.pasteLabel).click();
+    });
+    expect(view.querySelector<HTMLInputElement>('input')!.value).toBe('');
   });
 });

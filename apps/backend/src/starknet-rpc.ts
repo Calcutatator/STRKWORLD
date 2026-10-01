@@ -44,9 +44,11 @@ import {
   ENDUR_XSTRK,
   ENDUR_XSTRK_ASSET,
   CLAIM_WITHDRAWAL_SELECTOR,
+  CONVERT_TO_ASSETS_SELECTOR,
   GET_REQUEST_INFO_SELECTOR,
   MAX_ENDUR_CLAIM_DRY_RUNS,
   MAX_ENDUR_REQUESTS,
+  ONE_XSTRK,
   WITHDRAW_QUEUE_EVENT_KEY,
 } from './endur.js';
 
@@ -408,6 +410,22 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
     const payable = new Set(due.filter((_request, index) => dryRuns[index] != null).map((request) => request.requestId));
     const requests = recorded.map((request) => ({ ...request, claimableNow: payable.has(request.requestId) }));
     return { chainTime, strk, xstrk, outstanding, requests, complete };
+  }
+
+  /**
+   * D-091: xSTRK's exchange rate: one pinned `convert_to_assets(10^18)` on
+   * xSTRK at the latest block. A failed, malformed or zero answer fails the
+   * read; nothing about any player is asked or answered.
+   */
+  async getEndurRate(signal?: AbortSignal): Promise<bigint> {
+    const [outcome] = await this.callPinned([{
+      contract: ENDUR_XSTRK,
+      selector: CONVERT_TO_ASSETS_SELECTOR,
+      calldata: [`0x${ONE_XSTRK.toString(16)}`, '0x0'],
+    }], signal);
+    const assets = readU256(outcome, 'xSTRK rate');
+    if (assets === null || assets <= 0n) throw new Error('Starknet RPC could not read the xSTRK rate.');
+    return assets;
   }
 
   /**

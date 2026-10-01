@@ -452,10 +452,25 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       flow: {
         name: 'failed',
         kind: failure.kind,
-        message: COPY.errors[failure.kind],
+        message: settlingRefusal(failure.kind) ? COPY.balance.settling : COPY.errors[failure.kind],
         recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery,
       },
     });
+  }
+
+  /**
+   * D-091: the wallet refused a spend as more than the balance, although the
+   * total it reported covers it and the pool fee. The total counts notes
+   * still maturing (about ten blocks after they arrive), which the wallet
+   * will not spend yet: the funds are settling, not missing.
+   */
+  function settlingRefusal(kind: PrivacyErrorKind): boolean {
+    const state = store.getState();
+    if (kind !== 'insufficient-balance' || state.balance.status !== 'loaded' || state.balance.maturityKnown || !state.pool) {
+      return false;
+    }
+    const spends = state.batch.filter((intent) => intent.kind !== 'shield');
+    return spends.length > 0 && queuedSpend(spends) + state.pool.feeAmount <= state.balance.total;
   }
 
   function discardPrepared(): void {
@@ -481,9 +496,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // a player must not send.
     if (state.mode === 'shield') return null;
     if (state.balance.status !== 'loaded') return null;
-    // The aggregate is not a spendable figure. Offering it as MAX is the
-    // unsafe button D-022 exists to prevent.
-    if (!state.balance.maturityKnown) return null;
+    // D-091 (amending D-022): a wallet that reports one total per token and
+    // no maturity split is taken at that total. The wallet itself refuses a
+    // spend that counts a note still maturing, so a Max can fail but cannot
+    // misspend, and that refusal says the funds are still settling.
+    const held = state.balance.maturityKnown ? state.balance.spendable : state.balance.total;
     const fee = state.pool?.feeAmount;
     // Both fees come out of the same shielded balance, so a maximum that
     // reserves only the pool fee is a button that always fails at prepare.
@@ -493,7 +510,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // empty the visit, so a maximum that ignores the queue is a button that
     // fails the moment anything is waiting in it.
     const spendable =
-      state.balance.spendable - fee - state.quotedGasForNextIntent - queuedSpend(state.batch);
+      held - fee - state.quotedGasForNextIntent - queuedSpend(state.batch);
     return spendable > 0n ? spendable : null;
   }
 
@@ -618,11 +635,6 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           amountText: maxText,
           notice: { tone: 'info', text: COPY.balance.feeReserved },
         }, store.getState().amountText !== maxText);
-        return;
-      }
-      const state = store.getState();
-      if (state.balance.status === 'loaded' && !state.balance.maturityKnown) {
-        notice('info', COPY.balance.maturityUnknown);
         return;
       }
       notice('info', COPY.balance.costUnknown);

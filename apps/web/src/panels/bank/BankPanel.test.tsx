@@ -283,7 +283,13 @@ describe('BankPanel rendering', () => {
 
     const empty = render(panel, seam, 'menu');
     expect(empty).toContain(COPY.postOffice.oneAtATime);
-    expect(empty).toContain(COPY.gameMode.reviewAction);
+    expect(empty).toContain(COPY.bank.enterRecipient);
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    // Filled in, the button reviews one send, never "add to this visit".
+    expect(render(panel, seam, 'menu')).toContain(COPY.gameMode.reviewAction);
+    panel.setRecipient('');
+    panel.setAmount('');
     expect(empty).not.toContain(COPY.batch.add);
     expect(empty).not.toContain(COPY.batch.empty);
     expect(empty).not.toContain(COPY.batch.why);
@@ -573,6 +579,46 @@ describe('BankPanel rendering', () => {
     const markup = render(panel, seam);
     expect(markup).toContain('name="amount"');
     expect(markup).not.toContain(`>${COPY.bank.max}<`);
+  });
+
+  it('shows the pool fee on every control, and the private balance on the field of each that spends it (D-091)', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await panel.refreshBalance();
+
+    // Shielding spends public STRK the Bank cannot see: no balance on its field,
+    // the private figure stays in the card, and its disclosure stays in the header.
+    const shield = render(panel, seam);
+    expect(shield).toContain(SHIELD_DISCLOSURE);
+    expect(shield).toContain('class="balance-total"');
+    expect(shield).not.toContain('ui-amount-balance');
+    expect(shield).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
+
+    for (const mode of ['unshield', 'transfer', 'stake'] as const) {
+      panel.setMode(mode);
+      const markup = render(panel, seam);
+      expect(markup, mode).toContain(`<span class="ui-amount-balance">${COPY.kit.poolBalance}: <span class="ui-figure">100 STRK</span></span>`);
+      expect(markup, mode).not.toContain('class="balance-total"');
+      expect(markup, mode).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
+      // Swap conventions stay at the Exchange.
+      expect(markup, mode).not.toContain(COPY.kit.half);
+      expect(markup, mode).not.toContain('Slippage');
+    }
+  });
+
+  it('says an amount over the read balance is too much, inline and on the button', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setMode('unshield');
+    await panel.refreshBalance();
+    panel.setRecipient(BOB);
+    panel.setAmount('101');
+
+    const markup = render(panel, seam);
+    expect(markup).toContain(COPY.kit.exceedsBalance);
+    expect(markup).toMatch(new RegExp(`<button type="submit" disabled="">${COPY.kit.insufficient.replace('{symbol}', 'STRK')}</button>`));
   });
 
   it('states review figures exactly', async () => {

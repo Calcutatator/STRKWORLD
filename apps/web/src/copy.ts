@@ -161,8 +161,11 @@ export const COPY = freezeCopy({
     refreshAgain: 'Read it again',
     changed:
       'Your balance has changed. Read it again whenever you want the new figure — STRKWORLD will not ask your wallet on its own.',
+    /** D-091: the shipped wallet's one total per token, which Max now uses. */
     maturityUnknown:
-      'Your wallet reports one total and decides for itself which notes are old enough to spend, so there is no maximum to fill in here.',
+      'Your wallet reports one total, which can include funds you just added that are still settling for a few seconds.',
+    /** D-091: the wallet refused a spend the reported total covers: a note is still maturing. */
+    settling: 'Funds you just added are still settling; try again in a few seconds.',
     costUnknown:
       'The network cost depends on how much you queue, comes out of the same balance, and is only known once a visit of this shape has been costed. Review this visit once and the maximum appears.',
     maturing: 'Some of this is still maturing and cannot be spent yet.',
@@ -212,6 +215,9 @@ export const COPY = freezeCopy({
     amount: 'Amount',
     recipient: 'To',
     max: 'Max',
+    /** D-091: the send's primary button before it has a recipient. */
+    enterRecipient: 'Enter a recipient',
+    checkRecipient: 'Check the address',
     poolFee: 'Pool fee',
     poolFeeNote: 'Read live from the pool. It is a governance setting and has moved before.',
     networkCost: 'Network cost',
@@ -281,9 +287,21 @@ export const COPY = freezeCopy({
   stake: {
     eyebrow: 'Liquid staking with Endur',
     intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
-    /** D-085: unstaking is now a counter of its own, below the stake form. */
+    /** D-085: unstaking is a counter of its own; D-091 puts it behind the Unstake tab. */
     unstaking:
-      "To unstake, use the unstaking counter below. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
+      "To unstake, use the Unstake tab. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
+    /** D-091: the counter's two tabs, as Endur's own app names them. */
+    tabStake: 'Stake',
+    tabUnstake: 'Unstake',
+    tabsLabel: 'Stake or unstake',
+    /** D-091: the preview rows. Estimates at xSTRK's live rate, never shown at review. */
+    willReceive: 'You will receive',
+    exchangeRate: 'Exchange rate',
+    rateLine: '1 xSTRK = {rate} STRK',
+    rateLoading: 'Reading the rate…',
+    rateUnavailable: 'Unavailable right now',
+    /** The demo fake's fixed rate, said to be one. */
+    demoRate: "Demo rate, not Endur's.",
     oneAtATime: 'This counter prepares and confirms one stake at a time.',
     youStake: 'You stake',
     youReceive: 'You receive',
@@ -307,6 +325,9 @@ export const COPY = freezeCopy({
       "Send xSTRK from your pool balance into Endur's withdrawal queue. The request waits on a stand-in address: anyone can look it up, but it is not linked to your wallet. When Endur releases the STRK, claim it and it returns to your pool balance.",
     wait: "Endur's queue holds the STRK for about seven days, sometimes longer while Endur gathers it. Endur often pays a ready request to the stand-in address on its own; claiming then just moves it into your pool balance.",
     amount: 'xSTRK to unstake',
+    /** D-091: the preview row for Endur's wait, measured on chain (D-085). */
+    waitingTime: 'Waiting time',
+    waitValue: 'About 7 days',
     request: 'Review unstake request',
     readRequests: 'Show my unstaking requests',
     readAgain: 'Read my requests again',
@@ -684,6 +705,13 @@ export const COPY = freezeCopy({
     recipient: 'Recipient',
     refundAddress: 'Refund address',
     expected: 'Expected STRK',
+    /** D-091: the quote's rows, as wallets and bridges name them. */
+    willReceive: 'You will receive',
+    estTime: 'Est. time',
+    estTimeNote: 'Once your deposit confirms on its own chain.',
+    estMinutes: '~{minutes} min',
+    estUnderMinute: 'Under a minute',
+    status: 'Status',
     minimum: 'Minimum STRK',
     deadline: 'Quote deadline',
     depositAddress: 'Deposit address',
@@ -964,6 +992,9 @@ export const COPY = freezeCopy({
     invert: 'Show the inverse rate',
     refreshIn: 'Quote refreshes in {seconds}s',
     refreshing: 'Refreshing quote…',
+    paste: 'Paste',
+    pasteLabel: 'Paste an address',
+    addressPlaceholder: 'Enter address',
   },
 
   submissionUncertainty: {

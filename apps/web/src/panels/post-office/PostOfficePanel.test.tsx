@@ -33,7 +33,7 @@ describe('Post Office Menu Mode', () => {
   it('composes one send at a time — one recipient per send (D-065)', () => {
     const markup = render(<PostOfficePanel onClose={() => {}} />);
     expect(markup).toContain(COPY.postOffice.oneAtATime);
-    expect(markup).toContain(COPY.gameMode.reviewAction);
+    expect(markup).toContain(COPY.bank.enterRecipient);
     // D-040's visit vocabulary would promise several sends settling together.
     expect(markup).not.toContain(COPY.batch.add);
     expect(markup).not.toContain(COPY.batch.empty);
