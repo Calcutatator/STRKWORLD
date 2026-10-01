@@ -1011,6 +1011,15 @@ function buildTorso(look: AvatarLook, d: BuildDims): BufferGeometry {
       case 'cloak':
         addCloak(b, item.color, outfit, d);
         break;
+      case 'collar':
+        addCollar(b, item.color, d);
+        break;
+      case 'quiver':
+        addQuiver(b, item.color, item.fletching, outfit, d);
+        break;
+      case 'sheath':
+        addSheath(b, item.color, item.hilt, d);
+        break;
       case 'pauldrons':
       {
         // Caps over the arm tops. Where they reach in under the head they sit
@@ -1093,22 +1102,38 @@ function addCoat(b: PartBuilder, coat: CoatGear, inner: number, d: BuildDims): v
     });
     return;
   }
-  // Knee coats: back and side tails only, so the legs stride through the open front.
+  // Knee and long coats: back and side tails only, so the legs stride through
+  // the open front. A long coat's tails reach the calf, so they hang further
+  // back and out, clear of the heels and hands at a sprint.
   b.tag('coat-tail');
-  const length = legLength * 0.55;
+  const long = coat.length === 'long';
+  const length = legLength * (long ? COAT_LONG_TAIL : 0.55);
   b.box({
     size: [shellWidth, length, 0.04],
     color: coat.color,
-    ...hang([0, 0.03, -shellDepth / 2 + 0.02], length, [0.35, 0, 0]),
+    ...hang([0, 0.03, -shellDepth / 2 + 0.02], length, [long ? COAT_LONG_BACK_TILT : 0.35, 0, 0]),
   });
   for (const s of SIDES) {
     b.box({
       size: [0.04, length, shellDepth - 0.02],
       color: coat.color,
-      ...hang([s * (shellWidth / 2 - 0.02), 0.03, 0], length, [0, 0, s * 0.12]),
+      ...hang([s * (shellWidth / 2 - 0.02), 0.03, 0], length, [0, 0, s * (long ? COAT_LONG_SIDE_FLARE : 0.12)]),
+    });
+  }
+  if (long) {
+    // A trim band across the back tail's hem.
+    b.box({
+      size: [shellWidth + 0.01, 0.035, 0.05],
+      color: coat.trim,
+      ...hang([0, 0.03, -shellDepth / 2 + 0.02], length * 2 - 0.035, [COAT_LONG_BACK_TILT, 0, 0]),
     });
   }
 }
+
+/** A long coat's tails, against the leg's length, and how far they hang back and out. */
+const COAT_LONG_TAIL = 0.8;
+const COAT_LONG_BACK_TILT = 0.55;
+const COAT_LONG_SIDE_FLARE = 0.16;
 
 function addBelt(
   b: PartBuilder,
@@ -1120,7 +1145,7 @@ function addBelt(
   const { torsoWidth, torsoDepth } = d;
   b.tag('belt');
   const y = 0.075;
-  if (coat?.length === 'knee') {
+  if (coat && coat.length !== 'ankle') {
     // Worn under an open coat: only the front opening shows it.
     const z = (torsoDepth + 0.04) / 2;
     b.box({ size: [coatOpening(coat, d), 0.06, 0.024], at: [0, y, z + 0.003], color });
@@ -1284,6 +1309,59 @@ function addCloak(b: PartBuilder, color: number, outfit: AvatarOutfit, d: BuildD
   });
 }
 
+/**
+ * A standing collar: like the fur collar, the head sits a little into its top,
+ * but it is cloth, crisper at the corners.
+ */
+function addCollar(b: PartBuilder, color: number, d: BuildDims): void {
+  const { torsoWidth, torsoDepth, torsoHeight } = d;
+  const back = -(torsoDepth / 2 + 0.08);
+  const front = torsoDepth / 2 + 0.06;
+  b.tag('collar', NECK_SOCKET);
+  b.box({
+    size: [torsoWidth * 0.92, 0.15, front - back],
+    at: [0, torsoHeight + 0.02 - 0.075, (front + back) / 2],
+    color,
+    chamfer: 0.045,
+  });
+}
+
+/**
+ * A quiver slung across the back, its fletching below the head's overhang and
+ * between the arms, behind a mantle's drape if one is worn.
+ */
+function addQuiver(b: PartBuilder, color: number, fletching: number, outfit: AvatarOutfit, d: BuildDims): void {
+  const { torsoWidth, torsoDepth, torsoHeight } = d;
+  const behind = findGear(outfit, 'mantle') ? 0.07 : 0.01;
+  const tube = torsoHeight * 0.66;
+  b.tag('quiver');
+  b.push([torsoWidth * 0.08, torsoHeight * 0.4, -(torsoDepth / 2 + behind + 0.05)], [0, 0, 0.5]);
+  b.box({ size: [0.11, tube, 0.09], at: [0, 0, 0], color });
+  b.box({ size: [0.13, 0.035, 0.11], at: [0, tube / 2 - 0.01, 0], color: fletching });
+  b.box({ size: [0.085, 0.06, 0.06], at: [0, tube / 2 + 0.035, 0], color: fletching, taper: [0.7, 0.4] });
+  b.pop();
+}
+
+/**
+ * A scabbarded sword on the left hip, hung from the belt and angled steeply
+ * back, so the thigh swings in front of it and the heel below it.
+ */
+function addSheath(b: PartBuilder, color: number, hilt: number, d: BuildDims): void {
+  const { torsoWidth, torsoDepth } = d;
+  b.tag('sheath');
+  b.push([torsoWidth * 0.36, 0.08, -(torsoDepth / 2 + 0.02)], [SHEATH_TILT, 0, 0]);
+  const length = 0.36;
+  b.box({ size: [0.05, length, 0.035], at: [0, -length / 2, 0], color });
+  b.box({ size: [0.06, 0.04, 0.045], at: [0, -length + 0.02, 0], color: hilt });
+  // The hilt rises forward out of the scabbard's mouth, into the hip.
+  b.box({ size: [0.11, 0.03, 0.05], at: [0, 0.01, 0], color: hilt });
+  b.box({ size: [0.04, 0.1, 0.04], at: [0, 0.07, 0], color: hilt });
+  b.pop();
+}
+
+/** How far the sheath leans back from upright. */
+const SHEATH_TILT = 0.95;
+
 function addBreastplate(
   b: PartBuilder,
   color: number,
@@ -1356,13 +1434,22 @@ function buildArm(look: AvatarLook, d: BuildDims, side: Side): BufferGeometry {
     taper: [0.9, 0.5],
   });
   const handScale = gloved ? 1.06 : 0.92;
+  // Fingerless gloves stop short of the fist's end, where the fingers show.
+  const fingers = gloved && findGear(outfit, 'fingerless') ? FINGERS : 0;
   b.tag('hand');
   b.box({
-    size: [armWidth * handScale, lower, armDepth * handScale],
-    at: [0, -upper - lower / 2, 0],
+    size: [armWidth * handScale, lower - fingers, armDepth * handScale],
+    at: [0, -upper - (lower - fingers) / 2, 0],
     color: outfit.gloves ?? character.skin,
     chamfer: 0.015,
   });
+  if (fingers > 0) {
+    b.box({
+      size: [armWidth * 0.94, fingers, armDepth * 0.94],
+      at: [0, -armLength + fingers / 2, 0],
+      color: character.skin,
+    });
+  }
   const coat = findGear(outfit, 'coat');
   if (coat) {
     b.tag('cuff');
@@ -1381,6 +1468,9 @@ function buildArm(look: AvatarLook, d: BuildDims, side: Side): BufferGeometry {
   }
   return b.build();
 }
+
+/** How much of a fingerless glove's fist is bare fingers. */
+const FINGERS = 0.05;
 
 /** Carried facing forward in front of the left forearm, clear of the chest plate. */
 function addShield(
@@ -1485,6 +1575,55 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
       b.pop();
       break;
     }
+    case 'dagger':
+      // Held like the sword, point down and leaning out, half its length.
+      b.push(grip, [-0.5, 0, -0.7], scale);
+      b.box({ size: [0.04, 0.09, 0.04], at: [0, -0.005, 0], color: weapon.hilt });
+      b.box({ size: [0.11, 0.03, 0.05], at: [0, -0.06, 0], color: weapon.hilt });
+      b.box({ size: [0.06, 0.17, 0.02], at: [0, -0.16, 0], color: weapon.blade });
+      b.box({
+        size: [0.06, 0.07, 0.02],
+        at: [0, -0.28, 0],
+        rotation: [0, 0, Math.PI],
+        taper: [0.12, 1],
+        color: weapon.blade,
+      });
+      b.pop();
+      break;
+    case 'bow': {
+      // Upright at the side, its limbs bending out away from the body and the
+      // string on the inside, short enough that the lower tip clears the ground.
+      b.push(grip, [0, 0, 0], scale);
+      b.box({ size: [0.05, 0.13, 0.05], at: [0, 0, 0], color: weapon.grip });
+      for (const s of SIDES) {
+        const limb = 0.22;
+        const bend = 0.32;
+        b.push([0, s * 0.055, 0], [0, 0, s * bend]);
+        b.box({ size: [0.05, limb, 0.045], at: [0, s * limb / 2, 0], color: weapon.wood });
+        b.box({
+          size: [0.04, 0.06, 0.04],
+          at: [0.008, s * (limb + 0.02), 0],
+          rotation: [0, 0, -s * 0.5],
+          color: weapon.wood,
+        });
+        b.pop();
+      }
+      const reach = 0.055 + 0.22 * Math.cos(0.32) + 0.04;
+      b.box({ size: [0.012, 2 * reach, 0.012], at: [0.02, 0, 0], color: weapon.string });
+      b.pop();
+      break;
+    }
+    case 'hammer':
+      // A two-handed war hammer carried in one fist, head up and leaning out.
+      // Leaning well out, so the haft clears a pauldron as the arm swings.
+      b.push(grip, [0.2, 0, 0.9], scale * 1.15);
+      b.box({ size: [0.05, 0.62, 0.05], at: [0, 0.2, 0], color: weapon.handle, chamfer: 0.01 });
+      b.box({ size: [0.24, 0.12, 0.12], at: [0, 0.56, 0], color: weapon.head });
+      for (const x of [-0.13, 0.13]) {
+        b.box({ size: [0.03, 0.14, 0.14], at: [x, 0.56, 0], color: weapon.face });
+      }
+      b.pop();
+      break;
     case 'halberd':
       b.push(grip, [0.08, 0, 0.25], scale);
       b.box({ size: [0.055, 1.02, 0.055], at: [0, 0.21, 0], color: weapon.shaft, chamfer: 0.012 });
@@ -1531,6 +1670,24 @@ function buildLeg(look: AvatarLook, d: BuildDims): BufferGeometry {
     color: outfit.boots,
     chamfer: 0.02,
   });
+  const greaves = findGear(outfit, 'greaves');
+  if (greaves) {
+    // Over the shin from the boot to below the knee, with a knee cop in front.
+    const shin = legLength - bootHeight - 0.02;
+    // Low enough that a thigh swung forward at a sprint keeps it below the hip band.
+    const height = shin * 0.48;
+    b.tag('greave');
+    b.box({
+      size: [legWidth + 0.026, height, legDepth + 0.026],
+      at: [0, -legLength + bootHeight + height / 2 - 0.01, 0.004],
+      color: greaves.color,
+    });
+    b.box({
+      size: [legWidth * 0.75, 0.05, 0.026],
+      at: [0, -legLength + bootHeight + height - 0.02, legDepth / 2 + 0.022],
+      color: greaves.trim,
+    });
+  }
   const wraps = findGear(outfit, 'wraps');
   if (wraps) {
     b.box({
@@ -1741,7 +1898,7 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     swingLeft = findGear(look.outfit, 'shield') ? STEADY_ARM_SWING : 1;
     swingRight = weapon === null
       ? 1
-      : weapon.kind === 'staff' || weapon.kind === 'halberd'
+      : weapon.kind === 'staff' || weapon.kind === 'halberd' || weapon.kind === 'bow'
         ? STEADY_ARM_SWING
         : WEAPON_ARM_SWING;
   };

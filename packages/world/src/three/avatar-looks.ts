@@ -85,8 +85,8 @@ export type AvatarGear =
       readonly kind: 'coat';
       readonly color: number;
       readonly trim: number;
-      /** Knee coats are open at the front; ankle robes are closed bells. */
-      readonly length: 'knee' | 'ankle';
+      /** Knee and long (calf) coats are open at the front; ankle robes are closed bells. */
+      readonly length: 'knee' | 'long' | 'ankle';
     }
   | { readonly kind: 'furCollar'; readonly color: number }
   | { readonly kind: 'cloak'; readonly color: number }
@@ -98,7 +98,21 @@ export type AvatarGear =
       readonly coverage: 'full' | 'upper';
     }
   | { readonly kind: 'hornedHelmet'; readonly color: number; readonly horn: number }
-  | { readonly kind: 'shield'; readonly face: number; readonly emblem: number; readonly rim: number };
+  | { readonly kind: 'shield'; readonly face: number; readonly emblem: number; readonly rim: number }
+  /** A standing collar round the neck, under the chin. */
+  | { readonly kind: 'collar'; readonly color: number }
+  /** The gloves stop at the knuckles, so the fingers show. */
+  | { readonly kind: 'fingerless' }
+  /**
+   * Plate over the shins, above the boots, with a knee cop. Standard builds
+   * only: a small build's shin is too short for it, and a large build's
+   * sprinting thigh lifts its front into the hip band (D-096).
+   */
+  | { readonly kind: 'greaves'; readonly color: number; readonly trim: number }
+  /** Arrows on the back, kept below the head. */
+  | { readonly kind: 'quiver'; readonly color: number; readonly fletching: number }
+  /** A scabbarded sword hung from the belt on the left hip, angled back. */
+  | { readonly kind: 'sheath'; readonly color: number; readonly hilt: number };
 
 /** The fighting states' one visible weapon set, held in the right hand. */
 export type AvatarWeapon =
@@ -112,7 +126,10 @@ export type AvatarWeapon =
   | { readonly kind: 'crossbow'; readonly stock: number; readonly limbs: number; readonly string: number }
   | { readonly kind: 'mace'; readonly head: number; readonly handle: number }
   | { readonly kind: 'staff'; readonly shaft: number; readonly ring: number; readonly orb: number }
-  | { readonly kind: 'halberd'; readonly blade: number; readonly shaft: number };
+  | { readonly kind: 'halberd'; readonly blade: number; readonly shaft: number }
+  | { readonly kind: 'dagger'; readonly blade: number; readonly hilt: number }
+  | { readonly kind: 'bow'; readonly wood: number; readonly grip: number; readonly string: number }
+  | { readonly kind: 'hammer'; readonly head: number; readonly face: number; readonly handle: number };
 
 export interface AvatarOutfit {
   /** The torso garment (or what shows in an open coat's front). */
@@ -200,8 +217,10 @@ const CHARACTER_8: AvatarCharacter = {
   hair: { style: 'shaggy', color: 0x25498e },
 };
 
-// Outfits. Fighting states keep the cosy palette (README: "Cosy and fighting
-// states preserve each character's hair and clothing palette") and add gear.
+// Outfits. Each fighting state is a change of clothes as well as a weapon:
+// fantasy-MMO adventurer gear, one archetype per character, that keeps the
+// character's face, hair and skin and carries its signature colours as
+// accents (D-096).
 
 const COSY_1: AvatarOutfit = {
   top: 0x0a5663,
@@ -307,22 +326,66 @@ const COSY_8: AvatarOutfit = {
   weapon: null,
 };
 
+// Swordsman: a long charcoal battle coat with a high collar and teal trim
+// (the scarf's teal), fingerless gloves, steel greaves, a sheathed spare on
+// the hip and a sword in hand.
 const FIGHTING_1: AvatarOutfit = {
-  ...COSY_1,
-  gear: [...COSY_1.gear, { kind: 'pauldrons', color: 0x9b5413 }],
-  weapon: { kind: 'sword', blade: 0xe2dcc4, hilt: 0x9b5413 },
+  top: 0x0a4652,
+  sleeves: 0x2a2f36,
+  gloves: 0x3b2a1c,
+  trousers: 0x23272c,
+  boots: 0x3d3328,
+  belt: { color: 0x3b2414, buckle: 0xc9ced4 },
+  gear: [
+    { kind: 'coat', color: 0x2a2f36, trim: 0x13909e, length: 'long' },
+    { kind: 'collar', color: 0x2a2f36 },
+    { kind: 'fingerless' },
+    { kind: 'greaves', color: 0x7b828a, trim: 0x13909e },
+    { kind: 'sheath', color: 0x1d2126, hilt: 0x13909e },
+  ],
+  weapon: { kind: 'sword', blade: 0xdfe4e8, hilt: 0x13909e },
 };
 
+// Rogue: the cat girl in a sleeveless slate scouting jerkin. Her olive turns
+// into a high cowl, orange straps cross her chest, the arms are bare to long
+// fingerless gauntlets, and she carries a dagger. Goggles, ears and tail stay.
 const FIGHTING_2: AvatarOutfit = {
-  ...COSY_2,
-  weapon: { kind: 'wrench', size: 'hand', head: 0xa8a36c, handle: 0xe8962e },
+  top: 0x2b3d45,
+  sleeves: null,
+  gloves: 0x4a2a14,
+  trousers: 0x23272b,
+  boots: 0x2a1a0e,
+  belt: { color: 0x5a3416, buckle: 0xaca464 },
+  gear: [
+    { kind: 'goggles', frame: 0x8a5a1c, lens: 0xa3a060 },
+    { kind: 'collar', color: 0x676034 },
+    { kind: 'harness', color: 0xb0561c, buckle: 0xaca464 },
+    { kind: 'fingerless' },
+  ],
+  weapon: { kind: 'dagger', blade: 0xd9dde0, hilt: 0xd9500b },
 };
 
+// Archer: a moss-green hood and hooded cape over a leather jerkin, cream
+// sleeves (the ranger's cream), fingerless bracers, a quiver on the back and
+// a longbow.
 const FIGHTING_3: AvatarOutfit = {
-  ...COSY_3,
-  weapon: { kind: 'crossbow', stock: 0xa0621a, limbs: 0x5a4520, string: 0xe8d9b0 },
+  top: 0x6b4424,
+  sleeves: 0xf2d49e,
+  gloves: 0x5a3410,
+  trousers: 0x263224,
+  boots: 0x5a3008,
+  belt: { color: 0x4a2a0a, buckle: 0xd28d37 },
+  gear: [
+    { kind: 'hood', color: 0x3b6a45 },
+    { kind: 'mantle', color: 0x3b6a45 },
+    { kind: 'fingerless' },
+    { kind: 'quiver', color: 0x7a4a14, fletching: 0xf3dcaa },
+  ],
+  weapon: { kind: 'bow', wood: 0xb47a2e, grip: 0x4a2a10, string: 0xf3e6c4 },
 };
 
+// Guardian (a change of clothes already, unchanged): steel plate with gold
+// trim, the fur collar kept, kite shield and flanged mace.
 const FIGHTING_4: AvatarOutfit = {
   top: 0x5a6068,
   sleeves: 0x5f656c,
@@ -339,16 +402,43 @@ const FIGHTING_4: AvatarOutfit = {
   weapon: { kind: 'mace', head: 0x7b7665, handle: 0x6a3d0e },
 };
 
+// Mage: a midnight-indigo robe with her gold as trim, a high cream collar
+// and long cream gloves (the scholar's cream), and a crystal-orb staff.
 const FIGHTING_5: AvatarOutfit = {
-  ...COSY_5,
-  weapon: { kind: 'staff', shaft: 0x8a4c0c, ring: 0xd88c12, orb: 0x3d6150 },
+  top: 0xf0cd8a,
+  sleeves: 0x30336a,
+  gloves: 0xf0cd8a,
+  trousers: 0x23203a,
+  boots: 0x3a2a4a,
+  belt: { color: 0xb8721c, buckle: 0xf3c24a },
+  gear: [
+    { kind: 'coat', color: 0x30336a, trim: 0xe59108, length: 'ankle' },
+    { kind: 'collar', color: 0xf0cd8a },
+  ],
+  weapon: { kind: 'staff', shaft: 0x4a2c14, ring: 0xe59108, orb: 0x6cc4e0 },
 };
 
+// Smith-warrior: the mechanic in a steel cuirass trimmed in her orange, copper
+// pauldrons over her teal (the belt's teal, now the tunic), fingerless gloves, steel-capped
+// boots (her legs are too short for greaves), her goggles, and a war hammer.
 const FIGHTING_6: AvatarOutfit = {
-  ...COSY_6,
-  weapon: { kind: 'wrench', size: 'giant', head: 0x56554a, handle: 0xc0702a },
+  top: 0x1e4a56,
+  sleeves: 0x1e4a56,
+  gloves: 0x5a300c,
+  trousers: 0x2a2c32,
+  boots: 0x7d8288,
+  belt: { color: 0x3b2410, buckle: 0xd8b55f },
+  gear: [
+    { kind: 'goggles', frame: 0xb0701c, lens: 0x22505c },
+    { kind: 'breastplate', color: 0x9aa1a8, trim: 0xde7f22, coverage: 'full' },
+    { kind: 'pauldrons', color: 0xc0662a },
+    { kind: 'fingerless' },
+  ],
+  weapon: { kind: 'hammer', head: 0x6a6e72, face: 0xde7f22, handle: 0x6a3d0e },
 };
 
+// Berserker (a change of clothes already, unchanged): horned bronze helm,
+// bronze plate and pauldrons, mossy cape, halberd.
 const FIGHTING_7: AvatarOutfit = {
   top: 0x96581a,
   sleeves: 0x96581a,
@@ -365,11 +455,20 @@ const FIGHTING_7: AvatarOutfit = {
   weapon: { kind: 'halberd', blade: 0xe3d6a8, shaft: 0x7a4a12 },
 };
 
+// Guild knight: a white uniform coat with gold trim over navy (the duellist's
+// navy), a steel chest plate and pauldrons, steel greaves and a longsword.
 const FIGHTING_8: AvatarOutfit = {
-  ...COSY_8,
+  top: 0x1f4586,
+  sleeves: 0xeceef0,
+  gloves: 0x1f3a6e,
+  trousers: 0x26324a,
+  boots: 0xd8dce0,
+  belt: { color: 0x1f3a6e, buckle: 0xd09a3a },
   gear: [
-    ...COSY_8.gear,
-    { kind: 'breastplate', color: 0xe2a335, trim: 0xf0d08a, coverage: 'upper' },
+    { kind: 'coat', color: 0xeceef0, trim: 0xd09a3a, length: 'knee' },
+    { kind: 'breastplate', color: 0xb4bcc6, trim: 0xd09a3a, coverage: 'upper' },
+    { kind: 'pauldrons', color: 0xb4bcc6 },
+    { kind: 'greaves', color: 0xb4bcc6, trim: 0xd09a3a },
   ],
   weapon: { kind: 'sword', blade: 0xd4dae2, hilt: 0xd39a2e },
 };
@@ -409,21 +508,21 @@ export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepF
   'avatar-7': look('avatar-7', 'cosy', CHARACTER_7, COSY_7),
   // Navy-haired duellist: navy long coat with gold trim over a linen shirt, dark trousers.
   'avatar-8': look('avatar-8', 'cosy', CHARACTER_8, COSY_8),
-  // Character 1 fighting: adds leather pauldrons and a sword.
+  // Character 1 fighting, the swordsman: long charcoal battle coat, high collar, teal trim, greaves, sheath and sword.
   'avatar-9': look('avatar-9', 'fighting', CHARACTER_1, FIGHTING_1),
-  // Character 2 fighting: the cat girl with a hand wrench.
+  // Character 2 fighting, the rogue: the cat girl in dark leathers, olive cowl, crossed straps, gauntlets and a dagger.
   'avatar-10': look('avatar-10', 'fighting', CHARACTER_2, FIGHTING_2),
-  // Character 3 fighting: adds a crossbow.
+  // Character 3 fighting, the archer: moss-green hood and cape, leather jerkin, quiver and longbow.
   'avatar-11': look('avatar-11', 'fighting', CHARACTER_3, FIGHTING_3),
-  // Character 4 fighting: steel plate with gold trim, fur collar kept, kite shield and flanged mace.
+  // Character 4 fighting, the guardian: steel plate with gold trim, fur collar kept, kite shield and flanged mace.
   'avatar-12': look('avatar-12', 'fighting', CHARACTER_4, FIGHTING_4),
-  // Character 5 fighting: adds an orb staff.
+  // Character 5 fighting, the mage: midnight-indigo robe with gold trim, cream high collar and a crystal-orb staff.
   'avatar-13': look('avatar-13', 'fighting', CHARACTER_5, FIGHTING_5),
-  // Character 6 fighting: adds a giant wrench.
+  // Character 6 fighting, the smith-warrior: steel cuirass, copper pauldrons over teal, steel boots, goggles and a war hammer.
   'avatar-14': look('avatar-14', 'fighting', CHARACTER_6, FIGHTING_6),
-  // Character 7 fighting: horned bronze helm, bronze plate and pauldrons, mossy cape, halberd.
+  // Character 7 fighting, the berserker: horned bronze helm, bronze plate and pauldrons, mossy cape, halberd.
   'avatar-15': look('avatar-15', 'fighting', CHARACTER_7, FIGHTING_7),
-  // Character 8 fighting: adds a gold chest plate and a sword.
+  // Character 8 fighting, the guild knight: white gold-trimmed coat over navy, steel plate, pauldrons, greaves and a longsword.
   'avatar-16': look('avatar-16', 'fighting', CHARACTER_8, FIGHTING_8),
 });
 

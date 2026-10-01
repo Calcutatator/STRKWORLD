@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { Box3, Group, Mesh, Vector3, type Material, type Object3D } from 'three';
+import { Box3, Color, Group, Mesh, Vector3, type Material, type Object3D } from 'three';
 import type { AvatarSpriteKey } from '@strkworld/shared';
 import { AVATAR_SPRITE_KEYS } from '../avatar-state.js';
 import {
@@ -95,7 +95,8 @@ describe('avatar figure shape', () => {
       const bounds = new Box3().setFromObject(mesh(createAvatarFigure(key), 'avatar-torso'));
       return bounds.max.x - bounds.min.x;
     };
-    expect(torsoWidth('avatar-14')).toBeLessThan(torsoWidth('avatar-2'));
+    // Everyday small against standard: the small fighting look's pauldrons stand wider (D-096).
+    expect(torsoWidth('avatar-6')).toBeLessThan(torsoWidth('avatar-2'));
     expect(torsoWidth('avatar-2')).toBeLessThan(torsoWidth('avatar-12'));
   });
 
@@ -201,6 +202,39 @@ describe('avatar figure shape', () => {
     for (const key of AVATAR_SPRITE_KEYS.filter((k) => k !== 'avatar-2' && k !== 'avatar-10')) {
       expect(tags(key, 'avatar-head'), key).not.toContain('ears');
       expect(tags(key, 'avatar-torso'), key).not.toContain('tail');
+    }
+  });
+
+  it('builds the battle outfits’ gear on the parts that carry it (D-096)', () => {
+    const tags = (key: AvatarSpriteKey, name: string): string[] =>
+      avatarPartBoxes(mesh(createAvatarFigure(key), name).geometry).map((box) => box.tag);
+    // The swordsman: high collar and sheath on the torso, greaves on the legs, sword in hand.
+    expect(tags('avatar-9', 'avatar-torso')).toEqual(expect.arrayContaining(['collar', 'sheath', 'coat-tail']));
+    expect(tags('avatar-9', 'avatar-leg-left')).toContain('greave');
+    expect(tags('avatar-9', 'avatar-arm-right')).toContain('sword');
+    expect(tags('avatar-10', 'avatar-arm-right')).toContain('dagger');
+    expect(tags('avatar-11', 'avatar-torso')).toContain('quiver');
+    expect(tags('avatar-11', 'avatar-arm-right')).toContain('bow');
+    expect(tags('avatar-14', 'avatar-arm-right')).toContain('hammer');
+    expect(tags('avatar-16', 'avatar-leg-right')).toContain('greave');
+    // Fingerless gloves show the fingers: a skin box at the end of each fist.
+    const skin = avatarLook('avatar-9').character.skin;
+    const arm = mesh(createAvatarFigure('avatar-9'), 'avatar-arm-left').geometry;
+    const hands = avatarPartBoxes(arm).filter((box) => box.tag === 'hand');
+    expect(hands).toHaveLength(2);
+    const colours = arm.getAttribute('color');
+    const fingers = hands[1]!.first * 3;
+    const expected = new Color(skin);
+    expect([colours.getX(fingers), colours.getY(fingers), colours.getZ(fingers)]).toEqual([
+      expect.closeTo(expected.r, 5),
+      expect.closeTo(expected.g, 5),
+      expect.closeTo(expected.b, 5),
+    ]);
+    // Every cosy look is untouched: none of the new gear is worn day to day.
+    for (const key of AVATAR_SPRITE_KEYS.slice(0, 8)) {
+      for (const name of ['avatar-torso', 'avatar-leg-left', 'avatar-arm-left']) {
+        for (const tag of ['collar', 'sheath', 'quiver', 'greave']) expect(tags(key, name), key).not.toContain(tag);
+      }
     }
   });
 

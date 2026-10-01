@@ -259,6 +259,19 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Four fighting looks were only a weapon; every one is now a change of clothes, and the chibi head decides what reads (D-096)
+
+The owner's "only a few of the characters in the fighting stances change clothes" was right: `avatar-10`, `11`, `13` and `14` were the everyday outfit plus a weapon (`...COSY_N`), and `avatar-9` and `16` added one piece to the same clothes. All six are new outfits, SAO-inspired archetypes; `avatar-12` and `15` already changed and are kept. Traps met on the way:
+
+- **The head hides the chest.** The chibi head is wider and deeper than the torso, so at the street camera's 28° almost nothing between the shoulders and the chin shows from the front, and from behind a hood hides the whole back: the archer's quiver shows only from the side. What reads is the torso's colour block, the arms, the legs and the weapon. A real change means new garment colours (the test asks for at least three of top, sleeves, gloves, trousers, boots), not just pieces at the neck.
+- **Anything on the back must stay below the head's overhang** (`torsoHeight`, less a margin for the nod), or the head swings through it: a quiver's fletching or a sword hilt over the shoulder cannot rise above the chin line.
+- **Greaves fit only the standard build.** A thigh swung forward at a sprint lifts the greave's front-top corner; on a large build it rises 0.023 into the hip band's front, and a small build's shin is too short to carry one. Steel boots stand in for them.
+- **A weapon in a pauldroned arm leans out or goes through the pauldron.** The weapon is part of the arm group, so the pauldron (a socket that holds the arm) lets it in but not out through its outer face; the hammer's haft did, at every lean below 0.85. It leans 0.9.
+- **The cat girl has the least room.** Ears, face marks, tail and goggles are 316 of her 1,100 triangles; her rogue outfit is 1,088, so it is colour, straps, a collar and a dagger. A chamfered box costs 28 triangles, a plain one 12: new gear uses plain boxes.
+- **Everyday looks are checked geometry for geometry.** Hashing every cosy look's positions, normals, colours, box records and pivots before and after proved them unchanged, so the walker strip (D-058) did not move and needs no regeneration.
+
+*Verified:* `avatar-looks.test.ts` (every pair changes at least three garment colours and its gear; no two fighting looks share gear and weapon kinds), `avatar-figure.test.ts` (the new gear's boxes on the right parts, fingerless gloves end in skin, no new gear on an everyday look; 7 meshes and at most 1,100 triangles for all sixteen), `tools/avatar-clipping.test.ts` (no finding in any look over 36 poses and every view) and `tools/avatar-walker.test.ts` (strip unchanged). Before and after renders were made with `createFigureRenderer`.
+
 ### 2026-10-01 — Avatar clipping is a seam the camera can see; the green woodsman's hair came out through his helmet (D-095)
 
 The lead's "the green character's outfit clips when switching his mode" is the F toggle (D-053) to `avatar-15`: his mop hair, built to the crown as for a bare head, stood 0.15 units outside the horned helmet's tapered dome. `packages/world/tools/avatar-clipping.ts` now checks every look in every pose, and found more clips in all sixteen looks, mostly at a sprint. Traps met on the way:
