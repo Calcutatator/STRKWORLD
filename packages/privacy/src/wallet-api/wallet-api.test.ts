@@ -1303,7 +1303,6 @@ describe('Wallet API capability versions', () => {
   });
 
   it.each([
-    ['null', null],
     ['object', {}],
     ['primitive', 42],
   ] as const)('rejects a non-array %s supported-version response as invalid wallet data', async (_label, response) => {
@@ -1311,6 +1310,16 @@ describe('Wallet API capability versions', () => {
     vi.mocked(supportedVersions).mockResolvedValue(response as never);
 
     await expect(ops.capability()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ] as const)('reads a %s supported-version answer as a wallet with no Wallet API, not a dropped connection', async (_label, response) => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockResolvedValue(response as never);
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unsupported-wallet' });
   });
 
   it('does not treat malformed versions or a 0.10.3 prerelease as stable support', async () => {
@@ -1383,6 +1392,96 @@ describe('Wallet API capability versions', () => {
       registration: 'unknown',
       supportsShadowAccounts: false,
     });
+  });
+});
+
+describe('capability probe failures: unsupported, unreachable or the wallet\'s own code', () => {
+  const missingMethod: readonly (readonly [string, unknown])[] = [
+    ['JSON-RPC -32601', { code: -32601, message: 'Method not found' }],
+    ['EIP-1474 -32004', { code: -32004, message: 'Method not supported' }],
+    ['EIP-1193 4200', { code: 4200, message: 'The requested method is not supported' }],
+    ['a -32601 nested under error', { error: { code: -32601 } }],
+    ['a -32601 under cause', Object.assign(new Error('request failed'), { cause: { code: -32601 } })],
+    ['"Not implemented"', new Error('Not implemented')],
+    ['"Unknown method"', new Error('Unknown method: wallet_supportedWalletApi')],
+    ['"Unknown request type"', new Error('Unknown request type wallet_supportedWalletApi')],
+    ['"does not exist"', new Error('The method "wallet_supportedWalletApi" does not exist / is not available.')],
+    ['a thrown string', 'Not implemented'],
+    ['an unknown code with a missing-method message', { code: -32603, message: 'Internal error: method not found' }],
+    ['API_VERSION_NOT_SUPPORTED', { code: 162, message: 'An error occurred (API_VERSION_NOT_SUPPORTED)' }],
+  ];
+
+  it.each(missingMethod)('reads %s as unsupported-wallet', async (_label, failure) => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockRejectedValue(failure);
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unsupported-wallet' });
+  });
+
+  it.each([
+    ['a failed fetch', new TypeError('Failed to fetch')],
+    ['a timeout', new Error('Request timed out')],
+    ['a popup closed without a code', new Error('User closed the popup')],
+    ['an empty error', {}],
+  ] as const)('keeps %s unreachable', async (_label, failure) => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockRejectedValue(failure);
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+
+  it.each([
+    ['113 user-rejected', { code: 113, message: 'Not implemented' }, 'user-rejected'],
+    ['an AbortError', new DOMException('Operation cancelled.', 'AbortError'), 'user-rejected'],
+    ['163 unknown', { code: 163, message: 'An error occurred (UNKNOWN_ERROR)' }, 'unknown'],
+  ] as const)('keeps %s as the wallet meant it', async (_label, failure, kind) => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockRejectedValue(failure);
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind });
+  });
+
+  it('never runs a message getter, and a hostile error still maps to an opaque failure', async () => {
+    const { ops, supportedVersions } = fixture();
+    let reads = 0;
+    const getterMessage = Object.defineProperty({}, 'message', {
+      get() {
+        reads += 1;
+        return 'Method not found';
+      },
+    });
+    vi.mocked(supportedVersions).mockRejectedValueOnce(getterMessage);
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unreachable' });
+    expect(reads).toBe(0);
+
+    const hostile = new Proxy({}, {
+      get() { throw new Error('get trap'); },
+      getOwnPropertyDescriptor() { throw new Error('descriptor trap'); },
+      getPrototypeOf() { throw new Error('prototype trap'); },
+      has() { throw new Error('has trap'); },
+    });
+    vi.mocked(supportedVersions).mockRejectedValueOnce(hostile);
+    const failure = await ops.capability().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PrivacyError);
+    expect(failure).toMatchObject({ kind: 'unreachable' });
+  });
+
+  it('reads only the start of a long message', async () => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockRejectedValue(new Error(`${'x'.repeat(600)} not implemented`));
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+
+  it('keeps a cancelled query a cancellation even when the wallet then says the method is missing', async () => {
+    const { ops, supportedVersions } = fixture();
+    const controller = new AbortController();
+    vi.mocked(supportedVersions).mockImplementation(async () => {
+      controller.abort();
+      throw { code: -32601, message: 'Method not found' };
+    });
+
+    await expect(ops.capability(controller.signal)).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 });
 

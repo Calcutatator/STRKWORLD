@@ -152,6 +152,7 @@ export {
 } from './wallet-api/reserve-shield-planner.js';
 
 export {
+  REQUIRED_WALLET_API_VERSION,
   WalletApiPrivacyOperations,
   BackendPrivacyClient,
   createSupportedVersionsReader,

@@ -295,7 +295,10 @@ export function describeConnectState(state: unknown): string {
   }
   const confirmed = readData(state, 'registrationConfirmed');
   if (typeof confirmed === 'boolean') parts.push(`confirmed=${confirmed}`);
-  if (name === 'unsupported-wallet') parts.push(`walletApi=${plain(readData(state, 'walletApiVersion'))}`);
+  if (name === 'unsupported-wallet') {
+    parts.push(`walletApi=${plain(readData(state, 'walletApiVersion'))}`);
+    if (readData(state, 'versionTooOld') === true) parts.push('tooOld=true');
+  }
   return parts.join(' ');
 }
 
