@@ -1,4 +1,4 @@
-import type { Intent, OperationStage, PreparedBatch, PrivacyErrorKind, PrivacyOperations } from '@strkworld/privacy';
+import type { Intent, OperationStage, PreparedBatch, PrivacyErrorKind, PrivacyOperations, PrivateBalance } from '@strkworld/privacy';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createStore, type ReadableStore } from '../../store/store.js';
 import { formatTokenAmountExact, parseTokenAmount, sameAddress } from '../../format.js';
@@ -68,6 +68,10 @@ export interface ExchangeState {
   readonly flow: ExchangeFlow;
   /** D-084: the player ticked "I understand" for a review with no independent price check. */
   readonly priceAcknowledged: boolean;
+  /** The pool balance of each sellable asset, as the last read returned it. */
+  readonly holdings: readonly PrivateBalance[];
+  /** The pool's fee and fee token from `open()`, for a Max that leaves the fee behind. */
+  readonly pool: { readonly feeAmount: bigint; readonly feeToken: string } | null;
 }
 
 export interface ExchangePanel {
@@ -233,10 +237,10 @@ export function createExchangePanel(options: {
       // The list loads beside the pool read; the flow does not wait for it.
       void loadCatalog(signal);
       try {
-        await operations.poolConfig(signal);
+        const config = await operations.poolConfig(signal);
         if (!live(id)) return;
         const receipt = receipts.pending('exchange')[0];
-        patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash, restored: true } : { name: 'composing' } });
+        patch({ pool: { feeAmount: config.feeAmount, feeToken: config.feeToken }, flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash, restored: true } : { name: 'composing' } });
       } catch (error) { fail(error, id, 'close'); }
     },
     close() { start(); ++session; ++balanceRead; ++catalogRead; discard(); stateStore.setState(freezeExchangeState(fresh())); },
@@ -257,7 +261,8 @@ export function createExchangePanel(options: {
         const sellChoices = tradable.filter((asset) => (balances.find((b) => sameAddress(b.token, asset.token))?.total ?? 0n) > 0n);
         const sell = sellChoices[0] ?? null;
         const buy = tradable.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
-        patch({ balances: 'loaded', sellChoices, sell, buy });
+        const holdings = balances.filter((entry) => sellChoices.some((asset) => sameAddress(asset.token, entry.token)));
+        patch({ balances: 'loaded', sellChoices, sell, buy, holdings });
       } catch (error) {
         if (id !== balanceRead || currentSession !== session) return;
         const failure = toFailure(error); onError?.(failure); patch({ balances: 'failed', notice: COPY.errors[failure.kind] });
@@ -367,7 +372,7 @@ export function createExchangePanel(options: {
         receipts.record({ building: 'exchange', transactionHash: result.transactionHash, intents: batch.intents });
         ++balanceRead;
         if (!live(id)) return;
-        patch({ balances: 'unrequested', flow: { name: 'submitted', transactionHash: result.transactionHash }, notice: COPY.balance.changed });
+        patch({ balances: 'unrequested', holdings: [], flow: { name: 'submitted', transactionHash: result.transactionHash }, notice: COPY.balance.changed });
       } catch (error) {
         if (signingOwner === id) {
           signingOwner = null;
@@ -412,12 +417,17 @@ export const QUOTE_SPACING_MS = 1_500;
 const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });
 
 function initialState(register: readonly RouteGrade[], loaded: boolean): ExchangeState {
-  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false };
+  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false, holdings: [], pool: null };
 }
 
 /** The listed assets, or none until a loaded list is ready. */
 export function listedAssets(state: ExchangeState): readonly ExchangeAsset[] {
   return state.catalog.status === 'ready' ? state.catalog.assets : [];
+}
+
+/** The pool balance of `token` from the last read, or null before one. */
+export function holdingOf(state: ExchangeState, token: string): PrivateBalance | null {
+  return state.holdings.find((entry) => sameAddress(entry.token, token)) ?? null;
 }
 
 /** What the buy side may choose: listed, swappable in this build, and not the asset being sold. */
@@ -508,6 +518,8 @@ function freezeExchangeState(state: ExchangeState): ExchangeState {
     door: Object.freeze({ ...state.door }),
     catalog,
     sellChoices: Object.freeze(state.sellChoices.map(freezeAsset)),
+    holdings: Object.isFrozen(state.holdings) ? state.holdings : Object.freeze(state.holdings.map((entry) => Object.freeze({ ...entry }))),
+    pool: state.pool === null ? null : Object.freeze({ ...state.pool }),
     sell: freezeOptional(state.sell),
     buy: freezeOptional(state.buy),
     flow,

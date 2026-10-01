@@ -3525,3 +3525,317 @@ button.shell-start {
   align-items: flex-start;
   margin: 0.75em 0;
 }
+
+/* ===========================================================================
+ * The panel kit (`panels/kit`): amount field, token select, settings cog,
+ * detail rows, flip button and quote timer.
+ *
+ * Every rule reads the window's own `--ui-*` tokens and sets none, so each
+ * building keeps its look: Vesu's light Vault, the Exchange's own, the Bank's
+ * black and orange. Text sits on `--ui-surface` (or the sunken field) in
+ * tokens `styles.test.ts` holds at WCAG AA in every theme; `--ui-accent` is
+ * never text here, since several themes use it only as a fill.
+ * ======================================================================== */
+
+.ui-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+.ui-figure {
+  font-family: var(--ui-number-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-amount {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.ui-amount-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.ui-amount-head > label {
+  flex: 1 1 auto;
+}
+
+.ui-amount-balance {
+  color: var(--ui-text-dim);
+  font-size: 0.88rem;
+}
+
+.ui-amount-quick {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.ui-chip {
+  --btn-depth: min(var(--ui-btn-depth), 2px);
+  --btn-press: min(var(--ui-btn-press), 1px);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+/* Chosen: the theme's selected-tab fill, and an outline in its own ink, so
+ * the choice shows even in a theme whose selected tab matches its buttons. */
+.ui-chip[aria-pressed="true"] {
+  --btn-bg: var(--ui-tab-selected-bg);
+  --btn-bg-hover: var(--ui-tab-selected-bg);
+  --btn-text: var(--ui-tab-selected-text);
+  --btn-border: var(--ui-tab-selected-text);
+  --btn-border-hover: var(--ui-tab-selected-text);
+}
+
+.ui-amount-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  border: 1px solid var(--ui-input-border);
+  border-radius: var(--ui-radius-control);
+  background-color: var(--ui-surface-sunken);
+  color: var(--ui-text);
+}
+
+.ui-amount-box:hover {
+  border-color: var(--ui-input-border-hover);
+}
+
+.ui-amount-box:focus-within {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 1px;
+  border-color: var(--ui-focus);
+  box-shadow: var(--ui-input-focus-glow);
+}
+
+.ui-amount[data-invalid="true"] .ui-amount-box {
+  border-color: var(--ui-danger);
+}
+
+.panel .ui-amount-box > input:not([type="checkbox"]):not([type="radio"]) {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.35rem 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--ui-number-font);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel .ui-amount-box > input:not([type="checkbox"]):not([type="radio"]):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-amount-token {
+  flex: none;
+  max-width: 55%;
+}
+
+.ui-amount-symbol {
+  padding-inline: 0.4rem;
+  font-weight: 700;
+}
+
+.ui-amount-usd,
+.ui-amount-hint {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 0.88rem;
+}
+
+.ui-amount-message {
+  margin: 0;
+  color: var(--ui-danger);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ui-amount-message:empty {
+  display: none;
+}
+
+.ui-token-select {
+  display: block;
+}
+
+.panel .ui-token-select > select {
+  min-width: 7rem;
+}
+
+.ui-icon-button {
+  --btn-depth: min(var(--ui-btn-depth), 2px);
+  --btn-press: min(var(--ui-btn-press), 1px);
+  display: inline-grid;
+  place-items: center;
+  padding: 0.4rem;
+  line-height: 0;
+}
+
+.ui-settings {
+  position: relative;
+  display: inline-block;
+}
+
+.ui-settings-popover {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  gap: 0.6rem;
+  width: min(17rem, calc(100vw - 3rem));
+  padding: 0.8rem;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-hud-shadow);
+  color: var(--ui-text);
+}
+
+.ui-settings-title {
+  margin: 0;
+  color: var(--ui-heading);
+  font-weight: 700;
+}
+
+.ui-settings-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ui-settings-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.panel .ui-settings-custom > input:not([type="checkbox"]):not([type="radio"]) {
+  width: 5.5rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.ui-settings-warning {
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid var(--ui-warn);
+  color: var(--ui-text);
+  font-size: 0.88rem;
+}
+
+.ui-details {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.ui-detail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.15rem 1rem;
+}
+
+.ui-detail > dt {
+  color: var(--ui-text-dim);
+}
+
+.ui-detail > dd {
+  margin: 0;
+  color: var(--ui-text);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.ui-detail[data-tone="emphasis"] > dd {
+  color: var(--ui-heading);
+  font-weight: 700;
+}
+
+.ui-detail[data-tone="warning"] > dd {
+  color: var(--ui-warn);
+  font-weight: 600;
+}
+
+.ui-detail[data-tone="danger"] > dd {
+  color: var(--ui-danger);
+  font-weight: 600;
+}
+
+.ui-detail-note {
+  display: block;
+  color: var(--ui-text-dim);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.ui-rate,
+.ui-before-after {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ui-rate-invert {
+  padding: 0.25rem;
+}
+
+.ui-flip {
+  display: flex;
+  justify-content: center;
+  margin-block: -0.3rem;
+}
+
+.ui-flip-button {
+  border-radius: 999px;
+}
+
+.ui-quote-timer {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--ui-text-dim);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-quote-timer-track {
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--ui-line);
+  overflow: hidden;
+}
+
+.ui-quote-timer-bar {
+  display: block;
+  height: 100%;
+  background: var(--ui-text-dim);
+  transition: inline-size 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-quote-timer-bar {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ui-quote-timer-bar {
+    background: CanvasText;
+  }
+}

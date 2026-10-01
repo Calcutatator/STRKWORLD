@@ -941,6 +941,33 @@ export const COPY = freezeCopy({
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 
+  /**
+   * The shared panel kit (`panels/kit`). Wording follows the rest of the
+   * shell: a balance is the pool balance, and a button says what it will do
+   * or why it cannot yet. `{symbol}` is filled in by the kit.
+   */
+  kit: {
+    poolBalance: 'Pool balance',
+    max: 'Max',
+    half: '50%',
+    maxLabel: 'Fill in the most you can use',
+    halfLabel: 'Fill in half of the most you can use',
+    enterAmount: 'Enter an amount',
+    chooseToken: 'Choose a token',
+    insufficient: 'Insufficient {symbol}',
+    invalidAmount: 'Enter a valid amount',
+    belowMinimum: 'Below the minimum',
+    exceedsBalance: 'More than your pool balance',
+    belowMinimumDetail: 'The minimum is {minimum}.',
+    invalidDetail: 'Use digits and one decimal point, with no more decimal places than the token has.',
+    settings: 'Settings',
+    custom: 'Custom',
+    flip: 'Swap direction',
+    invert: 'Show the inverse rate',
+    refreshIn: 'Quote refreshes in {seconds}s',
+    refreshing: 'Refreshing quote…',
+  },
+
   submissionUncertainty: {
     acknowledge: 'I refreshed and checked my private balance',
     acknowledged:
