@@ -224,7 +224,7 @@ describe('shell boundaries', () => {
       .sort();
     expect(readers).toEqual(['connect/GetAWallet.tsx', 'copy.ts']);
     const naming = shell
-      .filter(({ text }) => /ready\.co|xverse\.app/.test(stripComments(text)))
+      .filter(({ text }) => /ready\.co|xverse\.app|dlcobpjiigpikoobohmabehhmhfoodbb|idnnbdplmphpflfnlkomgpfbpcgelopg/.test(stripComments(text)))
       .map(({ path }) => path);
     expect(naming).toEqual(['copy.ts']);
   });
