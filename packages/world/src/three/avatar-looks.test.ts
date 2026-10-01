@@ -46,6 +46,26 @@ describe('avatar looks', () => {
     }
   });
 
+  it('changes clothes in every fighting look, not only adding a weapon (D-096)', () => {
+    for (const key of COSY_KEYS) {
+      const cosy = AVATAR_LOOKS[key].outfit;
+      const fighting = AVATAR_LOOKS[pairedAvatarSprite(key)].outfit;
+      const garments = (['top', 'sleeves', 'gloves', 'trousers', 'boots'] as const).filter(
+        (garment) => cosy[garment] !== fighting[garment],
+      );
+      expect(garments.length, key).toBeGreaterThanOrEqual(3);
+      expect(fighting.gear, key).not.toEqual(cosy.gear);
+    }
+  });
+
+  it('gives the eight fighting looks distinct archetypes: gear and weapon never repeat', () => {
+    const archetypes = COSY_KEYS.map((key) => {
+      const { gear, weapon } = AVATAR_LOOKS[pairedAvatarSprite(key)].outfit;
+      return JSON.stringify([gear.map((item) => item.kind).sort(), weapon?.kind]);
+    });
+    expect(new Set(archetypes).size).toBe(8);
+  });
+
   it('gives the eight characters distinct skin, hair colour and hair style', () => {
     const characters = COSY_KEYS.map((key) => AVATAR_LOOKS[key].character);
     expect(characters.map((character) => character.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
