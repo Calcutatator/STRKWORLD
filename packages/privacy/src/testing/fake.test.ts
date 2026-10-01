@@ -230,6 +230,17 @@ describe('the gas estimate follows the route (D-082, D-084)', () => {
     expect(() => ops.setSwapQuote({ swapReview: { expectedAmountOut: 0n, slippageBps: 100, expiresAt: 5_000 } }))
       .toThrow(/swap review/i);
   });
+
+  it("floors the swap at the player's own slippage when the intent carries one, as the adapter does (D-089)", async () => {
+    const usdc = '0x1234';
+    const ops = new FakePrivacyOperations({
+      balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 10_000n, slippageBps: 100, expiresAt: 1_000 },
+    });
+    const intent = { kind: 'swap', tokenIn: usdc, tokenOut: STRK, amountIn: 10n ** 18n, minAmountOut: 1n, slippageBps: 30 } as const;
+    expect((await ops.prepare([intent])).swapReview).toMatchObject({ slippageBps: 30, minimumAmountOut: 9_970n });
+    await expect(ops.prepare([{ ...intent, slippageBps: 301 }])).rejects.toThrow(/slippage is outside/);
+  });
 });
 
 describe('deterministic prepared swap review', () => {

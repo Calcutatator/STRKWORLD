@@ -51,13 +51,28 @@ export function feeReserve(
  * The most a player can put in: what is spendable less what must stay behind.
  *
  * `null` means "no honest Max", and the button is disabled: the spendable
- * figure is unknown (D-022: a wallet reporting only an aggregate has no
- * spendable split), the reserve is unknown, or nothing is left after it.
+ * figure is unknown (no balance read; see `maxBasis` for a wallet that
+ * reports only a per-token total), the reserve is unknown, or nothing is left
+ * after it.
  */
 export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null = 0n): bigint | null {
   if (spendable === null || reserve === null) return null;
   const left = spendable - reserve;
   return left > 0n ? left : null;
+}
+
+/**
+ * What a Max may fill from, for one token's pool balance: the spendable
+ * figure when the wallet splits it, otherwise the per-token total
+ * `wallet_strk20Balances` returns (D-089, amending D-022). That total is the
+ * figure the balance line already shows and a player may type in by hand, so
+ * Max fills in nothing a typed amount could not; a note received in the last
+ * few blocks may not be spendable yet, and the wallet, which proves, refuses
+ * a spend it cannot make. `null` (no balance read) is no Max.
+ */
+export function maxBasis(balance: { readonly total: bigint; readonly spendable: bigint; readonly maturityKnown: boolean } | null): bigint | null {
+  if (balance === null) return null;
+  return balance.maturityKnown ? balance.spendable : balance.total;
 }
 
 /** `amount × numerator / denominator`, truncated towards zero. 50% is `(amount, 1n, 2n)`. */

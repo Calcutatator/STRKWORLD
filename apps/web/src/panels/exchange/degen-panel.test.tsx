@@ -90,6 +90,7 @@ describe('the degen counter in demo', () => {
       total: '6 STRK',
       disclosures: [SWAP_DISCLOSURE],
       rate: '1 STRK ≈ 10 LORDS',
+      inverseRate: '1 LORDS ≈ 0.1 STRK',
       // The demo has no oracle (D-084); its fixture check carries no USD.
       sellUsd: null,
       expectedBuyUsd: null,
@@ -101,7 +102,7 @@ describe('the degen counter in demo', () => {
     const done = panel.store.getState().flow;
     expect(done.name).toBe('submitted');
     expect(operations.submitted).toEqual([[{
-      kind: 'swap', tokenIn: STRK, tokenOut: LORDS, amountIn: 10n * 10n ** 18n, minAmountOut: 99_500000000000000000n,
+      kind: 'swap', tokenIn: STRK, tokenOut: LORDS, amountIn: 10n * 10n ** 18n, minAmountOut: 99_500000000000000000n, slippageBps: 50,
     }]]);
     expect(receipts.pending('exchange')).toHaveLength(1);
   });

@@ -677,7 +677,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · its no-MAX-when-maturity-is-unknown rule amended by D-089 (Max may fill from the per-token total)**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -4577,7 +4577,7 @@ caller) stops it until a new decision.
 
 ## D-084 — The swap runs on its own shadow account, quoted by avnu's keyless API
 
-**2026-10-01 · Accepted by the user (the lead asked for private swaps at the Exchange and the degen floor with no avnu API key and no STRKWORLD relay) · supersedes D-023 (server-planned, relayed, quote-bound swaps) · supersedes D-082 in part (the swap is wallet-submitted too) · supersedes D-070 in part (no player flow needs the key) · amends D-067 (its admission guards the quote proxy) · keeps D-042's protected-minimum formula and D-024's swap disclosure · extends D-036's seam: `SwapReview.priceCheck`, the optional `acknowledgeUncheckedPrice` on `PreparedBatch.confirm`, and an optional `degen` on `WalletRoutePolicy.swap` · adds one public route to D-014's backend, which still logs nothing per request · D-083 is the borrowing route, which shares the shadow-account resolver**
+**2026-10-01 · Accepted by the user (the lead asked for private swaps at the Exchange and the degen floor with no avnu API key and no STRKWORLD relay) · supersedes D-023 (server-planned, relayed, quote-bound swaps) · supersedes D-082 in part (the swap is wallet-submitted too) · supersedes D-070 in part (no player flow needs the key) · amends D-067 (its admission guards the quote proxy) · keeps D-042's protected-minimum formula and D-024's swap disclosure · extends D-036's seam: `SwapReview.priceCheck`, the optional `acknowledgeUncheckedPrice` on `PreparedBatch.confirm`, and an optional `degen` on `WalletRoutePolicy.swap` · adds one public route to D-014's backend, which still logs nothing per request · D-083 is the borrowing route, which shares the shadow-account resolver · its build-fixed slippage amended by D-089 (the player chooses, up to the build's figure)**
 
 **Context.** D-082 left the swap the only relayed route: avnu's private-swap
 plan and its fee came together from avnu's paymaster, which refuses
@@ -5147,3 +5147,97 @@ on the street, 2.46 in the Studio; 2.87 KB/s per client overall; tick p95
 7.7 ms, 11.0% of a core; 0 of 722,399 peer sightings in a wrong area and
 20,838 street sightings from the roof; 0 decode failures. Not verified: a
 real browser drawing the street's crowd from the roof.
+
+---
+
+## D-089 — The Exchange swaps as swap apps do: live quote, Max from the per-token balance, and a slippage cog
+
+**2026-10-01 · Accepted by the lead (the owner asked for the Exchange and the degen floor to follow avnu's and Uniswap's swap conventions, with Max and the slippage cog, simply and in the building's own style) · amends D-022 (Max may fill from the per-token total) · amends D-084 (the slippage is the player's, up to the build's figure, which becomes a ceiling) · extends D-036's frozen seam with the swap intent's optional `slippageBps` · keeps D-084's review, oracle check, unchecked-price tick, re-quote and fee ceiling unchanged**
+
+**Context.** The Exchange's compose view was two selects, an amount and a
+Review button: no Buy figure until the review, no flip, no rate, and Max off
+for every live player. The spec (`defi-ui-patterns.md`, swap section) and the
+owner's principles ask for Sell and Buy, 50% and Max, the flip arrow, a live
+read-only Buy figure with USD values, a rate with an invert, slippage behind a
+cog (0.1/0.5/1% and custom, capped at 3%, a warning above 1%), and four rows:
+Receive at least, Price impact, Pool fee, Route via avnu.
+
+Read on 2026-10-01: `wallet_strk20Balances(tokens)` answers
+`[{ token, balance }, ...]`, one entry per requested token (the STRK20 corpus,
+"Show the shielded balance"; the adapter's parser,
+`wallet-api/operations.ts`, which refuses any other shape). So per-token
+balances are available. What it does not give is which notes are mature: a
+note is spendable 10 blocks after it is created (corpus, "matures 10 blocks
+after creation"). That is what D-022 meant by "aggregate": spendable plus
+maturing, per token, not a total across tokens. The adapter reports
+`maturityKnown: false` and zero `spendable`, so the kit's Max was always off.
+
+D-084's slippage was the build's own (`VITE_STRK20_SWAP_SLIPPAGE_BPS`), and the
+adapter refused a floor tighter than it, so a cog had nothing to set.
+
+**Decision.**
+
+- **Max fills from the per-token total** when the wallet gives no spendable
+  split (`maxBasis` in the kit), less the 6 STRK pool fee when selling STRK,
+  the fee's own token (`maxAfterReserve`, `feeReserve`); off when that leaves
+  nothing. A non-STRK sell keeps its whole balance, since the wallet chooses
+  which pool token pays the fee (D-079), and the Pool fee row says so. The
+  total is what the balance line shows and a player may type in by hand, so
+  Max fills in nothing a typed amount could not. A note received in the last
+  10 blocks may not be spendable yet; the wallet, which proves, refuses a
+  spend it cannot make, as it would for the same figure typed in. This
+  replaces D-022's "the shell must not derive MAX when maturity is unknown".
+- **The live quote is a prepared batch**, asked for 800 ms after the last edit
+  (`LIVE_QUOTE_DELAY_MS`), never inside the 1.5 s spacing a Review press
+  keeps, and from a budget of 7, one more every 6 s (`LIVE_QUOTE_BUDGET`),
+  below the backend's per-client bucket (10, one more every 6 s, D-084), so
+  typing never spends what Review and the confirm-time re-quote need. Only a
+  swap worth quoting is asked (both sides listed and swappable, an amount
+  within the pool balance, a valid slippage). A Review press takes a fresh
+  live quote for exactly that swap as is, with no second request, and waits
+  for one already in flight rather than asking twice; any edit discards it. A
+  quote that runs out (30 s) dims, with "Review swap asks for a fresh one";
+  nothing re-asks on its own, so an idle open counter costs avnu nothing. A
+  failed live quote (a refusal in the wallet included) pauses live quoting
+  until the next Review press, so it is not asked again on every keystroke.
+  The first quote of a connection may ask the wallet for the swap's
+  shadow-account commitment, as a Review press did before.
+- **Slippage is the player's.** The swap intent gains an optional
+  `slippageBps` (D-036 extension): a whole number from 1 to the build's
+  `WalletRoutePolicy.swap.slippageBps`, which is now that build's ceiling and
+  the default for an intent without one. The adapter quotes and floors at it
+  and refuses anything else before the wallet or avnu is asked; the fake does
+  the same. The cog offers 0.1%, 0.5% (default) and 1%, those at or below
+  the ceiling only, and a custom value; above 1% it warns, above the ceiling
+  (never more than 3%, so D-084's 6% worst case under the oracle stands) it
+  says "Enter a value up to 3%." and the button reads "Check the slippage".
+  The counter refuses a review whose floor is not for the chosen slippage. On
+  Railway both slippage figures are 50, so the cog shows 0.1% and 0.5% until
+  both are raised to 300 (`deploy/RAILWAY.md`).
+- **Price impact** is how far the expected output sits below the input's
+  value at Pragma's price (`priceCheck.shortfallBps`, which counts avnu's fee
+  and the route's impact together), floored at 0; "Not known" when Pragma
+  prices one side or neither. Above 3% it is a warning. D-084 already refuses
+  a checked quote more than 3% under the oracle, so the warning shows only if
+  that bound is ever widened; the degen floor's unpriced tokens read "Not
+  known".
+- **Buttons**: "Enter an amount", "Insufficient {token}", "Check the slippage",
+  "Review swap", "Preparing with your wallet…", then the review's own confirm.
+  The review, the oracle check and the unchecked-price tick are unchanged;
+  the review's slippage line now says the slippage was chosen with the cog.
+- **Look.** The view is the panel kit (`AmountField` gains `readOnly`, `busy`
+  and `stale`; `SettingsPopover` a `hint` and a custom value that survives
+  passing through a preset) in the Exchange's own `--ui-*` tokens, so the
+  ground floor wears avnu's look and the degen floor its own. The degen
+  floor runs the same view over its list.
+
+**Consequences.** A player sees what a swap returns before reviewing it, and
+Max works for live players. The live quote spends a little more of avnu's
+public window and the backend's than Review presses alone did, bounded per
+counter by the budget above; the backend's own limits are unchanged. Max can
+include a note that matured too recently to spend, which the wallet refuses
+with nothing sent. The adapter's swap slippage is no longer one build-wide
+figure, so the swap stand-in's quotes carry several slippages; nothing about
+the player beyond what D-084 lists reaches avnu or the backend. Not verified
+live: the cog's wider range on Railway, and a Max that counts a maturing note
+on a real wallet.

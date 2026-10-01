@@ -47,8 +47,8 @@ function button(label: string): HTMLButtonElement {
 }
 
 function select(label: string): HTMLSelectElement {
-  const found = [...container!.querySelectorAll('label')].find((candidate) => candidate.firstChild?.textContent === label);
-  const control = found?.querySelector('select');
+  const found = [...container!.querySelectorAll('label')].find((candidate) => candidate.textContent === label);
+  const control = found?.htmlFor ? container!.querySelector<HTMLSelectElement>(`select[id="${found.htmlFor}"]`) : found?.querySelector('select');
   if (!control) throw new Error(`No select labelled ${label}`);
   return control;
 }
@@ -114,11 +114,11 @@ describe('the degen station, driven through the screen in demo', () => {
       .toEqual(['Verified', 'Community', 'Unruggable', COPY.degen.displayOnly]);
 
     await click(button(COPY.balance.refresh));
-    const buy = select(COPY.exchange.buy);
+    const buy = select(COPY.exchange.buyToken);
     expect([...buy.options].map((option) => option.value)).not.toContain(SSTR);
     await choose(buy, DOG);
     await type(container.querySelector<HTMLInputElement>('input[name="amount"]')!, '2');
-    await click(button(COPY.flow.review));
+    await click(button(COPY.exchange.review));
 
     const gate = container.querySelector('.confirm-gate')!;
     expect(gate.textContent).toContain('2 STRK');

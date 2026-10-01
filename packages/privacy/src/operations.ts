@@ -30,8 +30,9 @@ import type {
  * (borrowing on Vesu from a second shadow account: `borrowMarket`,
  * `borrowPositions` and `prepareBorrow`, with their shapes below) and D-085
  * (Endur unstaking through a shadow account: `endurUnstakePosition`,
- * `prepareEndurUnstake` and `prepareEndurClaim`); every other method and
- * shape is unchanged.
+ * `prepareEndurUnstake` and `prepareEndurClaim`) and D-089 (the swap
+ * intent's optional `slippageBps`); every other method and shape is
+ * unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -59,6 +60,13 @@ export type Intent =
       tokenOut: Address;
       amountIn: bigint;
       minAmountOut: bigint;
+      /**
+       * D-089: the player's slippage for this swap, in bps, from the
+       * Exchange's slippage cog. A whole number from 1 to the build's
+       * ceiling (`WalletRoutePolicy.swap.slippageBps`, at most 300); anything
+       * else is refused. Absent, the swap uses the build's ceiling, as before.
+       */
+      slippageBps?: number;
     }
   /**
    * Endur private staking (D-063): shielded STRK in, shielded xSTRK out,

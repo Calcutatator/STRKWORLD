@@ -102,6 +102,28 @@ describe('preparing a shadow-account swap', () => {
     expect(Object.isFrozen(batch.swapReview)).toBe(true);
   });
 
+  it('quotes at the player\'s own slippage, at or below the build\'s ceiling (D-089)', async () => {
+    const { ops, quotes } = seam();
+    const batch = await ops.prepare([{ ...SWAP, slippageBps: 50 }]);
+
+    expect(quotes.requests.map((request) => request.slippageBps)).toEqual([50]);
+    // 431,000 less 0.5%, floored.
+    expect(batch.swapReview).toMatchObject({ slippageBps: 50, minimumAmountOut: 428_845n });
+    expect(batch.intents).toEqual([{ ...SWAP, slippageBps: 50, minAmountOut: 428_845n }]);
+  });
+
+  it.each([
+    ['above the build\'s ceiling', 101],
+    ['zero', 0],
+    ['fractional', 12.5],
+    ['not a number', '50'],
+  ])('refuses a player slippage %s before anything is asked', async (_label, slippageBps) => {
+    const { ops, quotes, commitments } = seam();
+    await expect(ops.prepare([{ ...SWAP, slippageBps } as unknown as Intent])).rejects.toThrow(/slippage is outside/);
+    expect(quotes.requests).toEqual([]);
+    expect(commitments).toEqual([]);
+  });
+
   it('refuses a requested floor above the quote\'s protected minimum', async () => {
     const { ops, invoked } = seam();
     await expect(ops.prepare([{ ...SWAP, minAmountOut: 426_691n }])).rejects.toThrow(/protected minimum/);
