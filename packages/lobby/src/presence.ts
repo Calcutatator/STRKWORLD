@@ -23,7 +23,7 @@ import type {
   SandboxTile,
 } from '@strkworld/shared';
 import { isAreaStepAllowed, isAreaWalkable, isOverAreaGrid, normalizePresenceArea } from './areas.js';
-import { MOVE_BURST, resolveRoomConfig } from './config.js';
+import { JUMP_MIN_INTERVAL_MS, MOVE_BURST, resolveRoomConfig } from './config.js';
 import {
   UpdateThrottle,
   createGameId,
@@ -83,6 +83,9 @@ export type AdmitRejection =
 export type AdmitOutcome =
   | { readonly ok: true; readonly gameId: GameId }
   | { readonly ok: false; readonly reason: AdmitRejection };
+
+/** D-097: what became of a `jump` message. Every outcome but 'applied' is silent. */
+export type JumpOutcome = 'applied' | 'throttled' | 'absent';
 
 export type MoveOutcome =
   /** Written to state. */
@@ -185,6 +188,8 @@ export class LobbyPresence {
   readonly #capacity: number;
   readonly #worldLimit: number;
   readonly #throttle: UpdateThrottle;
+  /** D-097: the jump floor, strict and per session. */
+  readonly #jumpThrottle = new UpdateThrottle(JUMP_MIN_INTERVAL_MS);
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
   /** D-060: the room's block sandbox, mirrored into `state.sandbox`. */
   readonly #sandbox: LobbySandbox;
@@ -479,6 +484,7 @@ export class LobbyPresence {
     this.peers.delete(session.gameId);
     this.#sessions.delete(sessionKey);
     this.#throttle.forget(sessionKey);
+    this.#jumpThrottle.forget(sessionKey);
     this.#announce(this.#sandbox.forget(sessionKey, players));
     this.#football.forget(sessionKey);
     this.#movedAt.delete(sessionKey);
@@ -591,6 +597,24 @@ export class LobbyPresence {
    * this registry holds: the kick message carries nothing, so nothing a client
    * says is read. Refusals are silent; the state is the only answer.
    */
+  /**
+   * D-097: the session's avatar jumped. Bumps its `jumps` counter (mod 256),
+   * which reaches exactly the observers whose view already holds the entry —
+   * so only peers in the same presence area, inside the interest radius. Live
+   * on the street or the roof only: the Studio is for changing clothes, and a
+   * suspended session has no entry. Throttled strictly; every refusal is
+   * silent.
+   */
+  jump(sessionKey: string, now: number): JumpOutcome {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended || session.area === 'studio') return 'absent';
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return 'absent';
+    if (!this.#jumpThrottle.accept(sessionKey, now)) return 'throttled';
+    entry.jumps = ((entry.jumps ?? 0) + 1) & 0xff;
+    return 'applied';
+  }
+
   kickBall(sessionKey: string, now: number): KickOutcome {
     const session = this.#sessions.get(sessionKey);
     // The pitch is on the street (D-087); the Studio is drawn over it.

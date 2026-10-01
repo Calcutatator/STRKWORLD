@@ -143,6 +143,12 @@ export interface PresenceState {
    * palette index — cosmetic, never financial.
    */
   carrying: number;
+  /**
+   * D-097: how many times this player has jumped, modulo 256. A cosmetic
+   * counter: a peer plays a jump when it changes. No time, no target, nothing
+   * financial; only the room writes it, at most once per its jump floor.
+   */
+  jumps: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +450,12 @@ export type WorldEvents = {
    * interior, so a street consumer never reads a room's coordinates.
    */
   'area:moved': { position: Position; facing: Facing };
+  /**
+   * D-097: the local avatar jumped (Space). Cosmetic: the jump never changes
+   * movement or collision. The Shell forwards it to the lobby only while the
+   * player is live in a shared presence area; never from a private interior.
+   */
+  'player:jumped': Record<string, never>;
   /**
    * D-076: the player came within sight of the Privacy Plaza, or left it.
    * Presentation only: while it is near, the Shell reads the pool's public

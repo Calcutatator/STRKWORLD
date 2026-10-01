@@ -2,6 +2,7 @@ import type { Group, Object3D, Texture } from 'three';
 import type { AvatarSpriteKey, BuildingId, StationId } from '@strkworld/shared';
 import type { FixedRoomStationPresentation } from '../fixed-room.js';
 import type { PlazaStatsPresentation } from '../plaza-stations.js';
+import type { JumpPose } from '../jump.js';
 
 /**
  * Contracts shared by the 3D presentation modules (D-059).
@@ -15,6 +16,11 @@ import type { PlazaStatsPresentation } from '../plaza-stations.js';
 export interface AvatarMotion {
   readonly moving: boolean;
   readonly sprinting: boolean;
+  /**
+   * D-097: the jump pose this frame (stretch, tuck, landing squash), or
+   * none. The caller lifts the figure; the figure only changes shape.
+   */
+  readonly jump?: JumpPose | null;
 }
 
 /**

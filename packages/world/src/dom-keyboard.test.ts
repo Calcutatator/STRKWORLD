@@ -220,6 +220,30 @@ describe('DOM World keyboard', () => {
     expect(block).toHaveBeenCalledOnce();
   });
 
+  it('emits keydown-Space for the jump (D-097), never from a text field or a disabled keyboard', () => {
+    const { window, keyboard } = setup();
+    const jump = vi.fn();
+    keyboard.on('keydown-Space', jump);
+    const press = key('Space');
+    window.dispatch('keydown', press);
+    expect(jump).toHaveBeenCalledWith({ repeat: false, target: null });
+    // Space is captured, so the page does not scroll under the World.
+    expect(press.preventDefault).toHaveBeenCalled();
+    window.dispatch('keydown', key('Space', { repeat: true }));
+    expect(jump).toHaveBeenLastCalledWith({ repeat: true, target: null });
+    window.dispatch('keydown', key('Space', { target: { tagName: 'INPUT' } }));
+    window.dispatch('keydown', key('Space', { target: { tagName: 'TEXTAREA' } }));
+    keyboard.enabled = false;
+    window.dispatch('keydown', key('Space'));
+    expect(jump).toHaveBeenCalledTimes(2);
+    keyboard.enabled = true;
+    // A suspended keyboard (a panel open) hands Space to the page untouched.
+    keyboard.disableGlobalCapture();
+    const typed = key('Space');
+    window.dispatch('keydown', typed);
+    expect(typed.preventDefault).not.toHaveBeenCalled();
+  });
+
   it('detaches every listener on destroy and stays inert', () => {
     const { window, document, keyboard } = setup();
     const handler = vi.fn();

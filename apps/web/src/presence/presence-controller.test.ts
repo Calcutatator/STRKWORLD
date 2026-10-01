@@ -224,7 +224,7 @@ describe('presence controller', () => {
     expect(made.client.onPeers).toHaveBeenCalledTimes(1);
     made.publishPeers([{ gameId: 'peer-7', x: 40, y: 72, facing: 'left', sprite: 'avatar-2' }]);
 
-    expect(snapshots.at(-1)).toEqual([{ id: 'peer-7', x: 40, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([{ id: 'peer-7', x: 40, y: 72, facing: 'left', carrying: null, jumps: 0, sprite: 'avatar-2' }]);
     expect(Object.isFrozen(rawSnapshots.at(-1))).toBe(true);
     expect(Object.isFrozen(rawSnapshots.at(-1)?.[0])).toBe(true);
     stopSource();
@@ -256,6 +256,7 @@ describe('presence controller', () => {
       facing: 'down',
       sprite: 'avatar-1',
       carrying: null,
+      jumps: 0,
     }]);
     stopSource();
     stopWorld();
@@ -279,10 +280,10 @@ describe('presence controller', () => {
     made.drop();
 
     expect(snapshots.at(-3)).toEqual([
-      { id: 'peer-1', x: 40, y: 72, facing: 'down', carrying: null, sprite: 'avatar-1' },
-      { id: 'peer-2', x: 80, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' },
+      { id: 'peer-1', x: 40, y: 72, facing: 'down', carrying: null, jumps: 0, sprite: 'avatar-1' },
+      { id: 'peer-2', x: 80, y: 72, facing: 'left', carrying: null, jumps: 0, sprite: 'avatar-2' },
     ]);
-    expect(snapshots.at(-2)).toEqual([{ id: 'peer-2', x: 88, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' }]);
+    expect(snapshots.at(-2)).toEqual([{ id: 'peer-2', x: 88, y: 72, facing: 'left', carrying: null, jumps: 0, sprite: 'avatar-2' }]);
     expect(snapshots.at(-1)).toEqual([]);
     stopSource();
     stopWorld();
@@ -308,7 +309,7 @@ describe('presence controller', () => {
     const stop = presence.listen(world);
 
     world.emit('player:moved', moved);
-    peerListener?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null }]);
+    peerListener?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null, jumps: 0 }]);
 
     expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
     expect(made.client.onPeers).not.toHaveBeenCalled();
@@ -362,7 +363,7 @@ describe('presence controller', () => {
     expect(consoleError).toHaveBeenCalledOnce();
     expect(latePeers).toBeDefined();
 
-    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null }]);
+    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null, jumps: 0 }]);
 
     expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
     expect(snapshots.at(-1)).toEqual([]);
@@ -673,7 +674,7 @@ describe('presence controller', () => {
     expect(second.peerListenerCount()).toBe(1);
     first.publishPeers([{ gameId: 'stale-again', x: 3, y: 4, facing: 'up', sprite: 'avatar-1' }]);
     second.publishPeers([{ gameId: 'fresh', x: 5, y: 6, facing: 'down', sprite: 'avatar-2' }]);
-    expect(snapshots.at(-1)).toEqual([{ id: 'fresh', x: 5, y: 6, facing: 'down', carrying: null, sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([{ id: 'fresh', x: 5, y: 6, facing: 'down', carrying: null, jumps: 0, sprite: 'avatar-2' }]);
     stopWorld();
   });
 
@@ -803,6 +804,30 @@ describe('presence controller', () => {
     expect(made.calls).toContainEqual(['updatePosition', 44, 76, 'down']);
     expect(made.calls).toContainEqual(['resume', { x: 999, y: 999, facing: 'up' }, 'avatar-1']);
     stop();
+  });
+
+  it('forwards a jump to the lobby client only while connected (D-097)', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const jump = vi.fn(() => true);
+    made.client.jump = jump;
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    // No client yet: nothing to tell, and a jump never starts a join.
+    world.emit('player:jumped', {});
+    expect(jump).not.toHaveBeenCalled();
+    expect(made.client.connect).not.toHaveBeenCalled();
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    world.emit('player:jumped', {});
+    expect(jump).toHaveBeenCalledTimes(1);
+    // The client itself refuses from a private interior; the controller
+    // still hands it over and lets the client decide.
+    stop();
+    world.emit('player:jumped', {});
+    expect(jump).toHaveBeenCalledTimes(1);
   });
 
   it('keeps an Avatar Studio selection local until exit, then resumes with it', async () => {

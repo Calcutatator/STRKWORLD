@@ -258,7 +258,7 @@ describe('HudLayer', () => {
     const view = mount(<HudLayer shell={createEventBus<ShellEvents>()} storage={memory().storage} />);
     const guide = view.querySelector('.journey-guide') as HTMLElement;
     const inputs = [...guide.querySelectorAll('dt')].map((node) => node.textContent);
-    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'F', 'E', 'Esc']);
+    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'Space', 'F', 'E', 'Esc']);
     expect(guide.textContent).toContain('Menu Mode');
     expect(guide.textContent).toContain('sandbox');
 

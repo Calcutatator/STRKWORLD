@@ -25,6 +25,11 @@ export interface PresenceClient {
    * the player solo (suspended) in the shared rooms too, the safe fallback.
    */
   enterArea?(area: PresenceArea, placement: { x: number; y: number; facing: Facing }, sprite: AvatarSpriteKey): void;
+  /**
+   * D-097: the avatar jumped. Optional: a client without it shows no one the
+   * jump. The client sends it only while live on the street or the roof.
+   */
+  jump?(): boolean;
   disconnect(): Promise<void>;
   onStatus(listener: (event: LobbyStatusEvent) => void): () => void;
   onPeers(listener: (peers: readonly PeerSnapshot[]) => void): () => void;
@@ -260,7 +265,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     try {
       stopPeers = ownedClient.onPeers((snapshot) => {
         if (active && !destroyed && client === ownedClient) {
-          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite, carrying }) => ({ id: gameId, x, y, facing, sprite, carrying })));
+          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite, carrying, jumps }) => ({ id: gameId, x, y, facing, sprite, carrying, jumps })));
         }
       });
     } catch (error) {
@@ -477,6 +482,13 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     }
     return true;
   };
+  // D-097: a cosmetic jump, forwarded while connected. The client itself
+  // refuses while suspended (a private interior) and in the Studio.
+  const onJumped = () => {
+    const ownedClient = client;
+    if (!ownedClient || state.status !== 'connected' || typeof ownedClient.jump !== 'function') return;
+    ownedClient.jump();
+  };
   const onAreaMoved = (value: WorldEvents['area:moved']) => {
     const owned = ownMovementPayload(value);
     if (!owned) return;
@@ -677,6 +689,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         stops.push(world.on('rooftop:exited', onRooftopExited));
         stops.push(world.on('area:moved', onAreaMoved));
         stops.push(world.on('avatar:selected', onAvatarSelected));
+        stops.push(world.on('player:jumped', onJumped));
         return stop;
       } catch (error) {
         try {

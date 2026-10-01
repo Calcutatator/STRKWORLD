@@ -259,6 +259,19 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — A cosmetic per-player event is cheapest as a byte on the presence entry, not a message (D-097)
+
+The Space jump needed peers in the same area to see it without breaking D-086's per-patch design or D-087's isolation. Traps and facts met on the way:
+
+- **The views already do area isolation.** `peers` is `view: true`, so a field on `PresenceEntry` reaches exactly the observers whose `StateView` holds that entry. A one-shot `room.broadcast` would bypass that filter and need its own per-area fan-out; a counter needs none. Measured with `Encoder.encodeView` on two views: one jump costs a seeing observer 4 bytes (`255, refId, 0x80|field, value`) in the next patch, and 2 when the jumper also moved in it (the ref switch is shared); an observer who does not see the jumper gets 0.
+- **The first `encodeView` after `encodeAllView` is not empty.** It flushes the views' own pending additions (46 and 26 bytes here); measure from the second patch.
+- **A counter needs a baseline.** A peer first seen with `jumps = 7` must not jump on arrival: the remote layer stores the first value and plays only on a change.
+- **Session frames are clamped to 100 ms** (`MAX_SESSION_FRAME_MS`): `session.update(250)` advances 100. Tests that wait out a jump or cooldown must step in small frames.
+- **Space was captured but unbound.** `dom-keyboard.ts` already swallowed Space while the World owned input; E (sandbox, plaza, kick) and F (outfit) are the only action keys, so nothing had to move. A suspended keyboard stops capturing, so a focused panel button still gets Space natively.
+- **Shared seam changes ripple into fixtures.** Adding `jumps` to `PresenceState`/`PeerSnapshot` failed typecheck in `privacy.test.ts`'s frozen field set and in web/lobby fixtures that spell out a full snapshot (`presence-controller.test.ts`, `client.test.ts`); the HUD's control list is pinned in two tests (`GettingStarted.test.tsx`, `HudLayer.test.tsx`).
+
+*Verified:* `packages/lobby/src/jump.test.ts` (floor, refusals, area views, the 4-byte patch), `jump-room.test.ts` (real server: a street jump reaches the street, a roof jump the roof, neither the other or the Studio), `packages/world/src/world-session-jump.test.ts` (gating, no double jump, cooldown, movement unchanged), `presenter.test.ts` (local and peer jump, shadow, reduced motion). A jump strip of `avatar-1` was rendered with `createFigureRenderer`.
+
 ### 2026-10-01 — Four fighting looks were only a weapon; every one is now a change of clothes, and the chibi head decides what reads (D-096)
 
 The owner's "only a few of the characters in the fighting stances change clothes" was right: `avatar-10`, `11`, `13` and `14` were the everyday outfit plus a weapon (`...COSY_N`), and `avatar-9` and `16` added one piece to the same clothes. All six are new outfits, SAO-inspired archetypes; `avatar-12` and `15` already changed and are kept. Traps met on the way:

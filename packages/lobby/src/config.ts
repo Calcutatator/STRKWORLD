@@ -120,6 +120,22 @@ export const FOOTBALL_MIN_KICK_INTERVAL_MS = 250;
  */
 export const FOOTBALL_CLIENT_KICK_INTERVAL_MS = 300;
 
+/**
+ * Server-side floor between two accepted jumps from the same session, in ms.
+ * D-097. Strict, like the kick's: a jump is a key press. A jump inside it is
+ * dropped silently, and nothing about it reaches anyone.
+ */
+export const JUMP_MIN_INTERVAL_MS = 400;
+
+/**
+ * The floor the client wrapper holds its own jumps to, in ms: above the
+ * server floor, so jitter never drops an honest jump. The World's own jump
+ * (500 ms in the air, then a 150 ms cooldown) is slower still. Moves, sandbox
+ * actions, kicks and jumps together stay under `MAX_MESSAGES_PER_SECOND`:
+ * 20 + 5 + 3.3 + 2.2 a second, against 40.
+ */
+export const JUMP_CLIENT_INTERVAL_MS = 450;
+
 /** How often the room encodes state changes, in ms. 20fps. */
 export const PATCH_RATE_MS = 50;
 
@@ -248,6 +264,12 @@ export const MESSAGE = Object.freeze({
    * Whatever a client sends with it is never read.
    */
   kick: 'football:kick',
+  /**
+   * No payload — D-097: the avatar jumped. The room bumps the sender's
+   * `jumps` counter, at most once per `JUMP_MIN_INTERVAL_MS`, on the street
+   * or the roof. Whatever a client sends with it is never read.
+   */
+  jump: 'jump',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];

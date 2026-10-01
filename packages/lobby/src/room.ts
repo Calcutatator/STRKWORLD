@@ -274,6 +274,16 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.onMessage(MESSAGE.kick, (client: Client) => {
       this.#registry.kickBall(client.sessionId, performance.now());
     });
+
+    /*
+     * D-097. The payload is never read. An accepted jump bumps the sender's
+     * own `jumps` counter, which the next patch carries only to the views
+     * that already hold its entry: the same area, the same interest radius.
+     * No view sync: nobody moved.
+     */
+    this.onMessage(MESSAGE.jump, (client: Client) => {
+      this.#registry.jump(client.sessionId, performance.now());
+    });
   }
 
   override onJoin(client: Client, options?: unknown): void {
