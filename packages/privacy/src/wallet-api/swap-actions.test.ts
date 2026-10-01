@@ -75,7 +75,7 @@ function fixture() {
       return tokens.map((token) => ({ token, balance: '0x64' }));
     },
     async strk20InvokeTransaction() {
-      return { transaction_hash: '0xshield' };
+      return { transaction_hash: '0x5e1d' };
     },
     async strk20PrepareInvoke(actions) {
       prepared.push(actions);

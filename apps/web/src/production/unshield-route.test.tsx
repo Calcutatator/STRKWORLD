@@ -23,7 +23,8 @@ import { detectRoutePolicy, parseRoutePolicy, routePolicyFrom } from './config.j
 /**
  * D-062 end to end: the production environment switch is the only thing that
  * opens unshield, from the parsed policy through the Shell's doors and the
- * Bank's Unshield tab down to the Wallet API adapter's relayed route.
+ * Bank's Unshield tab down to the Wallet API adapter, where the wallet proves
+ * and submits it (D-082).
  *
  * Vite inlines `import.meta.env` when it transforms a module, so `vi.stubEnv`
  * cannot reach `detectRoutePolicy()`. The rendered Bank reads the live policy
@@ -154,19 +155,15 @@ describe("the Bank's Unshield tab follows this build's environment", () => {
   });
 });
 
-describe('the Wallet API adapter relays unshield under the parsed policy', () => {
-  function adapter(policy: WalletRoutePolicy, relayFee = 5n) {
-    // The shell speaks typed intents only. The wallet's proof stays opaque
-    // here: the adapter must hand it to the relay unchanged, so this test
-    // never builds or opens a protocol action (D-018).
-    const proof = Object.freeze({ opaque: 'wallet-proof' }) as unknown as Awaited<
-      ReturnType<WalletStrk20Account['strk20PrepareInvoke']>
-    >;
+describe('the Wallet API adapter has the wallet submit unshield under the parsed policy (D-082)', () => {
+  function adapter(policy: WalletRoutePolicy) {
+    // The shell speaks typed intents only, so this test never builds or opens
+    // a protocol action (D-018): it checks who is asked, not what.
     const wallet: WalletStrk20Account = {
       address: '0xabc',
       strk20Balances: async (tokens) => tokens.map((token) => ({ token, balance: '0x64' })),
-      strk20InvokeTransaction: vi.fn(async () => ({ transaction_hash: '0xshield' })),
-      strk20PrepareInvoke: vi.fn(async () => proof),
+      strk20InvokeTransaction: vi.fn(async () => ({ transaction_hash: '0x5e1d' })),
+      strk20PrepareInvoke: vi.fn(async () => { throw new Error('an unshield is not relayed'); }),
     };
     const pool: PoolReadClient = {
       config: async () => ({ feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
@@ -177,7 +174,7 @@ describe('the Wallet API adapter relays unshield under the parsed policy', () =>
       estimate: vi.fn(async () => ({
         token: STRK,
         recipient: FEE_RECIPIENT,
-        amount: relayFee,
+        amount: 1n,
         authorization: 'fee-auth',
         expiresAtBlock: 1_450,
       })),
@@ -190,38 +187,31 @@ describe('the Wallet API adapter relays unshield under the parsed policy', () =>
       supportedVersions: async () => ['0.10.3'],
       policy,
     });
-    return { ops, gateway, wallet, proof };
+    return { ops, gateway, wallet };
   }
 
   const unshieldIntent = { kind: 'unshield', token: STRK, amount: 20n, recipient: BOB } as const;
   const transferIntent = { kind: 'transfer', token: STRK, amount: 20n, recipient: BOB } as const;
 
-  it('prepares, proves and submits a STRK unshield as a relayed pool-native route', async () => {
-    const { ops, gateway, wallet, proof } = adapter(unshieldOnly);
+  it('prepares a STRK unshield at the pool fee and has the wallet prove and submit it, with no relay', async () => {
+    const { ops, gateway, wallet } = adapter(unshieldOnly);
 
     const batch = await ops.prepare([unshieldIntent]);
-    const result = await batch.confirm({ feeCeiling: POOL_FEE + 5n });
+    expect(batch).toMatchObject({ poolFee: POOL_FEE, gasEstimate: 0n, totalCost: POOL_FEE });
+    const result = await batch.confirm({ feeCeiling: POOL_FEE });
 
-    expect(result).toEqual({ transactionHash: '0xunshield' });
-    expect(gateway.estimate).toHaveBeenCalledWith(expect.objectContaining({
-      route: 'unshield',
-      feeToken: STRK,
-      operationToken: STRK,
-    }));
-    expect(wallet.strk20PrepareInvoke).toHaveBeenCalledOnce();
-    expect(wallet.strk20InvokeTransaction).not.toHaveBeenCalled();
-    expect(gateway.submit).toHaveBeenCalledOnce();
-    const submitted = vi.mocked(gateway.submit).mock.calls[0]![0];
-    expect(submitted).toMatchObject({ route: 'unshield', feeAuthorization: 'fee-auth', proofValidityBlocks: 450 });
-    expect(submitted.artifact).toBe(proof);
+    expect(result).toEqual({ transactionHash: '0x5e1d' });
+    expect(wallet.strk20InvokeTransaction).toHaveBeenCalledOnce();
+    expect(wallet.strk20PrepareInvoke).not.toHaveBeenCalled();
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
   });
 
-  it('refuses a relay fee above the unshield ceiling and a batch above its intent bound', async () => {
-    await expect(adapter(unshieldOnly, 6n).ops.prepare([unshieldIntent])).rejects.toThrow(/relay fee exceeds/i);
+  it('refuses a batch above the unshield intent bound', async () => {
     await expect(adapter(unshieldOnly).ops.prepare([unshieldIntent, unshieldIntent])).rejects.toThrow(/too many intents/i);
   });
 
-  it('holds both relayed routes to the strictest merged ceiling', async () => {
+  it('needs no relay quote for either pool spend under a merged policy', async () => {
     const merged = parseRoutePolicy({
       ...UNSHIELD_ENV,
       VITE_STRK20_TRANSFER_ENABLED: 'true',
@@ -229,13 +219,11 @@ describe('the Wallet API adapter relays unshield under the parsed policy', () =>
       VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '7',
       VITE_STRK20_TRANSFER_ALLOWED_TOKENS: STRK,
     });
-    expect(merged.maxRelayFee).toBe(5n);
+    const { ops, gateway } = adapter(merged);
 
-    // 6 is inside transfer's own ceiling of 7, but not inside the merged one.
-    await expect(adapter(merged, 6n).ops.prepare([transferIntent])).rejects.toThrow(/relay fee exceeds/i);
-    await expect(adapter(merged, 6n).ops.prepare([unshieldIntent])).rejects.toThrow(/relay fee exceeds/i);
-    await expect(adapter(merged, 5n).ops.prepare([transferIntent])).resolves.toMatchObject({ poolFee: POOL_FEE });
-    await expect(adapter(merged, 5n).ops.prepare([unshieldIntent])).resolves.toMatchObject({ poolFee: POOL_FEE });
+    await expect(ops.prepare([transferIntent])).resolves.toMatchObject({ totalCost: POOL_FEE });
+    await expect(ops.prepare([unshieldIntent])).resolves.toMatchObject({ totalCost: POOL_FEE });
+    expect(gateway.estimate).not.toHaveBeenCalled();
   });
 
   it('admits no other route or token through the unshield switch', async () => {

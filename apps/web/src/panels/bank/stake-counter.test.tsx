@@ -36,8 +36,8 @@ import {
 const STRK = ENDUR_XSTRK_ASSET;
 const ONE = 10n ** 18n;
 const POOL_FEE = 6n * ONE;
-/** The fake's relay estimate for one stake: two units of 1e15 (see fake.ts). */
-const STAKE_GAS = 2_000000000000000n;
+/** The fake's relay estimate for one stake: none, since the wallet submits it (D-082, fake.ts). */
+const STAKE_GAS = 0n;
 const strk = (whole: string) => parseTokenAmount(whole)!;
 const escaped = (text: string) => text.replaceAll("'", '&#x27;');
 

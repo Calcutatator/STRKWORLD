@@ -99,19 +99,21 @@ describe('Wallet Standard forward compatibility', () => {
           actionTypes: ['deposit'],
           receipt: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         },
+        // D-082: the wallet proves and submits the pool spends itself, with
+        // no relay-fee leg; only the quote-bound swap still reaches the relay.
         {
           name: 'unshield',
           intent: { kind: 'unshield', token: TOKEN, amount: 10n, recipient: RECIPIENT },
-          walletMethod: 'wallet_strk20PrepareInvoke',
-          actionTypes: ['withdraw', 'withdraw'],
-          receipt: '0x102',
+          walletMethod: 'wallet_strk20InvokeTransaction',
+          actionTypes: ['withdraw'],
+          receipt: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         },
         {
           name: 'transfer',
           intent: { kind: 'transfer', token: TOKEN, amount: 5n, recipient: RECIPIENT },
-          walletMethod: 'wallet_strk20PrepareInvoke',
-          actionTypes: ['transfer', 'withdraw'],
-          receipt: '0x103',
+          walletMethod: 'wallet_strk20InvokeTransaction',
+          actionTypes: ['transfer'],
+          receipt: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         },
         {
           name: 'swap',
@@ -137,21 +139,22 @@ describe('Wallet Standard forward compatibility', () => {
         'wallet_supportedWalletApi',
         'wallet_strk20Balances',
         'wallet_strk20InvokeTransaction',
-        'wallet_strk20PrepareInvoke',
-        'wallet_strk20PrepareInvoke',
+        'wallet_strk20InvokeTransaction',
+        'wallet_strk20InvokeTransaction',
         'wallet_strk20PrepareInvoke',
       ]);
       expect(backendRequests.map(({ path }) => path)).toEqual(expect.arrayContaining([
         '/api/v1/rpc/pool-config',
         '/api/v1/rpc/public-key',
-        '/api/v1/private/fees',
         '/api/v1/private/swaps/prepare',
         '/api/v1/private/submissions',
       ]));
+      // No fee quote is asked for any route (D-082): the swap's comes with its plan.
+      expect(backendRequests.map(({ path }) => path)).not.toContain('/api/v1/private/fees');
       expect(backendRequests
         .filter(({ path }) => path === '/api/v1/private/submissions')
         .map(({ body }) => body['route']))
-        .toEqual(['unshield', 'transfer', 'swap']);
+        .toEqual(['swap']);
 
       const source = productionPrivacySources();
       const sourceText = source.map(({ text }) => text).join('\n');

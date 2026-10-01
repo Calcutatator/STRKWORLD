@@ -2059,108 +2059,152 @@ button[data-locked="true"] {
  * every token `:root` sets (derived ones included; see the theme-token
  * finding in AGENTS.md) and flips `color-scheme` for native controls.
  *
- * Tokens measured from vesu.xyz (the palette the street's Vesu plate uses):
- * white pages #FFFFFF, near-black ink #0A0A0A, electric blue #2C41F6, pale
- * periwinkle #E0E5FF with deep-blue text #2030B6. Contrast, checked against
- * WCAG AA (styles.test.ts):
- *  - Body text #0A0A0A and dim text #52525B clear 4.5:1 on the white card
- *    and on the raised periwinkle #F2F4FF.
- *  - Primary buttons are white on the electric blue (6.6:1), and on the
- *    deep blue when hovered (9.7:1).
- *  - Secondary buttons are deep blue on the periwinkle (7.8:1).
- *  - The focus ring is the deep blue #2030B6; field borders #8A8A93 keep the
- *    3:1 a field boundary needs against the card.
+ * Tokens measured from the light theme in vesu.xyz's stylesheet: white
+ * cards #FFFFFF on the #F5F5F5 page, #E8E8E8 fills, hairlines at 7 % black,
+ * near-black ink #0A0A0A, the electric-blue primary button #2C41F6 with white
+ * text, the pale periwinkle secondary #E0E5FF with deep-blue text #2030B6,
+ * 8 px buttons and fields on 16 px panels, and its soft blue-grey shadows.
+ * Type: Vesu sets headings in Base Neue Wide at 600 and body copy in Nunito
+ * Sans. Neither is loaded (system stacks only): Nunito Sans is approximated
+ * by Avenir Next, and headings ask the system face to widen (`font-stretch`),
+ * which SF Pro can. Contrast, checked against WCAG AA (styles.test.ts):
+ *  - Body text #0A0A0A clears 18:1 on every surface. Vesu's own secondary
+ *    grey #808080 is 3.95:1 on white, so dim text is lifted to #666666
+ *    (5.74:1 on white, 5.27:1 on the page grey).
+ *  - Primary buttons are white on the electric blue (6.6:1), 7.3:1 on its
+ *    hover shade; secondary buttons deep blue on the periwinkle (7.8:1, and
+ *    7.1:1 hovered).
+ *  - Warning, danger and success take Vesu's own text tones, darkened where
+ *    needed: #806600 (5.5:1), #90090C (9.4:1), #0D7328 (6.0:1).
+ *  - The focus ring is the deep blue #2030B6 (9.7:1); field borders #8A8A8A
+ *    keep the 3:1 a field boundary needs against the card, which Vesu's
+ *    borderless fields would not.
  * --------------------------------------------------------------------- */
 
 .panel[data-building="vault"] {
   color-scheme: light;
 
-  /* System stacks only: Vesu's wide grotesk is approximated, never loaded. */
-  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* System stacks only: Vesu's faces are approximated, never loaded. */
+  --ui-font: "Nunito Sans", "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   --ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --ui-heading-font: var(--ui-font);
+  --ui-heading-font: "Base Neue", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font);
-  --ui-heading-size: 1.4rem;
+  --ui-heading-size: 1.35rem;
   --ui-heading-weight: 600;
   --ui-heading-case: none;
-  --ui-heading-tracking: -0.01em;
+  --ui-heading-tracking: 0.01em;
 
-  --ui-page: #ffffff;
-  --ui-scrim: rgb(224 229 255 / 0.8);
+  /* Vesu's modal backdrop: black at half strength over the page. */
+  --ui-page: #f5f5f5;
+  --ui-scrim: rgb(10 10 10 / 0.45);
   --ui-surface: #ffffff;
-  --ui-surface-raised: #f2f4ff;
-  --ui-surface-sunken: #f7f8fc;
+  --ui-surface-raised: #f5f5f5;
+  --ui-surface-sunken: #fbfbfb;
   --ui-header-bg: none;
-  --ui-line: #e0e5ff;
-  --ui-line-subtle: #eceffd;
-  --ui-panel-border: 1px solid #e0e5ff;
-  --ui-panel-shadow: 0 24px 64px rgb(32 48 182 / 0.16), 0 2px 8px rgb(10 10 10 / 0.06);
+  --ui-line: #e8e8e8;
+  --ui-line-subtle: rgb(0 0 0 / 0.07);
+  --ui-panel-border: 1px solid rgb(0 0 0 / 0.07);
+  --ui-panel-shadow: 0 8px 28px -6px rgb(19 40 78 / 0.12), 0 18px 88px -4px rgb(19 40 78 / 0.14);
   --ui-hud-shadow: 0 4px 0 rgb(0 0 0 / 0.28), 0 12px 28px rgb(0 0 0 / 0.35);
 
   --ui-text: #0a0a0a;
-  --ui-text-dim: #52525b;
+  --ui-text-dim: #666666;
   --ui-heading: #0a0a0a;
 
   --ui-accent: #2c41f6;
   --ui-focus: #2030b6;
   --ui-focus-width: 2px;
   --ui-callout-edge: var(--ui-accent);
-  --ui-warn: #b45309;
-  --ui-danger: #b91c1c;
-  --ui-success: #15803d;
-  --ui-lock: #63636b;
+  --ui-warn: #806600;
+  --ui-danger: #90090c;
+  --ui-success: #0d7328;
+  --ui-lock: #6b6b6b;
 
+  /* Vesu's shape language: 16 px panels, 8 px buttons and fields, no pills
+   * outside tags and chips. */
   --ui-radius-panel: 16px;
   --ui-radius-inner: 12px;
-  --ui-radius-control: 10px;
-  --ui-radius-button: 999px;
-  --ui-radius-tabs: 999px;
+  --ui-radius-control: 8px;
+  --ui-radius-button: 8px;
+  --ui-radius-tabs: 10px;
 
-  --ui-input-border: #8a8a93;
-  --ui-input-border-hover: #6b6b75;
-  --ui-input-focus-glow: 0 0 0 4px rgb(44 65 246 / 0.2);
+  --ui-input-border: #8a8a8a;
+  --ui-input-border-hover: #6b6b6b;
+  --ui-input-focus-glow: 0 0 0 4px rgb(44 65 246 / 0.18);
 
-  --ui-btn-size: 0.95rem;
+  /* Secondary buttons are Vesu's: deep blue on the periwinkle, flat. */
+  --ui-btn-size: 1rem;
   --ui-btn-weight: 600;
   --ui-btn-case: none;
   --ui-btn-tracking: 0;
-  --ui-btn-pad: 0.6rem 1.15rem;
+  --ui-btn-pad: 0.62rem 1.1rem;
   --ui-btn-bg: #e0e5ff;
-  --ui-btn-bg-hover: #d0d8ff;
+  --ui-btn-bg-hover: #d3daff;
   --ui-btn-text: #2030b6;
-  --ui-btn-border: #d0d8ff;
-  --ui-btn-border-hover: #b8c4ff;
+  --ui-btn-border: #e0e5ff;
+  --ui-btn-border-hover: #d3daff;
   --ui-btn-edge: transparent;
   --ui-btn-inset: 0 0 #0000;
   --ui-btn-glow: 0 0 #0000;
   --ui-btn-drop: 0 0 #0000;
   --ui-btn-drop-active: 0 0 #0000;
   --ui-btn-depth: 0px;
-  --ui-btn-lift: -1px;
+  --ui-btn-lift: 0px;
   --ui-btn-press: 1px;
 
+  /* The primary is the electric blue, darkened 7 % on hover as Vesu does. */
   --ui-primary-bg: #2c41f6;
-  --ui-primary-bg-hover: #2030b6;
+  --ui-primary-bg-hover: #293ce5;
   --ui-primary-text: #ffffff;
   --ui-primary-border: #2c41f6;
-  --ui-primary-border-hover: #2030b6;
+  --ui-primary-border-hover: #293ce5;
   --ui-primary-edge: transparent;
   --ui-primary-inset: 0 0 #0000;
-  --ui-primary-glow: 0 10px 24px -12px rgb(44 65 246 / 0.6);
+  --ui-primary-glow: 0 0 #0000;
 
-  --ui-tab-hover: rgb(44 65 246 / 0.08);
+  /* Vesu's segmented control: the chosen mode in the blue, the rest quiet. */
+  --ui-tab-hover: rgb(0 0 0 / 0.05);
   --ui-tab-selected-bg: #2c41f6;
   --ui-tab-selected-text: #ffffff;
-  --ui-tab-selected-shadow: 0 1px 2px rgb(10 10 10 / 0.12);
+  --ui-tab-selected-shadow: 0 1px 2px rgb(19 40 78 / 0.16);
 }
 
 .panel[data-building="vault"] > .panel-card > .panel-header {
-  border-bottom-color: #e0e5ff;
+  border-bottom-color: rgb(0 0 0 / 0.07);
+}
+
+/* Vesu's mark beside the window's title: its bar and iridescent triangle,
+ * an inline SVG drawn from the logo's own colours, so nothing is fetched.
+ * A flex item of the header, before the title; decorative only. */
+.panel[data-building="vault"] > .panel-card > .panel-header::before {
+  content: "";
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: -0.4rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-2 -2 104 104'%3E%3Cdefs%3E%3ClinearGradient id='b' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%230e1f27'/%3E%3Cstop offset='.11' stop-color='%230e1f27'/%3E%3Cstop offset='.135' stop-color='%23d8f4fb'/%3E%3Cstop offset='.16' stop-color='%23008bad'/%3E%3Cstop offset='.3' stop-color='%2310526a'/%3E%3Cstop offset='.5' stop-color='%2310323e'/%3E%3Cstop offset='.7' stop-color='%230c1113'/%3E%3Cstop offset='1' stop-color='%230a0a0a'/%3E%3C/linearGradient%3E%3ClinearGradient id='t' x1='.2' x2='.55' y2='1'%3E%3Cstop offset='0' stop-color='%23d9b91d'/%3E%3Cstop offset='.28' stop-color='%23e69800'/%3E%3Cstop offset='.5' stop-color='%23eb7700'/%3E%3Cstop offset='.68' stop-color='%23dd5600'/%3E%3Cstop offset='.84' stop-color='%23be4400'/%3E%3Cstop offset='1' stop-color='%23934200'/%3E%3C/linearGradient%3E%3CradialGradient id='g' cx='.62' cy='0' r='.62'%3E%3Cstop offset='0' stop-color='%2366ef74'/%3E%3Cstop offset='.45' stop-color='%2380e054' stop-opacity='.8'/%3E%3Cstop offset='1' stop-color='%2380e054' stop-opacity='0'/%3E%3C/radialGradient%3E%3ClinearGradient id='s' x1='.42'%3E%3Cstop offset='0' stop-color='%23314a20' stop-opacity='0'/%3E%3Cstop offset='1' stop-color='%23314a20' stop-opacity='.78'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M33.0 100.0 56.0 100.0 23.0 0.0 0.0 0.0Z' fill='url(%23b)'/%3E%3Cpath d='M59.0 95.5 60.3 97.5 62.5 98.7 65.0 98.7 67.2 97.5 68.5 95.5 97.4 7.9 97.7 5.6 97.1 3.5 95.8 1.6 93.9 0.4 91.7 0.0 35.8 0.0 33.6 0.4 31.7 1.6 30.4 3.5 29.8 5.6 30.1 7.9Z' fill='url(%23t)'/%3E%3Cpath d='M59.0 95.5 60.3 97.5 62.5 98.7 65.0 98.7 67.2 97.5 68.5 95.5 97.4 7.9 97.7 5.6 97.1 3.5 95.8 1.6 93.9 0.4 91.7 0.0 35.8 0.0 33.6 0.4 31.7 1.6 30.4 3.5 29.8 5.6 30.1 7.9Z' fill='url(%23g)'/%3E%3Cpath d='M59.0 95.5 60.3 97.5 62.5 98.7 65.0 98.7 67.2 97.5 68.5 95.5 97.4 7.9 97.7 5.6 97.1 3.5 95.8 1.6 93.9 0.4 91.7 0.0 35.8 0.0 33.6 0.4 31.7 1.6 30.4 3.5 29.8 5.6 30.1 7.9Z' fill='url(%23s)'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* And the triangle's gradient as a thin line along the header's top edge. */
+.panel[data-building="vault"] > .panel-card > .panel-header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  pointer-events: none;
+  background: linear-gradient(90deg, #d9b91d, #e69800 22%, #eb7700 40%, #80e054 62%, #26c081 80%, #2c41f6);
+}
+
+/* Headings in the widened system face, as Vesu's wide grotesk sets them. */
+.panel[data-building="vault"] :is(.panel-header h2, .panel-review h3, .vault-position > h3) {
+  font-stretch: 125%;
 }
 
 .panel[data-building="vault"] .balance-total {
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
@@ -2175,35 +2219,41 @@ button[data-locked="true"] {
   margin: 0;
 }
 
-/* The eyebrow is a periwinkle pill; the copy stays sentence case. */
+/* The eyebrow is Vesu's tag: deep blue on the periwinkle, set in caps. */
 .panel[data-building="vault"] .vault-eyebrow {
   padding: 0.22rem 0.7rem;
   border-radius: 999px;
   background: #e0e5ff;
   color: #2030b6;
+  font-family: var(--ui-heading-font);
   font-size: 0.72rem;
   font-weight: 700;
+  font-stretch: 125%;
   letter-spacing: 0.12em;
   line-height: 1.3;
   text-transform: uppercase;
 }
 
-/* How fees work: product information in a quiet card, never styled as a
- * disclosure, which is the register's and sits at the commit point. */
+/* How fees work: product information in a quiet card on the page grey,
+ * never styled as a disclosure, which is the register's and sits at the
+ * commit point. */
 .panel[data-building="vault"] .vault-note {
   justify-self: stretch;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid #e0e5ff;
-  border-radius: var(--ui-radius-inner);
-  background: var(--ui-surface-sunken);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgb(0 0 0 / 0.07);
+  border-radius: 8px;
+  background: #f5f5f5;
   color: var(--ui-text);
   font-size: 0.92rem;
 }
 
 .panel[data-building="vault"] .vault-position > h3 {
+  flex-basis: 100%;
   margin: 0 0 0.5rem;
+  font-family: var(--ui-heading-font);
   font-size: 1rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .panel[data-building="vault"] :is(.vault-figures, .vault-review) {
@@ -2216,6 +2266,12 @@ button[data-locked="true"] {
 .panel[data-building="vault"] :is(.vault-figures, .vault-review) > dd {
   margin: 0;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The agreed total at Vesu's bold, not the base theme's heavy 800. */
+.panel[data-building="vault"] .review-costs :is(dt, dd):last-of-type {
+  font-weight: 700;
 }
 
 .panel[data-building="vault"] .vault-review-note {
@@ -2230,29 +2286,42 @@ button[data-locked="true"] {
   align-items: center;
 }
 
+/* Vesu's info box: deep blue text on the periwinkle, 8 px round. */
 .panel[data-building="vault"] .vault-unsupported {
-  padding: 0.75rem 0.9rem;
-  border-left: 3px solid var(--ui-accent);
-  border-radius: var(--ui-radius-inner);
-  background: var(--ui-surface-raised);
-  color: var(--ui-text);
+  padding: 0.8rem 0.95rem;
+  border-radius: 8px;
+  background: #e0e5ff;
+  color: #2030b6;
+  font-weight: 600;
 }
 
 /* D-079: one row per token the counter offers, Vesu's rate beside its
- * symbol and the position under it once read. */
+ * symbol and the position under it once read: white market rows edged in
+ * the hairline, striped in the page grey as Vesu's tables are. */
 .panel[data-building="vault"] .vault-markets {
   display: grid;
-  gap: 0.5rem;
+  flex-basis: 100%;
+  gap: 0;
   margin: 0 0 0.75rem;
   padding: 0;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 0.07);
+  border-radius: 12px;
+  background: #ffffff;
   list-style: none;
 }
 
 .panel[data-building="vault"] .vault-market {
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--ui-line);
-  border-radius: var(--ui-radius-inner);
-  background: var(--ui-surface-sunken);
+  padding: 0.65rem 0.85rem;
+  background: #ffffff;
+}
+
+.panel[data-building="vault"] .vault-market:nth-child(2n) {
+  background: #fbfbfb;
+}
+
+.panel[data-building="vault"] .vault-market + .vault-market {
+  border-top: 1px solid rgb(0 0 0 / 0.07);
 }
 
 .panel[data-building="vault"] .vault-market-head {
@@ -2264,8 +2333,13 @@ button[data-locked="true"] {
   margin: 0;
 }
 
+/* The token as Vesu's chip: its symbol in a white pill on the hairline. */
 .panel[data-building="vault"] .vault-market-symbol {
-  font-weight: 600;
+  padding: 0.12rem 0.6rem;
+  border: 1px solid rgb(0 0 0 / 0.07);
+  border-radius: 999px;
+  background: #ffffff;
+  font-weight: 700;
 }
 
 .panel[data-building="vault"] :is(.vault-apy, .vault-market-none, .vault-as-of, .vault-rates-note, .vault-stand-in-note) {
@@ -2273,12 +2347,16 @@ button[data-locked="true"] {
   font-size: 0.9rem;
 }
 
+.panel[data-building="vault"] .vault-apy {
+  font-variant-numeric: tabular-nums;
+}
+
 .panel[data-building="vault"] .vault-market-none {
   margin: 0.35rem 0 0;
 }
 
 .panel[data-building="vault"] .vault-market > .vault-figures {
-  margin: 0.4rem 0 0;
+  margin: 0.45rem 0 0;
 }
 
 .panel[data-building="vault"] :is(.vault-as-of, .vault-rates-note) {
@@ -2328,16 +2406,33 @@ button[data-locked="true"] {
 }
 
 /* The stand-in address is public, and this line says so (D-079): quiet
- * product information, never styled as the register's disclosure. */
+ * product information under a hairline, never styled as the register's
+ * disclosure. Its address sits in Vesu's grey field chip. */
 .panel[data-building="vault"] .vault-stand-in {
-  margin: 0.75rem 0 0;
+  flex-basis: 100%;
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(0 0 0 / 0.07);
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
 
+.panel[data-building="vault"] .vault-stand-in > code {
+  border-color: transparent;
+  border-radius: 6px;
+  background: #f5f5f5;
+}
+
 .panel[data-building="vault"] .vault-stand-in > a {
-  color: var(--ui-accent);
+  color: #2030b6;
   font-weight: 600;
+  text-underline-offset: 0.15em;
+}
+
+.panel[data-building="vault"] .vault-stand-in > a:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .panel[data-building="vault"] .vault-stand-in-note {
@@ -2346,8 +2441,12 @@ button[data-locked="true"] {
 }
 
 @media (forced-colors: active) {
-  .panel[data-building="vault"] .vault-eyebrow {
+  .panel[data-building="vault"] :is(.vault-eyebrow, .vault-market-symbol) {
     border: 1px solid CanvasText;
+  }
+
+  .panel[data-building="vault"] > .panel-card > .panel-header::after {
+    background: CanvasText;
   }
 }
 

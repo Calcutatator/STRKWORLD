@@ -26,9 +26,9 @@ import type { Intent } from '@strkworld/privacy';
  *
  * **It holds at most one transfer** (D-065). A first transfer to a new
  * recipient publishes that recipient's address, so a batch of transfers would
- * publish every new recipient in one transaction, paid by one sender. The
- * relay refuses such a submission; refusing here says so before the wallet
- * proves anything.
+ * publish every new recipient in one transaction, paid by one sender.
+ * Refusing here says so before the wallet proves anything; the wallet now
+ * submits a send itself (D-082), so this is where the rule is held.
  *
  * **It never clears itself on emit.** `confirm()` hands out a frozen snapshot;
  * the visit's intent survives a failed prepare so the player is not asked to
@@ -130,9 +130,10 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
         if (intent.kind === 'transfer' && intents.some((entry) => entry.kind === 'transfer')) {
           return { ok: false, rejection: { reason: 'one-recipient-per-send' } };
         }
-        // The relay's unshield route admits exactly one withdrawal per
-        // submission (apps/backend server-actions.ts), so a second unshield in
-        // the batch would be refused only after the player approved the proof.
+        // One withdrawal per unshield, as the relay's unshield route admitted
+        // (apps/backend server-actions.ts). Since D-082 the wallet submits it
+        // and the relay is not asked, but the rule is kept: one public
+        // withdrawal per transaction links no two recipients.
         if (intent.kind === 'unshield' && intents.some((entry) => entry.kind === 'unshield')) {
           return { ok: false, rejection: { reason: 'one-unshield-per-send' } };
         }

@@ -586,10 +586,11 @@ describe('BankPanel rendering', () => {
     await panel.prepare();
 
     const markup = render(panel, seam);
-    // The relay estimate is 0.001 STRK — a four-decimal display would show it
-    // as 0.001, but the pool fee and total must survive at full precision.
+    // A send is wallet-submitted (D-082): the seam states no relay estimate,
+    // and the pool fee and total survive at full precision.
     expect(markup).toContain('6 STRK');
-    expect(markup).toContain('0.001 STRK');
+    expect(markup).toContain('<dd>0 STRK</dd>');
+    expect(markup).not.toContain('0.001 STRK');
   });
 
   it('states a queued shield\'s public leg in STRK, never in base units (D-072)', async () => {

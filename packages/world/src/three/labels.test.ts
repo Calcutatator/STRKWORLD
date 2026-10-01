@@ -5,6 +5,7 @@ import {
   SIGN_PIXELS_PER_UNIT,
   createCanvasLabelFactory,
   createNullLabelFactory,
+  glyphStretch,
   layoutFloatingLabel,
   layoutSignText,
   signCanvasSize,
@@ -233,6 +234,40 @@ describe('createCanvasLabelFactory', () => {
     expect(avnuCanvas!.drawnWith[0]!.font).toMatch(/^800 /);
   });
 
+  it('widens a stretched wordmark about its centre, and fits it to the board widened', () => {
+    const { doc, canvases } = fakeDocument({ ratio: 1 });
+    const factory = createCanvasLabelFactory(doc);
+    const base: SignStyleOptions = { width: 3.2, height: 1.1, titleFont: 'sans', titleWeight: 700, lowercase: true, borderWidth: 0 };
+    const stretched = (titleStretch: number): SignStyleOptions => ({ ...base, titleStretch });
+    factory.sign('Vesu', base);
+    factory.sign('Vesu', stretched(1.4));
+    const [plain, wide] = canvases;
+    expect(plain!.drawn).toEqual(['vesu']);
+    expect(wide!.drawn).toEqual(['vesu']);
+    // An unstretched line draws as it always did, at the board's centre, untransformed.
+    expect(plain!.transforms).toEqual([]);
+    expect(plain!.drawnAt[0]![0]).toBe(plain!.width / 2);
+    // A stretched one is scaled about its own centre and drawn at it.
+    const [, , y] = wide!.transforms[1]!;
+    expect(wide!.transforms).toEqual([['save'], ['translate', wide!.width / 2, y], ['scale', 1.4, 1], ['restore']]);
+    expect(wide!.drawnAt[0]).toEqual([0, 0]);
+    // Measured widened, it still fits the board: a long line shrinks to fit.
+    const px = (canvas: FakeCanvas) => Number(/(\d+)px/.exec(canvas.drawnWith[0]!.font)![1]);
+    factory.sign('a wide wordmark', stretched(1));
+    factory.sign('a wide wordmark', stretched(2));
+    const [, , narrowLong, wideLong] = canvases;
+    expect(px(wideLong!)).toBeLessThan(px(narrowLong!));
+    expect(px(wideLong!) * 0.6 * 'a wide wordmark'.length * 2).toBeLessThanOrEqual(wideLong!.width);
+  });
+
+  it('clamps a glyph stretch to between 1 and 2', () => {
+    expect(glyphStretch(undefined)).toBe(1);
+    expect(glyphStretch(Number.NaN)).toBe(1);
+    expect(glyphStretch(0.5)).toBe(1);
+    expect(glyphStretch(1.4)).toBe(1.4);
+    expect(glyphStretch(3)).toBe(2);
+  });
+
   it('gives every floating label its own sprite geometry, disposed with the label', () => {
     const { doc } = fakeDocument({ ratio: 1 });
     const labels = createCanvasLabelFactory(doc);
@@ -269,6 +304,10 @@ interface FakeCanvas {
   readonly drawnWith: { font: string; letterSpacing: string; fillStyle: unknown }[];
   readonly gradients: { stops: [number, string][] }[];
   readonly arcRadii: number[];
+  /** save / translate / scale / restore calls, in order. */
+  readonly transforms: (string | number)[][];
+  /** Where each line was drawn, in the current transform. */
+  readonly drawnAt: [number, number][];
   getContext(kind: string): unknown;
 }
 
@@ -282,6 +321,8 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
       const drawnWith: { font: string; letterSpacing: string; fillStyle: unknown }[] = [];
       const gradients: { stops: [number, string][] }[] = [];
       const arcRadii: number[] = [];
+      const transforms: (string | number)[][] = [];
+      const drawnAt: [number, number][] = [];
       const context = {
         font: '10px sans-serif',
         letterSpacing: '0px',
@@ -295,8 +336,9 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
           const px = Number(/(\d+(?:\.\d+)?)px/.exec(context.font)?.[1] ?? 10);
           return { width: text.length * px * 0.6 };
         },
-        fillText(text: string) {
+        fillText(text: string, x: number, y: number) {
           drawn.push(text);
+          drawnAt.push([x, y]);
           drawnWith.push({ font: context.font, letterSpacing: context.letterSpacing, fillStyle: context.fillStyle });
         },
         createLinearGradient() {
@@ -307,6 +349,10 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
         arcTo(_x1: number, _y1: number, _x2: number, _y2: number, radius: number) {
           arcRadii.push(radius);
         },
+        save: () => transforms.push(['save']),
+        restore: () => transforms.push(['restore']),
+        translate: (x: number, y: number) => transforms.push(['translate', x, y]),
+        scale: (x: number, y: number) => transforms.push(['scale', x, y]),
         clearRect: vi.fn(),
         beginPath: vi.fn(),
         moveTo: vi.fn(),
@@ -322,6 +368,8 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
         drawnWith,
         gradients,
         arcRadii,
+        transforms,
+        drawnAt,
         getContext: () => (options.noContext ? null : context),
       };
       canvases.push(canvas);

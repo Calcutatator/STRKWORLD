@@ -10,6 +10,7 @@ import {
   Material,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
@@ -24,7 +25,7 @@ import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../
 import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from '../fixed-room.js';
 import { createNullLabelFactory } from './labels.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
-import { AVNU, BUILDING_THEMES, NEAR, STRK20, VESU, boxGeometry } from './palette.js';
+import { AVNU, BUILDING_THEMES, NEAR, STRK20, VESU, VESU_MARK, boxGeometry } from './palette.js';
 import { CITY_FRONT, backdropSurface } from './backdrop.js';
 import { fogRange } from './world-engine.js';
 import {
@@ -421,7 +422,11 @@ describe('buildStreet', () => {
         text: 'NEAR\nINTENTS',
         style: { titleWeight: 400, subtitleFont: 'mono', subtitleColor: '#00ec97', background: '#000000', foreground: '#ffffff', uppercase: true },
       },
-      vault: { text: 'Vesu', style: { background: '#1d1e22', foreground: '#e0e5ff', accent: '#2c41f6' } },
+      // Vesu's wordmark: lowercase ink letters, widened, on no board of their own.
+      vault: {
+        text: 'vesu',
+        style: { lowercase: true, foreground: '#0a0a0a', background: 'rgba(255,255,255,0)', borderWidth: 0, titleWeight: 700, titleStretch: 1.4 },
+      },
     } as const;
     for (const [building, { text, style }] of Object.entries(expected)) {
       const sign = plate(building);
@@ -821,6 +826,87 @@ describe('the Vault, locked or opened on the Shell\'s switch (D-077)', () => {
   /** Behind the door's slot, clear of the vestibule's walls, floor and far wall: where the swung door stands. */
   const inVestibule = (door: { x: number; y: number }) => (vertex: Vector3): boolean =>
     vertex.x > door.x + 0.5 && vertex.x < door.x + 1.95 && vertex.z > door.y - 1.9 && vertex.z < door.y - 0.3;
+
+  it('dresses the Vault in Vesu: a white building, blue light, the wordmark, and the V on its roof in the logo\'s gradients', () => {
+    for (const map of [createStreetMap(), OPEN]) {
+      const { view } = build(map);
+      const vault = view.ground.getObjectByName('building:vault')!;
+      const theme = BUILDING_THEMES.vault!;
+      expect(theme).toMatchObject({ wall: VESU.white, glow: VESU.blue, openPortal: VESU.blue });
+      expect(theme.sign).toMatchObject({ background: '#2c41f6', foreground: '#ffffff', subtitleColor: '#e0e5ff', titleStretch: 1.3 });
+      expect(hexColoursOf(vaultBody(view))).toContain(new Color(VESU.white).getHex());
+      expect((meshNamed(vault, ':glow').material as MeshStandardMaterial).emissive.getHex()).toBe(new Color(VESU.blue).getHex());
+      // The V: self-lit, so the logo's colours read as they are.
+      const mark = meshNamed(vault, ':mark');
+      const material = mark.material as MeshBasicMaterial;
+      expect(material).toBeInstanceOf(MeshBasicMaterial);
+      expect(material.toneMapped).toBe(false);
+      expect(material.vertexColors).toBe(true);
+      // Its bar runs the light-page art's stops, teal down to ink; its triangle
+      // shades from gold and green at the top to orange at the tip.
+      const colours = hexColoursOf(mark);
+      for (const [, hex] of VESU_MARK.light.bar) expect(colours).toContain(new Color(hex).getHex());
+      const hues = huesOf(mark);
+      expect(hues.filter(isOrange).length).toBeGreaterThan(10);
+      expect(hues.filter(isGreen).length).toBeGreaterThan(3);
+      // On the roof, over the building's own tiles, taller than a storey.
+      mark.geometry.computeBoundingBox();
+      const box = mark.geometry.boundingBox!;
+      const { x } = PLAN.find((entry) => entry.building === 'vault')!;
+      expect(box.min.y).toBeGreaterThan(theme.height);
+      expect(box.max.y - box.min.y).toBeGreaterThan(1.9);
+      expect(box.min.x).toBeGreaterThan(x);
+      expect(box.max.x).toBeLessThan(x + 7);
+      expect(box.min.z).toBeGreaterThan(5);
+      expect(box.max.z).toBeLessThan(11);
+      // Facing the street, the bar to the left of the triangle, as the logo reads.
+      const position = mark.geometry.getAttribute('position');
+      const paint = mark.geometry.getAttribute('color');
+      const colour = new Color();
+      const hsl = { h: 0, s: 0, l: 0 };
+      const [inkX, warmX]: [number[], number[]] = [[], []];
+      for (let i = 0; i < position.count; i++) {
+        colour.setRGB(paint.getX(i), paint.getY(i), paint.getZ(i)).getHSL(hsl, SRGBColorSpace);
+        if (hsl.l < 0.06) inkX.push(position.getX(i));
+        if (isOrange({ h: hsl.h * 360, s: hsl.s, l: hsl.l })) warmX.push(position.getX(i));
+      }
+      const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      expect(mean(inkX)).toBeLessThan(mean(warmX));
+      const normal = new Vector3();
+      const [a, b, c] = [new Vector3(), new Vector3(), new Vector3()];
+      let facing = 0;
+      for (let i = 0; i < position.count; i += 3) {
+        a.fromBufferAttribute(position, i);
+        b.fromBufferAttribute(position, i + 1);
+        c.fromBufferAttribute(position, i + 2);
+        normal.subVectors(b, a).cross(c.clone().sub(a)).normalize();
+        if (Math.abs(normal.z) > 0.9) {
+          expect(normal.z).toBeGreaterThan(0);
+          facing += 1;
+        }
+      }
+      expect(facing).toBeGreaterThan(100);
+      // Whole in the fixed camera from the pavement in front of the door.
+      const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
+      createCameraRig({ camera }).update(16, { x: x + 3, z: 12 }, null);
+      camera.updateMatrixWorld(true);
+      for (const corner of [
+        new Vector3(box.min.x, box.max.y, box.max.z),
+        new Vector3(box.max.x, box.max.y, box.max.z),
+        new Vector3(box.min.x, box.min.y, box.max.z),
+      ]) {
+        const ndc = corner.project(camera);
+        expect(Math.abs(ndc.x)).toBeLessThan(1);
+        expect(Math.abs(ndc.y)).toBeLessThan(1);
+      }
+      // The wordmark sits over the door's sign, under the cornice.
+      const plate = view.labels.children.find((child) => child.userData['brand'] === 'vault')!;
+      const sign = view.labels.children.find((child) => child.userData['building'] === 'vault')!;
+      expect(plate.position.y).toBeGreaterThan(sign.position.y + 0.5);
+      expect(plate.position.y).toBeLessThan(theme.height);
+      view.dispose();
+    }
+  });
 
   it('keeps the default Vault locked: a dim red portal and the chained, padlocked door', () => {
     const { map, view } = build();

@@ -36,6 +36,7 @@ import {
   NEAR,
   STRK20,
   VESU,
+  addVesuMark,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -47,6 +48,7 @@ import {
   cylinderGeometry,
   faceBox,
   faceDisc,
+  facePanel,
   facePipe,
   faceQuad,
   faceTorus,
@@ -139,6 +141,8 @@ const GLOW = 'glow';
 const BEACON = 'beacon';
 /** Additive washes of light on a facade (the Bridge's aurora); RGBA paint. */
 const AURA = 'aura';
+/** Self-lit vertex colour, untouched by the light (the Vault's Vesu mark). */
+const MARK = 'mark';
 
 type Animator = (elapsedMs: number) => void;
 
@@ -1228,6 +1232,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       false,
     );
     addMesh(AURA, () => unlitMaterial({ additive: true }), false, false);
+    addMesh(MARK, () => unlitMaterial(), false, false);
 
     group.updateMatrixWorld(true);
     const box = new Box3().setFromObject(group);
@@ -2241,100 +2246,139 @@ function crosshair(ctx: BuildingCtx, face: Face, u: number, v: number, colour: n
 }
 
 /**
- * Charcoal stone, iron straps, crenellations, and a chained, padlocked vault
- * door. The Vault opens on shadow accounts, behind the Shell's switch
- * (D-077): its door then stands swung back in a vestibule instead, and
- * nothing else on the facade changes. Locked, it is D-007's facade.
+ * Vesu (the Vault's lender, D-077), drawn from its app and its mark: a white
+ * card of a building on a periwinkle plinth, tall windows of night-blue or
+ * periwinkle-lit glass in rounded white frames, an ink portal round the
+ * vault door between white planters, its sign as Vesu's primary button
+ * (white on the electric blue), `vesu` in the wordmark's wide ink letters
+ * across the attic, and the V itself standing on the roof, its bar and
+ * iridescent triangle in the logo's own gradients. Blue light lines run along
+ * the plinth, round the portal and under the cornice. The Vault opens on shadow
+ * accounts, behind the Shell's switch (D-077): its door then stands swung
+ * back in a vestibule, and nothing else changes. Locked, it is chained and
+ * padlocked, as D-007's facade was.
  */
 function vaultStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
   const H = t.height;
   const doorTop = 2.3;
   const open = ctx.fp.door !== null && !ctx.fp.door.locked;
-  const front = massing(ctx, H, 0.1, doorTop, aoPaint(t.wall, 0.05), BODY, open ? VAULT_VESTIBULE : 0);
+  const front = massing(ctx, H, 0.42, doorTop, aoPaint(t.wall, 0.035), BODY, open ? VAULT_VESTIBULE : 0);
   const gc = ctx.doorCentre;
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
-  const blocked = (a: number, b: number) =>
-    ctx.gap !== null && a < ctx.gap.x1 + 0.3 && b > ctx.gap.x0 - 0.3;
-
-  // Rusticated base: staggered stone blocks.
-  const rows: ReadonlyArray<readonly [number, number]> = [
-    [0, 0.42],
-    [0.44, 0.86],
-    [0.88, 1.3],
-  ];
-  rows.forEach(([y0, y1], row) => {
-    let x = xa + (row % 2 === 0 ? 0 : 0.42);
-    let i = 0;
-    while (x < xb - 0.05) {
-      const w = 0.8 + hash01(ctx.fp.index, row * 40 + i, 81) * 0.2;
-      const a = x + 0.02;
-      const b = Math.min(xb, x + w) - 0.02;
-      if (b - a > 0.1 && !blocked(a, b)) {
-        ctx.bins.add(BODY, boxGeometry(a, y0, front, b, y1, front + 0.05), jitterColor(t.wallAlt, hash01(ctx.fp.index, row * 40 + i, 82), 0.03));
-      }
-      x += w;
-      i++;
-    }
-  });
-  for (const run of solidRuns(ctx)) {
-    const a = Math.max(run.x0, xa);
-    const b = Math.min(run.x1, xb);
-    const trimA = ctx.gap && run.x1 === ctx.gap.x0 ? 0.3 : 0;
-    const trimB = ctx.gap && run.x0 === ctx.gap.x1 ? 0.3 : 0;
-    if (b - trimA - (a + trimB) > 0.1) {
-      ctx.bins.add(BODY, boxGeometry(a + trimB, 1.32, front, b - trimA, 1.42, front + 0.06), t.trim);
-    }
-  }
-  ctx.bins.add(BODY, boxGeometry(xa, H - 0.35, front, xb, H - 0.22, front + 0.06), t.trim);
-  for (let x = xa + 0.2; x < xb - 0.1; x += 0.4) {
-    ctx.bins.add(BODY, boxGeometry(x - 0.03, H - 0.31, front + 0.06, x + 0.03, H - 0.26, front + 0.085), 0x6a6f78);
-  }
-
   const face: Face = { normal: 'z+', plane: front };
-  const signHalf = t.sign.width / 2 + 0.2;
-  for (const [a, b] of [
-    [xa + 0.3, gc - signHalf],
-    [gc + signHalf, xb - 0.3],
-  ] as const) {
-    for (const x of distribute(a, b, 0.2, 0.7)) {
-      windowOnFace(ctx, face, x, 2.0, 0.2, 1.1, false, { frame: t.trim, sill: false });
-      for (const dx of [-0.05, 0.05]) {
-        ctx.bins.add(BODY, boxGeometry(x + dx - 0.012, 2.0, front, x + dx + 0.012, 3.1, front + 0.03), 0x1a1c20);
-      }
+  const blueLine = lift(VESU.blue, -0.32);
+  const frameTop = doorTop + 0.3;
+  const signY = frameTop + 0.02 + t.sign.height / 2;
+
+  // The plinth in Vesu's periwinkle, a blue light line along its top.
+  band(ctx, 0, 0.38, 0.035, VESU.blueSoft, front, doorTop);
+  band(ctx, 0.38, 0.405, 0.04, blueLine, front, doorTop, GLOW);
+
+  // Tall windows of night-blue glass in rounded white frames edged in the
+  // fill grey, as Vesu's cards sit on its page: beside the door, and down
+  // both sides.
+  let k = 0;
+  const pane = (onFace: Face, x: number, v0: number, v1: number): void => {
+    const [u0, u1] = [x - 0.3, x + 0.3];
+    ctx.bins.add(BODY, facePanel(onFace, u0 - 0.1, v0 - 0.1, u1 + 0.1, v1 + 0.1, 0.012, 0.14), t.wallAlt);
+    ctx.bins.add(BODY, facePanel(onFace, u0 - 0.075, v0 - 0.075, u1 + 0.075, v1 + 0.075, 0.03, 0.12), t.wall);
+    const lit = isLit(ctx, k++);
+    ctx.bins.add(lit ? LIT : GLASS, facePanel(onFace, u0, v0, u1, v1, 0.036, 0.08), lit ? t.windowLit : t.windowDark);
+    // A slim transom low across each pane, like a card's divider.
+    ctx.bins.add(BODY, faceBox(onFace, u0, v0 + 0.8, 0.036, u1, v0 + 0.83, 0.05), t.wall);
+  };
+  for (const run of solidRuns(ctx)) {
+    const nearDoor = (x: number) => ctx.gap !== null && x > ctx.gap.x0 - 0.62 && x < ctx.gap.x1 + 0.62;
+    const a = Math.max(run.x0, xa) + 0.22;
+    const b = Math.min(run.x1, xb) - 0.22;
+    for (const x of distribute(a, b, 0.62, 0.34)) {
+      if (!nearDoor(x)) pane(face, x, 0.72, 2.62);
     }
+  }
+  for (const side of sideFaces(ctx)) {
+    for (const z of distribute(ctx.z0 + 0.9, front - 0.7, 0.62, 0.9)) pane(side, z, 0.72, 2.62);
   }
 
   if (ctx.gap) {
     const g = ctx.gap;
+    // Ink framing the alcove, the logo's black.
     for (const [a, b] of [
-      [g.x0 - 0.28, g.x0],
-      [g.x1, g.x1 + 0.28],
+      [g.x0 - 0.26, g.x0],
+      [g.x1, g.x1 + 0.26],
     ] as const) {
-      ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.02, b, doorTop + 0.3, ctx.zf - 0.04), t.trim);
+      ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.02, b, frameTop, ctx.zf - 0.05), t.trim);
     }
-    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.28, doorTop, front - 0.02, g.x1 + 0.28, doorTop + 0.3, ctx.zf - 0.04), t.trim);
-    for (let x = g.x0 - 0.15; x <= g.x1 + 0.15; x += 0.3) {
-      ctx.bins.add(BODY, boxGeometry(x - 0.03, doorTop + 0.12, ctx.zf - 0.04, x + 0.03, doorTop + 0.18, ctx.zf - 0.02), 0x6a6f78);
+    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.26, doorTop, front - 0.02, g.x1 + 0.26, frameTop, ctx.zf - 0.05), t.trim);
+    // A blue light line round the frame's face.
+    const lineZ = ctx.zf - 0.05;
+    for (const [a, b] of [
+      [g.x0 - 0.2, g.x0 - 0.16],
+      [g.x1 + 0.16, g.x1 + 0.2],
+    ] as const) {
+      ctx.bins.add(GLOW, boxGeometry(a, 0.42, lineZ - 0.005, b, frameTop - 0.06, lineZ + 0.012), blueLine);
     }
+    ctx.bins.add(GLOW, boxGeometry(g.x0 - 0.2, frameTop - 0.1, lineZ - 0.005, g.x1 + 0.2, frameTop - 0.06, lineZ + 0.012), blueLine);
     if (open) openVaultDoor(ctx, g, doorTop);
     else vaultDoor(ctx, g, doorTop);
-    sconce(ctx, g.x0 - 0.5, 1.58, front);
-    sconce(ctx, g.x1 + 0.5, 1.58, front);
+    // White planters either side of the portal, on the facade row.
+    for (const [a, b] of [
+      [g.x0 - 1.05, g.x0 - 0.34],
+      [g.x1 + 0.34, g.x1 + 1.05],
+    ] as const) {
+      if (overlapsGap(ctx, a, b) || a < xa || b > xb) continue;
+      const [z0, z1] = [front + 0.03, ctx.zf - 0.04];
+      ctx.bins.add(BODY, boxGeometry(a, 0, z0, b, 0.46, z1), t.wall);
+      ctx.bins.add(BODY, boxGeometry(a - 0.015, 0.46, z0 - 0.015, b + 0.015, 0.5, z1 + 0.01), t.wallAlt);
+      const cx = (a + b) / 2;
+      const cz = (z0 + z1) / 2;
+      for (const dx of [-0.17, 0.15]) {
+        ctx.bins.add(
+          BODY,
+          sphereGeometry(cx + dx, 0.64, cz, 0.19, { widthSegments: 6, heightSegments: 4, scaleY: 0.9 }),
+          jitterColor(PALETTE.hedgeLight, hash01(Math.round(cx * 10), Math.round(dx * 100), 5), 0.05),
+        );
+      }
+    }
   }
 
+  // The attic: white, `vesu` across it, a blue line under the cornice.
+  band(ctx, H - 0.14, H - 0.11, 0.03, blueLine, front, doorTop, GLOW);
+  band(ctx, H - 0.11, H + 0.06, 0.05, t.wall, front, doorTop);
   roofSlab(ctx, H, front, t.roof);
-  parapet(ctx, H, 0.12, 0.2, t.trim, front);
-  for (let x = xa; x + 0.35 <= xb + 1e-6; x += 0.7) {
-    ctx.bins.add(BODY, boxGeometry(x, H + 0.12, front - 0.2, x + 0.35, H + 0.45, front), t.trim);
-    ctx.bins.add(BODY, boxGeometry(x, H + 0.12, ctx.z0 + SIDE_INSET, x + 0.35, H + 0.45, ctx.z0 + SIDE_INSET + 0.2), t.trim);
+  parapet(ctx, H, 0.2, 0.14, t.wall, front);
+  // The parapet's rounded coping, in the fill grey.
+  const za = ctx.z0 + SIDE_INSET;
+  for (const [x0, z0, x1, z1] of [
+    [xa, front - 0.14, xb, front],
+    [xa, za, xb, za + 0.14],
+    [xa, za, xa + 0.14, front],
+    [xb - 0.14, za, xb, front],
+  ] as const) {
+    ctx.bins.add(BODY, boxGeometry(x0 - 0.015, H + 0.2, z0 - 0.015, x1 + 0.015, H + 0.24, z1 + 0.015), t.wallAlt);
   }
-  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 1.2, H, ctx.z0 + 1.2, ctx.x0 + 2, H + 0.25, ctx.z0 + 2), 0x2a2d31);
-  // Vesu, calm, locked or open: a small plaque on the door's lintel.
-  const brand = ctx.gap ? { x: gc, y: doorTop + 0.15, z: ctx.zf - 0.015 } : undefined;
-  return { doorTop, sign: { x: gc, y: 2.95, z: ctx.zf - 0.03 }, ...(brand ? { brand } : {}) };
+
+  // The V on the roof's front edge, facing the street on a low white base:
+  // Vesu's mark as the building's crest, in the logo's own gradients (the
+  // light-page art, whose ink bar reads against the sky).
+  const crestSize = 2;
+  const crestZ = front - 0.2;
+  ctx.bins.add(BODY, boxGeometry(gc - 1.05, H + 0.2, crestZ - 0.34, gc + 1.05, H + 0.34, crestZ), t.wall);
+  ctx.bins.add(BODY, boxGeometry(gc - 1.07, H + 0.34, crestZ - 0.36, gc + 1.07, H + 0.37, crestZ + 0.02), t.wallAlt);
+  addVesuMark(ctx.bins, MARK, { normal: 'z+', plane: crestZ - 0.2 }, gc, H + 0.37, crestSize, 0, 0.14, 'light');
+
+  return {
+    doorTop,
+    sign: { x: gc, y: signY, z: ctx.zf - 0.03 },
+    brand: { x: gc, y: (signY + t.sign.height / 2 + H - 0.14) / 2, z: front + 0.02 },
+  };
 }
+
+/** The vault door's ring and bolts: chrome, as the mark's bar is capped. */
+const VAULT_CHROME = 0xc9ccd2;
+/** Its hub: Vesu's electric blue. */
+const VAULT_HUB = VESU.blue;
 
 /** A heavy steel door with a bolt ring, chained in an X and padlocked. */
 function vaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
@@ -2347,14 +2391,14 @@ function vaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
   const cy = 1.2;
   ctx.bins.add(BODY, boxGeometry(a, 0, back, b, doorTop - 0.02, doorFace), t.door);
   const plane: Face = { normal: 'z+', plane: doorFace };
-  ctx.bins.add(BODY, faceTorus(plane, cx, cy, 0.05, 0.62, 0.045, { tubularSegments: 18 }), 0x4a4e56);
+  ctx.bins.add(BODY, faceTorus(plane, cx, cy, 0.05, 0.62, 0.045, { tubularSegments: 18 }), VAULT_CHROME);
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
     const u = cx + Math.cos(angle) * 0.62;
     const v = cy + Math.sin(angle) * 0.62;
-    ctx.bins.add(BODY, faceBox(plane, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), 0x5a5f68);
+    ctx.bins.add(BODY, faceBox(plane, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), VAULT_CHROME);
   }
-  ctx.bins.add(BODY, faceDisc(plane, cx, cy, 0, 0.12, 0.08, 10), 0x5a5f68);
+  ctx.bins.add(BODY, faceDisc(plane, cx, cy, 0, 0.12, 0.08, 10), VAULT_HUB);
 
   // Chains in an X: alternate links lie flat and stand on edge.
   const chain = 0x4a4d52;
@@ -2425,7 +2469,7 @@ function openVaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
   const a = gap.x0 + JAMB;
   const b = gap.x1 - JAMB;
   // The steel sill the door closes on, across the doorway's mouth.
-  ctx.bins.add(BODY, boxGeometry(a, floor, mouth - 0.06, b, floor + 0.03, mouth + 0.06), 0x4a4e56);
+  ctx.bins.add(BODY, boxGeometry(a, floor, mouth - 0.06, b, floor + 0.03, mouth + 0.06), t.trim);
   // The leaf in its own frame: the hinge on the local z axis, the free edge
   // at -w, the street face at +T. Swung about the hinge at the east jamb.
   const w = b - a;
@@ -2436,18 +2480,18 @@ function openVaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
   const cv = 1.2;
   leaf(boxGeometry(-w, floor + 0.005, 0, 0, doorTop - 0.02, T), t.door);
   const face: Face = { normal: 'z+', plane: T };
-  leaf(faceTorus(face, cu, cv, 0.05, 0.62, 0.045, { tubularSegments: 18 }), 0x4a4e56);
+  leaf(faceTorus(face, cu, cv, 0.05, 0.62, 0.045, { tubularSegments: 18 }), VAULT_CHROME);
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
     const u = cu + Math.cos(angle) * 0.62;
     const v = cv + Math.sin(angle) * 0.62;
-    leaf(faceBox(face, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), 0x5a5f68);
+    leaf(faceBox(face, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), VAULT_CHROME);
   }
-  leaf(faceDisc(face, cu, cv, 0, 0.12, 0.08, 10), 0x5a5f68);
+  leaf(faceDisc(face, cu, cv, 0, 0.12, 0.08, 10), VAULT_HUB);
   const edge: Face = { normal: 'z+', plane: 0 };
   for (const v of [0.55, 1.2, 1.85]) leaf(facePipe(edge, -w - 0.12, -w + 0.02, v, T / 2, 0.05, 8), 0x9ea3ab);
   // The heavy hinge knuckles, on the east jamb.
-  for (const y of [0.4, 1.6]) ctx.bins.add(BODY, cylinderGeometry(b + 0.04, y, mouth, 0.07, 0.07, 0.34, 10), 0x5a5f68);
+  for (const y of [0.4, 1.6]) ctx.bins.add(BODY, cylinderGeometry(b + 0.04, y, mouth, 0.07, 0.07, 0.34, 10), t.trim);
 }
 
 function genericStyle(ctx: BuildingCtx): StyleResult {

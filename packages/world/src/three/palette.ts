@@ -167,16 +167,89 @@ export const ENDUR = Object.freeze({
 });
 
 /**
- * The Vault's lender, Vesu (D-077) — measured from vesu.xyz (Sept 2026): white
- * pages, near-black text in a wide grotesk at 600, an electric-blue primary
- * and a pale periwinkle secondary with deep-blue text.
+ * The Vault's lender, Vesu (D-077) — measured from the light theme in
+ * vesu.xyz's stylesheet (Sept 2026): white cards on a #F5F5F5 page with
+ * #E8E8E8 fills, near-black ink and #808080 secondary text, an electric-blue
+ * primary and a pale periwinkle secondary with deep-blue text, 8 px radii,
+ * and a wide grotesk (Base Neue Wide, 600) for headings and the wordmark.
  */
 export const VESU = Object.freeze({
   white: 0xffffff,
+  /** The page behind the cards. */
+  page: 0xf5f5f5,
+  /** Neutral buttons, rules and the hairline between cards. */
+  fill: 0xe8e8e8,
   ink: 0x0a0a0a,
+  muted: 0x808080,
   blue: 0x2c41f6,
   blueSoft: 0xe0e5ff,
   blueText: 0x2030b6,
+  /** The dark theme's periwinkle, for glass and screens. */
+  night: 0x182062,
+});
+
+/**
+ * Vesu's mark, sampled from its logo art (vesu.xyz/img/vesu-logo-light.png
+ * and -dark.png, Sept 2026): a V of two strokes, a slanted bar and a rounded
+ * inverted triangle in an iridescent gradient. `light` is the version for
+ * light pages (a teal bar shading to ink, a glossy triangle darkening to its
+ * right); `dark` the one for dark pages and Vesu's socials (an ice-blue bar,
+ * a triangle that glows gold, mint and cream). Each triangle grid is seven
+ * rows from the top edge to the tip (`MARK_ROWS`) by five columns from its
+ * left edge to its right (`MARK_COLUMNS`); each bar is stops from its foot up.
+ */
+export interface VesuMarkColours {
+  /** [v from the foot, colour], ascending; the cap is the last stop. */
+  readonly bar: readonly (readonly [number, number])[];
+  readonly triangle: readonly (readonly number[])[];
+}
+
+export const MARK_ROWS: readonly number[] = Object.freeze([0.03, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9]);
+export const MARK_COLUMNS: readonly number[] = Object.freeze([0.08, 0.25, 0.5, 0.75, 0.92]);
+
+export const VESU_MARK: Readonly<Record<'light' | 'dark', VesuMarkColours>> = Object.freeze({
+  light: Object.freeze({
+    bar: Object.freeze([
+      [0, 0x0a0a0a],
+      [0.3, 0x0c1113],
+      [0.5, 0x10323e],
+      [0.7, 0x10526a],
+      [0.84, 0x008bad],
+      [0.86, 0xd8f4fb],
+      [0.88, 0x0e1f27],
+      [1, 0x0e1f27],
+    ] as const),
+    triangle: Object.freeze([
+      Object.freeze([0xc7d149, 0xa0e875, 0x66ef74, 0x26c081, 0x198562]),
+      Object.freeze([0xd9b91d, 0xc8d13e, 0x80e054, 0x46a257, 0x316136]),
+      Object.freeze([0xe69800, 0xe4b100, 0xabc41a, 0x6d8a25, 0x485820]),
+      Object.freeze([0xeb7700, 0xe49000, 0xbf9e00, 0x857202, 0x584e0e]),
+      Object.freeze([0xdd5600, 0xce6f00, 0xaa7a00, 0x776310, 0x554a0e]),
+      Object.freeze([0xbe4400, 0xad4c00, 0x8d5800, 0x6a500e, 0x504111]),
+      Object.freeze([0x934200, 0x854000, 0x714000, 0x5c3c09, 0x4d370c]),
+    ]),
+  }),
+  dark: Object.freeze({
+    bar: Object.freeze([
+      [0, 0xfafeff],
+      [0.3, 0xdef9ff],
+      [0.5, 0xc8f5ff],
+      [0.7, 0xb0f1ff],
+      [0.84, 0x00b8d7],
+      [0.86, 0xffffff],
+      [0.88, 0xc8c8c8],
+      [1, 0xc8c8c8],
+    ] as const),
+    triangle: Object.freeze([
+      Object.freeze([0xb79e00, 0x78ba1d, 0x52e568, 0x73fac6, 0xc5fde6]),
+      Object.freeze([0xd58400, 0xb7a700, 0x7fe25d, 0x9ef5b1, 0xe7fce7]),
+      Object.freeze([0xe36b00, 0xdd9400, 0xc4da4a, 0xd0ec93, 0xe6f4c7]),
+      Object.freeze([0xe74f00, 0xea8800, 0xefc847, 0xf6e38b, 0xf8efb9]),
+      Object.freeze([0xea5e00, 0xee8e1f, 0xf3c25b, 0xf6e298, 0xfaefbd]),
+      Object.freeze([0xef8d30, 0xf1a34a, 0xf5c477, 0xf8e0a5, 0xf9edc0]),
+      Object.freeze([0xf4bf7a, 0xf8ce99, 0xfae3c0, 0xfbeed2, 0xfef9f0]),
+    ]),
+  }),
 });
 
 /**
@@ -781,46 +854,71 @@ export const BUILDING_THEMES: Readonly<Partial<Record<BuildingId, BuildingTheme>
   }),
   vault: Object.freeze({
     style: 'vault',
-    height: 3.9,
-    // Charcoal that still shows its stonework in the warm light.
-    wall: 0x61656e,
-    wallAlt: 0x51555d,
-    trim: 0x6d727b,
-    accent: 0x8a7248,
-    roof: 0x4a4d54,
-    door: 0x34373d,
-    windowLit: 0x5a4636,
-    windowGlow: 0x6b2a20,
-    windowDark: 0x1c1f24,
-    glow: 0x9b2e22,
-    beacon: 0x9b2e22,
-    litRatio: 0,
-    portal: 0x8a1f18,
+    height: 4.2,
+    // Vesu's light pages: white card walls, periwinkle and fill-grey
+    // details, ink frames and night-blue glass, with the electric blue kept
+    // for the sign, the light lines and the door's hub.
+    wall: VESU.white,
+    wallAlt: VESU.fill,
+    trim: lift(VESU.ink, 0.1),
+    // The padlock's deep blue: only the locked door wears it.
+    accent: VESU.blueText,
+    roof: VESU.page,
+    door: lift(VESU.ink, 0.12),
+    windowLit: VESU.blueSoft,
+    // Lit panes glow a deep blue under the periwinkle, so they read as
+    // Vesu's light behind glass rather than as white card.
+    windowGlow: lift(VESU.blue, -0.28),
+    windowDark: lift(VESU.night, 0.04),
+    glow: VESU.blue,
+    // Under ACES a strong glow bleaches the blue towards white.
+    glowIntensity: 0.9,
+    beacon: VESU.blue,
+    litRatio: 0.5,
+    // Locked, the doorway glows a dim red: Vesu's own danger red.
+    portal: 0x90090c,
     // Opened on shadow accounts (D-077), the doorway glows in Vesu's blue.
     openPortal: VESU.blue,
+    // The door's sign as Vesu's primary button: white on the electric blue,
+    // its 8 px radius at the board's scale, the wide type approximated.
     sign: Object.freeze({
       width: 2.4,
       height: 0.66,
-      background: '#1d1e22',
-      foreground: '#9b9da5',
-      accent: '#5a2020',
+      background: css(VESU.blue),
+      foreground: css(VESU.white),
+      accent: css(VESU.blue),
+      cornerRadius: 0.18,
+      borderWidth: 0,
+      hairline: false,
+      titleFont: 'sans',
+      titleWeight: 700,
+      titleStretch: 1.3,
+      titleTracking: 0.02,
+      subtitleFont: 'sans',
+      subtitleWeight: 700,
+      subtitleStretch: 1.2,
+      subtitleTracking: 0.12,
+      subtitleColor: css(VESU.blueSoft),
+      uppercase: true,
     }),
-    // Calm, locked or open: Vesu's pale periwinkle and a thin blue edge on
-    // the Vault's own charcoal, not its bright white pages.
+    // Vesu's wordmark: its name in lowercase ink, wide and heavy, set on the
+    // white attic as letters with no board of their own.
     brand: Object.freeze({
-      text: 'Vesu',
+      text: 'vesu',
       style: Object.freeze({
-        width: 1.15,
-        height: 0.28,
-        background: '#1d1e22',
-        foreground: css(VESU.blueSoft),
-        accent: css(VESU.blue),
-        cornerRadius: 0.2,
-        borderWidth: 0.04,
+        width: 3.2,
+        height: 1.1,
+        background: 'rgba(255,255,255,0)',
+        foreground: css(VESU.ink),
+        accent: css(VESU.ink),
+        cornerRadius: 0,
+        borderWidth: 0,
         hairline: false,
         titleFont: 'sans',
-        titleWeight: 600,
-        titleTracking: 0.02,
+        titleWeight: 700,
+        titleStretch: 1.4,
+        titleTracking: -0.01,
+        lowercase: true,
       }),
     }),
   }),
@@ -1204,6 +1302,49 @@ export const ENDUR_STATION_THEME: StationTheme = Object.freeze({
   }),
 });
 
+/**
+ * Vesu's secondary button as the counter's label: deep-blue text on the
+ * periwinkle, edged in the primary blue, its 8 px radius at the label's scale.
+ */
+export const VESU_LABEL: FloatingStyleOptions = Object.freeze({
+  foreground: css(VESU.blueText),
+  background: cssAlpha(VESU.blueSoft, 0.96),
+  border: css(VESU.blue),
+  font: 'sans',
+  cornerRadius: 0.22,
+});
+
+/**
+ * The Vault's lending counter in Vesu's look: a white desk under an ink top,
+ * its supply card and desk-sized V on it (room-builder.ts), and Vesu's
+ * wordmark on the status panel, ink letters on a white plate.
+ */
+export const VESU_STATION_THEME: StationTheme = Object.freeze({
+  props: 'vesu',
+  kioskBase: VESU.white,
+  kioskTop: lift(VESU.ink, 0.1),
+  kioskTrim: VESU.ink,
+  label: VESU_LABEL,
+  looks: VESU_STATION_LOOKS,
+  plate: Object.freeze({
+    text: 'vesu',
+    style: Object.freeze({
+      width: 1.24,
+      height: 0.3,
+      background: css(VESU.white),
+      foreground: css(VESU.ink),
+      accent: css(VESU.fill),
+      cornerRadius: 0.18,
+      borderWidth: 0.05,
+      hairline: false,
+      titleFont: 'sans',
+      titleWeight: 700,
+      titleStretch: 1.4,
+      lowercase: true,
+    }),
+  }),
+});
+
 /** Interior palette for one fixed room. */
 export interface RoomTheme {
   readonly decor: RoomDecorStyle;
@@ -1322,12 +1463,13 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     stationLooks: NEAR_STATION_LOOKS,
   }),
   // The Vault, open on shadow accounts (D-077), in Vesu's own light pages:
-  // white and periwinkle underfoot, white walls over a periwinkle wainscot,
-  // ink capping and skirting them, the electric blue as trim and light.
+  // a white floor over the page grey, white walls over a periwinkle
+  // wainscot, ink capping and skirting them, the electric blue as trim and
+  // light. Its counter wears Vesu's own look (`VESU_STATION_THEME`).
   vault: Object.freeze({
     decor: 'vesu',
     floorA: VESU.white,
-    floorB: VESU.blueSoft,
+    floorB: VESU.page,
     floorAccent: VESU.blue,
     wall: VESU.white,
     wallLower: VESU.blueSoft,
@@ -1335,19 +1477,12 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     trim: VESU.blue,
     skirting: VESU.ink,
     cut: VESU.ink,
-    kioskBase: VESU.blueSoft,
-    kioskTop: VESU.white,
+    kioskBase: VESU.white,
+    kioskTop: lift(VESU.ink, 0.1),
     exitGlow: VESU.blue,
-    // Vesu's secondary button as a pill badge: deep-blue text on periwinkle,
-    // edged in the primary blue.
-    label: Object.freeze({
-      foreground: css(VESU.blueText),
-      background: cssAlpha(VESU.blueSoft, 0.96),
-      border: css(VESU.blue),
-      font: 'sans',
-      cornerRadius: 0.5,
-    }),
+    label: VESU_LABEL,
     stationLooks: VESU_STATION_LOOKS,
+    stations: Object.freeze({ 'vault:lending': VESU_STATION_THEME }),
   }),
 });
 
@@ -2098,6 +2233,227 @@ export function facePipe(
   else geometry.rotateX(Math.PI / 2);
   const [x, y, z] = faceToWorld(face, (u0 + u1) / 2, v, w);
   return geometry.translate(x, y, z);
+}
+
+// ---------------------------------------------------------------------------
+// Vesu's mark as low-poly relief
+// ---------------------------------------------------------------------------
+
+/**
+ * The V's proportions in its own unit box: `u` from -0.5 to 0.5 across it,
+ * `v` from 0 at its foot to 1 at its top, drawn from Vesu's logo. The bar
+ * leans right as it falls, and the triangle's left edge runs parallel to it,
+ * a thin gap apart; the triangle's sharp tip lies just under the foot, where
+ * its rounding lifts it to the line.
+ */
+const MARK_LEAN = 0.33;
+const MARK_BAR = 0.23;
+const MARK_GAP = 0.045;
+const MARK_TOP_RADIUS = 0.06;
+const MARK_TIP_RADIUS = 0.05;
+
+function markTriangleEdges(v: number): readonly [number, number] {
+  const drop = 1 - v;
+  return [-0.5 + MARK_BAR + MARK_GAP + MARK_LEAN * drop, 0.5 - MARK_LEAN * drop];
+}
+
+function markBarEdges(v: number): readonly [number, number] {
+  const left = -0.5 + MARK_LEAN * (1 - v);
+  return [left, left + MARK_BAR];
+}
+
+/** A convex polygon with each corner rounded by its own radius, in `segments` steps. */
+function roundCorners(points: readonly Point2[], radii: readonly number[], segments: number): Point2[] {
+  const out: Point2[] = [];
+  const n = points.length;
+  for (let i = 0; i < n; i++) {
+    const p = points[i]!;
+    const prev = points[(i + n - 1) % n]!;
+    const next = points[(i + 1) % n]!;
+    const r = radii[i] ?? 0;
+    if (r <= 0) {
+      out.push(p);
+      continue;
+    }
+    const a = normalise2(prev[0] - p[0], prev[1] - p[1]);
+    const b = normalise2(next[0] - p[0], next[1] - p[1]);
+    const half = Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1]))) / 2;
+    const reach = r / Math.tan(half);
+    const bisector = normalise2(a[0] + b[0], a[1] + b[1]);
+    const centre: Point2 = [p[0] + (bisector[0] * r) / Math.sin(half), p[1] + (bisector[1] * r) / Math.sin(half)];
+    const from: Point2 = [p[0] + a[0] * reach, p[1] + a[1] * reach];
+    const to: Point2 = [p[0] + b[0] * reach, p[1] + b[1] * reach];
+    const start = Math.atan2(from[1] - centre[1], from[0] - centre[0]);
+    let sweep = Math.atan2(to[1] - centre[1], to[0] - centre[0]) - start;
+    while (sweep > Math.PI) sweep -= Math.PI * 2;
+    while (sweep < -Math.PI) sweep += Math.PI * 2;
+    for (let s = 0; s <= segments; s++) {
+      const angle = start + (sweep * s) / segments;
+      out.push([centre[0] + Math.cos(angle) * r, centre[1] + Math.sin(angle) * r]);
+    }
+  }
+  return out;
+}
+
+function normalise2(x: number, y: number): Point2 {
+  const length = Math.hypot(x, y) || 1;
+  return [x / length, y / length];
+}
+
+/**
+ * The V's two outlines in its unit box, counter-clockwise: the bar, and the
+ * triangle with its corners rounded as the logo's are.
+ */
+export function vesuMarkOutlines(segments = 3): { readonly bar: readonly Point2[]; readonly triangle: readonly Point2[] } {
+  const [barTopLeft, barTopRight] = markBarEdges(1);
+  const [barFootLeft, barFootRight] = markBarEdges(0);
+  const [left] = markTriangleEdges(1);
+  // Where the two slanted edges would meet, below the foot.
+  const apexDrop = (0.5 - left) / (2 * MARK_LEAN);
+  const apex: Point2 = [0.5 - MARK_LEAN * apexDrop, 1 - apexDrop];
+  return {
+    bar: [
+      [barFootLeft, 0],
+      [barFootRight, 0],
+      [barTopRight, 1],
+      [barTopLeft, 1],
+    ],
+    triangle: roundCorners(
+      [apex, [0.5, 1], [left, 1]],
+      [MARK_TIP_RADIUS, MARK_TOP_RADIUS, MARK_TOP_RADIUS],
+      segments,
+    ),
+  };
+}
+
+/** Where the horizontal line at `v` crosses a convex outline: its left and right ends. */
+function rowExtent(outline: readonly Point2[], v: number): readonly [number, number] | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i]!;
+    const b = outline[(i + 1) % outline.length]!;
+    const lo = Math.min(a[1], b[1]);
+    const hi = Math.max(a[1], b[1]);
+    if (v < lo - 1e-9 || v > hi + 1e-9) continue;
+    if (Math.abs(b[1] - a[1]) < 1e-9) {
+      min = Math.min(min, a[0], b[0]);
+      max = Math.max(max, a[0], b[0]);
+      continue;
+    }
+    const u = a[0] + ((v - a[1]) / (b[1] - a[1])) * (b[0] - a[0]);
+    min = Math.min(min, u);
+    max = Math.max(max, u);
+  }
+  return min <= max ? [min, max] : null;
+}
+
+/** The mark's colour at (u, v) of its unit box: the bar's stops left of the gap, the triangle's grid right of it. */
+export function vesuMarkColour(variant: 'light' | 'dark', u: number, v: number): Color {
+  const colours = VESU_MARK[variant];
+  const [, barRight] = markBarEdges(v);
+  if (u <= barRight + MARK_GAP / 2) {
+    const stops = colours.bar;
+    const y = clamp01(v);
+    for (let i = 0; i + 1 < stops.length; i++) {
+      const [v0, c0] = stops[i]!;
+      const [v1, c1] = stops[i + 1]!;
+      if (y <= v1) return mixColor(c0, c1, (y - v0) / Math.max(1e-6, v1 - v0));
+    }
+    return new Color(stops[stops.length - 1]![1]);
+  }
+  const [left, right] = markTriangleEdges(Math.max(v, 0.02));
+  const s = clamp01((u - left) / Math.max(1e-6, right - left));
+  const t = clamp01(1 - v);
+  const at = (values: readonly number[], x: number): [number, number, number] => {
+    if (x <= values[0]!) return [0, 0, 0];
+    for (let i = 0; i + 1 < values.length; i++) {
+      if (x <= values[i + 1]!) return [i, i + 1, (x - values[i]!) / (values[i + 1]! - values[i]!)];
+    }
+    return [values.length - 1, values.length - 1, 0];
+  };
+  const [r0, r1, fr] = at(MARK_ROWS, t);
+  const [c0, c1, fc] = at(MARK_COLUMNS, s);
+  const grid = colours.triangle;
+  const top = mixColor(grid[r0]![c0]!, grid[r0]![c1]!, fc);
+  const bottom = mixColor(grid[r1]![c0]!, grid[r1]![c1]!, fc);
+  return top.lerp(bottom, fr);
+}
+
+/**
+ * Vesu's V as relief on a face: its two strokes standing `depth` out of the
+ * face from `w0`, `size` high with its foot at `v0`, centred on `cu`, painted
+ * with the logo's gradients (`variant`). The front is a grid of rows and
+ * columns so the gradient reads; the sides take the colour of their edge.
+ * Always reads the right way round from in front of the face.
+ */
+export function addVesuMark(
+  bin: GeometryBin,
+  key: string,
+  face: Face,
+  cu: number,
+  v0: number,
+  size: number,
+  w0: number,
+  depth: number,
+  variant: 'light' | 'dark',
+): void {
+  // Seen from in front, +u runs to the right on z+ and x- faces and to the left on the others.
+  const mirror = face.normal === 'z-' || face.normal === 'x+' ? -1 : 1;
+  const w1 = w0 + depth;
+  const toWorld = (x: number, y: number, w: number): Vec3 => faceToWorld(face, cu + mirror * x * size, v0 + y * size, w);
+  const paint: PaintFn = (x, y, z) => {
+    const u = face.normal === 'z+' || face.normal === 'z-' ? x : z;
+    return vesuMarkColour(variant, (mirror * (u - cu)) / size, (y - v0) / size);
+  };
+  const { bar, triangle } = vesuMarkOutlines(4);
+  const triangles: number[] = [];
+  // Mirroring flips the winding and the face's own orientation flips it back,
+  // so one order faces out of every face.
+  const push = (a: Vec3, b: Vec3, c: Vec3): void => {
+    triangles.push(...a, ...b, ...c);
+  };
+  const front = (outline: readonly Point2[], rows: readonly number[], columns: number): void => {
+    let previous: Vec3[] | null = null;
+    for (const v of rows) {
+      const extent = rowExtent(outline, v);
+      if (!extent) continue;
+      const row: Vec3[] = [];
+      for (let j = 0; j <= columns; j++) row.push(toWorld(extent[0] + ((extent[1] - extent[0]) * j) / columns, v, w1));
+      if (previous) {
+        for (let j = 0; j < columns; j++) {
+          push(previous[j]!, row[j]!, row[j + 1]!);
+          push(previous[j]!, row[j + 1]!, previous[j + 1]!);
+        }
+      }
+      previous = row;
+    }
+  };
+  const sides = (outline: readonly Point2[]): void => {
+    for (let i = 0; i < outline.length; i++) {
+      const [ax, ay] = outline[i]!;
+      const [bx, by] = outline[(i + 1) % outline.length]!;
+      const a0 = toWorld(ax, ay, w0);
+      const a1 = toWorld(ax, ay, w1);
+      const b0 = toWorld(bx, by, w0);
+      const b1 = toWorld(bx, by, w1);
+      push(a0, b0, b1);
+      push(a0, b1, a1);
+    }
+  };
+  // The bar's rows follow its stops, so its highlight line stays crisp.
+  front(bar, [...VESU_MARK[variant].bar.map(([v]) => v)].sort((a, b) => b - a), 1);
+  sides(bar);
+  const tipFoot = Math.min(...triangle.map(([, v]) => v));
+  const rows = [1, 0.995, 0.985, 0.97, 0.95, 0.92, 0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.17, 0.11, 0.07, 0.04, 0.025]
+    .filter((v) => v > tipFoot + 1e-4)
+    .concat([tipFoot + 1e-4]);
+  front(triangle, rows, 6);
+  sides(triangle);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(triangles, 3));
+  geometry.computeVertexNormals();
+  bin.add(key, geometry, paint);
 }
 
 /** Point a geometry's local +Z (or +Y) axis along a face normal. */

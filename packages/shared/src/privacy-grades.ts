@@ -110,7 +110,7 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     // lead waived the in-game disclosure.
     grade: 'anonymous',
     observable:
-      'Sender and amount hidden, recipient not always. A first transfer to a new recipient opens a channel keyed by their address: the address is in plaintext calldata and the pool counts a new channel for it in that block, so an observer learns that this address received a first private payment, and when. Later transfers to the same recipient add no such record. The relay fee leaves the pool publicly to the paymaster forwarder, and the proof publishes the block it was built against, which dates the confirm. One recipient per send (D-065), so a submission never links several recipients.',
+      'Sender and amount hidden, recipient not always. A first transfer to a new recipient opens a channel keyed by their address: the address is in plaintext calldata and the pool counts a new channel for it in that block, so an observer learns that this address received a first private payment, and when. Later transfers to the same recipient add no such record. The wallet submits the send (D-082) and the network fee it adds leaves the pool publicly, to the avnu paymaster forwarder in Ready, and the proof publishes the block it was built against, which dates the confirm. One recipient per send (D-065), so a submission never links several recipients.',
     disclosure: null,
     approvedBy: 'calc',
     approvedOn: '2026-09-27',

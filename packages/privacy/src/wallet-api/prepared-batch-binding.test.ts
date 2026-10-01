@@ -68,7 +68,7 @@ function seam() {
     },
     async strk20InvokeTransaction(actions) {
       invoked.push(actions);
-      return { transaction_hash: '0xshield' };
+      return { transaction_hash: '0x5e1d' };
     },
     async strk20PrepareInvoke(actions) {
       prepared.push(actions);
@@ -133,7 +133,7 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     // reach a batch that publishes the depositor *and* spends privately.
     mine.push({ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB });
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({
-      transactionHash: '0xshield',
+      transactionHash: '0x5e1d',
     });
 
     expect(invoked).toEqual([[{ type: 'deposit', token: TOKEN, amount: '0x1' }]]);
@@ -154,7 +154,7 @@ describe('a prepared batch does not read intent state the caller still owns', ()
   });
 
   it('C. ignores an unallowlisted withdraw appended after a private transfer was prepared', async () => {
-    const { ops, prepared } = seam();
+    const { ops, invoked } = seam();
     const mine: Intent[] = [{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }];
     const batch = await ops.prepare(mine);
 
@@ -163,20 +163,20 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     mine.push({ kind: 'unshield', token: '0xdeadbeef', amount: 5n, recipient: '0xbad' });
     await batch.confirm({ feeCeiling: POOL_FEE + 2n });
 
-    expect(prepared).toEqual([[
+    // The wallet proves and submits the reviewed transfer alone (D-082).
+    expect(invoked).toEqual([[
       { type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB },
-      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
     ]]);
   });
 
   it('D. proves the reviewed amount after the published intent is written to on the pool-native route', async () => {
-    const { ops, prepared } = seam();
+    const { ops, invoked } = seam();
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
     expect(Reflect.set(batch.intents[0]!, 'amount', HOSTILE)).toBe(false);
     await batch.confirm({ feeCeiling: POOL_FEE + 2n });
 
-    expect(prepared[0]?.[0]).toEqual({ type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB });
+    expect(invoked[0]?.[0]).toEqual({ type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB });
   });
 
   /**

@@ -35,7 +35,7 @@ export const COPY = freezeCopy({
 
   connect: {
     title: 'Connect your wallet',
-    body: "STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it; finished proofs pass through STRKWORLD's relay and AVNU to reach the network.",
+    body: 'STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it, and your wallet sends each finished transaction to the network itself.',
     action: 'Connect wallet',
     connecting: 'Waiting for your wallet…',
     retry: 'Try again',
@@ -704,9 +704,12 @@ export const COPY = freezeCopy({
     unreachable: 'Could not reach the network or your wallet. Nothing was sent.',
     'submission-uncertain':
       'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
-    /** D-070: the deployment has no avnu key for its relay. Shield never needs it. */
+    /**
+     * D-070, narrowed by D-082: the deployment has no avnu key for its relay.
+     * Only a swap still uses the relay; the wallet submits everything else.
+     */
     'relay-not-configured':
-      "Unshield, send, stake and swap need the private relay, which isn't set up on this site yet. Nothing was sent.",
+      "Swaps need the private relay, which isn't set up on this site yet. Nothing was sent.",
     /**
      * D-077: the Vault needs a wallet that runs STRK20 shadow accounts. A
      * fact about the wallet's release, not the account: it stays in the

@@ -27,6 +27,14 @@ import {
 import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import { compareSemver, parseSemver, type Semver } from './semver.js';
 import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
+import {
+  WALLET_RECEIPT_WAITS_MS,
+  abortableSleep,
+  freezeActions,
+  ownReceiptWaits,
+  submitThroughWallet,
+  waitForReceipt,
+} from './wallet-submission.js';
 
 /**
  * The Vault on the Wallet API (D-077): Vesu lending from the player's STRK20
@@ -41,7 +49,8 @@ import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Ac
  *   a relay nor a node can redirect the supply's withdraw leg.
  * - Supply and redeem are proved **and submitted by the wallet**
  *   (`wallet_strk20InvokeTransaction`), exactly like shield: no STRKWORLD
- *   relay, no avnu key, no relay fee.
+ *   relay, no avnu key, no relay fee. The submission and receipt wait are
+ *   `wallet-submission.ts`'s, shared with the pool spends (D-082).
  *
  * Nothing here branches on wallet identity: support is the version query and
  * the account's own method, then whatever the wallet answers.
@@ -55,14 +64,8 @@ const MAX_VAULT_ROWS = MAX_VAULT_MARKETS;
 /** D-079: a rate's decimal places; Vesu states 18. */
 const MAX_RATE_DECIMALS = 36;
 
-/**
- * The pauses between receipt reads once the wallet has submitted, in ms:
- * about seventy seconds in all. The chain makes a block every couple of
- * seconds, and a proved STRK20 transaction usually lands within a few.
- */
-export const VAULT_RECEIPT_WAITS_MS: readonly number[] = Object.freeze([
-  2_000, 3_000, 4_000, 5_000, 6_000, 8_000, 10_000, 12_000, 20_000,
-]);
+/** The Vault's receipt-read schedule: the shared wallet-submission one (D-082). */
+export const VAULT_RECEIPT_WAITS_MS: readonly number[] = WALLET_RECEIPT_WAITS_MS;
 
 /**
  * Whether a wallet can run a shadow account: a reported Wallet API of
@@ -130,11 +133,10 @@ export class ShadowVault {
     this.supported = options.supported;
     this.poolConfig = options.poolConfig;
     this.sleep = options.sleep ?? abortableSleep;
-    const waits = options.receiptWaitsMs ?? VAULT_RECEIPT_WAITS_MS;
-    if (!Array.isArray(waits) || waits.some((wait) => !Number.isSafeInteger(wait) || wait < 0)) {
-      throw new PrivacyError('unknown', 'The Vault receipt schedule is invalid.');
-    }
-    this.receiptWaitsMs = Object.freeze([...waits]);
+    this.receiptWaitsMs = ownReceiptWaits(
+      options.receiptWaitsMs ?? VAULT_RECEIPT_WAITS_MS,
+      'The Vault receipt schedule is invalid.',
+    );
   }
 
   /**
@@ -419,8 +421,7 @@ export class ShadowVault {
         emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the Vault action in your wallet' });
         let transactionHash: string;
         try {
-          const result = await owner.wallet.strk20InvokeTransaction(copyActions(reviewed));
-          transactionHash = readTransactionHash(result);
+          transactionHash = await submitThroughWallet(owner.wallet, reviewed);
         } catch (error) {
           emitStage(onStage, { stage: 'submit', ok: false, code: walletErrorCode(error) });
           emitProgress(onProgress, { stage: 'failed', message: 'The Vault action failed' });
@@ -453,30 +454,16 @@ export class ShadowVault {
     signal: AbortSignal | undefined,
     onStage: VaultStageCallback | undefined,
   ): Promise<VaultOutcome> {
-    let readable = false;
-    for (const wait of this.receiptWaitsMs) {
-      if (signal?.aborted) break;
-      try {
-        await this.sleep(wait, signal);
-      } catch {
-        break;
-      }
-      if (signal?.aborted) break;
-      let receipt: unknown;
-      try {
-        receipt = await this.pool.receipt(transactionHash, signal);
-      } catch {
-        continue;
-      }
-      readable = true;
-      const outcome = vaultOutcomeFromReceipt(receipt, transactionHash);
-      if (outcome !== 'pending') {
-        emitStage(onStage, { stage: 'receipt', status: outcome });
-        return outcome;
-      }
-    }
-    emitStage(onStage, { stage: 'receipt', status: readable ? 'pending' : 'unreadable' });
-    return 'pending';
+    const { outcome, readable } = await waitForReceipt({
+      pool: this.pool,
+      transactionHash,
+      waits: this.receiptWaitsMs,
+      sleep: this.sleep,
+      ...(signal ? { signal } : {}),
+      classify: (receipt) => vaultOutcomeFromReceipt(receipt, transactionHash),
+    });
+    emitStage(onStage, { stage: 'receipt', status: outcome !== 'pending' || readable ? outcome : 'unreadable' });
+    return outcome;
   }
 
   /**
@@ -654,41 +641,6 @@ function ownData(value: unknown, key: string): unknown {
   }
 }
 
-function readTransactionHash(value: unknown): string {
-  const hash = ownData(value, 'transaction_hash');
-  if (typeof hash !== 'string' || !isFelt(hash) || BigInt(hash) === 0n) {
-    throw new PrivacyError('unknown', 'The wallet returned an invalid transaction result.');
-  }
-  return hash;
-}
-
-/** Deep-frozen reviewed actions. Every leaf is a string, so this is complete. */
-function freezeActions(actions: readonly STRK20_ACTION[]): readonly STRK20_ACTION[] {
-  return Object.freeze(actions.map((action) => {
-    if (action.type !== 'shadow_account_invoke') return Object.freeze({ ...action });
-    return Object.freeze({
-      ...action,
-      calls: Object.freeze(action.calls.map((call) => Object.freeze({
-        ...call,
-        calldata: Object.freeze([...(call.calldata as string[])]),
-      }))),
-      collect_policy: Object.freeze({ ...action.collect_policy }),
-    });
-  })) as readonly STRK20_ACTION[];
-}
-
-/** A fresh, mutable copy of the reviewed actions for the wallet to take. */
-function copyActions(actions: readonly STRK20_ACTION[]): STRK20_ACTION[] {
-  return actions.map((action) => {
-    if (action.type !== 'shadow_account_invoke') return { ...action };
-    return {
-      ...action,
-      calls: action.calls.map((call) => ({ ...call, calldata: [...(call.calldata as string[])] })),
-      collect_policy: { ...action.collect_policy },
-    } as STRK20_ACTION;
-  });
-}
-
 function emitStage(callback: VaultStageCallback | undefined, stage: VaultStage): void {
   try {
     callback?.(Object.freeze({ ...stage }) as VaultStage);
@@ -703,24 +655,6 @@ function emitProgress(callback: ProgressCallback | undefined, progress: Operatio
   } catch {
     /* Observers cannot alter a financial operation. */
   }
-}
-
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new PrivacyError('user-rejected', 'Operation cancelled.'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(new PrivacyError('user-rejected', 'Operation cancelled.'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
