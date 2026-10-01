@@ -31,7 +31,7 @@ import {
   type TxResult,
 } from '../types.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
-import { mapTransferWalletError, mapWalletError } from './errors.js';
+import { mapCapabilityWalletError, mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowSwap } from './swap-operations.js';
 import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
@@ -52,7 +52,9 @@ import type {
   WalletStrk20Account,
 } from './types.js';
 
-const REQUIRED_WALLET_API = '0.10.3';
+/** The lowest Wallet API version that opens the city; the unsupported room names it. */
+export const REQUIRED_WALLET_API_VERSION = '0.10.3';
+const REQUIRED_WALLET_API = REQUIRED_WALLET_API_VERSION;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const U128_MASK = (1n << 128n) - 1n;
@@ -247,6 +249,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const versions = await this.supportedVersions(signal);
       throwIfAborted(signal);
+      if (versions === undefined || versions === null) {
+        // The wallet answered, with nothing: it has no Wallet API to report.
+        throw new PrivacyError('unsupported-wallet', 'This wallet does not report a STRK20 Wallet API version.');
+      }
       const ownedVersions = ownArrayElements(versions, 'capability response');
       const highest = highestVersion(ownedVersions);
       return Object.freeze({
@@ -257,7 +263,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         supportsShadowAccounts: shadowAccountsSupported(highest, this.wallet),
       });
     } catch (error) {
-      throw mapWalletError(error);
+      // A query cancelled meanwhile stays a cancellation, whatever the wallet said.
+      if (signalAborted(signal)) throw new PrivacyError('user-rejected', 'Operation cancelled.');
+      // A wallet that says it lacks the method is reachable and unsupported.
+      throw mapCapabilityWalletError(error);
     }
   }
 
@@ -945,6 +954,15 @@ function assertFeeCeiling(actual: bigint, ceiling: bigint): void {
 function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
   if (typeof ceiling !== 'bigint' || ceiling < 0n || ceiling > MAX_UINT256) {
     throw new PrivacyError('unknown', 'The fee ceiling must be a u256 bigint.');
+  }
+}
+
+/** Whether `signal` is aborted, read without letting a hostile getter escape; a throwing one counts as aborted. */
+function signalAborted(signal?: AbortSignal): boolean {
+  try {
+    return signal?.aborted === true;
+  } catch {
+    return true;
   }
 }
 

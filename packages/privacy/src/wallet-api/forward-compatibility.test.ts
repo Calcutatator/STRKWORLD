@@ -456,6 +456,44 @@ describe('Wallet Standard forward compatibility', () => {
     }
   });
 
+  const probeAnswers: readonly (readonly [string, () => Promise<unknown>, string])[] = [
+    ['answers -32601', async () => { throw { code: -32601, message: 'Method not found' }; }, 'unsupported-wallet'],
+    ['says "Not implemented"', async () => { throw new Error('Not implemented'); }, 'unsupported-wallet'],
+    ['answers nothing', async () => undefined, 'unsupported-wallet'],
+    ['answers 162', async () => { throw { code: 162, message: 'An error occurred (API_VERSION_NOT_SUPPORTED)' }; }, 'unsupported-wallet'],
+    ['drops the transport', async () => { throw new TypeError('Failed to fetch'); }, 'unreachable'],
+  ];
+  it.each(probeAnswers)('reads a connected wallet whose wallet_supportedWalletApi %s as %s', async (_label, answer, kind) => {
+    const account = { address: ACCOUNT } as AccountInterface;
+    const mock = new MockWallet(
+      { mainnet: [account], sepolia: [account] },
+      { id: 'hosted-frame', name: 'Hosted frame signer', available: true },
+    );
+    mock.switchChain(BigInt(MAINNET_CHAIN_ID));
+    const { wallet, requests } = completeWalletApi(mock, { extra: { wallet_supportedWalletApi: answer } });
+    const session = createProductionWalletSession({
+      rpcUrl: 'https://rpc.invalid',
+      backendBaseUrl: '/api',
+      policy: {
+        maxIntents: 1,
+        maxRelayFee: 0n,
+        enabledRoutes: ['shield'],
+        allowedTokens: { shield: [STRK], unshield: [], transfer: [], swap: [] },
+      },
+    });
+    const unregister = announceWallet(wallet);
+    try {
+      const [choice] = session.getSnapshot().wallets;
+      await session.connect(choice!.key);
+      await expect(session.operations.capability()).rejects.toMatchObject({ kind });
+      // The probe only: nothing was read, proved or sent.
+      expect(requests.map(({ type }) => type)).toEqual(['wallet_requestChainId', 'wallet_supportedWalletApi']);
+    } finally {
+      unregister();
+      session.destroy();
+    }
+  });
+
   it('rejects provider identity reads outside the display-only name projection', () => {
     const hostile = sourceFixture(`
       if (handle.name === 'Hosted frame signer') admit();

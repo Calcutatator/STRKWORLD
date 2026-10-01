@@ -281,6 +281,40 @@ The new note shows in the wallet's shielded view after about 20 s. Open
 question: whether Ready takes the fee from existing STRK notes instead when
 the account already holds some (then the full deposit would arrive).
 
+### 2026-10-01 — A wallet without `wallet_supportedWalletApi` showed "Cannot reach your wallet"; it now gets the unsupported room (D-093)
+
+- starknet.js 10.8 `walletV6.supportedWalletApi` is one bare
+  `request({ type: 'wallet_supportedWalletApi' })`
+  (`node_modules/starknet/dist/index.mjs`): whatever the wallet throws or
+  resolves reaches `capability()` untouched. Before D-093 only 162 reached the
+  unsupported room; -32601, "Not implemented" and an `undefined` answer fell
+  through `mapWalletError` to `unknown`/`unreachable`, and the connect flow's
+  `fromError` sends both to "Cannot reach your wallet".
+- `mapCapabilityWalletError` (`packages/privacy/src/wallet-api/errors.ts`) now
+  reads -32601, -32004, 4200, a missing-method message (own data property,
+  first 512 characters) and 162 as `unsupported-wallet`; a `null` or
+  `undefined` answer is the same. Codes 113, 118, 119, 120 and 162 win over
+  any message. The room for a reported version below 0.10.3 now names both
+  versions (`COPY.unsupported.tooOld`, `unsupportedRoomCopy`); the state
+  carries `versionTooOld: true`, which the debug log prints as `tooOld=true`.
+- A wallet at 0.10.3 (or one whose commitment call answers 162 or -32601)
+  passes the gate; Borrow and Endur unstake now have their own tests for it,
+  beside the Vault's and the swap's: `shadow-accounts-unsupported`, no
+  commitment asked, nothing invoked, staking still works.
+- Trap met: a Python heredoc that writes TypeScript turns `\b` into a
+  backspace character unless the string is raw. Every regex test failed
+  silently on "no match"; check written files for control characters.
+
+*Verified:* `wallet-api.test.ts` (each classification, hostile and getter
+errors, a cancelled query), `forward-compatibility.test.ts` (the real
+starknet.js reader through `createProductionWalletSession`),
+`connect-machine.test.ts`, `unsupported-copy.test.ts`,
+`ProductionRoot.test.tsx`, `debug-logs.test.tsx`,
+`borrow-operations.test.ts`, `endur-operations.test.ts`; typecheck and
+`scripts/check-invariants.sh`. **Not verified:** no live Xverse, or any
+wallet lacking the method, has been probed; the message patterns are
+English only.
+
 ### 2026-10-01 — xSTRK's live rate is one keyless `convert_to_assets` call; the wallet's balance read is one total per token (D-091)
 
 - xSTRK (`0x028d709c…0b0a`) answers ERC-4626 `convert_to_assets(u256)`:

@@ -3356,7 +3356,7 @@ window while the gate waits.
 
 ## D-073 — Late injected wallets appear without a click; install links are display only
 
-**2026-09-29 · Accepted by the user · extends D-054's discovery (the session looks again for late injected wallets, and the picker keeps its order) · adds display-only install links and gate-era unsupported-wallet copy to D-055's entry card**
+**2026-09-29 · Accepted by the user · extends D-054's discovery (the session looks again for late injected wallets, and the picker keeps its order) · adds display-only install links and gate-era unsupported-wallet copy to D-055's entry card · amended by D-093 (a wallet that answers the capability query as a method it lacks, or with nothing, lands in the unsupported room, not the unreachable one; a too-old version says so)**
 
 **Context.** The lead asked: "We also need to add Xverse as a wallet
 connector too." Xverse offers Starknet to dapps through the legacy injected
@@ -5465,6 +5465,65 @@ tests, the staking and unstaking flows through the tabs, the Post Office's
 send conventions, the Bridge's rows and status, the adapter, client, fake
 and backend rate reads. Not verified: no live wallet has shown these
 panels, and the rate route has not run on Railway.
+
+---
+
+## D-093 — A wallet that lacks the capability method is unsupported, not unreachable
+
+**2026-10-01 · Accepted (the lead's brief, from the Xverse end-to-end research) · amends D-073's consequence that any capability failure other than 162 shows the unreachable room · keeps D-055's gate (only a supported result admits), D-069's code-only logging rule for the message, D-077's shadow-account gating and SPEC §5 rule 2 (nothing branches on wallet identity)**
+
+**Context.** `wallet_supportedWalletApi` is STRKWORLD's only capability
+probe. Until now a probe that failed with anything but 162 (or with no code
+at all) mapped to `unknown` or `unreachable`, and both showed "Cannot reach
+your wallet" with "Try again". A connected wallet that does not implement the
+method (JSON-RPC -32601, "Not implemented", "Unknown method", or no answer)
+is reachable: it answered. Retrying cannot help, and the room told the player
+the connection had dropped. Xverse is the likely first wallet to meet this
+(the research found no public evidence that it answers the dapp-facing
+Wallet API).
+
+**Decision.**
+
+- **Unsupported.** `capability()` maps a probe failure to `unsupported-wallet`
+  when the wallet says the method is not there: code -32601 (JSON-RPC method
+  not found), -32004 (EIP-1474 method not supported) or 4200 (EIP-1193
+  unsupported method), anywhere down `error` and `cause`; a message, or a
+  thrown string, matching "method not found", "unknown method/request",
+  "unsupported method/request", "not implemented" or "method ... does not
+  exist / is not available / not supported"; 162, as before; or an answer of
+  `null` or `undefined`. The connect flow sends it to D-073's room, named by
+  the picker's display name, with "Connect a different wallet".
+- **Unreachable.** Only a failure with no wallet answer in it stays in
+  "Cannot reach your wallet" with its retry: a dropped transport, a timeout,
+  a popup closed without a 113, or an empty error. A code with a meaning of
+  its own keeps it (113 is a declined connection, back to the connect room;
+  118, 119, 120 as before), whatever its message says, and a cancelled query
+  stays a cancellation. 163 and other unexplained codes keep their present
+  `unknown` mapping and room.
+- **Too old.** A probe that names versions, all below 0.10.3, is still
+  unsupported, and the room now says so plainly: "{Wallet} is connected, but
+  it reports Wallet API {version} and STRKWORLD needs {required} or later,
+  so the city stays closed. ..." The required figure is
+  `REQUIRED_WALLET_API_VERSION`, exported by `@strkworld/privacy`, which the
+  shell copies as `REQUIRED_WALLET_API_LABEL` (a value import of the seam
+  would pull starknet.js into the entry chunk; a test holds them equal). The
+  separate "Wallet API x.y.z" line remains only for a 162 met after the city
+  admitted the version.
+- **Hostile errors.** The message is read only as an own data property
+  (getters never run, proxy traps cannot escape), bounded to its first 512
+  characters, and never kept or logged beyond what D-069 already records.
+- **Shadow accounts.** Unchanged and now tested on every counter: a wallet
+  at 0.10.3, or one whose commitment call answers 162 or -32601, passes the
+  city's gate, and the Vault, Borrow, Exchange and Endur unstake counters
+  say "doesn't support shadow accounts yet" with nothing asked or sent,
+  while the pool routes (staking included) work.
+
+**Consequences.** A wallet without the STRK20 Wallet API sees a room that
+says so, whatever error shape it uses, as long as the shape says the method
+is missing; a wallet whose answer says nothing about the method still sees
+the unreachable room. Message matching is a heuristic over English text: a
+wallet that words it otherwise, or localises it, falls back to unreachable,
+which is the old behaviour. Not verified: no live Xverse has been probed.
 
 ---
 

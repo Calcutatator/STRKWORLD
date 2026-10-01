@@ -45,7 +45,17 @@ export type ConnectState =
        */
       registrationConfirmed: boolean;
     }
-  | { name: 'unsupported-wallet'; walletApiVersion: string | null }
+  | {
+      name: 'unsupported-wallet';
+      walletApiVersion: string | null;
+      /**
+       * True when the capability query itself named a version below the one
+       * the city needs, so the room can say the wallet is too old, plainly.
+       * Absent for a wallet with no Wallet API at all, and for a 162 met
+       * later, whose version the city had already admitted.
+       */
+      versionTooOld?: true;
+    }
   | { name: 'not-registered' }
   | { name: 'unreachable' };
 
@@ -165,7 +175,11 @@ export function createConnectFlow(
 
 function classify(capability: WalletCapability): ConnectState {
   if (!capability.supportsStrk20) {
-    return { name: 'unsupported-wallet', walletApiVersion: capability.walletApiVersion };
+    // A version that parsed but was not admitted is a version below the
+    // required one: `capability()` admits by version alone.
+    return capability.walletApiVersion === null
+      ? { name: 'unsupported-wallet', walletApiVersion: null }
+      : { name: 'unsupported-wallet', walletApiVersion: capability.walletApiVersion, versionTooOld: true };
   }
   if (capability.registration === 'unregistered') {
     return { name: 'not-registered' };
@@ -177,6 +191,13 @@ function classify(capability: WalletCapability): ConnectState {
   };
 }
 
+/**
+ * A capability query that failed. `capability()` already reads a wallet that
+ * says it lacks the method (-32601, "Not implemented", no answer) as
+ * `unsupported-wallet`, so that wallet gets its own room; only a failure
+ * with no wallet answer in it (a dropped transport, a timeout, a popup closed
+ * without a 113) or one with no meaning of its own reaches `unreachable`.
+ */
 function fromError(error: unknown): ConnectState {
   switch (toFailure(error).kind) {
     case 'unsupported-wallet':

@@ -3,6 +3,7 @@ export { BackendPrivacyClient } from './backend-client.js';
 export { RpcPublicBalanceReader } from './public-balance.js';
 export { mapWalletError } from './errors.js';
 export {
+  REQUIRED_WALLET_API_VERSION,
   WalletApiPrivacyOperations,
   type WalletApiPrivacyOperationsOptions,
 } from './operations.js';

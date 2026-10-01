@@ -16,7 +16,7 @@ import { createConnectFlow, type ConnectFlow, type ConnectState } from '../conne
 import { DiscoveryRescan } from '../connect/DiscoveryRescan.js';
 import { EntryGate } from '../connect/EntryGate.js';
 import { GetAWallet } from '../connect/GetAWallet.js';
-import { selectedWalletName, unsupportedCopy } from '../connect/unsupported-copy.js';
+import { selectedWalletName, unsupportedRoomCopy } from '../connect/unsupported-copy.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
 import type { PresenceController } from '../presence/presence-controller.js';
@@ -477,12 +477,12 @@ function WalletCapabilityGateView({
     );
   }
   if (state.name === 'unsupported-wallet') {
-    const copy = unsupportedCopy(walletName);
+    const copy = unsupportedRoomCopy(walletName, state);
     return (
       <section className="room room-unsupported" data-testid="wallet-capability-gate">
         <h2>{copy.title}</h2>
         <p>{copy.body}</p>
-        {state.walletApiVersion ? <p className="room-detail">Wallet API {state.walletApiVersion}</p> : null}
+        {copy.detail ? <p className="room-detail">{copy.detail}</p> : null}
         <button type="button" onClick={onRetry}>{COPY.unsupported.action}</button>
       </section>
     );

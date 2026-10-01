@@ -117,7 +117,13 @@ function borrowPolicy(tokens: string[] = [...BORROW_TOKENS], routes: WalletRoute
   };
 }
 
-function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = {}) {
+function fixture(options: {
+  policy?: WalletRoutePolicy;
+  withReads?: boolean;
+  versions?: readonly string[];
+  /** What the wallet's commitment call does instead of answering. */
+  commitmentFails?: unknown;
+} = {}) {
   const invoked: STRK20_ACTION[][] = [];
   const commitments: string[] = [];
   const shadowReads: string[] = [];
@@ -142,6 +148,7 @@ function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = 
     },
     async strk20ShadowAccountCommitment(dappName: string) {
       commitments.push(dappName);
+      if (options.commitmentFails !== undefined) throw options.commitmentFails;
       return dappName === 'strkworld-borrow' ? BORROW_PARTIAL : VAULT_PARTIAL;
     },
   };
@@ -175,7 +182,7 @@ function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = 
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    supportedVersions: async () => ['0.10.4'],
+    supportedVersions: async () => [...(options.versions ?? ['0.10.4'])],
     policy: options.policy ?? borrowPolicy(),
     vault,
     ...(options.withReads === false ? {} : { borrow }),
@@ -297,6 +304,32 @@ describe('the borrow stand-in and loans (D-083)', () => {
     f.state.positions = positionRows({ [`${STRK}:${USDC}`]: { collateral: 10_000n * E18, debt: 100n * USDC_ONE } });
     const loans = await f.operations.borrowPositions();
     expect(loans.positions[0]!.health.maxLtv).toBe(680_000_000_000_000_000n);
+  });
+});
+
+describe('a wallet with STRK20 but no shadow accounts (D-083)', () => {
+  const request = { kind: 'borrow', collateral: STRK, debt: USDC, collateralAmount: 10_000n * E18, borrowAmount: 100n * USDC_ONE } as const;
+
+  it('reads loans and refuses a borrow as shadow-accounts-unsupported below Wallet API 0.10.4, asking the wallet nothing', async () => {
+    const f = fixture({ versions: ['0.10.3'] });
+    await expect(f.operations.capability()).resolves.toMatchObject({ supportsStrk20: true, supportsShadowAccounts: false });
+    await expect(f.operations.borrowPositions({ onStage: f.onStage })).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    await expect(f.operations.prepareBorrow(request)).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    expect(f.commitments).toEqual([]);
+    expect(f.invoked).toEqual([]);
+    expect(f.positionReads).toEqual([]);
+    expect(f.stages).toEqual([{ stage: 'capability', supported: false }]);
+  });
+
+  it.each([
+    ['method not found', { code: -32601, message: 'Method not found' }],
+    ['API_VERSION_NOT_SUPPORTED', { code: 162, message: 'An error occurred (API_VERSION_NOT_SUPPORTED)' }],
+  ])('reads a commitment refused as %s as shadow-accounts-unsupported, and sends nothing', async (_label, refusal) => {
+    const f = fixture({ commitmentFails: refusal });
+    await expect(f.operations.borrowPositions()).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    await expect(f.operations.prepareBorrow(request)).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    expect(f.invoked).toEqual([]);
+    expect(f.positionReads).toEqual([]);
   });
 });
 
