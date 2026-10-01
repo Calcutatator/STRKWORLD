@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import type { BorrowHealth, BorrowPosition } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import {
@@ -71,11 +71,17 @@ export function BorrowPanel({
   onClose,
   panel: injected,
   register = PRIVACY_REGISTER,
+  experience = 'station',
+  counters = null,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BorrowPanelMachine;
   register?: readonly RouteGrade[];
+  /** Presentation only: the counter and Menu Mode (D-088) render the same window. */
+  experience?: 'menu' | 'station';
+  /** Menu Mode's counter tabs (D-088); presentation only. */
+  counters?: ReactNode;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const owned = useMemo(
@@ -120,7 +126,7 @@ export function BorrowPanel({
       : null;
 
   return (
-    <div className="vault-experience borrow-experience" data-experience="station">
+    <div className="vault-experience borrow-experience" data-experience={experience}>
       <WalletAttentionCue active={attention !== null} kind={attention ?? 'confirm'} />
       <PanelFrame
         title={COPY.buildings.vault}
@@ -128,6 +134,7 @@ export function BorrowPanel({
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
+        counters={counters}
       >
         <BorrowIntro state={state} />
         <ModeTabs state={state} onSelect={(mode) => panel.setMode(mode)} />
