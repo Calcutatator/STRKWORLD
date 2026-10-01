@@ -291,6 +291,33 @@ Office and Bridge render and flow tests, and offline renders
 (`renders/bankux-*.png` in the working scratchpad, not committed).
 **Not verified:** no live wallet has shown these panels.
 
+### 2026-10-01 — Menu Mode missed the Vault's BORROW and the Exchange's DEGEN SWAP; a new counter needs a Menu Mode tab too (D-088)
+
+An audit of every player feature against Menu Mode found two windows only
+Game Mode reached: BORROW (D-083 said so) and the degen floor (nothing
+said so). Both are now tabs in their building's Menu Mode, admitted by
+`resolveStation` exactly as their counters are. How verified:
+`apps/web/src/visits/menu-mode-parity.flow.test.tsx` (six tests, through
+the real `VisitLayer`), the full suite, typecheck and the invariants.
+Traps:
+
+- **A counter added to `station-registry.ts` is not in Menu Mode by
+  itself.** Menu Mode renders `BUILDING_PANELS`, one component per
+  building. Add the station to its building's `menuCounters([...])` list
+  in that building's Menu adapter (`VaultMenuPanel`, `ExchangeMenuPanel`),
+  or the window is Game Mode only.
+- **Gate a tab by `resolveStation`, not by `routeDoor`.** A station locks
+  only when every route it offers is off or one is unapproved; reusing the
+  station resolver keeps Menu Mode and the room in step with the build
+  switches.
+- **Switching floors shows the Exchange's latest receipt first.** The
+  ledger restores the building's last swap into a freshly mounted window,
+  so a test that swaps downstairs then opens DEGEN SWAP must press Back to
+  the counter before it sees the list. Game Mode does the same.
+- **Tab switches unmount.** Keep one window mounted so one `ConfirmGate`
+  is on screen; `ExchangeMenuPanel` keys `ExchangePanel` by floor so the
+  degen machine is never the ground floor's.
+
 ### 2026-10-01 — The degen floor quotes keylessly, but its thin pairs split past the relay's calldata limit, so the quote proxy bounds by the swap's own ceiling (D-067, D-084)
 
 avnu's public `/swap/v3/quotes` and `/swap/v3/build` quote the curated degen

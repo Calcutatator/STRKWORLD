@@ -495,6 +495,16 @@ body {
   border-bottom: 1px solid var(--ui-line-subtle);
 }
 
+/* D-088: Menu Mode's counter tabs, between the header and the chosen
+ * counter's disclosure, so the disclosure reads as that counter's own. */
+.panel-counters {
+  padding: 0.9rem 1.25rem 0;
+}
+
+.panel-counters > .panel-modes {
+  margin: 0 0 0.9rem;
+}
+
 .commit-disclosures,
 .review-warnings {
   list-style: none;

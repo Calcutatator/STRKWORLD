@@ -754,6 +754,8 @@ export const COPY = freezeCopy({
     exit: 'Leave building',
     singleAction: 'This station confirms one action at a time.',
     reviewAction: 'Review this action',
+    /** D-088: names Menu Mode's row of counter tabs for assistive tech. */
+    counters: 'Counters',
   },
 
   presence: {

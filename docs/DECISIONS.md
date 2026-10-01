@@ -2981,7 +2981,7 @@ in-game timing signal.
 
 ## D-067 — The degen floor swaps a curated core plus avnu's live community list
 
-**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting · amended by D-084 (the degen admission guards the keyless quote proxy, not a relay; the browser admits the list behind its own switch)**
+**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting · amended by D-084 (the degen admission guards the keyless quote proxy, not a relay; the browser admits the list behind its own switch) · amended by D-088 (Menu Mode offers the degen floor's window beside the ground floor's)**
 
 **Context.** The Exchange's new degen floor was asked to list "the degen mode
 listed tokens on Starknet that avnu has", and the user chose a combination of
@@ -4445,7 +4445,7 @@ routes on Ready.
 
 ## D-083 — Borrowing on Vesu from a second shadow account, at its own counter in the Vault
 
-**2026-10-01 · Accepted by the user (the product owner's decisions: its own shadow account, a second counter in the Vault's room, Prime only in five tokens, four flows each one wallet-submitted private transaction, a health display, a build switch off by default) · extends D-077 (the canonical shadow-account anonymizer, to Vesu's pool contract itself) · extends D-036's frozen seam by three methods and their shapes · adds one register route (`vault.borrow`) with its own disclosure, and changes no D-024 string · builds on D-081 (the pinned Prime markets) and D-082 (wallet submission)**
+**2026-10-01 · Accepted by the user (the product owner's decisions: its own shadow account, a second counter in the Vault's room, Prime only in five tokens, four flows each one wallet-submitted private transaction, a health display, a build switch off by default) · extends D-077 (the canonical shadow-account anonymizer, to Vesu's pool contract itself) · extends D-036's frozen seam by three methods and their shapes · adds one register route (`vault.borrow`) with its own disclosure, and changes no D-024 string · builds on D-081 (the pinned Prime markets) and D-082 (wallet submission) · amended by D-088 (Menu Mode now offers the BORROW window too, behind the same gate)**
 
 **Context.** The Vault lends through Vesu's vTokens from the player's shadow
 account (D-077, D-079, D-081); borrowing was the open half. The research
@@ -5147,6 +5147,58 @@ on the street, 2.46 in the Studio; 2.87 KB/s per client overall; tick p95
 7.7 ms, 11.0% of a core; 0 of 722,399 peer sightings in a wrong area and
 20,838 street sightings from the roof; 0 decode failures. Not verified: a
 real browser drawing the street's crowd from the roof.
+
+---
+
+## D-088 — Menu Mode offers every counter its Game Mode room holds
+
+**2026-10-01 · Accepted · technical direction delegated to the project lead (the lead asked for Menu Mode parity with Game Mode) · amends D-083 (its "Menu Mode keeps the Vault's one window; borrowing is Game Mode only for now") · amends D-067 (the degen floor is reachable from Menu Mode) · keeps D-030's guardrails, D-042's one-swap Exchange and D-024's disclosures · no seam, register, World, lobby or backend change**
+
+**Context.** D-030 makes Menu Mode the secondary path to "the full set of
+the building's functions at once". Since then two rooms gained a second
+window that only Game Mode reached: the Vault's BORROW counter (D-083) and
+the Exchange's DEGEN SWAP counter (D-067). An audit of every player feature
+found no other gap: the Bank's Menu Mode has shield, unshield, transfer and
+stake, with the unstaking counter under the stake form (D-085); the Post
+Office's is its transfer (D-040); the Bridge's and the Vault's SUPPLY /
+REDEEM are the counters' own windows, the Vault over all twenty-three
+markets (D-081); the ground swap's review carries the price check and the
+unpriced-token acknowledgement (D-084). The Privacy Plaza (D-076), the
+sandbox (D-060), the pitch (D-078) and the Avatar Studio (D-047) have no
+Menu Mode by design: no building, no money.
+
+**Decision.**
+
+- **A row of counter tabs.** Where a room holds more than one window, Menu
+  Mode shows them one at a time behind tabs named as the counters are
+  (`SUPPLY / REDEEM` · `BORROW`, `SWAP` · `DEGEN SWAP`). The first tab is
+  the building's own Menu Mode window and is always offered; its window
+  still shows its own locked door. Every other tab is offered only while
+  `resolveStation` would open that counter, against the same register,
+  policy and build switches, so a counter the build leaves off
+  (`VITE_STRK20_BORROW_ENABLED` unset, or an unapproved route) is hidden,
+  not shown locked. With one tab, no row is drawn and the window is what it
+  was.
+- **The counters' own windows.** The tabs choose between the existing
+  `VaultPanel` and `BorrowPanel`, and `ExchangePanel` on its ground and
+  degen floors: the same machines, `ConfirmGate`, disclosures and receipts.
+  `apps/web/src/panels/MenuCounters.tsx` holds the admission and the tabs;
+  `VaultMenuPanel` and `ExchangeMenuPanel` are the registry's adapters, as
+  `PostOfficePanel` is (D-040). `PanelFrame` gains a presentation-only
+  `counters` slot between the header and the disclosure, so the disclosure
+  shown is always the chosen counter's own.
+- **One window mounted.** Only the chosen window is mounted, so only one
+  confirm is ever on screen. A tab switch closes one window and opens the
+  other, as walking between counters does: a submission already sent is not
+  cancelled, and its receipt stays in the shared ledger (the degen window
+  opens on the swap just sent downstairs, as the degen counter would).
+
+**Consequences.** A player can borrow and swap on the degen floor without
+walking. No disclosure string changes, and no route opens that its counter
+would not. Tests: `apps/web/src/visits/menu-mode-parity.flow.test.tsx`
+drives both rooms' Menu Mode through the real visit layer (a borrow and an
+unpriced swap to submission, a degen swap, and the hidden tabs with
+borrowing or swapping off). Not verified: a real browser at phone width.
 
 ---
 
