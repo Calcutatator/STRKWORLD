@@ -18,6 +18,8 @@ import { attachDebugTap } from '../../debug/debug-tap.js';
 import {
   createBankPanel,
   ROUTE_BY_MODE,
+  shieldFigures,
+  shieldMax,
   type BankMode,
   type BankPanel,
   type BankPanelOptions,
@@ -520,10 +522,13 @@ describe('bank panel — maturity-aware balance', () => {
     expect(blind.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.errors['insufficient-balance'] });
   });
 
-  it('offers no maximum for a shield — the shell cannot see public funds', async () => {
-    const panel = await openPanel(fake());
+  it('offers no shield maximum from the private balance: a shield spends public funds (D-094)', async () => {
+    const operations = fake({ publicBalances: { [STRK]: 0n } });
+    const panel = await openPanel(operations);
+    await settle();
     await panel.refreshBalance();
     expect(panel.store.getState().mode).toBe('shield');
+    // 100 STRK in the pool, nothing public: nothing to shield.
     expect(panel.maxSpendable()).toBeNull();
   });
 
@@ -537,6 +542,163 @@ describe('bank panel — maturity-aware balance', () => {
     expect(balance.status).toBe('failed');
     expect(balance.status === 'failed' && balance.message).toBe(COPY.errors.unreachable);
     expect(panel.store.getState().flow.name).toBe('composing');
+  });
+});
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe('bank panel — the Shield control spends the public wallet balance (D-094)', () => {
+  it('reads the public balance of the shield token when the room opens on Shield', async () => {
+    const operations = fake({ publicBalances: { [STRK]: strk('29') } });
+    const read = vi.spyOn(operations, 'publicBalance');
+    const privateRead = vi.spyOn(operations, 'balances');
+    const panel = await openPanel(operations);
+    await settle();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]![0]).toBe(STRK);
+    expect(panel.store.getState().publicBalance).toEqual({ status: 'loaded', token: STRK, amount: strk('29') });
+    // The private balance still waits for the player: no wallet was asked.
+    expect(privateRead).not.toHaveBeenCalled();
+    expect(panel.store.getState().balance.status).toBe('unrequested');
+  });
+
+  it('re-reads on Refresh and on returning to Shield, and drops it on another tab', async () => {
+    const operations = fake({ publicBalances: { [STRK]: strk('29') } });
+    const read = vi.spyOn(operations, 'publicBalance');
+    const panel = await openPanel(operations);
+    await settle();
+    await panel.refreshPublicBalance();
+    expect(read).toHaveBeenCalledTimes(2);
+
+    panel.setMode('unshield');
+    expect(panel.store.getState().publicBalance.status).toBe('unrequested');
+    await panel.refreshPublicBalance();
+    expect(read).toHaveBeenCalledTimes(2);
+
+    panel.setMode('shield');
+    await settle();
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(panel.store.getState().publicBalance).toMatchObject({ status: 'loaded', amount: strk('29') });
+  });
+
+  it('discards a read that lands after the player left Shield', async () => {
+    const operations = fake();
+    const answer = deferred<bigint>();
+    vi.spyOn(operations, 'publicBalance').mockReturnValue(answer.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('unshield');
+    answer.resolve(strk('29'));
+    await settle();
+    expect(panel.store.getState().publicBalance.status).toBe('unrequested');
+  });
+
+  it('reads the token the pool names, and a new token after the room reopens', async () => {
+    const OTHER: Address = '0x0123';
+    const operations = fake({ publicBalances: { [STRK]: strk('29'), [OTHER]: strk('3') } });
+    const read = vi.spyOn(operations, 'publicBalance');
+    const panel = await openPanel(operations);
+    await settle();
+    expect(panel.store.getState().publicBalance).toMatchObject({ token: STRK, amount: strk('29') });
+
+    panel.close();
+    vi.spyOn(operations, 'poolConfig').mockResolvedValueOnce({
+      feeAmount: POOL_FEE, feeToken: OTHER, proofValidityBlocks: 450, noteMaturityBlocks: 0,
+    });
+    await panel.open();
+    await settle();
+    expect(read.mock.calls.at(-1)![0]).toBe(OTHER);
+    expect(panel.store.getState().publicBalance).toMatchObject({ token: OTHER, amount: strk('3') });
+  });
+
+  it('reports a failed read as a state, and asks no wallet', async () => {
+    const operations = fake();
+    operations.injectFault({ kind: 'unreachable', on: 'publicBalance' });
+    const panel = await openPanel(operations);
+    await settle();
+    expect(panel.store.getState().publicBalance).toEqual({ status: 'failed', message: COPY.balance.publicFailed });
+    expect(panel.maxSpendable()).toBeNull();
+  });
+
+  it('Max is the wallet balance less the pool fee on top, and less what is queued', async () => {
+    const panel = await openPanel(fake({ publicBalances: { [STRK]: strk('29') } }));
+    await settle();
+    // 29 STRK public, 6 STRK pool fee on top: 23 STRK reaches the pool.
+    expect(panel.maxSpendable()).toBe(strk('23'));
+    panel.applyMax();
+    expect(panel.store.getState().amountText).toBe('23');
+
+    panel.setAmount('20');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
+    // The fee is paid once per visit, so only 3 STRK more fits.
+    expect(panel.maxSpendable()).toBe(strk('3'));
+  });
+
+  it('offers no Max when the wallet holds no more than the pool fee', async () => {
+    const panel = await openPanel(fake({ publicBalances: { [STRK]: strk('6') } }));
+    await settle();
+    expect(panel.maxSpendable()).toBeNull();
+  });
+
+  it('refuses a shield whose amount plus the pool fee is more than the wallet holds', async () => {
+    const panel = await openPanel(fake({ publicBalances: { [STRK]: strk('29') } }));
+    await settle();
+    panel.setAmount('23.000000000000000001');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(panel.store.getState().notice?.text).toBe('Insufficient STRK');
+
+    panel.setAmount('23');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
+  });
+
+  it('shields the typed amount: the note is the amount and the wallet sends amount + fee', async () => {
+    const operations = fake({ balances: {}, publicBalances: { [STRK]: strk('29') } });
+    const panel = await openPanel(operations);
+    await settle();
+    panel.setAmount('9');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: strk('9') }]]);
+    // 9 STRK reached the pool; 9 + 6 left the wallet.
+    const [pool] = await operations.balances([STRK]);
+    expect(pool!.total).toBe(strk('9'));
+    expect(await operations.publicBalance(STRK)).toBe(strk('14'));
+    const state = panel.store.getState();
+    expect(state.flow).toMatchObject({ name: 'submitted', shielded: true });
+    // The wallet balance is re-read after the shield, without a wallet prompt.
+    await settle();
+    expect(panel.store.getState().publicBalance).toMatchObject({ status: 'loaded', amount: strk('14') });
+  });
+
+  it('names the public balance, not the pool, when the wallet refuses a shield as short', async () => {
+    const operations = fake({ publicBalances: { [STRK]: strk('29') } });
+    const panel = await openPanel(operations);
+    await settle();
+    panel.setAmount('9');
+    await panel.addToBatch();
+    await panel.prepare();
+    operations.injectFault({ kind: 'insufficient-balance', on: 'confirm' });
+    await panel.confirm();
+    expect(panel.store.getState().flow).toMatchObject({
+      name: 'failed',
+      message: "There is not enough STRK in your wallet's public balance for this deposit.",
+    });
+  });
+});
+
+describe('shield figures (D-094)', () => {
+  it('puts the pool fee on top of the amount', () => {
+    expect(shieldFigures(strk('9'), POOL_FEE)).toEqual({ amount: strk('9'), fee: POOL_FEE, total: strk('15') });
+  });
+
+  it('caps Max at the balance less the fee and the queue', () => {
+    expect(shieldMax(strk('29'), POOL_FEE, 0n)).toBe(strk('23'));
+    expect(shieldMax(strk('29'), POOL_FEE, strk('20'))).toBe(strk('3'));
+    expect(shieldMax(strk('6'), POOL_FEE, 0n)).toBeNull();
+    expect(shieldMax(strk('5'), POOL_FEE, 0n)).toBeNull();
   });
 });
 
@@ -1389,6 +1551,8 @@ class AggregateOnlyOperations implements PrivacyOperations {
     this.inner.prepareEndurUnstake(shares, options);
   prepareEndurClaim: PrivacyOperations['prepareEndurClaim'] = (options) => this.inner.prepareEndurClaim(options);
   endurRate: PrivacyOperations['endurRate'] = (signal) => this.inner.endurRate(signal);
+  // D-094: the public balance, passed through untouched.
+  publicBalance: PrivacyOperations['publicBalance'] = (token, signal) => this.inner.publicBalance(token, signal);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);

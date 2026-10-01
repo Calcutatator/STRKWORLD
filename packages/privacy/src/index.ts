@@ -56,6 +56,8 @@ export type {
 
 // D-072: the pool and its Deposit event, which `depositStatus` reads from a receipt.
 export { POOL_DEPOSIT_EVENT, STRK20_POOL } from './pool.js';
+// D-094: a shield's amount reaches the pool; the pool fee goes on top.
+export { shieldDeposits } from './shield-deposit.js';
 
 // Endur private staking (D-063): the pinned mainnet contracts the stake route
 // admits; and unstaking through a shadow account (D-085).
@@ -155,6 +157,8 @@ export {
   REQUIRED_WALLET_API_VERSION,
   WalletApiPrivacyOperations,
   BackendPrivacyClient,
+  RpcPublicBalanceReader,
+  type PublicBalanceReader,
   createSupportedVersionsReader,
   createWalletDiscovery,
   createProductionWalletSession,

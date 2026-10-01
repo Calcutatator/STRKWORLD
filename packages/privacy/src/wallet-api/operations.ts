@@ -20,6 +20,7 @@ import type {
   WalletCapability,
 } from '../operations.js';
 import { depositStatusFromReceipt } from '../pool.js';
+import { shieldDeposits } from '../shield-deposit.js';
 import {
   PrivacyError,
   type Address,
@@ -42,6 +43,7 @@ import type {
   EndurReadClient,
   PoolNativeRoute,
   PoolReadClient,
+  PublicBalanceReader,
   SupportedVersionsReader,
   SwapPriceReader,
   SwapQuoteClient,
@@ -78,6 +80,11 @@ export interface WalletApiPrivacyOperationsOptions {
    * (D-084). Absent, every swap fails closed.
    */
   swapPrices?: SwapPriceReader;
+  /**
+   * D-094: the account's public token balance, over the wallet's own RPC.
+   * Absent, `publicBalance` fails closed as unreachable.
+   */
+  publicBalances?: PublicBalanceReader;
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
   now?: () => number;
@@ -107,9 +114,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly borrow: ShadowBorrow;
   private readonly endur: EndurUnstake;
   private readonly swap: ShadowSwap;
+  private readonly publicBalances: PublicBalanceReader | null;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
+    this.publicBalances = options.publicBalances ?? null;
     assertAddress(options.wallet.address, 'wallet account');
     this.walletAddress = options.wallet.address;
     this.pool = options.pool;
@@ -194,6 +203,20 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   /** D-085: unstaked STRK into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
   prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch> {
     return this.endur.prepareClaim(options);
+  }
+
+  /** D-094: the connected account's public balance of one token. See `PrivacyOperations`. */
+  async publicBalance(token: Address, signal?: AbortSignal): Promise<bigint> {
+    throwIfAborted(signal);
+    assertAddress(token, 'public balance token');
+    if (!this.publicBalances) {
+      throw new PrivacyError('unreachable', 'The wallet balance could not be read.');
+    }
+    const amount = await this.publicBalances.read(token, this.walletAddress, signal);
+    if (typeof amount !== 'bigint' || amount < 0n || amount > MAX_UINT256) {
+      throw new PrivacyError('unreachable', 'The wallet balance could not be read.');
+    }
+    return amount;
   }
 
   /** D-091: xSTRK's live exchange rate, read through the backend. See `PrivacyOperations`. */
@@ -402,7 +425,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
 
     const config = await this.poolConfig(signal);
-    const warnings = freezeWarnings(await this.warningsFor(reviewed, signal));
+    const warnings = freezeWarnings(await this.warningsFor(reviewed, config, signal));
     if (hasShield) return this.prepareShield(reviewed, config, warnings);
     if (kinds.has('swap')) {
       if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
@@ -476,7 +499,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           assertFeeCeiling(current.feeAmount, feeCeiling);
           assertNotDiscarded(discarded);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
-          const result = await wallet.strk20InvokeTransaction(toActions(intents));
+          // D-094: the fee goes on top of the shield, at the fee read at prepare.
+          // The ceiling above holds the live fee to it, so the note is never
+          // less than the amount reviewed.
+          const result = await wallet.strk20InvokeTransaction(toActions(intents, config));
           // Once the wallet returns a transaction hash the public deposit may
           // already be on-chain. Do not turn that success into a retryable
           // cancellation merely because the caller aborted while it settled.
@@ -572,13 +598,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
    * back as a warning. What an observer sees of a stake stays recorded in the
    * privacy register's `observable` entry (D-063).
    */
-  private async warningsFor(intents: readonly Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
+  private async warningsFor(intents: readonly Intent[], config: PoolConfig, signal?: AbortSignal): Promise<BatchWarning[]> {
     const warnings: BatchWarning[] = [];
-    for (const intent of intents) {
+    const deposits = shieldDeposits(intents, config);
+    for (const [index, intent] of intents.entries()) {
       if (intent.kind === 'shield') {
         warnings.push({
           kind: 'public-leg',
-          detail: `Depositing ${intent.amount} is public: the amount and your address are visible on-chain.`,
+          detail: `Depositing ${deposits.at(index)} is public: the amount and your address are visible on-chain.`,
         });
       } else if (intent.kind === 'unshield') {
         warnings.push({
@@ -736,10 +763,14 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
  */
 const OPEN_NOTE_PLACEHOLDER = '${openNoteIds[0]}';
 
-function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
-  return intents.map((intent): STRK20_ACTION => {
+function toActions(intents: readonly Intent[], config?: PoolConfig): STRK20_ACTION[] {
+  // D-094: a shield deposits its amount plus the pool fee, so the note is the amount.
+  const deposits = config ? shieldDeposits(intents, config) : null;
+  return intents.map((intent, index): STRK20_ACTION => {
     switch (intent.kind) {
-      case 'shield': return { type: 'deposit', token: intent.token, amount: toFelt(intent.amount) };
+      case 'shield':
+        if (!deposits) throw new PrivacyError('unknown', 'A shield needs the pool fee it pays.');
+        return { type: 'deposit', token: intent.token, amount: toFelt(deposits.at(index)!) };
       case 'unshield': return {
         type: 'withdraw', token: intent.token, amount: toFelt(intent.amount), recipient: intent.recipient,
       };

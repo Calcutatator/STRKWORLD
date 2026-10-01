@@ -40,6 +40,7 @@ import type {
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
+import { shieldDeposits } from '../shield-deposit.js';
 import { SWAP_MAX_SLIPPAGE_BPS } from '../swap-prices.js';
 import {
   ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
@@ -180,6 +181,13 @@ function demoMaxLtv(collateral: string, debt: string): bigint {
  *   - deposits are always to self
  */
 
+/**
+ * D-094: a DEMO public balance, 1,000 whole units of an 18-decimal token,
+ * that the fake's wallet holds of any token `publicBalances` does not list.
+ * Never a real account's figure.
+ */
+export const DEMO_PUBLIC_BALANCE = 1_000n * 10n ** 18n;
+
 export interface FakeConfig {
   /**
    * Starting shielded balances, token → amount. Omitted, the fake starts with
@@ -192,6 +200,14 @@ export interface FakeConfig {
    * `setDepositStatus` changes it (D-072). `landed` by default.
    */
   deposits?: DepositStatus;
+  /**
+   * D-094: the demo wallet's PUBLIC balances, token → amount, which a shield
+   * draws on. A listed token's shield is refused when its deposit (the
+   * amount plus the pool fee in the fee token) exceeds it, and debited when
+   * it confirms. An unlisted token reads `DEMO_PUBLIC_BALANCE` and is
+   * neither checked nor debited.
+   */
+  publicBalances?: Record<Address, bigint>;
   /** Addresses registered in the pool and able to receive. */
   registered?: Address[];
   poolConfig?: Partial<PoolConfig>;
@@ -317,7 +333,9 @@ export interface Fault {
     | 'endurPrepare'
     | 'endurConfirm'
     /** D-091: xSTRK's exchange-rate read. */
-    | 'endurRate';
+    | 'endurRate'
+    /** D-094: the public balance read a shield draws on. */
+    | 'publicBalance';
   message?: string;
   sticky?: boolean;
 }
@@ -330,6 +348,8 @@ interface MaturingNote {
 
 export class FakePrivacyOperations implements PrivacyOperations {
   private spendable = new Map<Address, bigint>();
+  /** D-094: the demo wallet's public balances, by normalised token. */
+  private readonly publicHeld = new Map<string, bigint>();
   private maturing: MaturingNote[] = [];
   private registeredAddrs: Set<string>;
   private pool: PoolConfig;
@@ -399,6 +419,12 @@ export class FakePrivacyOperations implements PrivacyOperations {
         throw new PrivacyError('unknown', 'The fake starting balance amount must be a non-negative bigint.');
       }
       this.spendable.set(token, amount);
+    }
+    for (const [token, amount] of Object.entries(config.publicBalances ?? {})) {
+      if (typeof amount !== 'bigint' || amount < 0n) {
+        throw new PrivacyError('unknown', 'The fake public balance amount must be a non-negative bigint.');
+      }
+      this.publicHeld.set(normalise(token), amount);
     }
     this.registeredAddrs = new Set((config.registered ?? []).map((address) => {
       assertAddress(address, 'fake registered recipient');
@@ -639,6 +665,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     })) as PrivateBalance[];
   }
 
+  /** D-094: the demo wallet's public balance of one token; `DEMO_PUBLIC_BALANCE` when unlisted. */
+  async publicBalance(token: Address, signal?: AbortSignal): Promise<bigint> {
+    assertAddress(token, 'fake public balance token');
+    await this.tick('publicBalance', signal);
+    return this.publicHeld.get(normalise(token)) ?? DEMO_PUBLIC_BALANCE;
+  }
+
   async recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus> {
     assertAddress(address, 'fake recipient');
     await this.tick('recipientStatus', signal);
@@ -728,11 +761,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
     const promptCount = 1;
 
-    for (const intent of reviewed) {
+    // D-094: a shield deposits its amount plus the pool fee, as in the adapter.
+    const deposits = shieldDeposits(reviewed, { feeToken: this.pool.feeToken, feeAmount: feeAtPrepare });
+    for (const [index, intent] of reviewed.entries()) {
       if (intent.kind === 'shield') {
         warnings.push({
           kind: 'public-leg',
-          detail: `Depositing ${intent.amount} is public: the amount and your address are visible on-chain.`,
+          detail: `Depositing ${deposits.at(index)} is public: the amount and your address are visible on-chain.`,
         });
       }
       if (intent.kind === 'unshield') {
@@ -841,6 +876,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
         emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
         emitProgress(onProgress, { stage: 'submitting', message: 'Submitting' });
 
+        // D-094: the deposits leave the demo wallet's public balance.
+        if (hasShield) self.debitPublic(canonicalIntents, feeAtPrepare);
         self.applyIntents(canonicalIntents, currentFee);
         self.submitted.push([...canonicalIntents]);
         const transactionHash = `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}`;
@@ -1523,6 +1560,27 @@ export class FakePrivacyOperations implements PrivacyOperations {
       if (sameAddress(key, token)) return value;
     }
     return 0n;
+  }
+
+  /** D-094: refuse a shield a listed public balance cannot pay for, else debit it. */
+  private debitPublic(intents: readonly Intent[], fee: bigint): void {
+    const deposits = shieldDeposits(intents, { feeToken: this.pool.feeToken, feeAmount: fee });
+    const byToken = new Map<string, bigint>();
+    intents.forEach((intent, index) => {
+      if (intent.kind !== 'shield') return;
+      const key = normalise(intent.token);
+      byToken.set(key, (byToken.get(key) ?? 0n) + deposits.at(index)!);
+    });
+    for (const [token, deposit] of byToken) {
+      const held = this.publicHeld.get(token);
+      if (held !== undefined && deposit > held) {
+        throw new PrivacyError('insufficient-balance', `Needs ${deposit} public, has ${held}.`);
+      }
+    }
+    for (const [token, deposit] of byToken) {
+      const held = this.publicHeld.get(token);
+      if (held !== undefined) this.publicHeld.set(token, held - deposit);
+    }
   }
 
   private credit(token: Address, amount: bigint): void {

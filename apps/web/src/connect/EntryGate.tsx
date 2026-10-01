@@ -15,6 +15,7 @@ import {
   createEntryGate,
   entryPolicyKey,
   entryTokens,
+  STRK as STRK_FEE_TOKEN,
   type AccountReader,
   type DepositFailure,
   type EntryGate as EntryGateMachine,
@@ -219,7 +220,7 @@ function DepositCard({ gate, state }: { gate: EntryGateMachine; state: Of<'depos
               onChange={(event) => gate.setAmount(event.target.value)}
             />
           </label>
-          <p className="panel-hint">{COPY.entry.feeNote}</p>
+          <p className="panel-hint">{sameAddress(token.token, STRK_FEE_TOKEN) ? COPY.bank.shieldFeeOnTop : COPY.entry.feeNote}</p>
           <button type="submit" className="review" disabled={preparing}>
             {preparing ? COPY.flow.preparing : COPY.entry.review}
           </button>
@@ -240,11 +241,10 @@ function DepositCard({ gate, state }: { gate: EntryGateMachine; state: Of<'depos
 
 /**
  * The commit point. The only confirm button is `ConfirmGate`'s, with the
- * register's approved deposit disclosure right above it (D-020, D-024). No fee
- * figure is shown: the wallet takes the pool's fee out of the deposit, in the
- * deposited token, so the note says so without a number. A STRK deposit no
- * larger than that fee gets a plain warning in its place instead, and can
- * still be confirmed: there is no minimum.
+ * register's approved deposit disclosure right above it (D-020, D-024).
+ * D-094: a STRK deposit pays the pool fee on top, so the review shows what
+ * reaches the pool, the fee and what leaves the wallet. Another token keeps
+ * D-072's plain note: the fee is STRK, and its share cannot be stated.
  */
 function ReviewCard({ gate, state }: { gate: EntryGateMachine; state: Of<'review' | 'depositing'> }) {
   const { review } = state;
@@ -259,14 +259,25 @@ function ReviewCard({ gate, state }: { gate: EntryGateMachine; state: Of<'review
           <ul className="batch-list">
             <li>{`${COPY.entry.deposit} ${formatTokenAmountExact(review.amount, review.token.decimals)} ${review.token.symbol}`}</li>
           </ul>
-          {review.feeTakesAll ? (
-            <p className="panel-notice" role="status" data-warning="fee-takes-all">{COPY.entry.feeTakesAll}</p>
+          {review.poolFee !== null ? (
+            <dl className="review-costs" data-review="shield">
+              <dt>{COPY.bank.youShield}</dt>
+              <dd>{`${formatTokenAmountExact(review.amount, review.token.decimals)} ${review.token.symbol}`}</dd>
+              <dt>{COPY.bank.poolFee}</dt>
+              <dd>{`${formatTokenAmountExact(review.poolFee, review.token.decimals)} ${review.token.symbol}`}</dd>
+              <dt>{COPY.bank.totalFromWallet}</dt>
+              <dd>{`${formatTokenAmountExact(review.amount + review.poolFee, review.token.decimals)} ${review.token.symbol}`}</dd>
+            </dl>
           ) : (
             <p className="panel-hint">{COPY.entry.feeNote}</p>
           )}
           {review.warnings.length > 0 ? (
             <ul className="review-warnings">
-              {describeWarnings(review.warnings, [{ kind: 'shield', token: review.token.token, amount: review.amount }]).map(
+              {describeWarnings(
+                review.warnings,
+                [{ kind: 'shield', token: review.token.token, amount: review.amount }],
+                review.poolFee !== null ? { feeToken: review.token.token, feeAmount: review.poolFee } : undefined,
+              ).map(
                 (text, index) => <li key={`${review.warnings[index]!.kind}-${index}`}>{text}</li>,
               )}
             </ul>

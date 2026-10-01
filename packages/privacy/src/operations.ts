@@ -200,6 +200,15 @@ export interface PrivacyOperations {
   balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]>;
 
   /**
+   * D-094: the connected account's PUBLIC balance of `token`, in base units:
+   * what a shield draws on. An ERC-20 `balance_of` over the wallet's own RPC,
+   * never STRKWORLD's backend or the lobby, and no wallet is asked, so it
+   * raises no prompt and may be read when the Shield control opens. It is a
+   * public chain fact, unlike `balances`, which only the wallet can answer.
+   */
+  publicBalance(token: Address, signal?: AbortSignal): Promise<bigint>;
+
+  /**
    * Whether an address can receive a private transfer.
    *
    * Read from the pool contract, not the Wallet API — no wallet method exists.

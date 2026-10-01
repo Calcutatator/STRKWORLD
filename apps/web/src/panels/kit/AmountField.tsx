@@ -22,6 +22,12 @@ export interface AmountFieldProps {
    * `null`) and there is no balance line and no "exceeds" check.
    */
   readonly balance?: bigint | null;
+  /**
+   * The figure the amount is checked against when it is not `balance`
+   * itself: a shield's wallet balance less the pool fee on top (D-094).
+   * Omit to check against `balance`.
+   */
+  readonly limit?: bigint | null;
   /** The balance line's words; the pool balance by default. */
   readonly balanceLabel?: string;
   /** A small control beside the balance line, such as re-reading it. */
@@ -55,14 +61,14 @@ export interface AmountFieldProps {
 }
 
 export function AmountField({
-  label, value, onChange, decimals, symbol, token, balance = null, balanceLabel = COPY.kit.poolBalance, balanceAction,
+  label, value, onChange, decimals, symbol, token, balance = null, limit, balanceLabel = COPY.kit.poolBalance, balanceAction,
   exceedsMessage = COPY.kit.exceedsBalance, max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
   readOnly = false, busy = false, stale = false,
 }: AmountFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   const hintId = `${id}-hint`;
-  const check = checkAmount(readOnly ? '' : value, { decimals, balance, minimum });
+  const check = checkAmount(readOnly ? '' : value, { decimals, balance: limit === undefined ? balance : limit, minimum });
   const message = amountMessage(check, minimum, decimals, symbol, exceedsMessage);
   const quick = max && !readOnly ? max : undefined;
   const maximum = quick ? quick() : null;

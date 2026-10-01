@@ -452,7 +452,8 @@ describe('existing intents under a stake-enabled policy', () => {
     const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 4n }]);
 
     await batch.confirm({ feeCeiling: POOL_FEE });
-    expect(invoke).toHaveBeenCalledWith([{ type: 'deposit', token: STRK, amount: '0x4' }]);
+    // D-094: the deposit is the amount plus the pool fee, so the note is the amount.
+    expect(invoke).toHaveBeenCalledWith([{ type: 'deposit', token: STRK, amount: `0x${(4n + POOL_FEE).toString(16)}` }]);
     expect(gateway.estimate).not.toHaveBeenCalled();
     expect(gateway.submit).not.toHaveBeenCalled();
   });
@@ -574,6 +575,7 @@ describe('session admission of the stake policy', () => {
       prepareEndurUnstake: async () => { throw new Error('unused'); },
       prepareEndurClaim: async () => { throw new Error('unused'); },
       endurRate: async () => { throw new Error('unused'); },
+      publicBalance: async () => { throw new Error('unused'); },
     };
   }
 

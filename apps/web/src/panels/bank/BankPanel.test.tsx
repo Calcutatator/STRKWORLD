@@ -418,6 +418,9 @@ describe('BankPanel rendering', () => {
     const seam = operations();
     const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
+    // A spend's review states both; a shield's states the fee on top instead (D-094).
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
@@ -585,14 +588,18 @@ describe('BankPanel rendering', () => {
     const seam = operations();
     const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
+    await settle();
     await panel.refreshBalance();
 
-    // Shielding spends public STRK the Bank cannot see: no balance on its field,
-    // the private figure stays in the card, and its disclosure stays in the header.
+    // D-094: shielding spends the wallet's public STRK, so its field shows
+    // that, never the pool figure or its settling note, and its disclosure
+    // stays in the header.
     const shield = render(panel, seam);
     expect(shield).toContain(SHIELD_DISCLOSURE);
-    expect(shield).toContain('class="balance-total"');
-    expect(shield).not.toContain('ui-amount-balance');
+    expect(shield).not.toContain('class="balance-total"');
+    expect(shield).toContain(`<span class="ui-amount-balance">${COPY.kit.walletBalance}: <span class="ui-figure">1000 STRK</span></span>`);
+    expect(shield).not.toContain(COPY.kit.poolBalance);
+    expect(shield).not.toContain(COPY.balance.maturityUnknown);
     expect(shield).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
 
     for (const mode of ['unshield', 'transfer', 'stake'] as const) {
@@ -655,10 +662,132 @@ describe('BankPanel rendering', () => {
 
     const markup = render(panel, seam);
     const warnings = markup.slice(markup.indexOf('class="review-warnings"'));
-    expect(warnings).toContain('Depositing 0.5 STRK is public: the amount and your address are visible on-chain.');
+    // D-094: the public leg is the deposit, the amount plus the pool fee on top.
+    expect(warnings).toContain('Depositing 6.5 STRK is public: the amount and your address are visible on-chain.');
     expect(markup).not.toContain('500000000000000000');
     // The approved disclosure is still the register's own words, at the commit point.
     expect(commitGate(markup)).toContain(SHIELD_DISCLOSURE);
+  });
+});
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094)', () => {
+  function walletSeam(publicStrk: string, privateStrk = '0') {
+    return new FakePrivacyOperations({
+      balances: { [STRK]: parseTokenAmount(privateStrk)! },
+      publicBalances: { [STRK]: parseTokenAmount(publicStrk)! },
+      registered: [BOB],
+    });
+  }
+
+  it('shows "Wallet balance: 29 STRK", not the pool balance or its settling note', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    const markup = render(panel, seam);
+    expect(markup).toContain(`<span class="ui-amount-balance">Wallet balance: <span class="ui-figure">29 STRK</span></span>`);
+    expect(markup).not.toContain('Pool balance');
+    expect(markup).not.toContain(COPY.balance.maturityUnknown);
+    expect(markup).not.toContain('class="balance-total"');
+    // Refresh sits beside it, and Max is offered.
+    expect(markup).toContain(`aria-label="${COPY.balance.refreshLabel}">${COPY.balance.refreshShort}</button>`);
+    expect(markup).toMatch(/aria-label="Fill in the most you can use">Max<\/button>/);
+  });
+
+  it('says it is reading the wallet balance until the chain answers', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    const markup = render(panel, seam);
+    expect(markup).toContain(COPY.balance.publicLoading);
+    expect(markup).not.toContain(COPY.balance.unrequested);
+  });
+
+  it('shows what is shielded, the pool fee on top and the total from the wallet', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.setAmount('13');
+    const markup = render(panel, seam);
+    expect(markup).toContain('<dt>You shield</dt><dd>13 STRK</dd>');
+    expect(markup).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
+    expect(markup).toContain('<dt>Total from your wallet</dt><dd>19 STRK</dd>');
+    expect(markup).toContain(COPY.bank.shieldFeeOnTop);
+  });
+
+  it('nudges that the fee is fixed when it is a large share of a small shield', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.setAmount('3');
+    expect(render(panel, seam)).toContain(COPY.bank.shieldFeeNudge);
+    panel.setAmount('13');
+    expect(render(panel, seam)).not.toContain(COPY.bank.shieldFeeNudge);
+  });
+
+  it('says Insufficient STRK when the amount plus the fee is more than the wallet holds', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.setAmount('24');
+    const markup = render(panel, seam);
+    expect(markup).toContain(COPY.bank.exceedsWallet);
+    expect(markup).toContain('<button type="submit" disabled="">Insufficient STRK</button>');
+    panel.setAmount('23');
+    expect(render(panel, seam)).not.toContain('Insufficient STRK');
+  });
+
+  it('notes why Max left some behind', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.applyMax();
+    const markup = render(panel, seam);
+    expect(markup).toContain('value="23"');
+    expect(markup).toContain(COPY.bank.shieldMaxNote);
+  });
+
+  it('switching to Unshield shows the pool balance again, with its own note', async () => {
+    const seam = walletSeam('29', '100');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.setMode('unshield');
+    await panel.refreshBalance();
+    const markup = render(panel, seam);
+    expect(markup).toContain(`${COPY.kit.poolBalance}: <span class="ui-figure">100 STRK</span>`);
+    expect(markup).not.toContain(COPY.kit.walletBalance);
+
+    panel.setMode('shield');
+    await settle();
+    expect(render(panel, seam)).toContain(`${COPY.kit.walletBalance}: <span class="ui-figure">29 STRK</span>`);
+  });
+
+  it('reviews the shield with the fee on top, and says when the funds appear', async () => {
+    const seam = walletSeam('29');
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    await settle();
+    panel.setAmount('9');
+    await panel.addToBatch();
+    await panel.prepare();
+    const review = render(panel, seam);
+    const figures = review.slice(review.indexOf('data-review="shield"'));
+    expect(figures).toMatch(/<dt>You shield<\/dt><dd>9 STRK<\/dd>[^]*?Pool fee[^]*?<dd[^>]*>6 STRK<\/dd><dt>Total from your wallet<\/dt><dd>15 STRK<\/dd>/);
+    expect(review).toContain('Depositing 15 STRK is public');
+    expect(review).toContain('<li>Shield 9 STRK</li>');
+
+    await panel.confirm();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'submitted', shielded: true });
+    const done = render(panel, seam);
+    expect(done).toContain(COPY.flow.submitted);
+    expect(done).toContain(COPY.bank.shieldArrives.replace("'", '&#x27;'));
   });
 });
 
