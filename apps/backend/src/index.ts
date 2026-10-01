@@ -8,7 +8,7 @@ export {
 } from './api.js';
 export { AvnuDegenCatalog, type AvnuDegenCatalogOptions } from './avnu-degen-catalog.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
-export { AVNU_EXCHANGE, AvnuSwapQuotes, type AvnuSwapQuotesOptions } from './avnu-swap-quotes.js';
+export { AVNU_EXCHANGE, AVNU_SWAP_MAX_CALLDATA, AvnuSwapQuotes, type AvnuSwapQuotesOptions } from './avnu-swap-quotes.js';
 export {
   DEBUG_LOGS_MAX_BODY_BYTES,
   DEBUG_LOGS_MAX_DETAIL_CHARS,

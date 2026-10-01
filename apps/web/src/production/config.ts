@@ -147,8 +147,9 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   // The policy has one intent bound for every route and one relay-fee ceiling
   // that the Wallet API adapter checks every relay quote against. Where
   // several routes are enabled, the strictest configured bound wins. Since
-  // D-082 only a swap is relayed, so the unshield, transfer and stake
-  // ceilings are still required and parsed but gate no quote of their own.
+  // D-082 and D-084 no route is relayed (the wallet submits the swap too), so
+  // the unshield, transfer and stake ceilings are still required and parsed
+  // but gate no quote of their own.
   const intentBounds: number[] = [];
   const relayFeeCeilings: bigint[] = [];
 
