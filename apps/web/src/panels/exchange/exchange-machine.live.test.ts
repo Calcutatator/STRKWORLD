@@ -8,7 +8,7 @@ import {
 } from './exchange-machine.js';
 
 /**
- * D-089: the Exchange's live quote and slippage cog. The Buy side is filled
+ * D-090: the Exchange's live quote and slippage cog. The Buy side is filled
  * while the player types, never faster than the counter's spacing and budget
  * allow; a Review press takes the live quote as is, and the slippage the
  * player chose is the one the swap is quoted and floored at.
@@ -62,7 +62,7 @@ function harness(options: {
   };
 }
 
-describe('the live quote (D-089)', () => {
+describe('the live quote (D-090)', () => {
   it('asks once, after the player stops typing, and the Buy side shows its figures', async () => {
     const { machine, prepare, release, open, waits } = harness();
     await open();
@@ -228,7 +228,7 @@ describe('the live quote (D-089)', () => {
   });
 });
 
-describe('the live quote and an unaccounted submission (D-089)', () => {
+describe('the live quote and an unaccounted submission (D-090)', () => {
   it('asks nothing while an earlier submission is unaccounted for, as Review is gated', async () => {
     let allowed = false;
     const { machine, waits, open } = harness({ allowed: () => allowed });
@@ -242,7 +242,7 @@ describe('the live quote and an unaccounted submission (D-089)', () => {
   });
 });
 
-describe('the slippage cog (D-089)', () => {
+describe('the slippage cog (D-090)', () => {
   it('starts at 0.5%, or the build ceiling if lower', () => {
     expect(harness().machine.store.getState()).toMatchObject({ slippageText: '0.5', slippageCeilingBps: 300 });
     expect(harness({ slippageCeilingBps: 30 }).machine.store.getState()).toMatchObject({ slippageText: '0.3', slippageCeilingBps: 30 });
@@ -301,7 +301,7 @@ describe('the slippage cog (D-089)', () => {
   });
 });
 
-describe('the flip arrow (D-089)', () => {
+describe('the flip arrow (D-090)', () => {
   it('swaps the sides and carries the live output into the Sell field', async () => {
     const { machine, release, open } = harness({ balances: { [strk!.token]: 100n * ONE, [eth!.token]: 5n * ONE } });
     await open();

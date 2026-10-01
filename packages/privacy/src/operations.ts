@@ -30,7 +30,7 @@ import type {
  * (borrowing on Vesu from a second shadow account: `borrowMarket`,
  * `borrowPositions` and `prepareBorrow`, with their shapes below) and D-085
  * (Endur unstaking through a shadow account: `endurUnstakePosition`,
- * `prepareEndurUnstake` and `prepareEndurClaim`) and D-089 (the swap
+ * `prepareEndurUnstake` and `prepareEndurClaim`) and D-090 (the swap
  * intent's optional `slippageBps`); every other method and shape is
  * unchanged.
  *
@@ -61,7 +61,7 @@ export type Intent =
       amountIn: bigint;
       minAmountOut: bigint;
       /**
-       * D-089: the player's slippage for this swap, in bps, from the
+       * D-090: the player's slippage for this swap, in bps, from the
        * Exchange's slippage cog. A whole number from 1 to the build's
        * ceiling (`WalletRoutePolicy.swap.slippageBps`, at most 300); anything
        * else is refused. Absent, the swap uses the build's ceiling, as before.

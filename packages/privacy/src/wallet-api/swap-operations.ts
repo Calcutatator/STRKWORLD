@@ -111,7 +111,7 @@ export class ShadowSwap {
     if (sameAddress(intent.tokenIn, intent.tokenOut)) {
       throw new PrivacyError('unknown', 'A swap needs two different tokens.');
     }
-    // D-089: the player's slippage, at or below the build's ceiling, or the ceiling itself.
+    // D-090: the player's slippage, at or below the build's ceiling, or the ceiling itself.
     const slippageBps = intent.slippageBps ?? swapPolicy.slippageBps;
     if (!Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > swapPolicy.slippageBps) {
       throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");

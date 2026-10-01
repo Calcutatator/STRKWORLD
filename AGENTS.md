@@ -259,7 +259,7 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-10-01 — `wallet_strk20Balances` is per token; what it lacks is maturity, not a split by token (D-022, D-089)
+### 2026-10-01 — `wallet_strk20Balances` is per token; what it lacks is maturity, not a split by token (D-022, D-090)
 
 `wallet_strk20Balances(tokens)` answers `[{ token, balance }, ...]`, one
 entry per requested token, and an empty list asks for every shielded token
@@ -268,7 +268,7 @@ balance is still maturing: a note is spendable 10 blocks after it is created.
 D-022's "aggregate" meant spendable plus maturing, for one token, not a total
 across tokens, and the adapter reports `maturityKnown: false` with zero
 `spendable`, which is why every Max built on `spendable` was off for live
-players. D-089 lets Max fill from the per-token total (`maxBasis` in the
+players. D-090 lets Max fill from the per-token total (`maxBasis` in the
 panel kit). How verified: the STRK20 corpus ("Show the shielded balance",
 `// [{ token, balance }, ...]`; "matures 10 blocks after creation") and the
 adapter's parser in `wallet-api/operations.ts`, which refuses any entry with

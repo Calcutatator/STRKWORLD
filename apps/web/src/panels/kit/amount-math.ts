@@ -64,7 +64,7 @@ export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null
 /**
  * What a Max may fill from, for one token's pool balance: the spendable
  * figure when the wallet splits it, otherwise the per-token total
- * `wallet_strk20Balances` returns (D-089, amending D-022). That total is the
+ * `wallet_strk20Balances` returns (D-090, amending D-022). That total is the
  * figure the balance line already shows and a player may type in by hand, so
  * Max fills in nothing a typed amount could not; a note received in the last
  * few blocks may not be spendable yet, and the wallet, which proves, refuses

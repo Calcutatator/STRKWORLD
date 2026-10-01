@@ -102,7 +102,7 @@ describe('preparing a shadow-account swap', () => {
     expect(Object.isFrozen(batch.swapReview)).toBe(true);
   });
 
-  it('quotes at the player\'s own slippage, at or below the build\'s ceiling (D-089)', async () => {
+  it('quotes at the player\'s own slippage, at or below the build\'s ceiling (D-090)', async () => {
     const { ops, quotes } = seam();
     const batch = await ops.prepare([{ ...SWAP, slippageBps: 50 }]);
 

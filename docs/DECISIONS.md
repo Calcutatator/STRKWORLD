@@ -677,7 +677,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · its no-MAX-when-maturity-is-unknown rule amended by D-089 (Max may fill from the per-token total)**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028 · its no-MAX-when-maturity-is-unknown rule amended by D-090 (Max may fill from the per-token total)**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -4577,7 +4577,7 @@ caller) stops it until a new decision.
 
 ## D-084 — The swap runs on its own shadow account, quoted by avnu's keyless API
 
-**2026-10-01 · Accepted by the user (the lead asked for private swaps at the Exchange and the degen floor with no avnu API key and no STRKWORLD relay) · supersedes D-023 (server-planned, relayed, quote-bound swaps) · supersedes D-082 in part (the swap is wallet-submitted too) · supersedes D-070 in part (no player flow needs the key) · amends D-067 (its admission guards the quote proxy) · keeps D-042's protected-minimum formula and D-024's swap disclosure · extends D-036's seam: `SwapReview.priceCheck`, the optional `acknowledgeUncheckedPrice` on `PreparedBatch.confirm`, and an optional `degen` on `WalletRoutePolicy.swap` · adds one public route to D-014's backend, which still logs nothing per request · D-083 is the borrowing route, which shares the shadow-account resolver · its build-fixed slippage amended by D-089 (the player chooses, up to the build's figure)**
+**2026-10-01 · Accepted by the user (the lead asked for private swaps at the Exchange and the degen floor with no avnu API key and no STRKWORLD relay) · supersedes D-023 (server-planned, relayed, quote-bound swaps) · supersedes D-082 in part (the swap is wallet-submitted too) · supersedes D-070 in part (no player flow needs the key) · amends D-067 (its admission guards the quote proxy) · keeps D-042's protected-minimum formula and D-024's swap disclosure · extends D-036's seam: `SwapReview.priceCheck`, the optional `acknowledgeUncheckedPrice` on `PreparedBatch.confirm`, and an optional `degen` on `WalletRoutePolicy.swap` · adds one public route to D-014's backend, which still logs nothing per request · D-083 is the borrowing route, which shares the shadow-account resolver · its build-fixed slippage amended by D-090 (the player chooses, up to the build's figure)**
 
 **Context.** D-082 left the swap the only relayed route: avnu's private-swap
 plan and its fee came together from avnu's paymaster, which refuses
@@ -5150,7 +5150,7 @@ real browser drawing the street's crowd from the roof.
 
 ---
 
-## D-089 — The Exchange swaps as swap apps do: live quote, Max from the per-token balance, and a slippage cog
+## D-090 — The Exchange swaps as swap apps do: live quote, Max from the per-token balance, and a slippage cog
 
 **2026-10-01 · Accepted by the lead (the owner asked for the Exchange and the degen floor to follow avnu's and Uniswap's swap conventions, with Max and the slippage cog, simply and in the building's own style) · amends D-022 (Max may fill from the per-token total) · amends D-084 (the slippage is the player's, up to the build's figure, which becomes a ceiling) · extends D-036's frozen seam with the swap intent's optional `slippageBps` · keeps D-084's review, oracle check, unchecked-price tick, re-quote and fee ceiling unchanged**
 
@@ -5229,7 +5229,11 @@ adapter refused a floor tighter than it, so a cog had nothing to set.
   and `stale`; `SettingsPopover` a `hint` and a custom value that survives
   passing through a preset) in the Exchange's own `--ui-*` tokens, so the
   ground floor wears avnu's look and the degen floor its own. The degen
-  floor runs the same view over its list.
+  floor runs the same view over its list. Each figure shows once: the pool
+  balance on the balance line beside 50% and Max (the token selectors show
+  the ticker alone), "via avnu" on the Route row (the card's footer badge is
+  gone), and no "one swap at a time" subtitle (D-042's single-swap rule
+  stands; the view has no batch controls to explain).
 
 **Consequences.** A player sees what a swap returns before reviewing it, and
 Max works for live players. The live quote spends a little more of avnu's

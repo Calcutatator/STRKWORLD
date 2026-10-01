@@ -1395,24 +1395,6 @@ button[data-locked="true"] {
   padding-inline: 1.5rem;
 }
 
-/* Easter egg: a quiet "via avnu" chip at the foot of the card. The empty
- * alternative text keeps it out of the accessibility tree; a browser without
- * that syntax drops the declaration and shows nothing. */
-.panel[data-building="exchange"] > .panel-card::after {
-  content: "via avnu" / "";
-  display: block;
-  width: fit-content;
-  margin: 0 1.5rem 1.2rem auto;
-  padding: 0.2rem 0.65rem;
-  border: 1px solid #313881;
-  border-radius: 999px;
-  background: #1c204a;
-  color: #718ef9;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
 /* ------------------------------------------------------------------------
  * The Exchange's degen counter: avnu's window with a degen flair (D-067).
  *
@@ -3853,7 +3835,7 @@ button.shell-start {
 }
 
 /* ===========================================================================
- * The Exchange's swap (D-089): Sell, the flip, Buy, the rate and four rows,
+ * The Exchange's swap (D-090): Sell, the flip, Buy, the rate and four rows,
  * in the window's own tokens (avnu's look downstairs, the degen look upstairs).
  * ======================================================================== */
 

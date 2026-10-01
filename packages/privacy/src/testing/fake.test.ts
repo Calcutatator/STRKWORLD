@@ -231,7 +231,7 @@ describe('the gas estimate follows the route (D-082, D-084)', () => {
       .toThrow(/swap review/i);
   });
 
-  it("floors the swap at the player's own slippage when the intent carries one, as the adapter does (D-089)", async () => {
+  it("floors the swap at the player's own slippage when the intent carries one, as the adapter does (D-090)", async () => {
     const usdc = '0x1234';
     const ops = new FakePrivacyOperations({
       balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },

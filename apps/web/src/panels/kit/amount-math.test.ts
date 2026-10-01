@@ -39,7 +39,7 @@ describe('Max less the pool fee', () => {
   });
 });
 
-describe('maxBasis (D-089)', () => {
+describe('maxBasis (D-090)', () => {
   it('uses the spendable figure when the wallet splits it', () => {
     expect(maxBasis({ total: 10n * ONE, spendable: 7n * ONE, maturityKnown: true })).toBe(7n * ONE);
   });

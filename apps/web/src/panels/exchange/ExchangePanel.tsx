@@ -49,7 +49,7 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
     register,
     canStartFinancialAction: () => { const state = submissionUncertainty.store.getState(); return !state.active || state.acknowledged; },
     ...(catalog ? { catalog } : {}),
-    // D-089: quote while the player types, and offer slippage up to the build's own ceiling.
+    // D-090: quote while the player types, and offer slippage up to the build's own ceiling.
     liveQuoteDelayMs: LIVE_QUOTE_DELAY_MS,
     ...slippageCeiling(),
   }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register, catalog]);
@@ -75,7 +75,6 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
     <PanelFrame title={COPY.buildings.exchange} building="exchange" brand={degen ? 'degen' : undefined} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose}>
       {degen ? <p className="degen-eyebrow">{COPY.degen.eyebrow}</p> : null}
       <ReceiptNextStep building="exchange" transactionHash={state.flow.name === 'submitted' ? state.flow.transactionHash : null} register={register} />
-      <p className="panel-hint">{COPY.exchange.oneSwap}</p>
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :
         state.flow.name === 'submitted' ? <div className="flow-done"><p>{state.flow.restored ? COPY.flow.receiptWaiting : COPY.flow.submitted} <code>{state.flow.transactionHash}</code></p><button type="button" onClick={() => panel.acknowledge()}>{COPY.flow.back}</button></div> :
         blocked ? null : committing ? <Review state={state} onConfirm={() => void panel.confirm()} onCancel={() => panel.cancelPrepared()} onAcknowledge={(value) => panel.acknowledgeUncheckedPrice(value)} /> :
@@ -88,25 +87,22 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
   </div>;
 }
 
-/** The build's own slippage ceiling (D-089), where this build has a swap policy. */
+/** The build's own slippage ceiling (D-090), where this build has a swap policy. */
 function slippageCeiling(): { slippageCeilingBps?: number } {
   const ceiling = detectRoutePolicy()?.swap?.slippageBps;
   return ceiling === undefined ? {} : { slippageCeilingBps: ceiling };
 }
 
-/** A token choice: the ticker, the name where the list gives one, the pool balance where read. */
-function tokenOption(state: ExchangeState, asset: ExchangeAsset): TokenOption {
-  return {
-    token: asset.token,
-    symbol: asset.symbol,
-    decimals: asset.decimals,
-    ...(asset.name ? { name: asset.name } : {}),
-    balance: holdingOf(state, asset.token)?.total ?? null,
-  };
+/**
+ * A token choice: the ticker alone. The pool balance is the balance line's,
+ * beside 50% and Max, and the degen floor's names are on its board.
+ */
+function tokenOption(asset: ExchangeAsset): TokenOption {
+  return { token: asset.token, symbol: asset.symbol, decimals: asset.decimals };
 }
 
 /**
- * The swap, laid out as swap apps lay it out (D-089): Sell with its pool
+ * The swap, laid out as swap apps lay it out (D-090): Sell with its pool
  * balance, 50% and Max; the flip arrow; Buy, read-only, filled from the live
  * quote; the rate; four rows; one button. Slippage is behind the cog. The
  * review and its confirm are unchanged: this view only composes.
@@ -139,7 +135,7 @@ function Compose({ state, panel }: { state: ExchangeState; panel: ExchangeMachin
       onChange={(value) => panel.setAmount(value)}
       decimals={sell?.decimals ?? 18}
       symbol={sell?.symbol ?? ''}
-      token={<TokenSelect label={COPY.exchange.sellToken} labelHidden value={sell?.token ?? ''} placeholder={COPY.exchange.chooseAsset} options={state.sellChoices.map((asset) => tokenOption(state, asset))} onChange={(token) => panel.setSell(token)} />}
+      token={<TokenSelect label={COPY.exchange.sellToken} labelHidden value={sell?.token ?? ''} placeholder={COPY.exchange.chooseAsset} options={state.sellChoices.map(tokenOption)} onChange={(token) => panel.setSell(token)} />}
       balance={holding?.total ?? null}
       {...(sell ? { max, half: true } : {})}
       usd={quote?.summary.sellUsd ?? null}
@@ -154,7 +150,7 @@ function Compose({ state, panel }: { state: ExchangeState; panel: ExchangeMachin
       onChange={() => {}}
       decimals={buy?.decimals ?? 18}
       symbol={buy?.symbol ?? ''}
-      token={<TokenSelect label={COPY.exchange.buyToken} labelHidden value={buy?.token ?? ''} options={buyChoices(state).map((asset) => tokenOption(state, asset))} onChange={(token) => panel.setBuy(token)} />}
+      token={<TokenSelect label={COPY.exchange.buyToken} labelHidden value={buy?.token ?? ''} options={buyChoices(state).map(tokenOption)} onChange={(token) => panel.setBuy(token)} />}
       usd={quote?.summary.expectedBuyUsd ?? null}
       busy={request !== null && state.live.status === 'quoting'}
       stale={quote?.stale ?? false}
@@ -215,7 +211,7 @@ function QuoteDetails({ quote, feeInSellToken }: { quote: ReadyQuote; feeInSellT
   </div>;
 }
 
-/** The slippage cog (D-089): 0.1%, 0.5%, 1% and a custom value, up to the build's ceiling. */
+/** The slippage cog (D-090): 0.1%, 0.5%, 1% and a custom value, up to the build's ceiling. */
 function SlippageCog({ state, onChange }: { state: ExchangeState; onChange: (value: string) => void }) {
   const presets = SLIPPAGE_PRESETS_BPS
     .filter((bps) => bps <= state.slippageCeilingBps)

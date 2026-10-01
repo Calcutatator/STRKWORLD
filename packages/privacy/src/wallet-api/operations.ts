@@ -642,7 +642,7 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   if (intents.length === 0) throw new PrivacyError('unknown', 'prepare called with no intents');
   if (intents.length > policy.maxIntents) throw new PrivacyError('unknown', 'Too many intents in one batch.');
   for (const intent of intents) {
-    // D-089: a swap may carry the player's own slippage, as an own data property.
+    // D-090: a swap may carry the player's own slippage, as an own data property.
     const swapSlippage = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'slippageBps') !== undefined;
     const expectedKeys = intent.kind === 'shield'
       ? ['kind', 'token', 'amount']

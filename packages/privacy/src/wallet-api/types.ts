@@ -344,7 +344,7 @@ export interface WalletRoutePolicy {
     expectedChainId: string;
     /**
      * The widest slippage a swap may use, in bps (1 to 300), and the one a
-     * swap intent without its own `slippageBps` uses. Since D-089 the
+     * swap intent without its own `slippageBps` uses. Since D-090 the
      * Exchange's slippage cog chooses at or below it.
      */
     slippageBps: number;

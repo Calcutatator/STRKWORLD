@@ -176,7 +176,7 @@ describe('ExchangePanel review render', () => {
     ]) {
       expect(gate).toContain(definition);
     }
-    // Slippage says what this swap carries, and that it is fixed once quoted (D-042, D-089).
+    // Slippage says what this swap carries, and that it is fixed once quoted (D-042, D-090).
     expect(gate).toContain(COPY.glossary.slippageFixedAt);
     expect(gate).toContain('0.50%');
     expect(gate).toContain(COPY.glossary.slippageReason);

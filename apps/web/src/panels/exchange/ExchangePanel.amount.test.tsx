@@ -11,7 +11,7 @@ import { ExchangePanel } from './ExchangePanel.js';
 import { createExchangePanel, type ExchangePanel as ExchangeMachine } from './exchange-machine.js';
 
 /**
- * The Exchange's swap view (D-089), driven through the screen: Sell with its
+ * The Exchange's swap view (D-090), driven through the screen: Sell with its
  * pool balance, 50% and Max; the flip; Buy filled from the live quote; the
  * rate line and its invert; the four rows; the slippage cog; and the button's
  * words. The review and its confirm are `ExchangePanel.test.tsx`'s.
@@ -128,7 +128,7 @@ describe('the Exchange swap: the Sell side', () => {
     expect(container!.textContent).not.toContain(COPY.balance.feeReserved);
   });
 
-  it('offers Max from the per-token total when the wallet reports no spendable split (D-089, amending D-022)', async () => {
+  it('offers Max from the per-token total when the wallet reports no spendable split (D-090, amending D-022)', async () => {
     const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * ONE } });
     const read = operations.balances.bind(operations);
     operations.balances = async (...args) => (await read(...args)).map((entry) => ({ ...entry, spendable: 0n, maturing: 0n, maturityKnown: false }));

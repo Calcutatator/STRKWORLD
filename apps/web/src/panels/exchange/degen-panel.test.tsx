@@ -162,7 +162,8 @@ describe('the degen counter in demo', () => {
     expect(markup).toContain(`<p class="degen-eyebrow">${COPY.degen.eyebrow}</p>`);
     expect(markup).toContain(COPY.degen.intro);
     expect(markup).toContain(COPY.degen.demo.replaceAll("'", '&#x27;'));
-    expect(markup).toContain(COPY.exchange.oneSwap);
+    // D-090: no subtitle; the Route row says "via avnu" once.
+    expect(markup).not.toContain('one swap at a time');
     // Chips name avnu's tags in words.
     expect(markup).toMatch(/<span class="degen-token-symbol">LORDS<\/span><span class="degen-token-name">Lords<\/span><span class="degen-chips"><span class="degen-chip" data-tag="verified">Verified<\/span><span class="degen-chip" data-tag="avnu">AVNU<\/span><\/span>/);
     expect(markup).toContain('<span class="degen-chip" data-tag="unruggable">Unruggable</span>');

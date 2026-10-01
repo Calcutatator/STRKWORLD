@@ -226,7 +226,6 @@ export const COPY = freezeCopy({
     protectedMinimum: 'Protected minimum',
     slippage: 'Slippage',
     expiresAt: 'Quote expires',
-    oneSwap: 'This Exchange prepares and confirms one swap at a time.',
     /**
      * D-084: the quote ran out before confirming, and avnu's fresh one would
      * lower the protected minimum, so the review shows it instead.
@@ -247,7 +246,7 @@ export const COPY = freezeCopy({
     acknowledgeUnchecked: 'I understand this swap has no independent price check.',
     acknowledgeFirst: 'Tick the box to confirm a swap with no independent price check.',
     /**
-     * D-089: the compose view, in the words swap apps use (Uniswap's Sell,
+     * D-090: the compose view, in the words swap apps use (Uniswap's Sell,
      * Buy, Receive at least, Max slippage and Route via; avnu's Price
      * impact). Nothing here adds a privacy claim: the disclosure is at the
      * commit point, as before.
@@ -883,7 +882,7 @@ export const COPY = freezeCopy({
       'The least amount you are guaranteed to receive, even if the market moves against you before this settles.',
     bridgeMinimum:
       'The least STRK this quote delivers if the bridge completes. If it cannot complete, 1Click refunds your deposit instead, so it is not a guarantee of arrival.',
-    /** D-089: the player sets the slippage with the cog; the review states what this swap carries. */
+    /** D-090: the player sets the slippage with the cog; the review states what this swap carries. */
     slippageFixedAt: 'This swap carries a slippage of',
     slippageReason:
       'chosen with the settings cog. It is fixed once quoted, which is what lets the protected minimum above be a guarantee rather than an estimate.',

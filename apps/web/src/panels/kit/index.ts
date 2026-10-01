@@ -26,7 +26,7 @@
  *   the button; build it with `maxAfterReserve(maxBasis(balance), feeReserve(...))`
  *   so a Max of the fee token leaves the pool fee behind. `maxBasis` is the
  *   spendable figure, or the per-token total for a wallet that reports only
- *   that (D-089, amending D-022). `readOnly` makes it a figure to read, as a
+ *   that (D-090, amending D-022). `readOnly` makes it a figure to read, as a
  *   swap's Buy side, with `busy` and `stale` for a quote in flight or run out.
  * - `TokenSelect`: a styled native select showing "STRK · 12.5"; native for
  *   keyboard, screen readers and phone pickers.

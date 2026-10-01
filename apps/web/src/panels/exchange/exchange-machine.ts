@@ -28,7 +28,7 @@ export interface ExchangeReview {
   readonly disclosures: readonly string[];
   /** D-084: the quote's implied rate, "1 STRK ≈ 0.0431 USDC". */
   readonly rate: string;
-  /** D-089: the same rate the other way up, "1 USDC ≈ 23.2 STRK", for the rate line's invert. */
+  /** D-090: the same rate the other way up, "1 USDC ≈ 23.2 STRK", for the rate line's invert. */
   readonly inverseRate: string;
   /** D-084: the oracle's USD value of each side, where the oracle prices it. */
   readonly sellUsd: string | null;
@@ -59,7 +59,7 @@ export type ExchangeCatalogState =
   | { readonly status: 'idle' | 'loading' | 'failed' };
 
 /**
- * D-089: the compose view's live quote, the figure the Buy field shows while
+ * D-090: the compose view's live quote, the figure the Buy field shows while
  * the player types. A live quote is a prepared batch like a Review press
  * makes, held until the player presses Review (which takes it as is, with no
  * second request) or edits the swap (which discards it).
@@ -103,11 +103,11 @@ export interface ExchangeState {
   readonly holdings: readonly PrivateBalance[];
   /** The pool's fee and fee token from `open()`, for a Max that leaves the fee behind. */
   readonly pool: { readonly feeAmount: bigint; readonly feeToken: string } | null;
-  /** D-089: the slippage cog's text, a percentage ("0.5"). */
+  /** D-090: the slippage cog's text, a percentage ("0.5"). */
   readonly slippageText: string;
-  /** D-089: the widest slippage this build lets the player choose, in bps. */
+  /** D-090: the widest slippage this build lets the player choose, in bps. */
   readonly slippageCeilingBps: number;
-  /** D-089: the Buy field's live quote. */
+  /** D-090: the Buy field's live quote. */
   readonly live: LiveQuote;
 }
 
@@ -122,9 +122,9 @@ export interface ExchangePanel {
   setSell(token: string): void;
   setBuy(token: string): void;
   setAmount(text: string): void;
-  /** D-089: the slippage cog's value, a percentage as typed. */
+  /** D-090: the slippage cog's value, a percentage as typed. */
   setSlippage(text: string): void;
-  /** D-089: swap the two sides, carrying the live output into the Sell field. */
+  /** D-090: swap the two sides, carrying the live output into the Sell field. */
   flip(): void;
   prepare(signal?: AbortSignal): Promise<void>;
   confirm(signal?: AbortSignal): Promise<void>;
@@ -158,13 +158,13 @@ export function createExchangePanel(options: {
   /** How the counter waits out the quote spacing; a test passes its own. */
   sleep?: (ms: number) => Promise<void>;
   /**
-   * D-089: quote while the player types, this long after the last edit
+   * D-090: quote while the player types, this long after the last edit
    * (`LIVE_QUOTE_DELAY_MS` in the panel). Absent, there is no live quote and
    * only a Review press asks, as before.
    */
   liveQuoteDelayMs?: number;
   /**
-   * D-089: the widest slippage the cog offers, in bps: the build's own
+   * D-090: the widest slippage the cog offers, in bps: the build's own
    * (`WalletRoutePolicy.swap.slippageBps`), at most `SLIPPAGE_CAP_BPS`.
    */
   slippageCeilingBps?: number;
@@ -258,7 +258,7 @@ export function createExchangePanel(options: {
     const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n, slippageBps }], signal);
     const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
     const review = batch.swapReview;
-    // D-089: the floor must be the one for the slippage the player chose.
+    // D-090: the floor must be the one for the slippage the player chose.
     if (!validReview(intent, review, sell, buy, amountIn, now()) || review!.slippageBps !== slippageBps) {
       batch.discard();
       return null;
@@ -285,7 +285,7 @@ export function createExchangePanel(options: {
     return { batch, summary };
   };
 
-  // -- D-089: the live quote ----------------------------------------------
+  // -- D-090: the live quote ----------------------------------------------
   //
   // One quote at a time, `liveDelayMs` after the last edit and never inside
   // the 1.5 s spacing a Review press keeps, from a budget that mirrors the
@@ -486,7 +486,7 @@ export function createExchangePanel(options: {
       if (slippage.status !== 'ok') { patch({ notice: COPY.exchange.slippageFix }); return; }
       const id = start(); discard(); patch({ flow: { name: 'preparing' }, notice: null });
       try {
-        // D-089: the live quote for exactly this swap, if fresh, is the
+        // D-090: the live quote for exactly this swap, if fresh, is the
         // review; one being asked is waited for rather than asked twice.
         const key = swapKey(state.sell, state.buy, amountIn, slippage.bps);
         const inFlight = liveInFlight(key);
@@ -637,7 +637,7 @@ function initialState(register: readonly RouteGrade[], loaded: boolean, slippage
 }
 
 /**
- * D-089: the slippage cog. Presets as swap apps offer them (1inch's 0.1%,
+ * D-090: the slippage cog. Presets as swap apps offer them (1inch's 0.1%,
  * 0.5% and 1%; Uniswap's default 0.5%), a custom value up to the build's
  * ceiling, never above `SLIPPAGE_CAP_BPS` (3%: with D-084's 3% oracle bound no
  * checked swap settles more than 6% under Pragma's price), and a warning
@@ -647,14 +647,14 @@ export const SLIPPAGE_PRESETS_BPS: readonly number[] = Object.freeze([10, 50, 10
 export const DEFAULT_SLIPPAGE_BPS = 50;
 export const SLIPPAGE_CAP_BPS = 300;
 export const SLIPPAGE_WARN_BPS = 100;
-/** D-089: a price impact above this is shown as a warning. */
+/** D-090: a price impact above this is shown as a warning. */
 export const PRICE_IMPACT_WARN_BPS = 300;
 /** The longest a timer can wait: a later expiry would fire at once instead. */
 const MAX_TIMER_MS = 2_147_483_647;
-/** D-089: how long after the last edit the counter quotes live. */
+/** D-090: how long after the last edit the counter quotes live. */
 export const LIVE_QUOTE_DELAY_MS = 800;
 /**
- * D-089: the live quote's own budget, below the backend's per-client bucket
+ * D-090: the live quote's own budget, below the backend's per-client bucket
  * (10 at once, one more every 6 s, D-084), so typing leaves room for the
  * Review press and the confirm-time re-quote.
  */
@@ -693,7 +693,7 @@ function swapKey(sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, slip
 }
 
 /**
- * D-089: the swap the compose view describes, if it is one worth a live
+ * D-090: the swap the compose view describes, if it is one worth a live
  * quote: the door open, both sides listed and swappable, an amount within the
  * pool balance, a valid slippage. Anything else gets no quote.
  */
@@ -710,7 +710,7 @@ export function swapRequest(state: ExchangeState): { sell: ExchangeAsset; buy: E
   return { sell, buy, amountIn, slippageBps: slippage.bps, key: swapKey(sell, buy, amountIn, slippage.bps) };
 }
 
-/** D-089: the flip arrow works when the asset being bought can be sold: the pool holds some. */
+/** D-090: the flip arrow works when the asset being bought can be sold: the pool holds some. */
 export function canFlip(state: ExchangeState): boolean {
   const { sell, buy } = state;
   if (!sell || !buy || state.balances !== 'loaded') return false;

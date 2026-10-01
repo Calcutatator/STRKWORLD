@@ -1424,7 +1424,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (!Number.isSafeInteger(configured.expiresAt) || configured.expiresAt <= 0) {
       throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
     }
-    // D-089: the player's own slippage when the intent carries one, as the adapter does.
+    // D-090: the player's own slippage when the intent carries one, as the adapter does.
     const slippageBps = intent.slippageBps ?? configured.slippageBps;
     const protectedMinimum = protectedMinimumOut(configured.expectedAmountOut, slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
