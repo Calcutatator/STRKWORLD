@@ -19,7 +19,6 @@ import type { PoolStatsSnapshot, PoolStatsSource } from './pool-stats.js';
 
 const FULL: PoolStatsSnapshot = Object.freeze({
   accounts: 2932,
-  deposits24h: 23,
   valueUsd: 1_177_415,
   topHoldings: Object.freeze([]),
   valueAsOf: '2026-09-30T00:00:00.000Z',

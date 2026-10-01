@@ -245,7 +245,7 @@ agent building the wrong thing. `WorldEvents` and `ShellEvents` in
 
 ## D-011 — `packages/shared` is a frozen seam
 
-**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076 · with the football pitch's constants and types, and `SANDBOX_AREA` laid out from `STREET_ORIGIN_X`, by D-078 · `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` by D-080**
+**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076 · with the football pitch's constants and types, and `SANDBOX_AREA` laid out from `STREET_ORIGIN_X`, by D-078 · `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` by D-080 · `deposits24h` removed from `plaza:stats` by D-098**
 
 **Context.** Four lanes work in parallel. `packages/shared` carries the event
 bus contract, the lobby schema and the building registry — a change there
@@ -3535,7 +3535,7 @@ avoidance rules are unchanged.
 
 ## D-076 — The Privacy Plaza at the west end
 
-**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020) · moves east with the street, unchanged relative to it, beside D-078's football pitch · the pool's value and top holdings replace the six-token `held` reads, from an external aggregate, by D-080**
+**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020) · moves east with the street, unchanged relative to it, beside D-078's football pitch · the pool's value and top holdings replace the six-token `held` reads, from an external aggregate, by D-080 · the 24-hour deposit count leaves the monument and its window, and the total gets its own face, by D-098**
 
 **Context.** The lead: "The left end of the road, opposite the sandbox, has
 nothing to do." Offered options, the lead picked "Privacy Plaza — a no-money
@@ -4078,7 +4078,7 @@ tokens on the test deployment (`deploy/RAILWAY.md`).
 
 ## D-080 — The plaza's pool value comes from strkprice.com, not a six-token guess
 
-**2026-09-30 · Accepted by the lead · extends D-076 (the Privacy Plaza's pool figures) · amends D-011's shared seam: `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` · adds a backend-only external fetch to D-014's backend, which still logs nothing per request · registers no route (D-020)**
+**2026-09-30 · Accepted by the lead · extends D-076 (the Privacy Plaza's pool figures) · amends D-011's shared seam: `plaza:stats`'s `held` replaced with `valueUsd` and `topHoldings` · the held face's "total, then each holding" cycle and the 24-hour deposit count are superseded by D-098 · adds a backend-only external fetch to D-014's backend, which still logs nothing per request · registers no route (D-020)**
 
 **Context.** The lead: the plaza's "held in the pool" figure was wrong. It
 read `balance_of(pool)` for six pinned tokens only (`POOL_STATS_TOKENS`, the
@@ -5616,3 +5616,18 @@ the amount would arrive), and any wallet other than Ready.
 - **The clipping check (D-095) passes for all sixteen looks** in all 36 poses and every view. Two limits it found are now rules: greaves only fit the standard build (a small build's shin is too short; a large build's thigh at a sprint lifts their front into the hip band), and a weapon held in a pauldroned arm has to lean well out (the hammer leans 0.9) or its haft passes out through the pauldron.
 
 **Consequences.** Pressing F now always visibly changes clothes. The everyday looks, and with them the loading walker (`avatar-1`, D-058), are byte for byte the same, so the walker strip is not regenerated. The 2D sheets stay the colour reference for the everyday looks only. Visual acceptance in the browser stays with the lead.
+
+## D-098 — The plaza shows the pool's total once, in place of the 24-hour deposit count
+
+**2026-10-02 · Accepted under the owner's brief ("on the Privacy Plaza, instead of 'Deposits in the last 24 hours', just show the total dollar amount in the pool") · extends D-076 and D-080 · amends D-011's shared seam: `plaza:stats` loses `deposits24h` · registers no route (D-020)**
+
+**Context.** The monument had three figures: accounts, deposits in the last 24 hours, and a "held in the pool" die face that cycled the USD total (D-080) and then each top holding. The window listed the same figures. So the total was already on screen, only as one frame of a cycling face and as the panel's "Held in the pool" row, and the owner wanted it as the plaza's headline in place of the deposit count.
+
+**Decision.**
+
+- **One place per figure.** The shaft's second face (the old deposit count) now reads the compact total, e.g. "$1.18M", captioned "TOTAL IN POOL". The die's face stops carrying the total and cycles the top holdings alone, captioned "TOP HOLDINGS", so the total is not shown twice on the monument.
+- **The window** drops the deposit row. Its former "Held in the pool" row is now "Total in the pool" (compact, exact on hover), so the total appears once there too, above the top holdings.
+- **The client no longer reads `deposits24h`:** `PlazaStatsPresentation`, `plaza:stats`, the web's `PoolStatsSnapshot` and parser, the demo figures and the poller's "incomplete" test all lose it.
+- **The backend still computes and returns `deposits24h`.** Removing its `Deposit`-event scan touches the cache, the API and their tests, and nothing else uses it; the web parser ignores the field. It can be removed later without a client change.
+
+**Consequences.** The plaza's headline is the pool's size in dollars, which is what a visitor can read without knowing what a deposit is. The die's face shows "…" until the top holdings arrive, even when the total is known; the total has its own face. No privacy claim changes: every figure is still a public pool-wide aggregate.

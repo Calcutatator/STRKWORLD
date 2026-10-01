@@ -20,7 +20,6 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const STATS: PoolStatsSnapshot = {
   accounts: 2_932,
-  deposits24h: 23,
   valueUsd: 1_177_415.13,
   topHoldings: [
     { symbol: 'xSTRK', usd: 453_000 },
@@ -57,15 +56,16 @@ async function settle(): Promise<void> {
 }
 
 describe('the monument window (D-076, D-080)', () => {
-  it("shows the pool's figures: accounts, deposits, the USD total and its top holdings", () => {
+  it("shows the pool's figures: accounts, the USD total once, and its top holdings", () => {
     const markup = view('ready', STATS);
     expect(markup).toContain(esc(COPY.plaza.monument.title));
     expect(markup).toContain(esc(COPY.plaza.monument.intro));
     expect(markup).toContain('data-stat="accounts">2,932<');
-    expect(markup).toContain('data-stat="deposits24h">23<');
-    // The compact total, with the exact figure on hover.
+    // The compact total, with the exact figure on hover, and shown once (D-098).
+    expect(markup).toContain(esc(COPY.plaza.monument.total));
+    expect(markup).not.toMatch(/24 hours/i);
+    expect(markup.match(/\$1\.18M/g)).toHaveLength(1);
     expect(markup).toContain('title="$1,177,415"');
-    expect(markup).toMatch(/\$1\.18M/);
     // The top holdings, most valuable first, compact.
     expect(markup).toMatch(/xSTRK \$453K[\s\S]*USDC \$198K/);
     expect(markup).toContain(esc(COPY.plaza.monument.topHoldings));
@@ -83,20 +83,20 @@ describe('the monument window (D-076, D-080)', () => {
   it('shows "…" while it loads, and says so plainly when the figures cannot be read', () => {
     const loading = view('loading', null);
     expect(loading).toContain('aria-busy="true"');
-    expect(loading.match(/…/g)).toHaveLength(3);
+    expect(loading.match(/…/g)).toHaveLength(2);
     expect(loading).not.toContain(esc(COPY.plaza.monument.failed));
     // No top-holdings section at all while there is nothing to list.
     expect(loading).not.toContain(esc(COPY.plaza.monument.topHoldings));
     const failed = view('failed', null);
-    expect(failed.match(/…/g)).toHaveLength(3);
+    expect(failed.match(/…/g)).toHaveLength(2);
     expect(failed).toContain(esc(COPY.plaza.monument.failed));
     // A part the backend has not counted yet is "…" on its own.
     const partial = view('ready', { ...STATS, accounts: null });
     expect(partial).toContain('data-stat="accounts">…<');
-    expect(partial).toContain('data-stat="deposits24h">23<');
+    expect(partial).toContain('>$1.18M<');
     // The USD total unknown, with no top holdings to show either.
     const noValue = view('ready', { ...STATS, valueUsd: null, topHoldings: null });
-    expect(noValue).toContain('data-stat="held">…<');
+    expect(noValue).toContain('data-stat="total">…<');
     expect(noValue).not.toContain(esc(COPY.plaza.monument.topHoldings));
   });
 
@@ -126,7 +126,6 @@ describe('the monument window (D-076, D-080)', () => {
     expect(container.querySelector('[data-stat="accounts"]')!.textContent).toBe('2,932');
     expect(published.at(-1)).toEqual({
       accounts: '2,932',
-      deposits24h: '23',
       valueUsd: '$1.18M',
       topHoldings: ['xSTRK · $453K', 'USDC · $198K'],
     });

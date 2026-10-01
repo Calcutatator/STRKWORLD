@@ -22,7 +22,6 @@ export interface PoolTokenValue {
 
 export interface PoolStatsSnapshot {
   readonly accounts: number | null;
-  readonly deposits24h: number | null;
   /** D-080: the pool's total USD value. */
   readonly valueUsd: number | null;
   /** D-080: the highest-value tokens the pool holds, most valuable first. */
@@ -89,7 +88,6 @@ export function createBackendPoolStats(options: { baseUrl: string; fetch?: Fetch
 export function parsePoolStatsResponse(value: unknown): PoolStatsSnapshot {
   if (!isRecord(value)) throw invalid();
   const accounts = count(ownValue(value, 'accounts'));
-  const deposits24h = count(ownValue(value, 'deposits24h'));
   const valueUsd = usdOrNull(ownValue(value, 'valueUsd'));
   const valueAsOf = isoStringOrNull(ownValue(value, 'valueAsOf'));
   const tokenCount = count(ownValue(value, 'tokenCount'));
@@ -108,7 +106,7 @@ export function parsePoolStatsResponse(value: unknown): PoolStatsSnapshot {
       return Object.freeze({ symbol, usd });
     }));
   }
-  return Object.freeze({ accounts, deposits24h, valueUsd, topHoldings, valueAsOf, tokenCount });
+  return Object.freeze({ accounts, valueUsd, topHoldings, valueAsOf, tokenCount });
 }
 
 /** What the monument draws: short figures, "…" in the World for any null. */
@@ -116,7 +114,6 @@ export function plazaStatsEvent(stats: PoolStatsSnapshot | null): ShellEvents['p
   const holdings = stats?.topHoldings;
   return Object.freeze({
     accounts: stats?.accounts == null ? null : formatPlazaCount(stats.accounts),
-    deposits24h: stats?.deposits24h == null ? null : formatPlazaCount(stats.deposits24h),
     valueUsd: stats?.valueUsd == null ? null : formatCompactUsd(stats.valueUsd),
     topHoldings: holdings && holdings.length > 0 ? Object.freeze(holdings.map(formatMonumentHoldingLine)) : null,
   });
