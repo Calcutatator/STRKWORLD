@@ -42,6 +42,7 @@ import type {
   PoolNativeRoute,
   PoolReadClient,
   SupportedVersionsReader,
+  SwapPriceReader,
   SwapQuoteClient,
   VaultReadClient,
   WalletRoutePolicy,
@@ -69,6 +70,11 @@ export interface WalletApiPrivacyOperationsOptions {
    * swap fails closed.
    */
   swapQuotes?: SwapQuoteClient;
+  /**
+   * The swap's independent price reference, Pragma over the wallet's own RPC
+   * (D-084). Absent, every swap fails closed.
+   */
+  swapPrices?: SwapPriceReader;
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
   now?: () => number;
@@ -149,6 +155,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       walletAddress: this.walletAddress,
       ...(options.vault ? { reads: options.vault } : {}),
       ...(options.swapQuotes ? { quotes: options.swapQuotes } : {}),
+      ...(options.swapPrices ? { prices: options.swapPrices } : {}),
       policy: this.policy,
       supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
       poolConfig: (signal) => this.poolConfig(signal),

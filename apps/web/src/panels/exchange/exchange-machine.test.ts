@@ -137,7 +137,7 @@ describe('Exchange machine', () => {
       totalCost: 6_002000000000000000n,
       warnings: [],
       promptCount: 1,
-      swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps: 50, expiresAt: farFuture },
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps: 50, expiresAt: farFuture, priceCheck: { status: 'checked' as const, boundBps: 300, shortfallBps: 0, sellUsd: 4_310_000n, expectedBuyUsd: 4_310_000n } },
       confirm: async () => ({ transactionHash: '0xnever' }),
       discard: () => { discarded += 1; },
     });
@@ -332,6 +332,7 @@ describe('Exchange machine', () => {
       warnings: [],
       promptCount: 1,
       swapReview: {
+        priceCheck: { status: 'checked' as const, boundBps: 300, shortfallBps: 0, sellUsd: 4_310_000n, expectedBuyUsd: 4_310_000n },
         expectedAmountOut: 2n * 10n ** 18n,
         minimumAmountOut: canonical.minAmountOut,
         slippageBps: 50,
@@ -647,7 +648,7 @@ describe('Exchange quotes on the shadow-account swap (D-084)', () => {
 function controlledOperations(confirmResult: Promise<{ transactionHash: string }>, secondPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, onConfirmEntered?: () => void, thirdPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, slippageBps = 50, onDiscard?: () => void): PrivacyOperations {
   let poolCalls = 0;
   const canonical = { kind: 'swap' as const, tokenIn: strk!.token, tokenOut: eth!.token, amountIn: 10n ** 18n, minAmountOut: 1_990000000000000000n };
-  const batch: PreparedBatch = { intents: [canonical], poolFee: 6n * 10n ** 18n, gasEstimate: 2n * 10n ** 15n, totalCost: 6_002000000000000000n, warnings: [], promptCount: 1, swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps, expiresAt: farFuture }, confirm: async () => { onConfirmEntered?.(); return confirmResult; }, discard() { onDiscard?.(); } };
+  const batch: PreparedBatch = { intents: [canonical], poolFee: 6n * 10n ** 18n, gasEstimate: 2n * 10n ** 15n, totalCost: 6_002000000000000000n, warnings: [], promptCount: 1, swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps, expiresAt: farFuture, priceCheck: { status: 'checked' as const, boundBps: 300, shortfallBps: 0, sellUsd: 4_310_000n, expectedBuyUsd: 4_310_000n } }, confirm: async () => { onConfirmEntered?.(); return confirmResult; }, discard() { onDiscard?.(); } };
   return {
     capability: async () => ({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' }),
     poolConfig: async () => { ++poolCalls; if (poolCalls === 1) return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; if (poolCalls === 2 && secondPool) return secondPool; if (poolCalls > 2 && thirdPool) return thirdPool; return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; },

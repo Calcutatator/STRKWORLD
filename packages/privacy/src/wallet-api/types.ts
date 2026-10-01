@@ -5,6 +5,7 @@ import type {
 } from 'starknet';
 import type { PoolConfig } from '../operations.js';
 import type { Address, TxResult } from '../types.js';
+import type { PragmaPrice } from '../swap-prices.js';
 
 /** Structural slice of WalletAccountV6 used by STRKWORLD. */
 export interface WalletStrk20Account {
@@ -257,6 +258,16 @@ export interface SwapQuoteAnswer {
     readonly entrypoint: string;
     readonly calldata: readonly string[];
   }>;
+}
+
+/**
+ * Pragma's spot prices for every pinned feed (`PRICE_FEEDS`, D-084), read by
+ * the browser over the wallet's own RPC, never through STRKWORLD's backend or
+ * avnu, so neither can vouch for its own quote. It always asks for the whole
+ * fixed set, so the read names no pair and nothing about the player.
+ */
+export interface SwapPriceReader {
+  read(signal?: AbortSignal): Promise<readonly PragmaPrice[]>;
 }
 
 /** The backend's keyless quote proxy (D-084). */

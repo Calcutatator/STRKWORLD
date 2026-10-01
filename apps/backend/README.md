@@ -176,7 +176,10 @@ for the taker, the player's swap stand-in (`avnu-swap-quotes.ts`). It answers
 the quote id, amounts and the one `multi_route_swap` call on the pinned
 exchange, which the browser checks again. It keeps its own aggregate window
 of 60 quotes a minute, spent only on admitted requests, besides a slot in the
-shared one, logs and keeps
+shared one, and a bucket per client (10 at once, one more every 6 s) keyed by
+a salted HMAC of the client's address (`client-key.ts`; the edge sends it as
+`x-strkworld-client`), reads avnu's answers as a stream cut off at 256 KB,
+logs and keeps
 nothing, and never touches the paymaster. The relay's fee and submission
 endpoints refuse `route: 'swap'` outright.
 

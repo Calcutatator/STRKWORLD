@@ -161,7 +161,16 @@ describe('Wallet Standard forward compatibility', () => {
     const PARTIAL = '0x5ab1e';
     const SHADOW = shadowAccountAddress(PARTIAL);
     const backendRequests: BackendRequest[] = [];
+    const oracleReads: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+      if (input.startsWith('https://rpc.invalid')) {
+        // D-084: the oracle read goes to the wallet's own RPC, never /api.
+        const batch = JSON.parse(String(init?.body)) as Array<{ id: number }>;
+        oracleReads.push(batch);
+        const now = Math.floor(Date.now() / 1000);
+        const answer = batch.map(({ id }) => ({ jsonrpc: '2.0', id, result: ['0x41c3f0', '0x8', `0x${now.toString(16)}`, '0xb', '0x0', '0x0'] }));
+        return { ok: true, status: 200, text: async () => JSON.stringify(answer) } as Response;
+      }
       const path = new URL(input, 'https://strkworld.invalid').pathname;
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       backendRequests.push({ path, body });
@@ -217,7 +226,10 @@ describe('Wallet Standard forward compatibility', () => {
       ]);
       expect(batch.swapReview).toMatchObject({ expectedAmountOut: 9_500n, minimumAmountOut: 9_405n, slippageBps: 100 });
       expect(batch.gasEstimate).toBe(0n);
-      await expect(batch.confirm({ feeCeiling: POOL_FEE })).resolves.toEqual({ transactionHash: '0x5a9' });
+      // TOKEN has no oracle price (D-084): unchecked, so confirming needs the acknowledgement.
+      expect(batch.swapReview?.priceCheck.status).toBe('unchecked');
+      await expect(batch.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true }))
+        .resolves.toEqual({ transactionHash: '0x5a9' });
 
       expect(walletRequests.map(({ type }) => type)).toEqual([
         'wallet_requestChainId',
@@ -262,6 +274,9 @@ describe('Wallet Standard forward compatibility', () => {
         '/api/v1/swap/quote',
         '/api/v1/rpc/pool-config',
       ]);
+      // One fixed batch of every pinned Pragma pair, naming none of the swap's.
+      expect(oracleReads).toHaveLength(1);
+      expect((oracleReads[0] as unknown[]).length).toBe(8);
       expect(backendRequests[2]!.body).toEqual({
         v: 1, sellToken: TOKEN, buyToken: STRK, sellAmount: '20', taker: shadow, slippageBps: 100,
       });

@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import { WalletApiPrivacyOperations, type Intent, type PoolReadClient, type WalletRoutePolicy, type WalletStrk20Account } from '../index.js';
 import { SWAP_QUOTE_TTL_MS } from '../swap.js';
-import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
-import { SWAP_FLOOR_MOVED_MESSAGE } from './swap-operations.js';
+import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestPrices, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
+import { SWAP_FLOOR_MOVED_MESSAGE, SWAP_UNCHECKED_PRICE_MESSAGE } from './swap-operations.js';
+import type { SwapPriceReader } from './types.js';
 
 /**
  * The shadow-account swap through the Wallet API seam (D-084): the stand-in
@@ -36,6 +37,7 @@ function seam(options: {
   standIn?: string;
   policy?: WalletRoutePolicy;
   invoke?: (actions: STRK20_ACTION[]) => Promise<{ transaction_hash: string }>;
+  prices?: SwapPriceReader | null;
 } = {}) {
   let clock = 1_000_000;
   const invoked: STRK20_ACTION[][] = [];
@@ -63,6 +65,7 @@ function seam(options: {
     wallet,
     pool,
     swapQuotes: quotes,
+    ...(options.prices === null ? {} : { swapPrices: options.prices ?? swapTestPrices(1_000_000) }),
     vault: swapTestReads(options.standIn),
     supportedVersions: async () => [...(options.versions ?? ['0.10.4'])],
     policy: options.policy ?? policy(),
@@ -88,6 +91,8 @@ describe('preparing a shadow-account swap', () => {
       minimumAmountOut: 426_690n,
       slippageBps: 100,
       expiresAt: 1_000_000 + SWAP_QUOTE_TTL_MS,
+      // 10 STRK at $0.0431 and 0.431 USDC at $1: exactly the oracle value.
+      priceCheck: { status: 'checked', boundBps: 300, sellUsd: 43_100_000n, expectedBuyUsd: 43_100_000n, shortfallBps: 0 },
     });
     // The published intent carries the floor the chain enforces.
     expect(batch.intents).toEqual([{ ...SWAP, minAmountOut: 426_690n }]);
@@ -134,10 +139,11 @@ describe('preparing a shadow-account swap', () => {
     expect(closed.quotes.requests).toEqual([]);
 
     const degen = seam({ policy: policy({ degen: true }) });
-    await expect(degen.ops.prepare([{ ...SWAP, tokenOut: DEGEN }])).resolves.toMatchObject({
+    await expect(degen.ops.prepare([{ ...SWAP, tokenOut: '0x0666' }])).resolves.toMatchObject({
       swapReview: { expectedAmountOut: 431_000n },
     });
-    expect(degen.quotes.requests[0]).toMatchObject({ buyToken: DEGEN });
+    expect(degen.quotes.requests[0]).toMatchObject({ buyToken: '0x0666' });
+
   });
 
   it('refuses a swap of a token for itself', async () => {
@@ -198,7 +204,8 @@ describe('confirming a shadow-account swap', () => {
   });
 
   it('stops with nothing sent when the re-quote would lower the reviewed floor', async () => {
-    const { ops, invoked, advance } = seam({ buyAmounts: [431_000n, 400_000n] });
+    // 428,000 is within the oracle bound, but its floor (423,720) is below the reviewed 426,690.
+    const { ops, invoked, advance } = seam({ buyAmounts: [431_000n, 428_000n] });
     const batch = await ops.prepare([SWAP]);
     advance(SWAP_QUOTE_TTL_MS + 1);
 
@@ -241,5 +248,60 @@ describe('confirming a shadow-account swap', () => {
     await ops.prepare([SWAP]);
     await ops.prepare([SWAP]);
     expect(commitments).toEqual(['strkworld-swap']);
+  });
+});
+
+describe('the independent price check (D-084)', () => {
+  it('refuses a quote worth more than 3% less than the oracle says, before the player sees it', async () => {
+    const { ops, invoked } = seam({ buyAmounts: [400_000n] });
+    await expect(ops.prepare([SWAP])).rejects.toThrow(/7\.19% below the oracle price/);
+    expect(invoked).toEqual([]);
+  });
+
+  it('accepts a quote within the bound, and reports how far below the oracle it sits', async () => {
+    const { ops } = seam({ buyAmounts: [420_000n] });
+    const batch = await ops.prepare([SWAP]);
+    expect(batch.swapReview?.priceCheck).toMatchObject({ status: 'checked', shortfallBps: 255, boundBps: 300 });
+  });
+
+  it('refuses when a pinned feed is missing, stale or thinly sourced, never leaving it unchecked', async () => {
+    for (const override of [null, { updatedAt: 1_000 - 1_801 }, { sources: 2 }, { price: 0n }]) {
+      const { ops } = seam({ prices: swapTestPrices(1_000_000, { 'USDC/USD': override }) });
+      await expect(ops.prepare([SWAP]), JSON.stringify(override, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
+        .rejects.toThrow(/USDC\/USD is missing or stale/);
+    }
+  });
+
+  it('refuses as unreachable when the oracle cannot be read for a pair it prices, and fails closed without a reader', async () => {
+    const down = seam({ prices: { async read() { throw new Error('rpc down'); } } });
+    await expect(down.ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unreachable' });
+    const none = seam({ prices: null });
+    await expect(none.ops.prepare([SWAP])).rejects.toThrow(/price reference is not configured/);
+  });
+
+  it('reviews a pair with no oracle price as unchecked, and confirms it only with the acknowledgement', async () => {
+    const unpriced = seam({ policy: policy({ degen: true }) });
+    const blind = await unpriced.ops.prepare([{ ...SWAP, tokenOut: '0x0666' }]);
+    expect(blind.swapReview?.priceCheck).toEqual({ status: 'unchecked', boundBps: 300, sellUsd: 43_100_000n });
+    await expect(blind.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(SWAP_UNCHECKED_PRICE_MESSAGE);
+    expect(unpriced.invoked).toEqual([]);
+    // The refusal did not spend the batch's one attempt.
+    await expect(blind.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true })).resolves.toEqual({ transactionHash: '0x5a9' });
+    expect(unpriced.invoked).toHaveLength(1);
+  });
+
+  it('checks a degen token that has a feed, such as LORDS, like any other', async () => {
+    // 10 STRK ($0.431) for 21.5 LORDS at $0.02: within the bound.
+    const { ops } = seam({ policy: policy({ degen: true }), buyAmounts: [215n * 10n ** 17n] });
+    const batch = await ops.prepare([{ ...SWAP, tokenOut: DEGEN }]);
+    expect(batch.swapReview?.priceCheck).toMatchObject({ status: 'checked', shortfallBps: 23 });
+  });
+
+  it('holds a re-quote at confirmation to the same oracle check', async () => {
+    const { ops, invoked, advance } = seam({ buyAmounts: [431_000n, 431_000n * 9n / 10n] });
+    const batch = await ops.prepare([SWAP]);
+    advance(SWAP_QUOTE_TTL_MS);
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(/below the oracle price/);
+    expect(invoked).toEqual([]);
   });
 });

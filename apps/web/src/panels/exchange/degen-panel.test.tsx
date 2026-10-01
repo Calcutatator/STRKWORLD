@@ -89,6 +89,12 @@ describe('the degen counter in demo', () => {
       networkCost: '0 STRK',
       total: '6 STRK',
       disclosures: [SWAP_DISCLOSURE],
+      rate: '1 STRK ≈ 10 LORDS',
+      // The demo has no oracle (D-084); its fixture check carries no USD.
+      sellUsd: null,
+      expectedBuyUsd: null,
+      priceCheck: 'checked',
+      priceCheckNote: COPY.exchange.priceCheckedAbove,
     });
 
     await panel.confirm();

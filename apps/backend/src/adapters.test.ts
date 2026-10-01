@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
-import { AVNU_EXCHANGE, AvnuSwapQuotes } from './avnu-swap-quotes.js';
+import { AVNU_EXCHANGE, AvnuSwapQuotes, MAX_RESPONSE_BYTES } from './avnu-swap-quotes.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type { PreparedArtifact } from './types.js';
 
@@ -74,7 +74,7 @@ describe('avnu keyless swap quotes (D-084)', () => {
     ],
   };
   const buildBody = { chainId: CHAIN, calls: [swapCall], executorAddress: null };
-  const text = (body: unknown, status = 200) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) }) as Response;
+  const text = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
   function fetcher(quote: unknown = quoteBody, build: unknown = buildBody) {
     return vi.fn(async (url: string, _init?: RequestInit) => (url.includes('/swap/v3/quotes') ? text(quote) : text(build)));
@@ -135,9 +135,27 @@ describe('avnu keyless swap quotes (D-084)', () => {
   });
 
   it('refuses an error status from avnu, and never builds after a failed quote', async () => {
-    const fetch = vi.fn(async () => text({ messages: ['Invalid quote id'] }, 400));
+    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => text({ messages: ['Invalid quote id'] }, 400));
     await expect(new AvnuSwapQuotes({ chainId: CHAIN, fetch }).quote(input)).rejects.toThrow(/400/);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('streams avnu\'s answer and aborts it past 256 KB, never holding an oversized body', async () => {
+    expect(MAX_RESPONSE_BYTES).toBe(256 * 1024);
+    let pulled = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(64 * 1024).fill(0x20);
+    const endless = () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) { pulled += 1; controller.enqueue(chunk); },
+      cancel() { cancelled = true; },
+    }), { status: 200 });
+    await expect(new AvnuSwapQuotes({ chainId: CHAIN, fetch: async () => endless() }).quote(input)).rejects.toThrow(/too much/);
+    // Five 64 KB chunks cross the cap; the stream is cancelled there.
+    expect(pulled).toBeLessThanOrEqual(6);
+    expect(cancelled).toBe(true);
+
+    const declared = vi.fn(async () => new Response('[]', { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }));
+    await expect(new AvnuSwapQuotes({ chainId: CHAIN, fetch: declared }).quote(input)).rejects.toThrow(/too much/);
   });
 
   it('stops on its own timeout and on the caller\'s cancellation', async () => {

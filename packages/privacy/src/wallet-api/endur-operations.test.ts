@@ -13,7 +13,6 @@ import {
   type EndurUnstakeRead,
   type Intent,
   type PoolReadClient,
-  type PrivateSubmissionGateway,
   type WalletRoutePolicy,
   type WalletStrk20Account,
 } from '../index.js';
@@ -111,18 +110,9 @@ function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowA
       return state.read as EndurUnstakeRead;
     },
   };
-  const submission: PrivateSubmissionGateway = {
-    async estimate() {
-      throw new Error('nothing here is relayed');
-    },
-    async submit() {
-      throw new Error('nothing here is relayed');
-    },
-  };
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission,
     supportedVersions: async () => ['0.10.3', '0.10.4'],
     policy: policy(options.routes),
     endur,

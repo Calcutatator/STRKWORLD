@@ -5,6 +5,7 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
+import { createHmac, randomBytes } from 'node:crypto';
 import { createConnection, type Socket } from 'node:net';
 import { realpath } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
@@ -118,6 +119,8 @@ async function handleRequest(
       request.resume();
       return sendError(response, 400, 'BAD_REQUEST', 'The request is invalid.');
     }
+    // D-084: the backend's per-client limits key on this, never on an address.
+    headers[CLIENT_KEY_HEADER] = clientKey(request);
     return proxyHttp(request, response, options.backendPort, stripApiPrefix(request.url ?? '/'), {
       headers,
     });
@@ -129,6 +132,24 @@ async function handleRequest(
     return sendError(response, 405, 'METHOD_NOT_ALLOWED', 'The method is not allowed.');
   }
   return serveStatic(request, response, options.staticRoot, pathname, observer);
+}
+
+/**
+ * D-084: a salted, unlinkable key for the client, for the backend's
+ * per-client rate limits. The salt is drawn when the process starts and never
+ * written anywhere; the key is never logged, and the client's own value of
+ * this header is never forwarded (`apiHeaders` builds headers from scratch).
+ * The address is the last `X-Forwarded-For` entry, the one Railway's proxy
+ * appends, or the socket's peer when there is no proxy.
+ */
+export const CLIENT_KEY_HEADER = 'x-strkworld-client';
+const CLIENT_KEY_SALT = randomBytes(32);
+
+export function clientKey(request: Pick<IncomingMessage, 'headers' | 'socket'>, salt: Buffer = CLIENT_KEY_SALT): string {
+  const forwarded = request.headers['x-forwarded-for'];
+  const chain = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded ?? '').split(',').map((entry) => entry.trim()).filter(Boolean);
+  const address = chain.at(-1) ?? request.socket.remoteAddress ?? 'unknown';
+  return createHmac('sha256', salt).update(address).digest('hex').slice(0, 32);
 }
 
 function isCanonicalApiTarget(target: string | undefined): boolean {

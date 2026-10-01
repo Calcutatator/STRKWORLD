@@ -203,6 +203,20 @@ describe('the gas estimate follows the route (D-082, D-084)', () => {
     ])).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
   });
 
+  it('needs the acknowledgement to confirm a swap reviewed as unchecked, as the adapter does (D-084)', async () => {
+    const usdc = '0x1234';
+    const make = () => new FakePrivacyOperations({
+      balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 10_000n, slippageBps: 100, expiresAt: 1_000, priceCheck: { status: 'unchecked', boundBps: 300 } },
+    });
+    const intent = { kind: 'swap', tokenIn: usdc, tokenOut: STRK, amountIn: 10n ** 18n, minAmountOut: 1n } as const;
+    const refused = await make().prepare([intent]);
+    expect(refused.swapReview?.priceCheck).toEqual({ status: 'unchecked', boundBps: 300 });
+    await expect(refused.confirm({ feeCeiling: SIX_STRK })).rejects.toThrow(/no independent price check/);
+    const acknowledged = await make().prepare([intent]);
+    await expect(acknowledged.confirm({ feeCeiling: SIX_STRK, acknowledgeUncheckedPrice: true })).resolves.toMatchObject({ transactionHash: expect.any(String) });
+  });
+
   it('quotes the next swap from what setSwapQuote says, as a re-quote would (D-084)', async () => {
     const usdc = '0x1234';
     const ops = new FakePrivacyOperations({
@@ -247,6 +261,7 @@ describe('deterministic prepared swap review', () => {
       minimumAmountOut: 98n,
       slippageBps: 333,
       expiresAt: 2_000,
+      priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 0, sellUsd: 0n, expectedBuyUsd: 0n },
     });
   });
 
@@ -268,6 +283,7 @@ describe('deterministic prepared swap review', () => {
         minimumAmountOut: 98n,
         slippageBps: 333,
         expiresAt: 2_000,
+        priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 0, sellUsd: 0n, expectedBuyUsd: 0n },
       },
       intent: {
         kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 98n,
@@ -737,6 +753,7 @@ describe('the fake owns its prepared intents too', () => {
       minimumAmountOut: 98n,
       slippageBps: 333,
       expiresAt: 2_000,
+      priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 0, sellUsd: 0n, expectedBuyUsd: 0n },
     });
   });
 

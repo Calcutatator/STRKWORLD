@@ -1,10 +1,11 @@
 import type { STRK20_ACTION } from 'starknet';
-import type { BatchWarning, Intent, PoolConfig, PreparedBatch } from '../operations.js';
+import type { BatchWarning, Intent, PoolConfig, PreparedBatch, SwapPriceCheck } from '../operations.js';
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback } from '../types.js';
 import { MAINNET_CHAIN_ID, SWAP_DAPP_NAME, SWAP_SHADOW_NONCE, ownSwapQuote, swapActions, type SwapQuote } from '../swap.js';
+import { checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
 import { mapShadowWalletError, mapWalletError } from './errors.js';
 import { ShadowAccountResolver } from './shadow-account.js';
-import type { SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
+import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 
 /**
@@ -20,6 +21,10 @@ import { freezeActions, submitThroughWallet } from './wallet-submission.js';
  * - The wallet proves **and submits** the swap
  *   (`wallet_strk20InvokeTransaction`) through `wallet-submission.ts`, as it
  *   does the Vault and every pool spend: no relay, no avnu key, no relay fee.
+ * - Every quote is held against Pragma's oracle price, read over the
+ *   wallet's own RPC (`swap-prices.ts`): a quote worth more than 3% less than
+ *   the input is refused, and a pair with no oracle price is reviewed as
+ *   unchecked and needs the player's explicit acknowledgement to confirm.
  * - A quote older than `SWAP_QUOTE_TTL_MS` at confirmation is asked for again
  *   before the wallet is: a fresh floor at or above the reviewed one goes
  *   ahead, anything lower stops with nothing sent.
@@ -30,6 +35,8 @@ export interface ShadowSwapOptions {
   readonly walletAddress: Address;
   readonly reads?: Pick<VaultReadClient, 'shadowAccount'>;
   readonly quotes?: SwapQuoteClient;
+  /** The independent price reference (D-084). Absent, every swap fails closed. */
+  readonly prices?: SwapPriceReader;
   readonly policy: WalletRoutePolicy;
   /** The operations' own capability answer: `supportsShadowAccounts`. */
   readonly supported: (signal?: AbortSignal) => Promise<boolean>;
@@ -44,10 +51,19 @@ type SwapIntent = Extract<Intent, { kind: 'swap' }>;
 /** Said when a re-quote at confirmation would lower the floor the player reviewed. */
 export const SWAP_FLOOR_MOVED_MESSAGE = 'The swap price moved below the minimum you reviewed. Nothing was sent; review the new quote.';
 
+/** Said when an unchecked swap is confirmed without the player's acknowledgement. */
+export const SWAP_UNCHECKED_PRICE_MESSAGE = 'This swap has no independent price check. Acknowledge that before confirming.';
+
+interface CheckedQuote {
+  readonly quote: SwapQuote;
+  readonly check: SwapPriceCheck;
+}
+
 export class ShadowSwap {
   private readonly wallet: WalletStrk20Account;
   private readonly walletAddress: Address;
   private readonly quotes?: SwapQuoteClient;
+  private readonly prices?: SwapPriceReader;
   private readonly policy: WalletRoutePolicy;
   private readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   private readonly now: () => number;
@@ -57,6 +73,7 @@ export class ShadowSwap {
     this.wallet = options.wallet;
     this.walletAddress = options.walletAddress;
     this.quotes = options.quotes;
+    this.prices = options.prices;
     this.policy = options.policy;
     this.poolConfig = options.poolConfig;
     this.now = options.now;
@@ -96,7 +113,7 @@ export class ShadowSwap {
     }
     const identity = await this.identity.resolve(signal, undefined);
     throwIfAborted(signal);
-    const quote = await this.quote(intent, identity.address, swapPolicy.slippageBps, signal);
+    const { quote, check } = await this.quote(intent, identity.address, swapPolicy.slippageBps, signal);
     if (quote.minAmountOut < intent.minAmountOut) {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }
@@ -118,12 +135,16 @@ export class ShadowSwap {
         minimumAmountOut: quote.minAmountOut,
         slippageBps: quote.slippageBps,
         expiresAt: quote.expiresAt,
+        priceCheck: check,
       }),
       async confirm(opts) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
-        const { feeCeiling, onProgress, signal: confirmSignal } = ownConfirmOptions(opts);
+        const { feeCeiling, onProgress, signal: confirmSignal, acknowledged } = ownConfirmOptions(opts);
         if (attempted) {
           throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
+        }
+        if (check.status === 'unchecked' && !acknowledged) {
+          throw new PrivacyError('unknown', SWAP_UNCHECKED_PRICE_MESSAGE);
         }
         attempted = true;
         throwIfAborted(confirmSignal);
@@ -138,11 +159,12 @@ export class ShadowSwap {
           if (quote.expiresAt <= owner.now()) {
             // A stale quote is asked for again before the wallet is. The
             // floor may only hold or rise: the player reviewed this one.
+            // The fresh quote passes the same oracle check, or it throws.
             const fresh = await owner.quote(canonicalIntent, identity.address, quote.slippageBps, confirmSignal);
-            if (fresh.minAmountOut < canonicalIntent.minAmountOut) {
+            if (fresh.quote.minAmountOut < canonicalIntent.minAmountOut) {
               throw new PrivacyError('unknown', SWAP_FLOOR_MOVED_MESSAGE);
             }
-            actions = freezeActions(owner.actions(fresh, identity.address));
+            actions = freezeActions(owner.actions(fresh.quote, identity.address));
           }
           if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
           throwIfAborted(confirmSignal);
@@ -170,8 +192,8 @@ export class ShadowSwap {
     };
   }
 
-  /** Ask the backend for avnu's quote for the stand-in, and own it. */
-  private async quote(intent: SwapIntent, taker: Address, slippageBps: number, signal?: AbortSignal): Promise<SwapQuote> {
+  /** Ask the backend for avnu's quote for the stand-in, own it, and hold it against the oracle. */
+  private async quote(intent: SwapIntent, taker: Address, slippageBps: number, signal?: AbortSignal): Promise<CheckedQuote> {
     const quotes = this.quotes;
     if (!quotes) throw new PrivacyError('unknown', 'The private swap quotes are not configured.');
     const request = Object.freeze({
@@ -191,7 +213,26 @@ export class ShadowSwap {
         : new PrivacyError('unreachable', 'The swap quote could not be read.', error);
     }
     throwIfAborted(signal);
-    return ownSwapQuote(answer, request, this.now());
+    const quote = ownSwapQuote(answer, request, this.now());
+    const reader = this.prices;
+    if (!reader) throw new PrivacyError('unknown', 'The swap price reference is not configured.');
+    let prices: readonly PragmaPrice[] | null;
+    try {
+      prices = await reader.read(signal);
+    } catch {
+      throwIfAborted(signal);
+      prices = null;
+    }
+    throwIfAborted(signal);
+    const check = checkSwapPrice({
+      sellToken: quote.sellToken,
+      buyToken: quote.buyToken,
+      sellAmount: quote.sellAmount,
+      buyAmount: quote.buyAmount,
+      prices,
+      nowMs: this.now(),
+    });
+    return Object.freeze({ quote, check });
   }
 
   private actions(quote: SwapQuote, shadowAccount: Address): STRK20_ACTION[] {
@@ -203,6 +244,7 @@ function ownConfirmOptions(options: unknown): {
   feeCeiling: bigint;
   onProgress: ProgressCallback | undefined;
   signal: AbortSignal | undefined;
+  acknowledged: boolean;
 } {
   const read = (key: string): unknown => {
     if (!options || typeof options !== 'object') throw invalidOptions();
@@ -225,7 +267,14 @@ function ownConfirmOptions(options: unknown): {
   if ((onProgress !== undefined && typeof onProgress !== 'function') || (signal !== undefined && !isAbortSignalLike(signal))) {
     throw invalidOptions();
   }
-  return { feeCeiling, onProgress: onProgress as ProgressCallback | undefined, signal: signal as AbortSignal | undefined };
+  const acknowledge = read('acknowledgeUncheckedPrice');
+  if (acknowledge !== undefined && typeof acknowledge !== 'boolean') throw invalidOptions();
+  return {
+    feeCeiling,
+    onProgress: onProgress as ProgressCallback | undefined,
+    signal: signal as AbortSignal | undefined,
+    acknowledged: acknowledge === true,
+  };
 }
 
 function invalidOptions(): PrivacyError {

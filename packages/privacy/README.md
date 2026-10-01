@@ -202,6 +202,14 @@ what the swap gained (`diff`). Only avnu's route encoding is taken from the
 quote. The wallet proves and submits it (`wallet_strk20InvokeTransaction`): no
 relay, no avnu key, no relay fee.
 
+Before the review, the quote is held against Pragma's on-chain oracle
+(`swap-prices.ts`), read by `wallet-api/pragma-prices.ts` over the wallet's
+own RPC, never the backend or avnu: one fixed batch of every pinned pair. With
+both tokens priced, an expected output more than 3% below the input's value
+is refused, as is a pinned price that is missing, stale or thinly sourced. A
+pair with an unpriced token is reviewed as `unchecked` and confirms only with
+`acknowledgeUncheckedPrice: true`.
+
 The floor is the protected minimum for the policy's slippage, computed as
 exact bigint arithmetic: `expectedAmountOut - (expectedAmountOut *
 slippageBps / 10_000)`. avnu's own build rounds the slippage up and can sit

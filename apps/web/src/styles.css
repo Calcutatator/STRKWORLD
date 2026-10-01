@@ -3500,3 +3500,18 @@ button.shell-start {
     background: Highlight;
   }
 }
+
+/* D-084: the swap review's oracle check, and the acknowledgement an unchecked pair needs. */
+.exchange-usd {
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.exchange-price-check[data-status="unchecked"] {
+  font-weight: 600;
+}
+.exchange-acknowledge {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  margin: 0.75em 0;
+}

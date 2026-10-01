@@ -10,7 +10,7 @@ import {
   type WalletStrk20Account,
 } from '../index.js';
 import { mapTransferWalletError } from './errors.js';
-import { SWAP_TEST_PARTIAL, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
+import { SWAP_TEST_PARTIAL, swapTestPrices, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const STRK_DECIMAL = BigInt(STRK).toString();
@@ -100,6 +100,7 @@ function swapOperations(wallet: WalletStrk20Account, pool: PoolReadClient) {
     wallet: shadowWallet,
     pool,
     swapQuotes: swapTestQuotes([2n]),
+    swapPrices: swapTestPrices(1_000),
     vault: swapTestReads(),
     supportedVersions: async () => ['0.10.4'],
     now: () => 1_000,
@@ -447,7 +448,10 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
       const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
       const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
 
-      await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+      // The swap's TOKEN has no oracle price (D-084): acknowledged, so the
+      // refusal below is the malformed config's.
+      await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n, acknowledgeUncheckedPrice: true }))
+        .rejects.toMatchObject({ kind: 'unknown', message: 'The pool returned an invalid configuration.' });
       expect(invoke).not.toHaveBeenCalled();
       expect(prepare).not.toHaveBeenCalled();
     },

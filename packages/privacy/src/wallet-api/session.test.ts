@@ -1082,6 +1082,7 @@ describe('WalletSession', () => {
       minimumAmountOut: 90n,
       slippageBps: 100,
       expiresAt: 2_000,
+      priceCheck: { status: 'unchecked' as const, boundBps: 300 },
     };
     const intents = [{ kind: 'swap' as const, tokenIn: '0x1', tokenOut: '0x2', amountIn: 1n, minAmountOut: 90n }];
     const connected = controllableConnection(
@@ -1108,6 +1109,7 @@ describe('WalletSession', () => {
       minimumAmountOut: 101n,
       slippageBps: 100,
       expiresAt: 2_000,
+      priceCheck: { status: 'unchecked' as const, boundBps: 300 },
     };
     const connected = controllableConnection(
       '0x111', operationsWithBatch({ ...batch(undefined, discard), swapReview }, '0.10.3'), new FakePrivacyOperations(),
@@ -1122,12 +1124,67 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['a missing price check', undefined],
+    ['a checked result without USD values', { status: 'checked', boundBps: 300, shortfallBps: 0 }],
+    ['a checked result past its bound', { status: 'checked', boundBps: 300, shortfallBps: 301, sellUsd: 1n, expectedBuyUsd: 1n }],
+    ['an unknown status', { status: 'trusted', boundBps: 300 }],
+    ['a negative USD value', { status: 'unchecked', boundBps: 300, sellUsd: -1n }],
+  ])('rejects a swap review with %s (D-084)', async (_label, priceCheck) => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'swap' as const, tokenIn: '0x1', tokenOut: '0x2', amountIn: 1n, minAmountOut: 90n }];
+    const swapReview = {
+      expectedAmountOut: 100n, minimumAmountOut: 90n, slippageBps: 100, expiresAt: 2_000,
+      ...(priceCheck === undefined ? {} : { priceCheck }),
+    };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents, swapReview } as never, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('passes the unchecked-price acknowledgement through only when it is exactly true (D-084)', async () => {
+    const selected = wallet('Ready');
+    const seen: unknown[] = [];
+    const intents = [{ kind: 'swap' as const, tokenIn: '0x1', tokenOut: '0x2', amountIn: 1n, minAmountOut: 90n }];
+    const swapReview = { expectedAmountOut: 100n, minimumAmountOut: 90n, slippageBps: 100, expiresAt: 2_000, priceCheck: { status: 'unchecked' as const, boundBps: 300 }, };
+    const make = () => ({
+      ...batch(), intents, swapReview,
+      async confirm(options: unknown) { seen.push(options); return { transactionHash: '0xabc' }; },
+    });
+    const operations = new FakePrivacyOperations();
+    const first = make(); const second = make();
+    let calls = 0;
+    const connected = controllableConnection(
+      '0x111', { ...operationsWithBatch(first, '0.10.3'), prepare: async () => (++calls === 1 ? first : second) } as never, operations,
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    await (await session.operations.prepare([])).confirm({ feeCeiling: 10n, acknowledgeUncheckedPrice: true });
+    await (await session.operations.prepare([])).confirm({ feeCeiling: 10n, acknowledgeUncheckedPrice: 'yes' as never });
+    expect(seen).toEqual([
+      { feeCeiling: 10n, acknowledgeUncheckedPrice: true },
+      { feeCeiling: 10n },
+    ]);
+  });
+
   it('rejects swap review metadata on a non-swap prepared batch', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();
     const intents = [{ kind: 'shield' as const, token: '0x1', amount: 1n }];
     const swapReview = {
       expectedAmountOut: 100n, minimumAmountOut: 90n, slippageBps: 100, expiresAt: 2_000,
+      priceCheck: { status: 'unchecked' as const, boundBps: 300 },
     };
     const connected = controllableConnection(
       '0x111', operationsWithBatch({ ...batch(undefined, discard), intents, swapReview }, '0.10.3'), new FakePrivacyOperations(),

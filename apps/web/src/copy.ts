@@ -232,6 +232,20 @@ export const COPY = freezeCopy({
      * lower the protected minimum, so the review shows it instead.
      */
     requoted: 'The quote expired and the price moved. Check the new protected minimum, then confirm again.',
+    /**
+     * D-084: the quote held against Pragma's on-chain oracle, read over the
+     * wallet's own network connection. `{shortfall}` and `{bound}` are
+     * percentages the counter fills in.
+     */
+    rate: 'Rate',
+    usdValue: 'Oracle value',
+    priceCheck: 'Price check',
+    priceCheckedBelow: "{shortfall}% below Pragma's oracle price, within the {bound}% allowed.",
+    priceCheckedAbove: "At or above Pragma's oracle price.",
+    priceUnchecked:
+      "No independent price check: Pragma's oracle has no price for at least one of these tokens, so nothing but avnu's quote says this rate is fair. The protected minimum only guards against the price moving after this quote.",
+    acknowledgeUnchecked: 'I understand this swap has no independent price check.',
+    acknowledgeFirst: 'Tick the box to confirm a swap with no independent price check.',
   },
 
   /**

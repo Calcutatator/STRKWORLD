@@ -10,6 +10,7 @@ import {
   type SwapQuote,
   type SwapQuotePort,
 } from './index.js';
+import { PerClientRateLimiter } from './client-key.js';
 import { AggregateRateLimiter } from './metrics.js';
 
 /**
@@ -62,6 +63,7 @@ function fixture(options: {
   quote?: SwapQuotePort['quote'];
   withQuotes?: boolean;
   swapQuoteRateLimiter?: AggregateRateLimiter;
+  swapQuoteClientRateLimiter?: PerClientRateLimiter;
 } = {}) {
   const paymaster: PaymasterPort = { buildFee: vi.fn(), submit: vi.fn() };
   const rpc: PoolRpcPort = { getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn() };
@@ -73,12 +75,14 @@ function fixture(options: {
     authorizations: new MemoryAuthorizationCodec(),
     ...(options.withQuotes === false ? {} : { swapQuotes }),
     ...(options.swapQuoteRateLimiter ? { swapQuoteRateLimiter: options.swapQuoteRateLimiter } : {}),
+    ...(options.swapQuoteClientRateLimiter ? { swapQuoteClientRateLimiter: options.swapQuoteClientRateLimiter } : {}),
   });
   return { api, swapQuotes, paymaster, rpc };
 }
 
 const BODY = { v: 1, sellToken: STRK, buyToken: OTHER, sellAmount: '10000000000000000000', taker: TAKER, slippageBps: 100 };
-const ask = (api: BackendApi, body: unknown = BODY, method = 'POST') => api.handle({ method, path: SWAP_QUOTE_PATH, body });
+const ask = (api: BackendApi, body: unknown = BODY, method = 'POST', client?: string) =>
+  api.handle({ method, path: SWAP_QUOTE_PATH, body, ...(client ? { client } : {}) });
 
 describe('the keyless swap quote proxy (D-084)', () => {
   it('quotes for the stand-in and answers decimal amounts and the built call', async () => {
@@ -167,6 +171,17 @@ describe('the keyless swap quote proxy (D-084)', () => {
     await expect(ask(api)).resolves.toMatchObject({ status: 200 });
     await expect(ask(api)).resolves.toMatchObject({ status: 429 });
     expect(swapQuotes.quote).toHaveBeenCalledTimes(1);
+  });
+
+  it('limits each client on its own, so one client cannot spend the window for everyone', async () => {
+    const { api, swapQuotes } = fixture({ swapQuoteClientRateLimiter: new PerClientRateLimiter(2, 60_000, () => 0) });
+    const greedy = 'a'.repeat(32);
+    await expect(ask(api, BODY, 'POST', greedy)).resolves.toMatchObject({ status: 200 });
+    await expect(ask(api, BODY, 'POST', greedy)).resolves.toMatchObject({ status: 200 });
+    await expect(ask(api, BODY, 'POST', greedy)).resolves.toMatchObject({ status: 429, body: { code: 'RATE_LIMITED' } });
+    // Another client still gets quotes.
+    await expect(ask(api, BODY, 'POST', 'b'.repeat(32))).resolves.toMatchObject({ status: 200 });
+    expect(swapQuotes.quote).toHaveBeenCalledTimes(3);
   });
 
   it('also takes a slot in the shared window', async () => {

@@ -7,6 +7,7 @@ import {
 import { Readable } from 'node:stream';
 import { BackendApi } from './api.js';
 import { HmacAuthorizationCodec } from './authorization.js';
+import { CLIENT_KEY_HEADER, ClientKeyer, requestClientKey } from './client-key.js';
 import { AvnuDegenCatalog } from './avnu-degen-catalog.js';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
 import { AvnuSwapQuotes } from './avnu-swap-quotes.js';
@@ -95,8 +96,10 @@ export function createBackendRuntime(
   const handler = createBackendFetchHandler(api, {
     maxRequestBytes: parsed.maxRequestBytes,
   });
+  // D-084: one salt per process, never written anywhere.
+  const keyer = new ClientKeyer();
   const server = createServer((request, response) => {
-    void serveFetchRequest(request, response, handler);
+    void serveFetchRequest(request, response, handler, keyer);
   });
   server.requestTimeout = parsed.backend.requestTimeoutMs;
 
@@ -264,6 +267,7 @@ async function serveFetchRequest(
   incoming: IncomingMessage,
   outgoing: ServerResponse,
   handler: FetchHandler,
+  keyer: ClientKeyer,
 ): Promise<void> {
   const abort = new AbortController();
   const abortRequest = () => abort.abort(new DOMException('Request aborted.', 'AbortError'));
@@ -274,7 +278,7 @@ async function serveFetchRequest(
   outgoing.once('close', abortResponse);
 
   try {
-    const request = toFetchRequest(incoming, abort.signal);
+    const request = toFetchRequest(incoming, abort.signal, keyer);
     const response = await handler(request);
     if (outgoing.destroyed) return;
     outgoing.statusCode = response.status;
@@ -296,12 +300,14 @@ async function serveFetchRequest(
   }
 }
 
-function toFetchRequest(incoming: IncomingMessage, signal: AbortSignal): Request {
+function toFetchRequest(incoming: IncomingMessage, signal: AbortSignal, keyer: ClientKeyer): Request {
   const method = incoming.method ?? 'GET';
   const headers = new Headers();
   copyHeader(incoming, headers, 'content-type');
   copyHeader(incoming, headers, 'content-length');
   copyHeader(incoming, headers, 'content-encoding');
+  // D-084: never the caller's own header, except the edge's on loopback.
+  headers.set(CLIENT_KEY_HEADER, requestClientKey(keyer, incoming.socket.remoteAddress, incoming.headers[CLIENT_KEY_HEADER]));
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
     init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;

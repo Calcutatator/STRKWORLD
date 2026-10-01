@@ -79,6 +79,62 @@ describe('ExchangePanel review render', () => {
     expect(gate).toContain('class="confirm"');
   });
 
+  it('shows the rate, the oracle value of each side and the price check inside ConfirmGate (D-084)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000,
+        priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 120, sellUsd: 123_456_789_000n, expectedBuyUsd: 121_975_000_000n },
+      },
+    });
+    const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
+    for (const value of ['1 STRK ≈ 2 ETH', '≈ $1,234.57', '≈ $1,219.75', "1.20% below Pragma&#x27;s oracle price, within the 3% allowed."]) expect(gate).toContain(value);
+    expect(gate).not.toContain('type="checkbox"');
+  });
+
+  it('asks for an explicit acknowledgement when nothing independent prices the pair (D-084)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000,
+        priceCheck: { status: 'unchecked', boundBps: 300, sellUsd: 4_310_000n },
+      },
+    });
+    const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
+    expect(gate).toContain('data-status="unchecked"');
+    expect(gate).toContain('type="checkbox"');
+    expect(gate).toContain(COPY.exchange.acknowledgeUnchecked);
+    expect(gate).toContain('≈ $0.04');
+
+    // Confirming without the tick sends nothing and says why.
+    await panel.confirm();
+    expect(operations.submitted).toEqual([]);
+    expect(panel.store.getState()).toMatchObject({ flow: { name: 'review' }, notice: COPY.exchange.acknowledgeFirst });
+    panel.acknowledgeUncheckedPrice(true);
+    await panel.confirm();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'submitted' });
+    expect(operations.submitted).toHaveLength(1);
+  });
+
+  it('resets the acknowledgement with every new review', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000, priceCheck: { status: 'unchecked', boundBps: 300 } },
+    });
+    const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    panel.acknowledgeUncheckedPrice(true);
+    expect(panel.store.getState().priceAcknowledged).toBe(true);
+    panel.setAmount('2'); await panel.prepare();
+    expect(panel.store.getState().priceAcknowledged).toBe(false);
+  });
+
   it('removes the review confirmation behind unacknowledged submission uncertainty', async () => {
     const { operations, panel } = await reviewed(); const uncertainty = createSubmissionUncertainty(); uncertainty.retain();
     const markup = renderToStaticMarkup(<PrivacyProvider operations={operations} submissionUncertainty={uncertainty}><ExchangePanel panel={panel} onClose={() => {}} /><SessionNoticeLayer /></PrivacyProvider>);

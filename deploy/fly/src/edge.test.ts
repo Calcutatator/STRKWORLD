@@ -4,7 +4,7 @@ import { createConnection } from 'node:net';
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { closeEdgeServer, createEdgeServer } from './edge';
+import { clientKey, closeEdgeServer, createEdgeServer } from './edge';
 
 const servers: Server[] = [];
 const directories: string[] = [];
@@ -352,6 +352,36 @@ describe('Fly edge public boundary', () => {
     expect(received.headers.forwarded).toBeUndefined();
     expect(received.headers['x-forwarded-for']).toBeUndefined();
     expect(received.headers['x-player-identifier']).toBeUndefined();
+    // D-084: only a salted, unlinkable client key, never the address itself.
+    expect(received.headers['x-strkworld-client']).toMatch(/^[0-9a-f]{32}$/);
+    expect(JSON.stringify(received.headers)).not.toContain('198.51.100.1');
+  });
+
+  it('keys clients by a salted hash of the proxy-appended address, and drops a client-sent key (D-084)', async () => {
+    const salt = Buffer.alloc(32, 7);
+    const socket = { remoteAddress: '10.0.0.5' };
+    const viaProxy = clientKey({ headers: { 'x-forwarded-for': '203.0.113.9, 198.51.100.1' }, socket } as never, salt);
+    expect(viaProxy).toMatch(/^[0-9a-f]{32}$/);
+    // The last entry, the one the proxy appended, is the key: a forged first entry cannot move it.
+    expect(clientKey({ headers: { 'x-forwarded-for': '1.2.3.4, 198.51.100.1' }, socket } as never, salt)).toBe(viaProxy);
+    expect(clientKey({ headers: {}, socket } as never, salt)).not.toBe(viaProxy);
+    expect(clientKey({ headers: { 'x-forwarded-for': '198.51.100.1' }, socket } as never, Buffer.alloc(32, 8))).not.toBe(viaProxy);
+
+    const root = await fixture();
+    let seen: string | string[] | undefined;
+    const backend = createServer((request, response) => {
+      seen = request.headers['x-strkworld-client'];
+      request.resume();
+      request.once('end', () => { response.setHeader('content-type', 'application/json'); response.end('{}'); });
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+    await fetchEdge(edgePort, '/api/v1/swap/quote', {
+      method: 'POST', body: '{"v":1}', headers: { 'Content-Type': 'application/json', 'X-Strkworld-Client': 'f'.repeat(32) },
+    });
+    expect(seen).toMatch(/^[0-9a-f]{32}$/);
+    expect(seen).not.toBe('f'.repeat(32));
   });
 
   it('forwards the degen token list GET (D-067) with no body and no player identity', async () => {

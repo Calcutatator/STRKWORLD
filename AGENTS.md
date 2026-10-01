@@ -259,7 +259,7 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-10-01 — avnu's public swap API is keyless, its exchange takes a keyless caller, and a shadow account can return only what it gained (D-084)
+### 2026-10-01 — avnu's public swap API is keyless, its exchange takes a keyless caller, a shadow account can return only what it gained, and Pragma checks the quote (D-084)
 
 `GET https://starknet.api.avnu.fi/swap/v3/quotes` and `POST /swap/v3/build`
 answer without any key: the build for a quote id, a `takerAddress`, a
@@ -290,6 +290,15 @@ of avnu's exchange and StarkWare's anonymizer read on GitHub. Traps met:
 - **The identity-read scanner flags `array[index]` with a variable index** in
   any production source of the privacy package, test helpers under
   `src/testing/` included (`forward-compatibility.test.ts`). Use `.at()`.
+- **Pragma prices the majors on mainnet, not strkBTC.** `get_data_median` on
+  `0x02a85bd6…875b` with calldata `[0x0, <pair short string>]` answers
+  `[price, decimals, last_updated, num_sources, expiration…]`: STRK/USD,
+  ETH/USD, USDC/USD (6 decimals), USDT/USD, WBTC/USD, WSTETH/USD, LORDS/USD and
+  EKUBO/USD answered with 3 to 11 sources; STRKBTC/USD answered all zeros, and
+  XSTRK/USD had only 2 sources. Cartridge's RPC accepts JSON-RPC batches.
+- **The edge forwards no client header**, so a per-client limit in the backend
+  needs the edge to send one: it sends a salted HMAC of the last
+  `X-Forwarded-For` entry as `x-strkworld-client`, never the address.
 - **starknet.js normalizes calldata but not `contractAddress`** when it hands a
   `shadow_account_invoke` to the wallet: a padded address stays padded. The
   swap canonicalizes every address it puts in an action.

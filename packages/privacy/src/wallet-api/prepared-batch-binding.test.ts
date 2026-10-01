@@ -6,7 +6,7 @@ import {
   type PoolReadClient,
   type WalletStrk20Account,
 } from '../index.js';
-import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
+import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestPrices, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
 
 /**
  * A prepared batch must prove the intents that were reviewed.
@@ -86,6 +86,7 @@ function seam() {
     wallet,
     pool,
     swapQuotes: swapTestQuotes([95n]),
+    swapPrices: swapTestPrices(1_000),
     vault: swapTestReads(),
     supportedVersions: vi.fn(async () => ['0.10.4']),
     now: () => 1_000,
@@ -156,7 +157,8 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
     expect(Reflect.set(batch.intents[0]!, 'amount', HOSTILE)).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE });
+    // TOKEN has no oracle price, so the swap is unchecked (D-084).
+    await batch.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true });
 
     expect(invoked[0]?.[0]).toEqual({ type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB });
   });
@@ -204,7 +206,8 @@ describe('a prepared batch does not read intent state the caller still owns', ()
 
     // The actions were built from this object at prepare; it must not move.
     expect(Reflect.set(batch.intents[0]!, 'amountIn', HOSTILE)).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE });
+    // TOKEN has no oracle price, so the swap is unchecked (D-084).
+    await batch.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true });
 
     expect(invoked[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: SWAP_TEST_SHADOW });
   });
@@ -214,7 +217,8 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     const batch = await ops.prepare([{ ...SWAP }]);
 
     expect(Reflect.set(batch.intents[0]!, 'tokenIn', '0xdeadbeef')).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE });
+    // TOKEN has no oracle price, so the swap is unchecked (D-084).
+    await batch.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true });
 
     expect(invoked[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: SWAP_TEST_SHADOW });
   });

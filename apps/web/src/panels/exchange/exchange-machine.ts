@@ -26,6 +26,14 @@ export interface ExchangeReview {
   readonly networkCost: string;
   readonly total: string;
   readonly disclosures: readonly string[];
+  /** D-084: the quote's implied rate, "1 STRK ≈ 0.0431 USDC". */
+  readonly rate: string;
+  /** D-084: the oracle's USD value of each side, where the oracle prices it. */
+  readonly sellUsd: string | null;
+  readonly expectedBuyUsd: string | null;
+  /** D-084: whether an independent oracle price vouches for this quote. */
+  readonly priceCheck: 'checked' | 'unchecked';
+  readonly priceCheckNote: string;
 }
 
 export type ExchangeFlow =
@@ -58,6 +66,8 @@ export interface ExchangeState {
   readonly amountText: string;
   readonly notice: string | null;
   readonly flow: ExchangeFlow;
+  /** D-084: the player ticked "I understand" for a review with no independent price check. */
+  readonly priceAcknowledged: boolean;
 }
 
 export interface ExchangePanel {
@@ -75,6 +85,8 @@ export interface ExchangePanel {
   confirm(signal?: AbortSignal): Promise<void>;
   cancelPrepared(): void;
   acknowledge(): void;
+  /** D-084: the player's acknowledgement that the reviewed swap has no independent price check. */
+  acknowledgeUncheckedPrice(acknowledged: boolean): void;
 }
 
 export function createExchangePanel(options: {
@@ -203,6 +215,13 @@ export function createExchangePanel(options: {
       expiresAt: new Date(safeReview.expiresAt).toISOString(),
       poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
       disclosures: disclosuresForIntents(batch.intents, register),
+      rate: `1 ${sell.symbol} ≈ ${formatRate((safeReview.expectedAmountOut * 10n ** BigInt(sell.decimals)) / intent.amountIn, buy.decimals)} ${buy.symbol}`,
+      sellUsd: formatUsd(safeReview.priceCheck.sellUsd),
+      expectedBuyUsd: formatUsd(safeReview.priceCheck.expectedBuyUsd),
+      priceCheck: safeReview.priceCheck.status,
+      priceCheckNote: safeReview.priceCheck.status === 'checked'
+        ? priceCheckedNote(safeReview.priceCheck.shortfallBps ?? 0, safeReview.priceCheck.boundBps)
+        : COPY.exchange.priceUnchecked,
     };
     return { batch, summary };
   };
@@ -281,13 +300,18 @@ export function createExchangePanel(options: {
           return;
         }
         prepared = quoted.batch;
-        patch({ flow: { name: 'review', summary: quoted.summary } });
+        patch({ flow: { name: 'review', summary: quoted.summary }, priceAcknowledged: false });
       } catch (error) { fail(error, id); }
     },
     async confirm(signal) {
       if (!gate()) return;
       const state = store.getState(); let batch = prepared;
       if (state.flow.name !== 'review' || !batch) return;
+      if (state.flow.summary.priceCheck === 'unchecked' && !state.priceAcknowledged) {
+        patch({ notice: COPY.exchange.acknowledgeFirst });
+        return;
+      }
+      const acknowledgeUncheckedPrice = state.flow.summary.priceCheck === 'unchecked' && state.priceAcknowledged;
       const id = start(); let summary = state.flow.summary;
       // The fee the player reviewed stays the ceiling, even after a re-quote.
       const reviewedTotal = batch.totalCost;
@@ -315,7 +339,7 @@ export function createExchangePanel(options: {
           discard();
           prepared = fresh.batch;
           if (fresh.batch.swapReview!.minimumAmountOut < reviewedFloor) {
-            patch({ flow: { name: 'review', summary: fresh.summary }, notice: COPY.exchange.requoted });
+            patch({ flow: { name: 'review', summary: fresh.summary }, notice: COPY.exchange.requoted, priceAcknowledged: false });
             return;
           }
           batch = fresh.batch; summary = fresh.summary;
@@ -334,7 +358,7 @@ export function createExchangePanel(options: {
         }
         signingOwner = id;
         signingBatch = batch;
-        const result = await batch.confirm({ feeCeiling: reviewedTotal + feeTolerance, signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
+        const result = await batch.confirm({ feeCeiling: reviewedTotal + feeTolerance, ...(acknowledgeUncheckedPrice ? { acknowledgeUncheckedPrice: true } : {}), signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
         if (signingOwner === id) {
           signingOwner = null;
           signingBatch = null;
@@ -363,6 +387,11 @@ export function createExchangePanel(options: {
       }
     },
     cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); },
+    acknowledgeUncheckedPrice(acknowledged) {
+      const flow = store.getState().flow;
+      if (flow.name !== 'review' || flow.summary.priceCheck !== 'unchecked') return;
+      patch({ priceAcknowledged: acknowledged === true, notice: null });
+    },
     acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); } },
   });
 
@@ -383,7 +412,7 @@ export const QUOTE_SPACING_MS = 1_500;
 const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });
 
 function initialState(register: readonly RouteGrade[], loaded: boolean): ExchangeState {
-  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' } };
+  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false };
 }
 
 /** The listed assets, or none until a loaded list is ready. */
@@ -486,5 +515,40 @@ function freezeExchangeState(state: ExchangeState): ExchangeState {
 }
 
 function validReview(intent: Intent | undefined, review: PreparedBatch['swapReview'], sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, now: number): intent is Extract<Intent, { kind: 'swap' }> {
-  return !!intent && intent.kind === 'swap' && !!review && sameAddress(intent.tokenIn, sell.token) && sameAddress(intent.tokenOut, buy.token) && intent.amountIn === amountIn && review.minimumAmountOut === intent.minAmountOut && intent.minAmountOut > 0n && typeof review.expectedAmountOut === 'bigint' && review.expectedAmountOut > 0n && review.minimumAmountOut <= review.expectedAmountOut && Number.isSafeInteger(review.slippageBps) && review.slippageBps > 0 && review.slippageBps <= 10_000 && Number.isSafeInteger(review.expiresAt) && review.expiresAt > now;
+  return !!intent && intent.kind === 'swap' && !!review && sameAddress(intent.tokenIn, sell.token) && sameAddress(intent.tokenOut, buy.token) && intent.amountIn === amountIn && review.minimumAmountOut === intent.minAmountOut && intent.minAmountOut > 0n && typeof review.expectedAmountOut === 'bigint' && review.expectedAmountOut > 0n && review.minimumAmountOut <= review.expectedAmountOut && Number.isSafeInteger(review.slippageBps) && review.slippageBps > 0 && review.slippageBps <= 10_000 && Number.isSafeInteger(review.expiresAt) && review.expiresAt > now && validPriceCheck(review.priceCheck);
+}
+
+/** D-084: a well-formed price check; a `checked` one sits within its own bound. */
+function validPriceCheck(check: unknown): boolean {
+  if (!check || typeof check !== 'object') return false;
+  const { status, boundBps, shortfallBps, sellUsd, expectedBuyUsd } = check as Record<string, unknown>;
+  const usd = (value: unknown) => value === undefined || (typeof value === 'bigint' && value >= 0n);
+  if (!Number.isSafeInteger(boundBps) || (boundBps as number) <= 0 || !usd(sellUsd) || !usd(expectedBuyUsd)) return false;
+  if (status === 'unchecked') return true;
+  return status === 'checked' && Number.isSafeInteger(shortfallBps) && (shortfallBps as number) <= (boundBps as number);
+}
+
+function priceCheckedNote(shortfallBps: number, boundBps: number): string {
+  if (shortfallBps <= 0) return COPY.exchange.priceCheckedAbove;
+  return COPY.exchange.priceCheckedBelow
+    .replace('{shortfall}', (shortfallBps / 100).toFixed(2))
+    .replace('{bound}', String(boundBps / 100));
+}
+
+/** At most eight decimal places of a rate, trailing zeros dropped. */
+function formatRate(value: bigint, decimals: number): string {
+  const exact = formatTokenAmountExact(value, decimals);
+  const [whole, fraction] = exact.split('.');
+  if (!fraction) return exact;
+  const trimmed = fraction.slice(0, 8).replace(/0+$/, '');
+  return trimmed ? `${whole}.${trimmed}` : whole!;
+}
+
+/** An 8-decimal USD value as "≈ $1,234.56", "< $0.01", or null when the oracle gave none. */
+function formatUsd(value: bigint | undefined): string | null {
+  if (value === undefined || value <= 0n) return null;
+  const cents = (value + 500_000n) / 1_000_000n;
+  if (cents === 0n) return '< $0.01';
+  const dollars = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `≈ $${dollars}.${(cents % 100n).toString().padStart(2, '0')}`;
 }

@@ -449,6 +449,11 @@ export interface ApiRequest {
   path: string;
   body: unknown;
   signal?: AbortSignal;
+  /**
+   * D-084: a salted, unlinkable key for the requesting client
+   * (`client-key.ts`), used only for per-client rate limits. Never logged.
+   */
+  client?: string;
 }
 
 export interface ApiResponse {

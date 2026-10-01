@@ -1,7 +1,8 @@
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { AVNU_EXCHANGE, AVNU_SWAP_ENTRYPOINT, MAINNET_CHAIN_ID } from '../swap.js';
 import { shadowAccountAddress } from '../vault.js';
-import type { SwapQuoteAnswer, SwapQuoteClient, VaultReadClient } from '../wallet-api/types.js';
+import { PRICE_FEEDS, type PragmaPrice } from '../swap-prices.js';
+import type { SwapPriceReader, SwapQuoteAnswer, SwapQuoteClient, VaultReadClient } from '../wallet-api/types.js';
 
 /**
  * Test doubles for the shadow-account swap (D-084): a partial commitment, the
@@ -103,4 +104,47 @@ export function swapTestQuotes(
       return (edit ? edit(answer, index) : answer) as SwapQuoteAnswer;
     },
   };
+}
+
+/**
+ * DEMO oracle prices (USD, 8 decimals) for every pinned feed, fresh at
+ * `nowMs`, from 10 sources. STRK at $0.0431 matches `avnuAnswer`'s 431,000
+ * USDC base units for 10 STRK. `overrides` replaces or drops (`null`) a pair.
+ */
+export function swapTestPrices(
+  nowMs: number,
+  overrides: Readonly<Record<string, Partial<PragmaPrice> | null>> = {},
+): SwapPriceReader & { reads: number } {
+  const base = new Map<string, bigint>([
+    ['STRK/USD', 4_310_000n],
+    ['ETH/USD', 400_000_000_000n],
+    ['USDC/USD', 100_000_000n],
+    ['USDT/USD', 100_000_000n],
+    ['WBTC/USD', 10_000_000_000_000n],
+    ['WSTETH/USD', 480_000_000_000n],
+    ['LORDS/USD', 2_000_000n],
+    ['EKUBO/USD', 100_000_000n],
+  ]);
+  const replaced = new Map(Object.entries(overrides));
+  const reader = {
+    reads: 0,
+    async read() {
+      reader.reads += 1;
+      const prices: PragmaPrice[] = [];
+      for (const feed of PRICE_FEEDS) {
+        const override = replaced.get(feed.pair);
+        if (override === null) continue;
+        prices.push({
+          pair: feed.pair,
+          price: base.get(feed.pair)!,
+          decimals: 8,
+          updatedAt: Math.floor(nowMs / 1000),
+          sources: 10,
+          ...override,
+        });
+      }
+      return prices;
+    },
+  };
+  return reader;
 }

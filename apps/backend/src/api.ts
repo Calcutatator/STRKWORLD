@@ -9,6 +9,7 @@ import {
   type RequestRateLimiterPort,
   type SponsorshipBudgetPort,
 } from './metrics.js';
+import { PerClientRateLimiter } from './client-key.js';
 import { POOL_STATS_RATE_LIMIT } from './pool-stats.js';
 import {
   RELAY_NOT_CONFIGURED_CODE,
@@ -71,6 +72,12 @@ export const SWAP_QUOTE_PATH = '/v1/swap/quote';
  * by caller, and this service is one caller for every player.
  */
 export const SWAP_QUOTE_RATE_LIMIT = Object.freeze({ maxRequests: 60, windowMs: 60_000 });
+/**
+ * Each client's own quote bucket (D-084): 10 at once, one more every 6 s, so
+ * no one client can spend the shared window for everyone. Keyed by a salted
+ * hash of the client's address (`client-key.ts`), held in memory, never logged.
+ */
+export const SWAP_QUOTE_CLIENT_RATE_LIMIT = Object.freeze({ capacity: 10, refillMs: 6_000 });
 /** The most a swap may sell: a pool note holds a u128. */
 const U128_BOUND = 1n << 128n;
 /** Starknet contract addresses lie below 2^251. */
@@ -95,6 +102,8 @@ export interface BackendApiOptions {
   poolStatsRateLimiter?: RequestRateLimiterPort;
   /** The swap quote route's own window (D-084), taken besides a slot in `rateLimiter`'s. */
   swapQuoteRateLimiter?: RequestRateLimiterPort;
+  /** Each client's own quote bucket (D-084), taken before the route's window. */
+  swapQuoteClientRateLimiter?: PerClientRateLimiter;
   /** The Vault's two pinned public reads (D-077). Without it, both routes answer 503. */
   vault?: VaultRpcPort;
   /** Vesu's supply APY for the pinned vaults (D-079). Without it, that route answers 503. */
@@ -117,6 +126,7 @@ export class BackendApi {
   private readonly limiter: RequestRateLimiterPort;
   private readonly poolStatsLimiter: RequestRateLimiterPort;
   private readonly swapQuoteLimiter: RequestRateLimiterPort;
+  private readonly swapQuoteClientLimiter: PerClientRateLimiter;
   private readonly config: BackendConfig;
   private readonly requestTimeoutMs: number;
   private readonly paymaster: PaymasterPort;
@@ -162,6 +172,9 @@ export class BackendApi {
     );
     this.swapQuoteLimiter = options.swapQuoteRateLimiter ?? new AggregateRateLimiter(
       SWAP_QUOTE_RATE_LIMIT.maxRequests, SWAP_QUOTE_RATE_LIMIT.windowMs, now,
+    );
+    this.swapQuoteClientLimiter = options.swapQuoteClientRateLimiter ?? new PerClientRateLimiter(
+      SWAP_QUOTE_CLIENT_RATE_LIMIT.capacity, SWAP_QUOTE_CLIENT_RATE_LIMIT.refillMs, now,
     );
     this.budget = options.sponsorshipBudget ?? new AggregateBudget(
       this.config.sponsorshipBudget.maxFeeAmount, this.config.sponsorshipBudget.windowMs, now,
@@ -212,7 +225,7 @@ export class BackendApi {
         switch (request.path) {
           case '/v1/private/fees': response = await abortable(this.fee(request.body, deadline.signal), deadline.signal); break;
           case '/v1/private/submissions': response = await abortable(this.submit(request.body, deadline.signal), deadline.signal); break;
-          case SWAP_QUOTE_PATH: response = await abortable(this.swapQuote(request.body, deadline.signal), deadline.signal); break;
+          case SWAP_QUOTE_PATH: response = await abortable(this.swapQuote(request.body, request.client, deadline.signal), deadline.signal); break;
           case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
@@ -385,7 +398,7 @@ export class BackendApi {
    * (its allowlist, or the degen list, D-067), the slippage within the
    * route's ceiling. The browser checks every field of the answer again.
    */
-  private async swapQuote(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+  private async swapQuote(body: unknown, client: string | undefined, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps']);
     requireVersion(value);
     const policy = this.routePolicy('swap');
@@ -416,6 +429,9 @@ export class BackendApi {
     // service asks of avnu's public API for every player at once. Taken only
     // once the request is admitted, so malformed or refused requests cannot
     // spend it.
+    // The client's own bucket first, so one client cannot spend the shared
+    // window; a request with no key (a direct call in tests) shares one.
+    if (!this.swapQuoteClientLimiter.take(client ?? 'unkeyed')) throw new RateLimitedError();
     if (!this.swapQuoteLimiter.take()) throw new RateLimitedError();
     const quote = await this.swapQuotes.quote({ sellToken, buyToken, sellAmount, taker, slippageBps, signal });
     if (

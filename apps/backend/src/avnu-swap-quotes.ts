@@ -27,7 +27,8 @@ export const AVNU_SWAP_ENTRYPOINT = 'multi_route_swap';
 const DEFAULT_BASE_URL = 'https://starknet.api.avnu.fi';
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_CALLDATA = 512;
-const MAX_RESPONSE_BYTES = 256 * 1024;
+/** The most of an avnu answer read: a quote and its build are a few kilobytes. */
+export const MAX_RESPONSE_BYTES = 256 * 1024;
 const U128_BOUND = 1n << 128n;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -137,10 +138,11 @@ export class AvnuSwapQuotes implements SwapQuotePort {
     const timer = setTimeout(() => controller.abort(new DOMException('avnu timed out.', 'TimeoutError')), this.timeoutMs);
     try {
       const response = await this.fetcher(url, { ...init, signal: controller.signal });
-      if (!response.ok) throw new Error(`avnu answered ${response.status}.`);
-      const text = await response.text();
-      if (text.length > MAX_RESPONSE_BYTES) throw new Error('avnu answered too much.');
-      return JSON.parse(text) as unknown;
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`avnu answered ${response.status}.`);
+      }
+      return JSON.parse(await readBounded(response)) as unknown;
     } catch (error) {
       if (controller.signal.aborted) throw controller.signal.reason ?? error;
       throw error;
@@ -149,6 +151,38 @@ export class AvnuSwapQuotes implements SwapQuotePort {
       signal?.removeEventListener('abort', onAbort);
     }
   }
+}
+
+/**
+ * The body as text, streamed, and aborted the moment it passes
+ * `MAX_RESPONSE_BYTES`: an oversized answer is never held in full. A
+ * declared length past the cap is refused before reading.
+ */
+async function readBounded(response: Response): Promise<string> {
+  const declared = Number(response.headers?.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error('avnu answered too much.');
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      // Cancelling the stream stops the transfer; nothing more is read.
+      await reader.cancel().catch(() => undefined);
+      throw new Error('avnu answered too much.');
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
 }
 
 function hexAmount(value: unknown): bigint | null {
