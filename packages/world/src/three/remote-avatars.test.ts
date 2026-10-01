@@ -177,6 +177,16 @@ function thrownBy(action: () => void): unknown {
   throw new Error('expected a throw');
 }
 
+
+/**
+ * The share of a gap a critically damped follow (D-086) closes in `ms` from
+ * rest, toward a target that holds still: `1 - (1 + t/T) e^(-t/T)`.
+ */
+function followedFromRest(ms: number): number {
+  const t = ms / REMOTE_INTERPOLATION_TIME_CONSTANT_MS;
+  return 1 - (1 + t) * Math.exp(-t);
+}
+
 describe('remote avatar layer 3D: subscription and reconciliation', () => {
   it('builds figures from the synchronous replay at their ground position and wire facing', () => {
     const { factory, created } = fakeFigures();
@@ -656,7 +666,7 @@ describe('remote avatar layer 3D: re-entrancy and teardown', () => {
 });
 
 describe('remote avatar layer 3D: interpolation', () => {
-  it('eases toward the latest snapshot at a frame-rate-independent exponential rate', () => {
+  it('follows the latest snapshot with a frame-rate-independent critically damped ease (D-086)', () => {
     const run = (frames: readonly number[]) => {
       const { factory, created } = fakeFigures();
       const peers = createRemotePeerSource([peer({ x: 40 })]);
@@ -671,12 +681,40 @@ describe('remote avatar layer 3D: interpolation', () => {
 
     const coarse = run([90]);
     const fine = run([15, 15, 15, 15, 15, 15]);
-    const expected = 40 + 64 * (1 - Math.exp(-90 / REMOTE_INTERPOLATION_TIME_CONSTANT_MS));
+    const expected = 40 + 64 * followedFromRest(90);
     expectAt(coarse.figure, expected, 72);
     expectAt(fine.figure, expected, 72);
 
     settle(coarse.layer);
     expectAt(coarse.figure, 104, 72);
+  });
+
+  it('draws a steady walker at an even speed between 50 ms patches (D-086)', () => {
+    const { factory, created } = fakeFigures();
+    const peers = createRemotePeerSource([peer({ x: 40 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory });
+    const figure = at(created, 0);
+    // 160 px/s, the walk speed: an 8 px step on every patch, drawn at 60 fps.
+    const frame = 1000 / 60;
+    const speeds: number[] = [];
+    let patchAt = 0;
+    let x = 40;
+    let last = figure.object.position.x;
+    for (let t = 0; t < 3000; t += frame) {
+      if (t >= patchAt) {
+        patchAt += 50;
+        x += 8;
+        peers.publish([peer({ x })]);
+      }
+      layer.update(frame);
+      const drawn = figure.object.position.x;
+      if (t > 1000) speeds.push((drawn - last) / frame);
+      last = drawn;
+    }
+    const mean = speeds.reduce((sum, v) => sum + v, 0) / speeds.length;
+    const spread = Math.sqrt(speeds.reduce((sum, v) => sum + (v - mean) ** 2, 0) / speeds.length);
+    // The first-order ease this replaced pulsed by 15% on every patch.
+    expect(spread / mean).toBeLessThan(0.08);
   });
 
   it('lands exactly and faces the wire once the ease is imperceptible, even mid-hold', () => {
@@ -845,11 +883,7 @@ describe('remote avatar layer 3D: yaw and frame deltas', () => {
 
     layer.update(10_000);
     expect(figure.update).toHaveBeenLastCalledWith(REMOTE_MAX_FRAME_MS, WALKING);
-    expectAt(
-      figure,
-      40 + 64 * (1 - Math.exp(-REMOTE_MAX_FRAME_MS / REMOTE_INTERPOLATION_TIME_CONSTANT_MS)),
-      72,
-    );
+    expectAt(figure, 40 + 64 * followedFromRest(REMOTE_MAX_FRAME_MS), 72);
   });
 
   it('freezes a figure whose animation throws instead of failing every frame', () => {
@@ -1133,12 +1167,15 @@ describe('remote avatar layer 3D: standing on stacks (D-060)', () => {
 
     // The peer's own position is already off the block...
     peers.publish([peer({ x: 300 })]);
-    advance(layer, 30, 10);
-    // ...but the eased figure is still over it, so it stays up.
-    expect(figure.object.position.x).toBeGreaterThanOrEqual(10);
-    expect(figure.object.position.y).toBe(1);
-
-    layer.update(10);
+    // ...but the eased figure is still over it for a while, so it stays up.
+    let framesUp = 0;
+    while (figure.object.position.x >= 10 && framesUp < 100) {
+      expect(figure.object.position.y).toBe(1);
+      layer.update(10);
+      framesUp += 1;
+    }
+    expect(framesUp).toBeGreaterThanOrEqual(3);
+    // The frame its drawn body leaves the block, it starts to fall.
     expect(figure.object.position.x).toBeLessThan(10);
     expect(figure.object.position.y).toBeLessThan(1);
   });

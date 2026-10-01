@@ -236,6 +236,11 @@ const EMPTY_SANDBOX: SandboxSnapshot = Object.freeze({
   carrying: null,
 });
 
+const EMPTY_COLUMN_MAP: ReadonlyMap<string, SandboxColumn> = new Map();
+
+/** At most this many sandbox reads in a row are skipped on the decoder hook's word: 5 s of patches. */
+const SANDBOX_RESYNC_READS = 100;
+
 interface WelcomePayload {
   gameId: string;
 }
@@ -275,6 +280,36 @@ export class LobbyClient {
 
   /** The last value `sandbox()` returned, reused while nothing changes. */
   #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
+  /**
+   * The room and the columns last read from its decoded sandbox, by tile
+   * key, so a patch that leaves the sandbox alone costs a read-only pass and
+   * no allocation (D-086). Re-reading 900 blocks into fresh frozen objects on
+   * every 20-a-second patch cost a near-full sandbox 0.5 ms a patch.
+   */
+  #sandboxReadRoom: ColyseusRoom<unknown, LobbyState> | null = null;
+  #sandboxRead: readonly SandboxColumn[] = EMPTY_SANDBOX.columns;
+  #sandboxReadByKey: ReadonlyMap<string, SandboxColumn> = EMPTY_COLUMN_MAP;
+  /** Scratch list for the read; reused, so an unchanged patch allocates none. */
+  readonly #sandboxScratch: SandboxColumn[] = [];
+  /**
+   * The room whose decoder tells this client which patches touched the
+   * sandbox, the hook it runs, and whether one has since the last read. A
+   * patch that only moved players then skips the sandbox read entirely.
+   */
+  #sandboxWatch: {
+    readonly room: ColyseusRoom<unknown, LobbyState>;
+    readonly serializer: object;
+    readonly decoder: object;
+    readonly hook: (changes: unknown) => void;
+  } | null = null;
+  #sandboxDirty = true;
+  /**
+   * Reads skipped on the hook's word since the last full one. Every
+   * `SANDBOX_RESYNC_READS`th read is full regardless, so a patch whose
+   * decode failed before it reached the hook cannot leave the sandbox stale
+   * for longer than that.
+   */
+  #sandboxSkips = 0;
   /** The last value delivered to sandbox listeners, for change detection. */
   #sandboxPublished: SandboxSnapshot = EMPTY_SANDBOX;
   /** When the last pick/place left this client, for the client-side floor. */
@@ -863,6 +898,7 @@ export class LobbyClient {
       // deliver an error/leave immediately after joinOrCreate resolves; those
       // callbacks must be able to identify this room even before welcome.
       this.#room = room;
+      this.#watchSandbox(room);
       this.#desired = null;
       this.#lastSentAt = null;
       this.#lastSentPlacement = null;
@@ -1276,11 +1312,86 @@ export class LobbyClient {
 
   #readSandbox(): SandboxSnapshot {
     const room = this.#room;
-    if (room === null) return EMPTY_SANDBOX;
-    const columns = readSandboxColumns(room);
+    if (room === null) {
+      // Let a retired room go rather than hold it for the next comparison.
+      this.#sandboxReadRoom = null;
+      this.#sandboxRead = EMPTY_SANDBOX.columns;
+      this.#sandboxReadByKey = EMPTY_COLUMN_MAP;
+      return EMPTY_SANDBOX;
+    }
+    const columns = this.#sandboxColumns(room);
     const carrying = this.#status === 'connected' ? this.#ownCarrying(room) : null;
     if (columns.length === 0 && carrying === null) return EMPTY_SANDBOX;
     return Object.freeze({ columns, carrying });
+  }
+
+  /**
+   * The room's validated columns, read so that a patch which left the
+   * sandbox alone allocates nothing and one that changed a column rebuilds
+   * only that column (D-086). A decoded column equal to one already read
+   * reuses that frozen column — exactly what `readSandboxColumn` would build
+   * from it — and anything else is read and validated in full.
+   */
+  #sandboxColumns(room: ColyseusRoom<unknown, LobbyState>): readonly SandboxColumn[] {
+    const sameRoom = room === this.#sandboxReadRoom;
+    const watched = this.#sandboxWatched(room);
+    if (sameRoom && watched && !this.#sandboxDirty && this.#sandboxSkips < SANDBOX_RESYNC_READS) {
+      this.#sandboxSkips += 1;
+      return this.#sandboxRead;
+    }
+    this.#sandboxSkips = 0;
+    if (watched) this.#sandboxDirty = false;
+    const read = readSandboxColumns(room, sameRoom ? this.#sandboxReadByKey : EMPTY_COLUMN_MAP, this.#sandboxScratch);
+    if (read === null && sameRoom) return this.#sandboxRead;
+    const columns = read ?? EMPTY_SANDBOX.columns;
+    const byKey = new Map<string, SandboxColumn>();
+    for (const column of columns) byKey.set(sandboxTileKey(column.x, column.y), column);
+    this.#sandboxReadRoom = room;
+    this.#sandboxRead = columns;
+    this.#sandboxReadByKey = byKey;
+    return columns;
+  }
+
+  /**
+   * Ask `room`'s decoder to report every patch's changes, and mark the
+   * sandbox dirty when one touches it (D-086). Uses the decoder's single raw
+   * change hook — `getRawChangesCallback` in `@colyseus/schema` — only if
+   * nothing else holds it, and `#sandboxWatched` checks every read that it
+   * still does; otherwise the client simply reads the sandbox every patch.
+   */
+  #watchSandbox(room: ColyseusRoom<unknown, LobbyState>): void {
+    this.#sandboxWatch = null;
+    this.#sandboxDirty = true;
+    try {
+      const serializer: unknown = Reflect.get(room, 'serializer');
+      if (serializer === null || typeof serializer !== 'object') return;
+      const decoder: unknown = Reflect.get(serializer, 'decoder');
+      if (decoder === null || typeof decoder !== 'object') return;
+      if (Reflect.get(decoder, 'triggerChanges') !== undefined) return;
+      const hook = (changes: unknown): void => {
+        if (!this.#sandboxDirty && touchesSandbox(changes, room)) this.#sandboxDirty = true;
+      };
+      Reflect.set(decoder, 'triggerChanges', hook);
+      this.#sandboxWatch = { room, serializer, decoder, hook };
+    } catch {
+      this.#sandboxWatch = null;
+    }
+  }
+
+  /** Whether `room`'s decoder is still reporting to this client's hook. */
+  #sandboxWatched(room: ColyseusRoom<unknown, LobbyState>): boolean {
+    const watch = this.#sandboxWatch;
+    if (watch === null || watch.room !== room) return false;
+    try {
+      // The SDK builds a new decoder on a handshake; the old one's hook says
+      // nothing about the new one's patches.
+      return (
+        Reflect.get(watch.serializer, 'decoder') === watch.decoder &&
+        Reflect.get(watch.decoder, 'triggerChanges') === watch.hook
+      );
+    } catch {
+      return false;
+    }
   }
 
   /** The colour on this client's own presence entry, validated, or null. */
@@ -1424,32 +1535,54 @@ function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
 
 /**
  * Every well-formed stack in the decoded room state, sorted by `(y, x)` and
- * frozen.
+ * frozen — or null when that would be exactly the columns of `previous`.
  *
  * Fails closed at every level: an unreadable container is an empty sandbox,
  * a malformed column is skipped whole (never partially trusted), and columns
  * beyond the room-wide block cap are not drawn.
+ *
+ * `previous` is the last result by tile key. A decoded column that matches
+ * its entry there field for field is that entry, unread: it is what
+ * `readSandboxColumn` would build from it. If every decoded column matched
+ * and every previous column was matched, nothing changed and the result is
+ * null — `scratch` is the only list it touched.
  */
 function readSandboxColumns(
   room: ColyseusRoom<unknown, LobbyState>,
-): readonly SandboxColumn[] {
-  const columns: SandboxColumn[] = [];
+  previous: ReadonlyMap<string, SandboxColumn>,
+  scratch: SandboxColumn[],
+): readonly SandboxColumn[] | null {
+  scratch.length = 0;
+  let reused = 0;
   try {
     const container: unknown = (room.state as { sandbox?: unknown } | undefined)?.sandbox;
-    if (container === null || typeof container !== 'object') return EMPTY_SANDBOX.columns;
+    if (container === null || typeof container !== 'object') return emptyUnless(previous);
     const forEach = (container as { forEach?: unknown }).forEach;
-    if (typeof forEach !== 'function') return EMPTY_SANDBOX.columns;
+    if (typeof forEach !== 'function') return emptyUnless(previous);
     Reflect.apply(forEach, container, [
       (value: unknown, key: unknown) => {
+        const known = typeof key === 'string' ? previous.get(key) : undefined;
+        if (known !== undefined && columnMatches(value, known)) {
+          scratch.push(known);
+          reused += 1;
+          return;
+        }
         const column = readSandboxColumn(value, key);
-        if (column !== null) columns.push(column);
+        if (column !== null) scratch.push(column);
       },
     ]);
   } catch {
-    return EMPTY_SANDBOX.columns;
+    scratch.length = 0;
+    return emptyUnless(previous);
   }
-  if (columns.length === 0) return EMPTY_SANDBOX.columns;
+  if (reused === scratch.length && reused === previous.size) {
+    scratch.length = 0;
+    return null;
+  }
+  if (scratch.length === 0) return EMPTY_SANDBOX.columns;
 
+  const columns = scratch.slice();
+  scratch.length = 0;
   columns.sort((a, b) => a.y - b.y || a.x - b.x);
   const kept: SandboxColumn[] = [];
   const seen = new Set<string>();
@@ -1463,6 +1596,50 @@ function readSandboxColumns(
     kept.push(column);
   }
   return Object.freeze(kept);
+}
+
+/**
+ * Whether one patch's decoded changes could have touched the sandbox. Errs
+ * towards yes: only a change to the peer map, a presence entry, a position or
+ * the ball is known not to. The sandbox's refs are its map, its columns (the
+ * only refs with `colours`) and their colour arrays (no `x`, no `gameId`).
+ */
+function touchesSandbox(changes: unknown, room: ColyseusRoom<unknown, LobbyState>): boolean {
+  try {
+    if (!Array.isArray(changes)) return true;
+    const state = room.state as { peers?: unknown; football?: unknown } | undefined;
+    for (const change of changes as unknown[]) {
+      const ref: unknown = change !== null && typeof change === 'object' ? (change as { ref?: unknown }).ref : undefined;
+      if (ref === null || typeof ref !== 'object') return true;
+      if (ref === state?.peers || ref === state?.football) continue;
+      if ('gameId' in ref) continue;
+      if ('x' in ref && !('colours' in ref)) continue;
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/** The empty sandbox, or null when the previous read was already empty. */
+function emptyUnless(previous: ReadonlyMap<string, SandboxColumn>): readonly SandboxColumn[] | null {
+  return previous.size === 0 ? null : EMPTY_SANDBOX.columns;
+}
+
+/** Whether a decoded column holds exactly `known`'s tile and colours. Reads only. */
+function columnMatches(value: unknown, known: SandboxColumn): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as { x?: unknown; y?: unknown; colours?: unknown };
+  if (record.x !== known.x || record.y !== known.y) return false;
+  const stack = record.colours;
+  if (stack === null || typeof stack !== 'object') return false;
+  const colours = known.colours;
+  if ((stack as { length?: unknown }).length !== colours.length) return false;
+  for (let index = 0; index < colours.length; index += 1) {
+    if ((stack as Record<number, unknown>)[index] !== colours[index]) return false;
+  }
+  return true;
 }
 
 /** One decoded stack, or null if any part of it is not exactly right. */
@@ -1563,6 +1740,7 @@ function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): b
 function sameSandbox(a: SandboxSnapshot, b: SandboxSnapshot): boolean {
   if (a === b) return true;
   if (a.carrying !== b.carrying || a.columns.length !== b.columns.length) return false;
+  if (a.columns === b.columns) return true;
   for (let index = 0; index < a.columns.length; index += 1) {
     const left = a.columns[index] as SandboxColumn;
     const right = b.columns[index] as SandboxColumn;

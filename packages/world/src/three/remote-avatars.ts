@@ -16,8 +16,12 @@ import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coor
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
 
-/** Time constant of the ease towards the latest snapshot position. */
-export const REMOTE_INTERPOLATION_TIME_CONSTANT_MS = 90;
+/**
+ * Time constant of the critically damped follow of the latest snapshot
+ * position (D-086). A walker is drawn twice this far behind the wire — 90 ms,
+ * the lag the earlier first-order ease had at 90 — but at an even speed.
+ */
+export const REMOTE_INTERPOLATION_TIME_CONSTANT_MS = 45;
 
 /**
  * A gap wider than this, in World pixels, is a teleport (a room exit, a
@@ -52,6 +56,9 @@ export const REMOTE_CARRY_CLEARANCE = 0.36;
 
 /** Below this gap, in World pixels, the ease is finished and lands exactly. */
 const SETTLE_DISTANCE_PX = 0.1;
+
+/** ...provided it is also this slow, in World px per ms (1 px/s). */
+const SETTLE_SPEED_PX_PER_MS = 0.001;
 
 /** A rise this tall is a block, and hops. Anything lower (a kerb) eases up. */
 const MIN_HOP_RISE = 0.5;
@@ -109,6 +116,9 @@ interface RemoteAvatar {
   /** Latest snapshot position, World px. */
   targetX: number;
   targetY: number;
+  /** Drawn velocity, World px per ms: the follow carries it between snapshots. */
+  vx: number;
+  vy: number;
   facing: Facing;
   yaw: number;
   /** Layer time of the last eased step; -Infinity while standing. */
@@ -489,6 +499,8 @@ function standingAvatar(
     y: peer.y,
     targetX: peer.x,
     targetY: peer.y,
+    vx: 0,
+    vy: 0,
     facing: peer.facing,
     yaw: facingToYaw(peer.facing),
     movedAt: Number.NEGATIVE_INFINITY,
@@ -522,6 +534,8 @@ function retarget(avatar: RemoteAvatar, peer: RemotePeerSnapshot, now: number): 
   }
   avatar.x = peer.x;
   avatar.y = peer.y;
+  avatar.vx = 0;
+  avatar.vy = 0;
   avatar.yaw = facingToYaw(peer.facing);
   avatar.movedAt = Number.NEGATIVE_INFINITY;
   return true;
@@ -538,16 +552,38 @@ function stepGround(avatar: RemoteAvatar, deltaMs: number, moving: boolean): voi
   const turn = Math.max(-maxTurn, Math.min(maxTurn, angleDelta(avatar.yaw, goal)));
   // Normalised so the yaw stays in (-PI, PI] however long a figure circles.
   avatar.yaw = angleDelta(0, avatar.yaw + turn);
-  if (Math.hypot(gapX, gapY) <= SETTLE_DISTANCE_PX) {
+  if (
+    Math.hypot(gapX, gapY) <= SETTLE_DISTANCE_PX &&
+    Math.hypot(avatar.vx, avatar.vy) <= SETTLE_SPEED_PX_PER_MS
+  ) {
     avatar.x = avatar.targetX;
     avatar.y = avatar.targetY;
+    avatar.vx = 0;
+    avatar.vy = 0;
   } else {
-    // Exponential approach: frame-rate independent, and it never overshoots
-    // a target that the next snapshot may already have moved on from.
-    const blend = 1 - Math.exp(-deltaMs / REMOTE_INTERPOLATION_TIME_CONSTANT_MS);
-    avatar.x += gapX * blend;
-    avatar.y += gapY * blend;
+    followAxis(avatar, 'x', avatar.targetX, deltaMs);
+    followAxis(avatar, 'y', avatar.targetY, deltaMs);
   }
+}
+
+/**
+ * One frame of a critically damped follow of `target` along one axis, in its
+ * exact closed form, so the result is the same however the time is split
+ * into frames. Snapshots arrive as a staircase — a step every 50 ms patch,
+ * and a missing step when a move is lost — and a second-order follow carries
+ * its velocity across each stair, where a first-order ease slowed down and
+ * sped up again within every patch. From rest it never overshoots a target
+ * that holds still.
+ */
+function followAxis(avatar: RemoteAvatar, axis: 'x' | 'y', target: number, deltaMs: number): void {
+  const omega = 1 / REMOTE_INTERPOLATION_TIME_CONSTANT_MS;
+  const velocityKey = axis === 'x' ? 'vx' : 'vy';
+  const error = avatar[axis] - target;
+  const velocity = avatar[velocityKey];
+  const decay = Math.exp(-omega * deltaMs);
+  const drift = velocity + omega * error;
+  avatar[axis] = target + (error + drift * deltaMs) * decay;
+  avatar[velocityKey] = (velocity - omega * drift * deltaMs) * decay;
 }
 
 /** Stand at `height` at once: first appearance, teleports. */

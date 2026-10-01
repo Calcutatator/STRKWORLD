@@ -260,6 +260,123 @@ describe('sandbox()', () => {
   });
 });
 
+describe('sandbox() reads only what changed (D-086)', () => {
+  it('reuses every column a patch did not touch, and rebuilds the one it did', async () => {
+    const joined = fakeRoom();
+    const sandbox = joined.state.sandbox as Map<string, unknown>;
+    const growing = [2];
+    sandbox.set(`${S(60)},1`, column(S(60), 1, [1]));
+    sandbox.set(`${S(61)},1`, column(S(61), 1, growing));
+    sandbox.set(`${S(62)},1`, column(S(62), 1, [3]));
+    const client = await connectedTo(joined);
+    const before = client.sandbox();
+
+    growing.push(4);
+    const after = client.sandbox();
+    expect(after).not.toBe(before);
+    expect(after.columns[0]).toBe(before.columns[0]);
+    expect(after.columns[2]).toBe(before.columns[2]);
+    expect(after.columns[1]).not.toBe(before.columns[1]);
+    expect(after.columns[1]).toEqual({ x: S(61), y: 1, colours: [2, 4] });
+    expect(Object.isFrozen(after.columns[1]?.colours)).toBe(true);
+    // A column that goes away goes, and the rest are still reused.
+    sandbox.delete(`${S(62)},1`);
+    const shrunk = client.sandbox();
+    expect(shrunk.columns).toHaveLength(2);
+    expect(shrunk.columns[0]).toBe(before.columns[0]);
+  });
+
+  it('still refuses a column changed in place to something invalid', async () => {
+    const joined = fakeRoom();
+    const sandbox = joined.state.sandbox as Map<string, unknown>;
+    const colours: unknown[] = [1, 2];
+    sandbox.set(`${S(60)},1`, column(S(60), 1, colours));
+    sandbox.set(`${S(61)},1`, column(S(61), 1, [3]));
+    const client = await connectedTo(joined);
+    expect(client.sandbox().columns).toHaveLength(2);
+
+    colours[1] = 99;
+    expect(client.sandbox().columns).toEqual([{ x: S(61), y: 1, colours: [3] }]);
+    colours[1] = 2;
+    expect(client.sandbox().columns).toHaveLength(2);
+  });
+
+  it('skips the read on a patch the decoder says only moved players, and falls back if its hook is taken', async () => {
+    const joined = fakeRoom();
+    const decoder: { triggerChanges?: (changes: unknown) => void } = {};
+    Object.assign(joined.room, { serializer: { decoder } });
+    const sandbox = joined.state.sandbox as Map<string, unknown>;
+    const colours = [1];
+    sandbox.set(`${S(60)},1`, column(S(60), 1, colours));
+    const client = await connectedTo(joined);
+    expect(typeof decoder.triggerChanges).toBe('function');
+    const first = client.sandbox();
+    expect(first.columns).toEqual([{ x: S(60), y: 1, colours: [1] }]);
+
+    // A patch that only moved a player: the decoded sandbox is not read.
+    colours.push(2);
+    decoder.triggerChanges?.([{ ref: joined.state.peers }, { ref: { x: 1, y: 2 } }, { ref: { gameId: PEER } }]);
+    expect(client.sandbox()).toBe(first);
+
+    // A patch that touched a column's colours: read, and the change shows.
+    decoder.triggerChanges?.([{ ref: colours }]);
+    expect(client.sandbox().columns).toEqual([{ x: S(60), y: 1, colours: [1, 2] }]);
+
+    // Anything unrecognised counts as a sandbox change.
+    colours.push(3);
+    decoder.triggerChanges?.([{ ref: null }]);
+    expect(client.sandbox().columns[0]?.colours).toEqual([1, 2, 3]);
+
+    // Someone else takes the hook: the client stops trusting it and reads.
+    decoder.triggerChanges = () => undefined;
+    colours.push(4);
+    expect(client.sandbox().columns[0]?.colours).toEqual([1, 2, 3, 4]);
+  });
+
+  it('still reads in full now and then, and stops trusting a decoder the SDK replaced', async () => {
+    const joined = fakeRoom();
+    const decoder: { triggerChanges?: (changes: unknown) => void } = {};
+    const serializer: { decoder: object } = { decoder };
+    Object.assign(joined.room, { serializer });
+    const sandbox = joined.state.sandbox as Map<string, unknown>;
+    const colours = [1];
+    sandbox.set(`${S(60)},1`, column(S(60), 1, colours));
+    const client = await connectedTo(joined);
+    client.sandbox();
+
+    // A change the hook never heard of (a decode that failed part-way)...
+    colours.push(2);
+    let reads = 0;
+    while (client.sandbox().columns[0]?.colours.length === 1 && reads < 1000) reads += 1;
+    // ...shows within a bounded number of reads.
+    expect(reads).toBeLessThanOrEqual(100);
+    expect(client.sandbox().columns[0]?.colours).toEqual([1, 2]);
+
+    // A new decoder (a fresh handshake) carries no hook of ours: read.
+    serializer.decoder = {};
+    colours.push(3);
+    expect(client.sandbox().columns[0]?.colours).toEqual([1, 2, 3]);
+  });
+
+  it('never carries one room\'s columns into the next', async () => {
+    const first = fakeRoom();
+    (first.state.sandbox as Map<string, unknown>).set(`${S(60)},1`, column(S(60), 1, [1]));
+    const client = await connectedTo(first);
+    expect(client.sandbox().columns).toHaveLength(1);
+    await client.disconnect();
+
+    const second = fakeRoom();
+    vi.spyOn(ColyseusClient.prototype, 'joinOrCreate').mockResolvedValueOnce(second.room as never);
+    const connecting = client.connect();
+    for (let tick = 0; tick < 20 && !second.handles(SERVER_MESSAGE.welcome); tick += 1) {
+      await Promise.resolve();
+    }
+    second.message(SERVER_MESSAGE.welcome, { gameId: OWN });
+    await connecting;
+    expect(client.sandbox().columns).toEqual([]);
+  });
+});
+
 describe('onSandbox', () => {
   it('replays at once, then delivers only real changes', async () => {
     const joined = fakeRoom();

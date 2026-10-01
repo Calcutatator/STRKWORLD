@@ -259,6 +259,49 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Multiplayer lag was dropped moves, frozen peers and an O(n³) view sync, not bandwidth (D-086)
+
+The lead's "lag when locked into multiplayer" reproduces locally with
+`npx tsx packages/lobby/tools/load-test.ts`: real `LobbyClient` bots against
+a forked, instrumented lobby, 20 ms of uplink jitter. Before D-086, a third
+of all moves were dropped by the strict 50 ms floor (the client sends at
+exactly that rate, so jitter delivers some 40 ms apart), and observers saw
+peers update every 100 ms instead of 50 more than half the time. Bandwidth
+was never the problem: 0.5–2.4 KB/s per client at 10–100 bots, patches of
+26–221 B. How verified: the load test before and after, the
+`interest-sync-room.test.ts` churn test against the old and new `room.ts`
+(905 decode failures, then none), and a CPU profile of the lobby at 100 bots.
+Traps met on the way:
+
+- **A StateView must change at most once per patch.** Recomputing views per
+  move let one entry leave and re-enter a view between two encodes.
+  `@colyseus/schema@4.0.30` encodes that so the SDK cannot apply it: it logs
+  `"refId" not found` and "Please report this issue", skips that structure,
+  and the peer freezes on that client until it leaves the view. It does not
+  throw, so nothing fails loudly; count the console line. Twelve clients
+  teleporting in a 700 px square produce hundreds in two seconds.
+- **The per-move recompute was O(sessions³) a second.** One room of 100 used
+  98.5% of a core and its patch rate fell to 11 a second. `onBeforePatch` is
+  the place for per-patch work: Colyseus calls it before the clock tick and
+  the encode, on the patch interval.
+- **A test client that sends faster than `maxMessagesPerSecond` (40) is
+  silently disconnected**, and its decoded state just stops updating. A test
+  that "sees stale positions" may simply have been kicked; assert the room
+  still holds every client.
+- **Colyseus already overflows a full room.** With `maxClients` reached, the
+  room locks and `joinOrCreate` makes a new `street` room: 100 bots at
+  capacity 48 made three rooms and refused nobody.
+- **A full sandbox made every patch cost the client 0.58 ms**, re-reading
+  ~850 blocks through `ArraySchema`'s proxy whether or not they changed. The
+  decoder's raw change hook (`getRawChangesCallback`) says which patches
+  touched it; it is a single slot, so check it is still yours before
+  trusting it.
+- **The World's draw cost is per figure, not per peer update**: 7 meshes,
+  all casting shadows, so 14 submissions each and 336 for the 24 an observer
+  can see (`packages/world/tools/remote-crowd-bench.ts`). The layer's own
+  per-frame CPU is about 0.1 ms at 100 figures. Real GPU cost needs a
+  browser.
+
 ### 2026-10-01 — avnu's public swap API is keyless, its exchange takes a keyless caller, a shadow account can return only what it gained, and Pragma checks the quote (D-084)
 
 `GET https://starknet.api.avnu.fi/swap/v3/quotes` and `POST /swap/v3/build`

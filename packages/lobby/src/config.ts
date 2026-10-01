@@ -24,14 +24,25 @@ export const DEFAULT_LOBBY_PORT = 2567;
 export const DEFAULT_ROOM_NAME = 'street';
 
 /**
- * Server-side floor between two accepted moves from the same session, in ms.
+ * Server-side floor between accepted moves from the same session, in ms, on
+ * average: the floor is a bucket `MOVE_BURST` deep (D-086).
  *
  * 50ms is 20 updates/second, which matches the default patch rate: sending
  * faster cannot make anything appear sooner, it only costs bandwidth. Anything
- * arriving early is dropped, never queued — a dropped move is superseded by
+ * beyond the bucket is dropped, never queued — a dropped move is superseded by
  * the next one, so queueing would only add latency.
  */
 export const MIN_UPDATE_INTERVAL_MS = 50;
+
+/**
+ * How many accepted moves may arrive closer together than
+ * `MIN_UPDATE_INTERVAL_MS` after a gap (D-086). The move floor is a token
+ * bucket of this depth, not a strict gap: the long-run rate is still one move
+ * per interval, but a move that arrives early only because the one before it
+ * was late is kept. 3 absorbs up to 100 ms of uplink jitter. The patch
+ * encodes only the latest position, so a burst costs no bandwidth.
+ */
+export const MOVE_BURST = 3;
 
 /**
  * Hard per-connection message ceiling handed to Colyseus itself.
