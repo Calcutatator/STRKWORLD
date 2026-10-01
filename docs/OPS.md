@@ -295,9 +295,12 @@ third party see nothing of ours, but it is our bill and our rate limit.
 
 ### AVNU paymaster key (`AVNU_PAYMASTER_API_KEY`)
 
-**Required for every relayed route, and it cannot ship to a browser** (D-013,
-D-014, D-070). Without it the relay answers unshield, transfer, stake and swap
-`503 RELAY_NOT_CONFIGURED` and says so once at startup; shield is unaffected.
+**Used by no player flow since D-084, and it can never ship to a browser**
+(D-013, D-014). The wallet submits shield, unshield, transfer, stake, the
+Vault and the swap itself (D-082, D-084), and the swap's quote comes from
+avnu's keyless public API. Only the backend's own relay endpoints, which no
+browser flow calls, need it: without one they answer unshield, transfer and
+stake `503 RELAY_NOT_CONFIGURED` and say so once at startup (D-070).
 The relay's `sponsored_private` transactions repay avnu from inside each
 transaction, so they do not spend Portal credits. The key can spend the Portal
 account's credits only on gasfree (`sponsored`) transactions, which STRKWORLD

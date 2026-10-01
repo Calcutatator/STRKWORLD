@@ -19,6 +19,17 @@ describe('privacy-safe Fetch edge', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('passes the runtime\'s salted client key, and nothing malformed, for per-client limits (D-084)', async () => {
+    const api = { handle: vi.fn(async (_request: { client?: string }) => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const post = (client: string) => handler(new Request('https://private.example/v1/swap/quote', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-strkworld-client': client }, body: '{}',
+    }));
+    await post('c'.repeat(32));
+    await post('198.51.100.1');
+    expect(api.handle.mock.calls.map(([request]) => request.client)).toEqual(['c'.repeat(32), undefined]);
+  });
+
   it('rejects non-JSON, query parameters and oversized bodies before the core', async () => {
     const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
     const handler = createBackendFetchHandler(api, { maxRequestBytes: 8 });

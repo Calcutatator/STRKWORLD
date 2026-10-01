@@ -10,6 +10,8 @@ import type { AccountInterface } from 'starknet';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProductionWalletSession, type Intent } from '../index.js';
+import { AVNU_EXCHANGE } from '../swap.js';
+import { avnuAnswer } from '../testing/swap-quotes.js';
 import { shadowAccountAddress } from '../vault.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
@@ -17,9 +19,7 @@ const ACCOUNT = '0x123';
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const TOKEN = '0x456';
 const RECIPIENT = '0x789';
-const RELAY_RECIPIENT = '0xabc';
 const POOL_FEE = 2n;
-const RELAY_FEE = 1n;
 
 describe('Wallet Standard forward compatibility', () => {
   afterEach(() => {
@@ -100,7 +100,7 @@ describe('Wallet Standard forward compatibility', () => {
           receipt: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         },
         // D-082: the wallet proves and submits the pool spends itself, with
-        // no relay-fee leg; only the quote-bound swap still reaches the relay.
+        // no relay-fee leg. The swap needs a 0.10.4 wallet (D-084), below.
         {
           name: 'unshield',
           intent: { kind: 'unshield', token: TOKEN, amount: 10n, recipient: RECIPIENT },
@@ -115,19 +115,12 @@ describe('Wallet Standard forward compatibility', () => {
           actionTypes: ['transfer'],
           receipt: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         },
-        {
-          name: 'swap',
-          intent: { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-          walletMethod: 'wallet_strk20PrepareInvoke',
-          actionTypes: ['withdraw', 'withdraw', 'transfer', 'invoke'],
-          receipt: '0x104',
-        },
       ];
 
       for (const operation of cases) {
         const before = walletRequests.length;
         const batch = await session.operations.prepare([operation.intent]);
-        await expect(batch.confirm({ feeCeiling: POOL_FEE + RELAY_FEE }))
+        await expect(batch.confirm({ feeCeiling: POOL_FEE }))
           .resolves.toEqual({ transactionHash: operation.receipt });
         const handoff = walletRequests.slice(before);
         expect(handoff.map(({ type }) => type), operation.name).toEqual([operation.walletMethod]);
@@ -141,25 +134,152 @@ describe('Wallet Standard forward compatibility', () => {
         'wallet_strk20InvokeTransaction',
         'wallet_strk20InvokeTransaction',
         'wallet_strk20InvokeTransaction',
-        'wallet_strk20PrepareInvoke',
       ]);
       expect(backendRequests.map(({ path }) => path)).toEqual(expect.arrayContaining([
         '/api/v1/rpc/pool-config',
         '/api/v1/rpc/public-key',
-        '/api/v1/private/swaps/prepare',
-        '/api/v1/private/submissions',
       ]));
-      // No fee quote is asked for any route (D-082): the swap's comes with its plan.
+      // Nothing is relayed (D-082, D-084): no fee quote, no relay submission.
       expect(backendRequests.map(({ path }) => path)).not.toContain('/api/v1/private/fees');
-      expect(backendRequests
-        .filter(({ path }) => path === '/api/v1/private/submissions')
-        .map(({ body }) => body['route']))
-        .toEqual(['swap']);
+      expect(backendRequests.map(({ path }) => path)).not.toContain('/api/v1/private/submissions');
 
       const source = productionPrivacySources();
       const sourceText = source.map(({ text }) => text).join('\n');
       expect(sourceText).not.toContain(['get', 'starknet', 'wallets'].join('-'));
       expect(walletIdentityReads(source)).toEqual([]);
+    } finally {
+      unregister();
+      session.destroy();
+    }
+  });
+
+  // D-084: the swap through the same exact request seam, on Wallet API
+  // 0.10.4: its own commitment, the backend's keyless quote for the stand-in,
+  // then one wallet-submitted shadow-account interaction. Real
+  // `WalletAccountV6` converts each call, so this is the literal request.
+  it('drives a swap through a 0.10.4 wallet: its own commitment, a keyless quote, one wallet-submitted batch', async () => {
+    const PARTIAL = '0x5ab1e';
+    const SHADOW = shadowAccountAddress(PARTIAL);
+    const backendRequests: BackendRequest[] = [];
+    const oracleReads: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+      if (input.startsWith('https://rpc.invalid')) {
+        // D-084: the oracle read goes to the wallet's own RPC, never /api.
+        const batch = JSON.parse(String(init?.body)) as Array<{ id: number }>;
+        oracleReads.push(batch);
+        const now = Math.floor(Date.now() / 1000);
+        const answer = batch.map(({ id }) => ({ jsonrpc: '2.0', id, result: ['0x41c3f0', '0x8', `0x${now.toString(16)}`, '0xb', '0x0', '0x0'] }));
+        return { ok: true, status: 200, text: async () => JSON.stringify(answer) } as Response;
+      }
+      const path = new URL(input, 'https://strkworld.invalid').pathname;
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      backendRequests.push({ path, body });
+      const value = path === '/api/v1/rpc/pool-config'
+        ? { feeAmount: POOL_FEE.toString(), feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }
+        : path === '/api/v1/rpc/shadow-account'
+          ? { address: SHADOW, deployed: false }
+          : path === '/api/v1/swap/quote'
+            ? (() => {
+                const answer = avnuAnswer({
+                  sellToken: String(body['sellToken']),
+                  buyToken: String(body['buyToken']),
+                  sellAmount: BigInt(String(body['sellAmount'])),
+                  taker: String(body['taker']),
+                  slippageBps: Number(body['slippageBps']),
+                }, 9_500n);
+                return { ...answer, sellAmount: answer.sellAmount.toString(), buyAmount: answer.buyAmount.toString() };
+              })()
+            : (() => { throw new Error(`Unexpected backend request: ${path}`); })();
+      return { ok: true, status: 200, json: async () => value } as Response;
+    }));
+    const account = { address: ACCOUNT } as AccountInterface;
+    const mock = new MockWallet(
+      { mainnet: [account], sepolia: [account] },
+      { id: 'hosted-frame', name: 'Hosted frame signer', available: true },
+    );
+    mock.switchChain(BigInt(MAINNET_CHAIN_ID));
+    const { wallet, requests: walletRequests } = completeWalletApi(mock, {
+      versions: ['0.10.4'],
+      extra: {
+        wallet_strk20ShadowAccountCommitment: async () => PARTIAL,
+        wallet_strk20InvokeTransaction: async () => ({ transaction_hash: '0x5a9' }),
+      },
+    });
+    const session = createProductionWalletSession({
+      rpcUrl: 'https://rpc.invalid',
+      backendBaseUrl: '/api',
+      policy: {
+        maxIntents: 1,
+        maxRelayFee: 0n,
+        enabledRoutes: ['swap'],
+        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [STRK, TOKEN] },
+        swap: { expectedChainId: MAINNET_CHAIN_ID, slippageBps: 100 },
+      },
+    });
+    const unregister = announceWallet(wallet);
+
+    try {
+      const [choice] = session.getSnapshot().wallets;
+      await session.connect(choice!.key);
+      const batch = await session.operations.prepare([
+        { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+      ]);
+      expect(batch.swapReview).toMatchObject({ expectedAmountOut: 9_500n, minimumAmountOut: 9_405n, slippageBps: 100 });
+      expect(batch.gasEstimate).toBe(0n);
+      // TOKEN has no oracle price (D-084): unchecked, so confirming needs the acknowledgement.
+      expect(batch.swapReview?.priceCheck.status).toBe('unchecked');
+      await expect(batch.confirm({ feeCeiling: POOL_FEE, acknowledgeUncheckedPrice: true }))
+        .resolves.toEqual({ transactionHash: '0x5a9' });
+
+      expect(walletRequests.map(({ type }) => type)).toEqual([
+        'wallet_requestChainId',
+        'wallet_supportedWalletApi',
+        'wallet_strk20ShadowAccountCommitment',
+        'wallet_strk20InvokeTransaction',
+      ]);
+      expect(walletRequests[2]!.params).toEqual({ dapp_name: 'strkworld-swap' });
+      const hex = (value: string) => `0x${BigInt(value).toString(16)}`;
+      const shadow = hex(SHADOW);
+      const token = hex(TOKEN);
+      const strk = hex(STRK);
+      const exchange = hex(AVNU_EXCHANGE);
+      expect(walletRequests[3]!.params).toEqual({
+        actions: [
+          { type: 'withdraw', token, amount: '0x14', recipient: shadow },
+          { type: 'transfer', token: strk, amount: 'OPEN', recipient: ACCOUNT },
+          {
+            type: 'shadow_account_invoke',
+            dapp_name: 'strkworld-swap',
+            nonce: '0x0',
+            calls: [
+              { contract_address: token, entry_point: 'approve', calldata: [exchange, '0x14', '0x0'] },
+              {
+                contract_address: exchange,
+                entry_point: 'multi_route_swap',
+                calldata: [
+                  token, '0x14', '0x0', strk, '0x251c', '0x0', '0x24bd', '0x0', shadow, '0x0', '0x0',
+                  '0x1', token, strk, '0x20d2431ba27021073cae53dab6d818b9e15f79e13639fd4f040f5b41a617fb6',
+                  '0xe8d4a51000', '0x1', '0x1',
+                ],
+              },
+            ],
+            collect_policy: { type: 'diff' },
+          },
+        ],
+      });
+      // The stand-in and the quote come through the backend, and nothing is relayed.
+      expect(backendRequests.map(({ path }) => path)).toEqual([
+        '/api/v1/rpc/pool-config',
+        '/api/v1/rpc/shadow-account',
+        '/api/v1/swap/quote',
+        '/api/v1/rpc/pool-config',
+      ]);
+      // One fixed batch of every pinned Pragma pair, naming none of the swap's.
+      expect(oracleReads).toHaveLength(1);
+      expect((oracleReads[0] as unknown[]).length).toBe(8);
+      expect(backendRequests[2]!.body).toEqual({
+        v: 1, sellToken: TOKEN, buyToken: STRK, sellAmount: '20', taker: shadow, slippageBps: 100,
+      });
     } finally {
       unregister();
       session.destroy();
@@ -464,42 +584,6 @@ function backendFetcher(requests: BackendRequest[]) {
         break;
       case '/api/v1/rpc/public-key':
         value = { publicKey: '0x1' };
-        break;
-      case '/api/v1/private/fees':
-        value = {
-          token: STRK,
-          recipient: RELAY_RECIPIENT,
-          amount: RELAY_FEE.toString(),
-          authorization: `fee-${String(body['route'])}`,
-          expiresAtBlock: 1_000,
-        };
-        break;
-      case '/api/v1/private/swaps/prepare':
-        value = {
-          quoteId: 'quote-forward-compatible',
-          buyAmount: '95',
-          expiresAt: Date.now() + 60_000,
-          chainId: MAINNET_CHAIN_ID,
-          executorAddress: '0xdef',
-          executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0x1'] }],
-          fee: {
-            token: STRK,
-            recipient: RELAY_RECIPIENT,
-            amount: RELAY_FEE.toString(),
-            authorization: 'fee-swap',
-            expiresAtBlock: 1_000,
-          },
-        };
-        break;
-      case '/api/v1/private/submissions':
-        value = {
-          transactionHash: {
-            shield: '0x101',
-            unshield: '0x102',
-            transfer: '0x103',
-            swap: '0x104',
-          }[String(body['route'])],
-        };
         break;
       default:
         throw new Error(`Unexpected backend request: ${path}`);

@@ -39,6 +39,7 @@ export type {
   PreparedEndurBatch,
   PreparedVaultBatch,
   PrivacyOperations,
+  SwapPriceCheck,
   SwapReview,
   VaultAction,
   VaultCallOptions,
@@ -115,6 +116,18 @@ export {
   type BorrowTokenInfo,
 } from './borrow.js';
 
+// The private swap on a shadow account (D-084): the pinned exchange, entry
+// point and dapp name, and the quote lifetime.
+export {
+  AVNU_EXCHANGE,
+  AVNU_SWAP_ENTRYPOINT,
+  SWAP_DAPP_NAME,
+  SWAP_QUOTE_TTL_MS,
+  SWAP_SHADOW_NONCE,
+} from './swap.js';
+// D-084: the swap's independent price check against Pragma's oracle.
+export { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_MAX_SLIPPAGE_BPS, SWAP_PRICE_BOUND_BPS, USD_DECIMALS, type PriceFeed } from './swap-prices.js';
+
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {
   DEMO_BORROW_PRICES,
@@ -124,6 +137,7 @@ export {
   FakePrivacyOperations,
   type FakeConfig,
   type FakeDemoSwapRates,
+  type FakeSwapReview,
   type Fault,
 } from './testing/fake.js';
 export { FakePublicShieldPlanner, type FakePublicShieldPlannerConfig } from './testing/public-shield.js';
@@ -151,11 +165,12 @@ export {
   type PublicShieldPlanInput,
   type PublicShieldPlanner,
   type PrivateSubmissionGateway,
-  type PreparedPrivateSwap,
   type RelayFeeQuote,
   type SupportedVersionsReader,
   type EndurReadClient,
   type EndurUnstakeRead,
+  type SwapQuoteAnswer,
+  type SwapQuoteClient,
   type VaultPositionRow,
   type VaultRateRow,
   type VaultReadClient,

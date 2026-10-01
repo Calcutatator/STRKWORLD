@@ -248,7 +248,7 @@ describe('Fly composition process boundary', () => {
   it('prints the relay\'s one startup line from its readiness message, and nothing else a child sends (D-070)', async () => {
     const child = await fakeChild();
     const staticRoot = await fakeStaticRoot();
-    const notice = relayStartupNotice(['transfer', 'unshield', 'swap'])!;
+    const notice = relayStartupNotice(['transfer', 'unshield', 'stake'])!;
     // The same fixture runs as both children, so the lobby sends the same
     // message: only the backend's may reach the log, and only once.
     for (const [sent, expected] of [

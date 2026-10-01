@@ -1,5 +1,4 @@
-import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
-import { num, transaction, type STRK20_ACTION } from 'starknet';
+import type { STRK20_ACTION } from 'starknet';
 import type {
   BatchWarning,
   BorrowMarket,
@@ -29,10 +28,10 @@ import {
   type RecipientStatus,
   type TxResult,
 } from '../types.js';
-import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
 import { mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
+import { ShadowSwap } from './swap-operations.js';
 import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
 import { ShadowBorrow } from './borrow-operations.js';
 import { EndurUnstake } from './endur-operations.js';
@@ -42,11 +41,9 @@ import type {
   EndurReadClient,
   PoolNativeRoute,
   PoolReadClient,
-  PrivateRoute,
-  PrivateSubmissionGateway,
-  PreparedPrivateSwap,
-  RelayFeeQuote,
   SupportedVersionsReader,
+  SwapPriceReader,
+  SwapQuoteClient,
   VaultReadClient,
   WalletRoutePolicy,
   WalletStrk20Account,
@@ -59,20 +56,32 @@ const U128_MASK = (1n << 128n) - 1n;
 
 /**
  * Pool spends the wallet proves and submits itself (D-082), like shield and
- * the Vault: no relay, no avnu key, no relay fee. Only the quote-bound swap
- * is still relayed.
+ * the Vault: no relay, no avnu key, no relay fee. The swap is wallet-submitted
+ * too, through its own shadow account (D-084, `swap-operations.ts`).
  */
-type WalletSubmittedRoute = Exclude<PrivateRoute, 'swap'>;
+type WalletSubmittedRoute = PoolNativeRoute | 'stake';
 type StakeIntent = Extract<Intent, { kind: 'stake' }>;
 
 export interface WalletApiPrivacyOperationsOptions {
   wallet: WalletStrk20Account;
   pool: PoolReadClient;
-  submission: PrivateSubmissionGateway;
+  /**
+   * avnu's keyless swap quotes, through the backend (D-084). Absent, every
+   * swap fails closed.
+   */
+  swapQuotes?: SwapQuoteClient;
+  /**
+   * The swap's independent price reference, Pragma over the wallet's own RPC
+   * (D-084). Absent, every swap fails closed.
+   */
+  swapPrices?: SwapPriceReader;
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
   now?: () => number;
-  /** The Vault's backend reads (D-077, D-079). Absent, every Vault call fails closed. */
+  /**
+   * The Vault's backend reads (D-077, D-079). Absent, every Vault call fails
+   * closed, and so does a swap, which resolves its stand-in the same way (D-084).
+   */
   vault?: VaultReadClient;
   /** The Borrow counter's backend reads (D-083). Absent, every borrow call fails closed. */
   borrow?: BorrowReadClient;
@@ -87,7 +96,6 @@ export interface WalletApiPrivacyOperationsOptions {
 export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly wallet: WalletStrk20Account;
   private readonly pool: PoolReadClient;
-  private readonly submission: PrivateSubmissionGateway;
   private readonly supportedVersions: SupportedVersionsReader;
   private readonly policy: WalletRoutePolicy;
   private readonly now: () => number;
@@ -95,13 +103,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly vault: ShadowVault;
   private readonly borrow: ShadowBorrow;
   private readonly endur: EndurUnstake;
+  private readonly swap: ShadowSwap;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
     assertAddress(options.wallet.address, 'wallet account');
     this.walletAddress = options.wallet.address;
     this.pool = options.pool;
-    this.submission = options.submission;
     this.supportedVersions = options.supportedVersions;
     this.policy = ownPolicy(options.policy);
     this.now = options.now ?? Date.now;
@@ -141,6 +149,17 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       poolConfig: (signal) => this.poolConfig(signal),
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+    });
+    this.swap = new ShadowSwap({
+      wallet: this.wallet,
+      walletAddress: this.walletAddress,
+      ...(options.vault ? { reads: options.vault } : {}),
+      ...(options.swapQuotes ? { quotes: options.swapQuotes } : {}),
+      ...(options.swapPrices ? { prices: options.swapPrices } : {}),
+      policy: this.policy,
+      supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+      poolConfig: (signal) => this.poolConfig(signal),
+      now: () => this.readNow(),
     });
   }
 
@@ -374,7 +393,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
         throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
       }
-      return this.prepareSwap(reviewed[0], config, warnings, signal);
+      return this.swap.prepare(reviewed[0], config, warnings, signal);
     }
     if (kinds.has('stake')) {
       const intent = reviewed[0];
@@ -387,151 +406,6 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
     const route = reviewed[0]!.kind as PoolNativeRoute;
     return this.prepareWalletSubmitted(reviewed, route, config, warnings, () => toActions(reviewed));
-  }
-
-  private async prepareSwap(
-    intent: Extract<Intent, { kind: 'swap' }>,
-    config: PoolConfig,
-    warnings: readonly BatchWarning[],
-    signal?: AbortSignal,
-  ): Promise<PreparedBatch> {
-    const swapPolicy = this.policy.swap;
-    const prepareSwap = this.submission.prepareSwap?.bind(this.submission);
-    if (!swapPolicy || !prepareSwap) {
-      throw new PrivacyError('unknown', 'The private swap gateway is not configured.');
-    }
-    if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0) {
-      throw new PrivacyError('unknown', 'The private swap slippage policy is invalid.');
-    }
-    const rawPlan = await prepareSwap({
-      sellToken: intent.tokenIn,
-      buyToken: intent.tokenOut,
-      sellAmount: intent.amountIn,
-      minAmountOut: intent.minAmountOut,
-      slippageBps: swapPolicy.slippageBps,
-      signal,
-    });
-    throwIfAborted(signal);
-    const plan = ownSwapPlan(
-      rawPlan,
-      intent,
-      config,
-      swapPolicy.expectedChainId,
-      this.policy.maxRelayFee,
-      this.readNow(),
-    );
-    const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
-    if (protectedMinimum < intent.minAmountOut) {
-      throw new PrivacyError(
-        'unknown',
-        'The requested swap floor exceeds AVNU’s protected minimum.',
-      );
-    }
-    // Frozen because this object is both published on the batch and the sole
-    // authority `assertPreparedSwapActions` recomputes the expected action set
-    // from. A writable published copy would let a caller move the guard's
-    // comparands and the action together, so the guard would confirm the
-    // corruption instead of catching it.
-    const canonicalIntent: Extract<Intent, { kind: 'swap' }> = Object.freeze({
-      ...intent,
-      minAmountOut: protectedMinimum,
-    });
-
-    const owner = this;
-    let discarded = false;
-    let confirmationAttempted = false;
-    return {
-      intents: Object.freeze([canonicalIntent]),
-      poolFee: config.feeAmount,
-      gasEstimate: plan.fee.amount,
-      totalCost: checkedFeeTotal(config.feeAmount, plan.fee.amount),
-      warnings,
-      promptCount: 1,
-      swapReview: Object.freeze({
-        expectedAmountOut: plan.buyAmount,
-        minimumAmountOut: canonicalIntent.minAmountOut,
-        slippageBps: swapPolicy.slippageBps,
-        expiresAt: plan.expiresAt,
-      }),
-      async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
-        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
-        assertFeeCeilingInput(feeCeiling);
-        assertFirstConfirmation(confirmationAttempted);
-        confirmationAttempted = true;
-        throwIfAborted(confirmSignal);
-        let acceptedResult: TxResult | undefined;
-        try {
-          const current = ownPoolConfig(await owner.pool.config(confirmSignal));
-          throwIfAborted(confirmSignal);
-          validateOwnedSwapPlan(
-            plan,
-            canonicalIntent,
-            current,
-            swapPolicy.expectedChainId,
-            owner.policy.maxRelayFee,
-            owner.readNow(),
-          );
-          assertFeeCeiling(checkedFeeTotal(current.feeAmount, plan.fee.amount), feeCeiling);
-          assertNotDiscarded(discarded);
-          // Snapshot the freshly validated calls, then hand the SDK its own
-          // separate copy. Sharing one array would let an input-mutating SDK
-          // corrupt the action *and* the authority the guard recomputes from,
-          // making the comparison tautological.
-          const reviewedCalls = snapshotExecutorCalls(plan.executorCalls);
-          const avnuPlan: PrivateSwapPlan = {
-            sellTokenAddress: canonicalIntent.tokenIn,
-            sellAmount: canonicalIntent.amountIn,
-            buyTokenAddress: canonicalIntent.tokenOut,
-            executorAddress: plan.executorAddress,
-            executorCalls: copyExecutorCalls(plan.executorCalls),
-            fee: {
-              token: plan.fee.token,
-              recipient: plan.fee.recipient,
-              amount: plan.fee.amount,
-            },
-            takerAddress: owner.walletAddress,
-          };
-          const actions = buildStrk20Actions(avnuPlan);
-          assertPreparedSwapActions(actions, {
-            sellToken: canonicalIntent.tokenIn,
-            sellAmount: canonicalIntent.amountIn,
-            buyToken: canonicalIntent.tokenOut,
-            taker: owner.walletAddress,
-            executor: plan.executorAddress,
-            executorCalls: reviewedCalls,
-            fee: plan.fee,
-          });
-          emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the private swap in your wallet' });
-          emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
-          const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
-          throwIfAborted(confirmSignal);
-          if (plan.expiresAt <= owner.readNow()) {
-            throw new PrivacyError('unknown', 'The private swap quote has expired.');
-          }
-          emitProgress(onProgress, { stage: 'submitting', message: 'Submitting the quote-bound private swap' });
-          const result = await owner.submission.submit({
-            route: 'swap',
-            artifact,
-            feeAuthorization: plan.fee.authorization,
-            proofValidityBlocks: current.proofValidityBlocks,
-            signal: confirmSignal,
-            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
-          });
-          const accepted = readSubmissionResult(result);
-          assertMatchingAcceptedResult(acceptedResult, accepted);
-          emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return accepted;
-        } catch (error) {
-          if (acceptedResult) {
-            emitProgress(onProgress, { stage: 'done', message: 'Done' });
-            return acceptedResult;
-          }
-          emitProgress(onProgress, { stage: 'failed', message: 'Private swap failed' });
-          throw mapWalletError(error);
-        }
-      },
-      discard() { discarded = true; },
-    };
   }
 
   private readNow(): number {
@@ -800,12 +674,17 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
     // Absent stake tokens admit nothing: an enabled stake route with no
     // allowlist still fails closed (D-063).
     const allowed = policy.allowedTokens[intent.kind] ?? [];
-    if (!allowed.some((token) => sameAddress(token, inputToken))) {
+    // D-067, D-084: with the degen floor on, the backend's quote route admits
+    // a swap's tokens (its allowlist or its own degen list); a token it does
+    // not admit gets no quote, so no swap.
+    const degenSwap = intent.kind === 'swap' && policy.swap?.degen === true;
+    const admitted = (candidate: string) => degenSwap || allowed.some((token) => sameAddress(token, candidate));
+    if (!admitted(inputToken)) {
       throw new PrivacyError('unknown', `The ${intent.kind} input token is not allowlisted.`);
     }
     if (twoSided) {
       assertAddress(intent.tokenOut, 'output token');
-      if (!allowed.some((token) => sameAddress(token, intent.tokenOut))) {
+      if (!admitted(intent.tokenOut)) {
         throw new PrivacyError('unknown', `The ${intent.kind} output token is not allowlisted.`);
       }
     }
@@ -830,157 +709,6 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
  */
 const OPEN_NOTE_PLACEHOLDER = '${openNoteIds[0]}';
 
-/** What the wallet must be asked to prove, taken from validated sources only. */
-interface ReviewedSwap {
-  /** From the canonical intent, not from the object handed to the SDK. */
-  sellToken: Address;
-  sellAmount: bigint;
-  buyToken: Address;
-  /** The connected account, so the output note cannot be credited elsewhere. */
-  taker: Address;
-  /** From the validated plan. */
-  executor: Address;
-  /** From the validated plan; the only authority for the invoke payload. */
-  executorCalls: readonly PreparedPrivateSwap['executorCalls'][number][];
-  fee: RelayFeeQuote;
-}
-
-/**
- * Deep-copy the validated executor calls. Every field is a string or an array of
- * strings, so copying one array level is a full deep copy.
- */
-function copyExecutorCalls(
-  calls: readonly PreparedPrivateSwap['executorCalls'][number][],
-): PreparedPrivateSwap['executorCalls'] {
-  return calls.map((call) => ({
-    contractAddress: call.contractAddress,
-    entrypoint: call.entrypoint,
-    calldata: [...call.calldata],
-  }));
-}
-
-/**
- * The guard's authority, read-only by construction.
- *
- * Deliberately applied only to the snapshot the guard recomputes from, never to
- * the copy handed to the SDK: freezing the SDK's input would turn a mutating SDK
- * into a thrown `TypeError`, which `mapWalletError` would report as an
- * unreachable network. A mutating SDK is a plan mismatch, not an outage.
- */
-function snapshotExecutorCalls(
-  calls: readonly PreparedPrivateSwap['executorCalls'][number][],
-): PreparedPrivateSwap['executorCalls'] {
-  const copied = copyExecutorCalls(calls);
-  for (const call of copied) {
-    Object.freeze(call.calldata);
-    Object.freeze(call);
-  }
-  return Object.freeze(copied) as PreparedPrivateSwap['executorCalls'];
-}
-
-/**
- * Independently serialize the invoke payload the reviewed plan implies.
- *
- * AVNU builds it as `[buyToken, ...fromCallsToExecuteCalldata_cairo1(calls)
- * .map(num.toHex), '${openNoteIds[0]}']`. Recomputing it from the *validated*
- * calls with the same pinned `starknet` helpers is what turns the invoke action
- * from "some call to the right contract" into the exact reviewed transaction —
- * the entry point lives inside this calldata, because `STRK20_INVOKE_ACTION`
- * carries no selector field.
- */
-function reviewedInvokeCalldata(reviewed: ReviewedSwap): readonly string[] {
-  const serialized = transaction.fromCallsToExecuteCalldata_cairo1(
-    reviewed.executorCalls.map((call) => ({
-      contractAddress: call.contractAddress,
-      entrypoint: call.entrypoint,
-      calldata: call.calldata,
-    })),
-  );
-  return [reviewed.buyToken, ...serialized.map((felt) => num.toHex(felt)), OPEN_NOTE_PLACEHOLDER];
-}
-
-/**
- * Check that the actions about to be proved still describe the reviewed swap.
- *
- * `buildStrk20Actions` is a validation-free array literal, and the relay's
- * binding check runs only after the wallet has already minted an irrevocable
- * proof. Verifying here keeps a divergence cheap: the sell leg must fund the
- * quoted executor and nobody else, the fee leg must match the authorized quote,
- * the bought asset must land in an open note owned by this account, and the one
- * external call must carry exactly the reviewed payload to that same executor.
- * Anything else — a reordering, a dropped leg, an extra action, a public deposit,
- * a retargeted or re-encoded inner call — is a mismatch, not a variant.
- *
- * Comparands are the canonical intent, the validated plan and the connected
- * account, never the intermediate plan object the SDK was fed, so a mistake in
- * this package's own mapping fails closed too.
- *
- * The four-action shape is source-derived from the exact pinned SDK; an approved
- * upgrade that changes it must fail closed here rather than silently prove a
- * different transaction. This is self-consistency only — a hostile plan's
- * actions match it faithfully.
- */
-function assertPreparedSwapActions(
-  actions: readonly STRK20_ACTION[],
-  reviewed: ReviewedSwap,
-): void {
-  const [sell, feeLeg, openNote, invoke] = actions;
-  let faithful = actions.length === 4 &&
-    isWithdrawal(sell, reviewed.sellToken, reviewed.sellAmount, reviewed.executor) &&
-    isWithdrawal(feeLeg, reviewed.fee.token, reviewed.fee.amount, reviewed.fee.recipient) &&
-    openNote?.type === 'transfer' &&
-    openNote.amount === 'OPEN' &&
-    sameAddress(openNote.token, reviewed.buyToken) &&
-    sameAddress(openNote.recipient, reviewed.taker) &&
-    invoke?.type === 'invoke' &&
-    sameAddress(invoke.contract, reviewed.executor);
-  if (faithful && invoke?.type === 'invoke') {
-    // A serialization failure is itself a mismatch, not a transport problem.
-    try {
-      faithful = sameCalldata(invoke.calldata, reviewedInvokeCalldata(reviewed));
-    } catch {
-      faithful = false;
-    }
-  }
-  if (!faithful) {
-    throw new PrivacyError(
-      'unknown',
-      'The private swap action set does not match the reviewed plan.',
-    );
-  }
-}
-
-/**
- * Exact length and order, with the open-note placeholder pinned to the final
- * slot. Every other slot is a felt, so it is compared by value: producers differ
- * in zero padding, and a placeholder appearing anywhere but last fails to parse
- * and therefore fails the comparison.
- */
-function sameCalldata(actual: readonly string[], reviewed: readonly string[]): boolean {
-  if (actual.length !== reviewed.length) return false;
-  const placeholderAt = reviewed.length - 1;
-  return reviewed.every((expected, index) => index === placeholderAt
-    ? actual[index] === OPEN_NOTE_PLACEHOLDER
-    : sameAmount(actual[index]!, BigInt(expected)));
-}
-
-function isWithdrawal(
-  action: STRK20_ACTION | undefined,
-  token: string,
-  amount: bigint,
-  recipient: string,
-): boolean {
-  return action?.type === 'withdraw' &&
-    sameAddress(action.token, token) &&
-    sameAmount(action.amount, amount) &&
-    sameAddress(action.recipient, recipient);
-}
-
-/** Felt amounts differ in padding between producers; compare the values. */
-function sameAmount(felt: string, amount: bigint): boolean {
-  try { return BigInt(felt) === amount; } catch { return false; }
-}
-
 function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
   return intents.map((intent): STRK20_ACTION => {
     switch (intent.kind) {
@@ -991,7 +719,7 @@ function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
       case 'transfer': return {
         type: 'transfer', token: intent.token, amount: toFelt(intent.amount), recipient: intent.recipient,
       };
-      case 'swap': throw new PrivacyError('unknown', 'Swap actions require the AVNU route.');
+      case 'swap': throw new PrivacyError('unknown', 'Swap actions require the shadow-account route.');
       case 'stake': throw new PrivacyError('unknown', 'Stake actions require the Endur anonymizer route.');
     }
   });
@@ -1067,222 +795,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   });
 }
 
-function assertMatchingAcceptedResult(accepted: TxResult | undefined, settled: TxResult): void {
-  if (accepted && accepted.transactionHash !== settled.transactionHash) {
-    throw new PrivacyError('unknown', 'The private service returned conflicting transaction receipts.');
-  }
-}
-
-function ownSwapPlan(
-  value: unknown,
-  intent: Extract<Intent, { kind: 'swap' }>,
-  config: PoolConfig,
-  expectedChainId: string,
-  maxRelayFee: bigint,
-  now: number,
-): PreparedPrivateSwap {
-  let quoteId: unknown;
-  let buyAmount: unknown;
-  let expiresAt: unknown;
-  let chainId: unknown;
-  let executorAddress: unknown;
-  let executorCallsValue: unknown;
-  let feeValue: unknown;
-  try {
-    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 7) {
-      throw new Error('invalid plan container');
-    }
-    const read = (key: PropertyKey): unknown => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor || !('value' in descriptor)) throw new Error('missing plan data property');
-      return descriptor.value;
-    };
-    quoteId = read('quoteId');
-    buyAmount = read('buyAmount');
-    expiresAt = read('expiresAt');
-    chainId = read('chainId');
-    executorAddress = read('executorAddress');
-    executorCallsValue = read('executorCalls');
-    feeValue = read('fee');
-  } catch {
-    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
-  }
-
-  const executorCalls = ownExecutorCalls(executorCallsValue);
-  const fee = ownRelayFee(feeValue, config, maxRelayFee);
-  const plan = Object.freeze({
-    quoteId,
-    buyAmount,
-    expiresAt,
-    chainId,
-    executorAddress,
-    executorCalls,
-    fee,
-  }) as PreparedPrivateSwap;
-  validateOwnedSwapPlan(plan, intent, config, expectedChainId, maxRelayFee, now);
-  return plan;
-}
-
-function ownExecutorCalls(value: unknown): PreparedPrivateSwap['executorCalls'] {
-  let length: number;
-  try {
-    if (!Array.isArray(value)) throw new Error('invalid call container');
-    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
-    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
-      throw new Error('invalid call container length');
-    }
-    length = lengthDescriptor.value as number;
-    if (length === 0 || Reflect.ownKeys(value).length !== length + 1) {
-      throw new Error('invalid call container shape');
-    }
-  } catch {
-    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-  }
-
-  const calls: PreparedPrivateSwap['executorCalls'] = [];
-  for (let index = 0; index < length; index += 1) {
-    let contractAddress: unknown;
-    let entrypoint: unknown;
-    let calldataValue: unknown;
-    try {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (!descriptor || !('value' in descriptor)) throw new Error('missing call');
-      const call = descriptor.value;
-      if (!call || typeof call !== 'object' || Array.isArray(call) || Reflect.ownKeys(call).length !== 3) {
-        throw new Error('invalid call');
-      }
-      const read = (key: PropertyKey): unknown => {
-        const field = Object.getOwnPropertyDescriptor(call, key);
-        if (!field || !('value' in field)) throw new Error('missing call field');
-        return field.value;
-      };
-      contractAddress = read('contractAddress');
-      entrypoint = read('entrypoint');
-      calldataValue = read('calldata');
-    } catch {
-      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-    }
-    const calldata = ownFeltArray(calldataValue);
-    calls.push(Object.freeze({ contractAddress, entrypoint, calldata }) as PreparedPrivateSwap['executorCalls'][number]);
-  }
-  return Object.freeze(calls) as PreparedPrivateSwap['executorCalls'];
-}
-
-function ownFeltArray(value: unknown): readonly string[] {
-  let length: number;
-  try {
-    if (!Array.isArray(value)) throw new Error('invalid calldata container');
-    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
-    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
-      throw new Error('invalid calldata length');
-    }
-    length = lengthDescriptor.value as number;
-    if (Reflect.ownKeys(value).length !== length + 1) throw new Error('invalid calldata shape');
-  } catch {
-    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-  }
-  const owned: string[] = [];
-  try {
-    for (let index = 0; index < length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'string') {
-        throw new Error('invalid calldata item');
-      }
-      owned.push(descriptor.value);
-    }
-  } catch {
-    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-  }
-  return Object.freeze(owned);
-}
-
-function validateOwnedSwapPlan(
-  plan: PreparedPrivateSwap,
-  intent: Extract<Intent, { kind: 'swap' }>,
-  config: PoolConfig,
-  expectedChainId: string,
-  maxRelayFee: bigint,
-  now: number,
-): void {
-  if (typeof plan.quoteId !== 'string' || plan.quoteId.trim().length === 0) {
-    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
-  }
-  if (plan.chainId !== expectedChainId) {
-    throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
-  }
-  if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
-    throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
-  }
-  if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= now) {
-    throw new PrivacyError('unknown', 'The private swap quote has expired.');
-  }
-  if (plan.buyAmount < intent.minAmountOut) {
-    throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
-  }
-  assertAddress(plan.executorAddress, 'private swap executor');
-  for (const call of plan.executorCalls) {
-    assertAddress(call.contractAddress, 'private swap call target');
-    if (
-      typeof call.entrypoint !== 'string'
-      || call.entrypoint.trim().length === 0
-      || call.calldata.some((felt) => !isFelt(felt))
-    ) {
-      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-    }
-  }
-  ownRelayFee(plan.fee, config, maxRelayFee);
-}
-
-function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): RelayFeeQuote {
-  let token: unknown;
-  let recipient: unknown;
-  let amount: unknown;
-  let authorization: unknown;
-  let expiresAtBlock: unknown;
-  try {
-    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 5) {
-      throw new Error('invalid fee container');
-    }
-    const read = (key: PropertyKey): unknown => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor || !('value' in descriptor)) throw new Error('missing fee data property');
-      return descriptor.value;
-    };
-    token = read('token');
-    recipient = read('recipient');
-    amount = read('amount');
-    authorization = read('authorization');
-    expiresAtBlock = read('expiresAtBlock');
-  } catch {
-    throw new PrivacyError('unknown', 'The relay returned an invalid fee quote.');
-  }
-  if (typeof token !== 'string' || !isFelt(token) || !sameAddress(token, config.feeToken)) {
-    throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
-  }
-  if (typeof recipient !== 'string') throw new PrivacyError('unknown', 'Invalid relay fee recipient address.');
-  assertAddress(recipient, 'relay fee recipient');
-  if (typeof amount !== 'bigint' || amount <= 0n || amount > maxRelayFee) {
-    throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
-  }
-  if (typeof authorization !== 'string' || authorization.trim().length === 0
-    || !Number.isSafeInteger(expiresAtBlock) || (expiresAtBlock as number) <= 0) {
-    throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
-  }
-  return Object.freeze({ token, recipient, amount, authorization, expiresAtBlock: expiresAtBlock as number });
-}
-
 function toFelt(value: bigint): string {
   return `0x${value.toString(16)}`;
 }
 
 function readWalletTransactionHash(value: unknown): string {
   return readTransactionHash(value, 'transaction_hash', 'wallet');
-}
-
-function readSubmissionResult(value: unknown): TxResult {
-  return Object.freeze({
-    transactionHash: readTransactionHash(value, 'transactionHash', 'private service'),
-  });
 }
 
 function readTransactionHash(value: unknown, field: string, source: string): string {
@@ -1357,14 +875,6 @@ function ownPoolConfig(value: unknown): PoolConfig {
     proofValidityBlocks: proofValidityBlocks as number,
     noteMaturityBlocks: noteMaturityBlocks as number,
   });
-}
-
-function checkedFeeTotal(poolFee: bigint, relayFee: bigint): bigint {
-  const total = poolFee + relayFee;
-  if (total > MAX_UINT256) {
-    throw new PrivacyError('unknown', 'The combined private operation fee exceeds u256.');
-  }
-  return total;
 }
 
 function sameAddress(a: string, b: string): boolean {

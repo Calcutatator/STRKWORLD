@@ -12,8 +12,9 @@ import type {
   EndurUnstakeRead,
   PoolReadClient,
   PrivateSubmissionGateway,
-  PreparedPrivateSwap,
   RelayFeeQuote,
+  SwapQuoteAnswer,
+  SwapQuoteClient,
   VaultPositionRow,
   VaultRateRow,
   VaultReadClient,
@@ -32,7 +33,7 @@ const MAX_ENDUR_ROWS = 64;
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient, EndurReadClient {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient, EndurReadClient, SwapQuoteClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -376,7 +377,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const signal = ownOptionalInputField(input, 'signal');
     const onAccepted = ownOptionalInputField(input, 'onAccepted');
     if (
-      (route !== 'transfer' && route !== 'unshield' && route !== 'swap' && route !== 'stake')
+      (route !== 'transfer' && route !== 'unshield' && route !== 'stake')
       || !artifact
       || typeof artifact !== 'object'
       || Array.isArray(artifact)
@@ -410,15 +411,16 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     return result;
   }
 
-  async prepareSwap(
-    input: NonNullable<PrivateSubmissionGateway['prepareSwap']> extends (...args: infer A) => unknown
-      ? A[0]
-      : never,
-  ): Promise<PreparedPrivateSwap> {
+  /**
+   * avnu's public, keyless swap quote for the swap stand-in (D-084), through
+   * the backend's thin proxy so the player's IP never reaches avnu next to
+   * that address and the amounts (D-014). Typed here, checked by the swap.
+   */
+  async quoteSwap(input: Parameters<SwapQuoteClient['quoteSwap']>[0]): Promise<SwapQuoteAnswer> {
     const sellToken = ownInputField(input, 'sellToken');
     const buyToken = ownInputField(input, 'buyToken');
     const sellAmount = ownInputField(input, 'sellAmount');
-    const minAmountOut = ownInputField(input, 'minAmountOut');
+    const taker = ownInputField(input, 'taker');
     const slippageBps = ownInputField(input, 'slippageBps');
     const signal = ownOptionalInputField(input, 'signal');
     if (
@@ -426,50 +428,44 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       || !isNonzeroFelt(sellToken)
       || typeof buyToken !== 'string'
       || !isNonzeroFelt(buyToken)
+      || typeof taker !== 'string'
+      || !isNonzeroFelt(taker)
       || typeof sellAmount !== 'bigint'
       || sellAmount <= 0n
-      || typeof minAmountOut !== 'bigint'
-      || minAmountOut <= 0n
+      || sellAmount > MAX_UINT256
       || !Number.isSafeInteger(slippageBps)
       || (slippageBps as number) <= 0
+      || (slippageBps as number) > 10_000
       || (signal !== undefined && !isAbortSignal(signal))
     ) {
-      throw new PrivacyError('unknown', 'The swap-prepare request is invalid.');
+      throw new PrivacyError('unknown', 'The swap quote request is invalid.');
     }
-    const raw = await this.post('/v1/private/swaps/prepare', {
+    const raw = await this.post('/v1/swap/quote', {
       v: 1,
       sellToken,
       buyToken,
       sellAmount: sellAmount.toString(),
-      minAmountOut: minAmountOut.toString(),
+      taker,
       slippageBps,
     }, signal as AbortSignal | undefined);
     throwIfAborted(signal as AbortSignal | undefined);
     const value = asRecord(raw);
-    const fee = asRecord(ownField(value, 'fee'));
-    const rawCalls = asArray(ownField(value, 'executorCalls'));
-    const executorCalls = rawCalls.map((raw) => {
-      const call = asRecord(raw);
+    const calls = asArray(ownField(value, 'calls')).map((entry) => {
+      const call = asRecord(entry);
       return Object.freeze({
         contractAddress: asString(ownField(call, 'contractAddress')),
         entrypoint: asString(ownField(call, 'entrypoint')),
-        calldata: Object.freeze(asArray(ownField(call, 'calldata')).map(asString)) as string[],
+        calldata: Object.freeze(asArray(ownField(call, 'calldata')).map(asString)),
       });
     });
     return Object.freeze({
       quoteId: asNonEmptyString(ownField(value, 'quoteId')),
-      buyAmount: asPositiveDecimalBigInt(ownField(value, 'buyAmount')),
-      expiresAt: asInteger(ownField(value, 'expiresAt')),
       chainId: asString(ownField(value, 'chainId')),
-      executorAddress: asString(ownField(value, 'executorAddress')),
-      executorCalls: Object.freeze(executorCalls) as PreparedPrivateSwap['executorCalls'],
-      fee: Object.freeze({
-        token: asString(ownField(fee, 'token')),
-        recipient: asString(ownField(fee, 'recipient')),
-        amount: asDecimalBigInt(ownField(fee, 'amount')),
-        authorization: asString(ownField(fee, 'authorization')),
-        expiresAtBlock: asInteger(ownField(fee, 'expiresAtBlock')),
-      }),
+      sellToken: asString(ownField(value, 'sellToken')),
+      buyToken: asString(ownField(value, 'buyToken')),
+      sellAmount: asPositiveDecimalBigInt(ownField(value, 'sellAmount')),
+      buyAmount: asPositiveDecimalBigInt(ownField(value, 'buyAmount')),
+      calls: Object.freeze(calls),
     });
   }
 

@@ -7,9 +7,10 @@ import {
 import { Readable } from 'node:stream';
 import { BackendApi } from './api.js';
 import { HmacAuthorizationCodec } from './authorization.js';
+import { CLIENT_KEY_HEADER, ClientKeyer, requestClientKey } from './client-key.js';
 import { AvnuDegenCatalog } from './avnu-degen-catalog.js';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
-import { AvnuSwapPlanner } from './avnu-swap-planner.js';
+import { AvnuSwapQuotes } from './avnu-swap-quotes.js';
 import type { DebugLogSink } from './debug-logs.js';
 import {
   parseBackendEnvironment,
@@ -26,7 +27,7 @@ import type {
   PaymasterPort,
   PoolRpcPort,
   PoolStatsPort,
-  SwapPlannerPort,
+  SwapQuotePort,
   VaultRatesPort,
   VaultRpcPort,
   EndurRpcPort,
@@ -36,7 +37,8 @@ import { VesuVaultRates } from './vesu-rates.js';
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
   rpc?: PoolRpcPort;
-  swapPlanner?: SwapPlannerPort;
+  /** avnu's keyless swap quotes (D-084); by default its public API. */
+  swapQuotes?: SwapQuotePort;
   degenCatalog?: DegenCatalogPort;
   /** The Privacy Plaza's pool stats (D-076); by default a cache over the RPC port. */
   poolStats?: PoolStatsPort;
@@ -94,8 +96,10 @@ export function createBackendRuntime(
   const handler = createBackendFetchHandler(api, {
     maxRequestBytes: parsed.maxRequestBytes,
   });
+  // D-084: one salt per process, never written anywhere.
+  const keyer = new ClientKeyer();
   const server = createServer((request, response) => {
-    void serveFetchRequest(request, response, handler);
+    void serveFetchRequest(request, response, handler, keyer);
   });
   server.requestTimeout = parsed.backend.requestTimeoutMs;
 
@@ -196,7 +200,7 @@ function createBackendApi(
   // D-067: composed only while the BACKEND_DEGEN_* group is present. It makes
   // no request until a player opens the degen counter or quotes a degen swap.
   const degen = parsed.backend.degen;
-  const avnuBaseUrl = parsed.swapPlanner.baseUrl;
+  const avnuBaseUrl = parsed.swapQuotes.baseUrl;
   const rpc = overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc);
   // D-076: the plaza's stats read the same private RPC, in the background,
   // and only when the port offers their narrow reads. D-080: its USD value
@@ -223,7 +227,8 @@ function createBackendApi(
     ...(endur ? { endur } : {}),
     vaultRates,
     ...(borrow ? { borrow } : {}),
-    swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
+    // D-084: avnu's keyless public quote API, read by this service alone.
+    swapQuotes: overrides.swapQuotes ?? new AvnuSwapQuotes(parsed.swapQuotes),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
         config: degen,
@@ -262,6 +267,7 @@ async function serveFetchRequest(
   incoming: IncomingMessage,
   outgoing: ServerResponse,
   handler: FetchHandler,
+  keyer: ClientKeyer,
 ): Promise<void> {
   const abort = new AbortController();
   const abortRequest = () => abort.abort(new DOMException('Request aborted.', 'AbortError'));
@@ -272,7 +278,7 @@ async function serveFetchRequest(
   outgoing.once('close', abortResponse);
 
   try {
-    const request = toFetchRequest(incoming, abort.signal);
+    const request = toFetchRequest(incoming, abort.signal, keyer);
     const response = await handler(request);
     if (outgoing.destroyed) return;
     outgoing.statusCode = response.status;
@@ -294,12 +300,14 @@ async function serveFetchRequest(
   }
 }
 
-function toFetchRequest(incoming: IncomingMessage, signal: AbortSignal): Request {
+function toFetchRequest(incoming: IncomingMessage, signal: AbortSignal, keyer: ClientKeyer): Request {
   const method = incoming.method ?? 'GET';
   const headers = new Headers();
   copyHeader(incoming, headers, 'content-type');
   copyHeader(incoming, headers, 'content-length');
   copyHeader(incoming, headers, 'content-encoding');
+  // D-084: never the caller's own header, except the edge's on loopback.
+  headers.set(CLIENT_KEY_HEADER, requestClientKey(keyer, incoming.socket.remoteAddress, incoming.headers[CLIENT_KEY_HEADER]));
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
     init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;

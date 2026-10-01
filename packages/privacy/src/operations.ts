@@ -102,6 +102,25 @@ export interface SwapReview {
   readonly minimumAmountOut: bigint;
   readonly slippageBps: number;
   readonly expiresAt: number;
+  /** D-084: the quote held against an independent oracle price, or why it could not be. */
+  readonly priceCheck: SwapPriceCheck;
+}
+
+/**
+ * D-084: the swap's independent price check. `checked`: both tokens have an
+ * oracle price and the expected output is worth no more than `boundBps` below
+ * the input (a worse quote is refused before review). `unchecked`: a token has
+ * no oracle price, so nothing independent vouches for the quote, and
+ * confirming needs `acknowledgeUncheckedPrice`. USD values carry 8 decimals
+ * and are present for each side that has a price.
+ */
+export interface SwapPriceCheck {
+  readonly status: 'checked' | 'unchecked';
+  readonly boundBps: number;
+  readonly sellUsd?: bigint;
+  readonly expectedBuyUsd?: bigint;
+  /** How far below the input's value the expected output sits, in bps (negative: above). Checked only. */
+  readonly shortfallBps?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +159,12 @@ export interface PreparedBatch {
     feeCeiling: bigint;
     onProgress?: ProgressCallback;
     signal?: AbortSignal;
+    /**
+     * D-084: the player acknowledged that this swap has no independent price
+     * check. Required, exactly `true`, to confirm a swap whose
+     * `swapReview.priceCheck.status` is `unchecked`; ignored otherwise.
+     */
+    acknowledgeUncheckedPrice?: boolean;
   }): Promise<TxResult>;
 
   /** Release any held quote or reservation. Safe to call twice. */

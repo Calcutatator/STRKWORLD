@@ -106,9 +106,9 @@ export function routeDisclosure(
  * a route is approved and disclosed at all (D-020) — fail here and the door
  * is a hard "no", the same for every build. Passing that, the active wallet
  * policy says whether *this build* has actually switched the route on
- * (D-054/D-056): production never enables swap today, and each of shield,
- * transfer, unshield (D-062) and stake (D-063) stays off unless this build's
- * own fail-closed configuration switches it on, independently of the others.
+ * (D-054/D-056): each of shield, transfer, unshield (D-062), stake (D-063),
+ * the Vault (D-077) and swap (D-084) stays off unless this build's own
+ * fail-closed configuration switches it on, independently of the others.
  * `policy` defaults to this build's live policy, or `null` outside production
  * (demo, tests) where there is no policy to disable anything — every
  * register-approved route stays open, exactly as before this gate existed.

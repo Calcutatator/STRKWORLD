@@ -5,6 +5,7 @@ import type {
 } from 'starknet';
 import type { PoolConfig } from '../operations.js';
 import type { Address, TxResult } from '../types.js';
+import type { PragmaPrice } from '../swap-prices.js';
 
 /** Structural slice of WalletAccountV6 used by STRKWORLD. */
 export interface WalletStrk20Account {
@@ -223,11 +224,11 @@ export interface PoolReadClient {
 
 export type PoolNativeRoute = 'unshield' | 'transfer';
 /**
- * Every route the backend can relay. `swap` is quote-bound and prepared
- * through `prepareSwap`; `stake` (D-063) invokes Endur's anonymizer. Since
- * D-082 the browser relays only `swap`: the wallet submits the others itself.
+ * Every route the backend can still relay: the pool-native spends and
+ * `stake` (D-063). Since D-082 the browser relays none of them, and since
+ * D-084 a swap is never relayed: the wallet submits every route itself.
  */
-export type PrivateRoute = PoolNativeRoute | 'swap' | 'stake';
+export type PrivateRoute = PoolNativeRoute | 'stake';
 
 export interface RelayFeeQuote {
   token: Address;
@@ -238,29 +239,58 @@ export interface RelayFeeQuote {
   expiresAtBlock: number;
 }
 
-export interface PreparedPrivateSwap {
-  quoteId: string;
-  buyAmount: bigint;
-  /** Unix epoch milliseconds. */
-  expiresAt: number;
-  chainId: string;
-  executorAddress: Address;
-  executorCalls: Array<{
-    contractAddress: Address;
-    entrypoint: string;
-    calldata: string[];
+/**
+ * avnu's public, keyless swap quote for the swap stand-in address (D-084),
+ * fetched through the STRKWORLD backend so the player's IP never reaches avnu
+ * next to that address and the amounts (D-014). Typed but untrusted: the
+ * caller checks every field against what it asked for.
+ */
+export interface SwapQuoteAnswer {
+  readonly quoteId: string;
+  readonly chainId: string;
+  readonly sellToken: Address;
+  readonly buyToken: Address;
+  readonly sellAmount: bigint;
+  readonly buyAmount: bigint;
+  /** avnu's built calls for the taker, without an approve. */
+  readonly calls: ReadonlyArray<{
+    readonly contractAddress: Address;
+    readonly entrypoint: string;
+    readonly calldata: readonly string[];
   }>;
-  fee: RelayFeeQuote;
+}
+
+/**
+ * Pragma's spot prices for every pinned feed (`PRICE_FEEDS`, D-084), read by
+ * the browser over the wallet's own RPC, never through STRKWORLD's backend or
+ * avnu, so neither can vouch for its own quote. It always asks for the whole
+ * fixed set, so the read names no pair and nothing about the player.
+ */
+export interface SwapPriceReader {
+  read(signal?: AbortSignal): Promise<readonly PragmaPrice[]>;
+}
+
+/** The backend's keyless quote proxy (D-084). */
+export interface SwapQuoteClient {
+  quoteSwap(input: {
+    sellToken: Address;
+    buyToken: Address;
+    sellAmount: bigint;
+    /** The swap stand-in address: avnu's taker and the swap's beneficiary. */
+    taker: Address;
+    slippageBps: number;
+    signal?: AbortSignal;
+  }): Promise<SwapQuoteAnswer>;
 }
 
 export interface PrivateSubmissionGateway {
   /**
-   * A relay fee quote for a non-quote-bound route; swaps quote in
-   * `prepareSwap`. Since D-082 the Wallet API adapter asks for none: those
-   * routes are wallet-submitted.
+   * A relay fee quote for a relayed route. Since D-082 the Wallet API adapter
+   * asks for none, and since D-084 no route the browser enables is relayed:
+   * the backend relay stays, and this client still speaks to it.
    */
   estimate(input: {
-    route: Exclude<PrivateRoute, 'swap'>;
+    route: PrivateRoute;
     feeToken: Address;
     operationToken: Address;
     signal?: AbortSignal;
@@ -278,15 +308,6 @@ export interface PrivateSubmissionGateway {
      */
     onAccepted?: (result: TxResult) => void;
   }): Promise<TxResult>;
-  /** Quote-bound AVNU route. Missing means swaps fail closed. */
-  prepareSwap?(input: {
-    sellToken: Address;
-    buyToken: Address;
-    sellAmount: bigint;
-    minAmountOut: bigint;
-    slippageBps: number;
-    signal?: AbortSignal;
-  }): Promise<PreparedPrivateSwap>;
 }
 
 export interface WalletRoutePolicy {
@@ -322,6 +343,14 @@ export interface WalletRoutePolicy {
   swap?: {
     expectedChainId: string;
     slippageBps: number;
+    /**
+     * D-067's degen floor (D-084): when true, a swap may name tokens beyond
+     * `allowedTokens.swap`, and the backend's quote route is their admission
+     * authority (its own allowlist or its own degen list): a token it does
+     * not admit gets no quote, so no swap. Absent or false admits only the
+     * static list.
+     */
+    degen?: boolean;
   };
 }
 

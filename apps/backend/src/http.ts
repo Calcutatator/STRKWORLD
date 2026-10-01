@@ -1,4 +1,5 @@
 import type { BackendApi } from './api.js';
+import { CLIENT_KEY_HEADER, isClientKey } from './client-key.js';
 
 export const DEFAULT_MAX_REQUEST_BYTES = 2_500_000;
 
@@ -53,11 +54,14 @@ export function createBackendFetchHandler(
       }
     }
 
+    // D-084: the runtime's salted client key, only for per-client limits.
+    const client = request.headers.get(CLIENT_KEY_HEADER);
     const result = await api.handle({
       method: request.method,
       path: url.pathname,
       body,
       signal: request.signal,
+      ...(isClientKey(client) ? { client } : {}),
     });
     return json(result.status, result.body);
   };

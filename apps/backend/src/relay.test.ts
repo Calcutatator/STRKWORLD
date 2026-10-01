@@ -11,7 +11,7 @@ import {
   type PoolRpcPort,
   type PreparedArtifact,
   type RoutePolicy,
-  type SwapPlannerPort,
+  type SwapQuotePort,
 } from './index.js';
 import {
   isRelayStartupNotice,
@@ -76,14 +76,15 @@ function fixture(paymaster: PaymasterPort, overrides: Partial<BackendConfig> = {
     getReceipt: vi.fn(async (hash: string) => ({ transactionHash: hash })),
     getBlockNumber: vi.fn(async () => 1_000),
   };
-  const swapPlanner: SwapPlannerPort = {
-    prepare: vi.fn(async () => ({
+  const swapQuotes: SwapQuotePort = {
+    quote: vi.fn(async (input) => ({
       quoteId: 'quote-1',
-      buyAmount: 100n,
-      expiresAt: 2_000,
       chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+      sellToken: input.sellToken,
+      buyToken: input.buyToken,
+      sellAmount: input.sellAmount,
+      buyAmount: 100n,
+      calls: [{ contractAddress: '0x4270', entrypoint: 'multi_route_swap', calldata: ['0xaaa'] }],
     })),
   };
   const degenCatalog: DegenCatalogPort = { snapshot: vi.fn(async () => ({ source: 'curated' as const, tokens: [] })) };
@@ -93,12 +94,12 @@ function fixture(paymaster: PaymasterPort, overrides: Partial<BackendConfig> = {
     paymaster,
     rpc,
     authorizations,
-    swapPlanner,
+    swapQuotes,
     degenCatalog,
     now: () => 1_000,
     sleep: async () => undefined,
   });
-  return { api, rpc, swapPlanner, degenCatalog, authorizations };
+  return { api, rpc, swapQuotes, degenCatalog, authorizations };
 }
 
 function keylessPaymaster() {
@@ -121,10 +122,10 @@ const submission = (api: BackendApi, route: string, feeAuthorization: string) =>
   body: { v: 1, route, artifact, feeAuthorization, proofValidityBlocks: 450 },
 });
 
-const swapPrepare = (api: BackendApi) => api.handle({
+const swapQuote = (api: BackendApi) => api.handle({
   method: 'POST',
-  path: '/v1/private/swaps/prepare',
-  body: { v: 1, sellToken: '0xabc', buyToken: STRK, sellAmount: '20', minAmountOut: '90', slippageBps: 100 },
+  path: '/v1/swap/quote',
+  body: { v: 1, sellToken: '0xabc', buyToken: STRK, sellAmount: '20', taker: '0x5ad0', slippageBps: 100 },
 });
 
 async function authorizationFor(authorizations: MemoryAuthorizationCodec, route: 'transfer' | 'unshield' | 'stake') {
@@ -174,13 +175,21 @@ describe('a relay with no avnu key (D-070)', () => {
     expect(rpc.getBlockNumber).not.toHaveBeenCalled();
   });
 
-  it('refuses a swap before the quote, since the planner is avnu too', async () => {
+  it('still quotes a swap: the swap is never relayed, and its quote needs no key (D-084)', async () => {
     const paymaster = keylessPaymaster();
-    const { api, swapPlanner, degenCatalog } = fixture(paymaster);
-    await expect(swapPrepare(api)).resolves.toEqual(REFUSED);
-    expect(swapPlanner.prepare).not.toHaveBeenCalled();
-    expect(degenCatalog.snapshot).not.toHaveBeenCalled();
+    const { api, swapQuotes } = fixture(paymaster);
+    await expect(swapQuote(api)).resolves.toMatchObject({ status: 200, body: { quoteId: 'quote-1' } });
+    expect(swapQuotes.quote).toHaveBeenCalledTimes(1);
     expect(paymaster.buildFee).not.toHaveBeenCalled();
+  });
+
+  it('refuses a swap on the relay routes as not relayed (D-084)', async () => {
+    const paymaster = keylessPaymaster();
+    const { api } = fixture(paymaster);
+    await expect(fee(api, 'swap')).resolves.toMatchObject({ status: 400, body: { message: 'Swaps are not relayed.' } });
+    await expect(submission(api, 'swap', 'auth')).resolves.toMatchObject({ status: 400 });
+    expect(paymaster.buildFee).not.toHaveBeenCalled();
+    expect(paymaster.submit).not.toHaveBeenCalled();
   });
 
   it.each(['transfer', 'unshield', 'stake'] as const)('refuses a %s submission, even one carrying a valid authorization', async (route) => {
@@ -222,7 +231,7 @@ describe('a relay with no avnu key (D-070)', () => {
     const { api, authorizations } = fixture(keylessPaymaster());
     for (let request = 0; request < 3; request += 1) {
       await fee(api, 'unshield');
-      await swapPrepare(api);
+      await swapQuote(api);
       await submission(api, 'transfer', await authorizationFor(authorizations, 'transfer'));
     }
     expect(stdout).not.toHaveBeenCalled();
@@ -260,9 +269,10 @@ describe('a key avnu rejects (D-070)', () => {
     expect(buildFee.mock.calls[0]).toEqual([expect.objectContaining({ paymasterApiKey: 'portal-key' }), expect.anything()]);
   });
 
-  it('answers a swap prepare and a submission the same way', async () => {
+  it('answers a submission the same way, and never touches a swap quote, which needs no key (D-084)', async () => {
     const swap = avnuPort({ apiKey: 'portal-key', buildFee: async () => { throw keyRejection(); } });
-    await expect(swapPrepare(fixture(swap.port).api)).resolves.toEqual(REFUSED);
+    await expect(swapQuote(fixture(swap.port).api)).resolves.toMatchObject({ status: 200 });
+    expect(swap.buildFee).not.toHaveBeenCalled();
 
     const relay = avnuPort({ apiKey: 'portal-key', submit: async () => { throw keyRejection('paymaster_executeTransaction'); } });
     const { api, authorizations } = fixture(relay.port);
@@ -289,8 +299,9 @@ describe('a key avnu rejects (D-070)', () => {
 
 describe('the relay startup notice (D-070)', () => {
   it('names the enabled routes it will refuse, and nothing while a key is set or the switch is off', () => {
-    expect(refusedRelayRoutes(config(), false)).toEqual(['transfer', 'unshield', 'swap', 'stake']);
-    expect(refusedRelayRoutes(config({ routes: { ...config().routes, swap: { ...config().routes.swap, enabled: false }, stake: undefined } }), false))
+    // An enabled swap route is never refused: it is not relayed (D-084).
+    expect(refusedRelayRoutes(config(), false)).toEqual(['transfer', 'unshield', 'stake']);
+    expect(refusedRelayRoutes(config({ routes: { ...config().routes, stake: undefined } }), false))
       .toEqual(['transfer', 'unshield']);
     expect(refusedRelayRoutes(config(), true)).toEqual([]);
     expect(refusedRelayRoutes(config({ globalEnabled: false }), false)).toEqual([]);
@@ -304,13 +315,13 @@ describe('the relay startup notice (D-070)', () => {
   });
 
   it('admits exactly its own lines at the edge, so a child cannot print anything else', () => {
-    const routes = ['transfer', 'unshield', 'swap', 'stake'] as const;
+    const routes = ['transfer', 'unshield', 'stake'] as const;
     for (let mask = 1; mask < 1 << routes.length; mask += 1) {
       const subset = routes.filter((_, index) => mask & (1 << index));
       expect(isRelayStartupNotice(relayStartupNotice(subset)), subset.join()).toBe(true);
     }
     const line = relayStartupNotice(['unshield'])!;
-    for (const forged of [`${line}\n[relay] more`, ` ${line}`, line.replace('unshield', 'withdraw'), '[debug] x', 42, null, undefined]) {
+    for (const forged of [`${line}\n[relay] more`, ` ${line}`, line.replace('unshield', 'withdraw'), line.replace('unshield', 'swap'), '[debug] x', 42, null, undefined]) {
       expect(isRelayStartupNotice(forged), String(forged)).toBe(false);
     }
   });
@@ -319,7 +330,7 @@ describe('the relay startup notice (D-070)', () => {
     const keyless = { ...environment() };
     delete keyless['AVNU_PAYMASTER_API_KEY'];
     expect(createBackendRuntime(keyless).startupNotice).toBe(
-      '[relay] AVNU_PAYMASTER_API_KEY is not set: transfer, unshield, swap will answer 503 RELAY_NOT_CONFIGURED until it is (D-070).',
+      '[relay] AVNU_PAYMASTER_API_KEY is not set: transfer, unshield will answer 503 RELAY_NOT_CONFIGURED until it is (D-070).',
     );
     expect(createBackendRuntime({ ...environment(), AVNU_PAYMASTER_API_KEY: '' }).startupNotice).toMatch(/^\[relay\] /);
     expect(createBackendRuntime(environment()).startupNotice).toBeNull();
@@ -357,8 +368,6 @@ function environment(): Record<string, string> {
     BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
-    BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
   };

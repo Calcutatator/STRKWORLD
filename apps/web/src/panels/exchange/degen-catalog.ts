@@ -123,14 +123,16 @@ export function parseDegenCatalogResponse(value: unknown): DegenCatalogSnapshot 
 /**
  * Whether this build's wallet policy lets a swap use a token. No policy (the
  * demo, tests) restricts nothing beyond the register, exactly as `routeDoor`
- * treats it. Production today enables no swap at all, so every degen token
- * there is display only, and the station is locked anyway.
+ * treats it. Production enables swap only with its own switch (D-084): its
+ * static list, plus, with the degen switch on, every token the backend's list
+ * carries, which the backend's quote route vets. Off, every degen token is
+ * display only, and the station is locked anyway.
  */
 export function policyAdmitsSwapToken(policy: WalletRoutePolicy | null, token: Address): boolean {
   if (!policy) return true;
   try {
     return policy.enabledRoutes.includes('swap')
-      && policy.allowedTokens.swap.some((allowed) => sameAddress(allowed, token));
+      && (policy.swap?.degen === true || policy.allowedTokens.swap.some((allowed) => sameAddress(allowed, token)));
   } catch {
     return false;
   }

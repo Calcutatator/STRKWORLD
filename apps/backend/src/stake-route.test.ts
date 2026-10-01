@@ -189,8 +189,6 @@ function baseEnvironment(overrides: Record<string, string> = {}): Record<string,
     BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
-    BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
     ...overrides,
@@ -300,7 +298,7 @@ describe('stake fee authorization', () => {
     const claims = await authorizations.verify(await authorizedStake(api));
 
     expect(claims).toMatchObject({ route: 'stake', operationToken: STRK, token: STRK, amount: 7n });
-    expect(claims?.swap).toBeUndefined();
+    expect(claims).not.toHaveProperty('swap');
   });
 
   it('refuses an operation token other than STRK', async () => {

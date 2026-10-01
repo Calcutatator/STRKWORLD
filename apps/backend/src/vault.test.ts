@@ -494,7 +494,7 @@ describe('the Vault read routes (D-077)', () => {
         getShadowAccount: vi.fn(async () => ({ address: SHADOW, deployed: true })),
         getVaultPositions: vi.fn(),
       } as PoolRpcPort,
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     await expect(withReads.api.handle({ method: 'POST', path: VAULT_SHADOW_ACCOUNT_PATH, body: { v: 1, partialCommitment: PARTIAL } }))
       .resolves.toEqual({ status: 200, body: { address: SHADOW, deployed: true } });
@@ -502,7 +502,7 @@ describe('the Vault read routes (D-077)', () => {
     const without = createBackendRuntime(environment(), {
       paymaster: { buildFee: vi.fn(), submit: vi.fn() },
       rpc: { getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn() },
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
     });
     await expect(without.api.handle({ method: 'POST', path: VAULT_SHADOW_ACCOUNT_PATH, body: { v: 1, partialCommitment: PARTIAL } }))
       .resolves.toMatchObject({ status: 503 });
@@ -541,8 +541,6 @@ function environment(): Record<string, string> {
     BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
-    BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
   };

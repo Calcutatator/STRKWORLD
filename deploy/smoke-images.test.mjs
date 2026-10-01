@@ -162,7 +162,6 @@ function expectInertFinancialEnvironment(create) {
     'BACKEND_ROUTE_UNSHIELD_ENABLED=false',
     'BACKEND_ROUTE_UNSHIELD_MAX_RELAY_FEE=0',
     'BACKEND_ROUTE_SWAP_ENABLED=false',
-    'BACKEND_ROUTE_SWAP_MAX_RELAY_FEE=0',
   ]));
 }
 

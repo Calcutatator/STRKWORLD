@@ -9,6 +9,7 @@ import {
   type RequestRateLimiterPort,
   type SponsorshipBudgetPort,
 } from './metrics.js';
+import { PerClientRateLimiter } from './client-key.js';
 import { POOL_STATS_RATE_LIMIT } from './pool-stats.js';
 import {
   RELAY_NOT_CONFIGURED_CODE,
@@ -34,8 +35,9 @@ import type {
   PoolRpcPort,
   PoolStatsPort,
   PrivateRoute,
+  RelayRoute,
   RoutePolicy,
-  SwapPlannerPort,
+  SwapQuotePort,
   VaultRatesPort,
   VaultRpcPort,
   EndurRpcPort,
@@ -62,6 +64,24 @@ const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 export const DEGEN_TOKENS_PATH = '/v1/degen/tokens';
 /** The Privacy Plaza's public pool stats (D-076): aggregates from the background cache. */
 export const POOL_STATS_PATH = '/v1/rpc/pool-stats';
+/** The private swap's keyless quote proxy (D-084). */
+export const SWAP_QUOTE_PATH = '/v1/swap/quote';
+/**
+ * The quote proxy's own aggregate window (D-084), besides a slot in the
+ * shared one: every request is two to avnu's public API, which rate-limits
+ * by caller, and this service is one caller for every player.
+ */
+export const SWAP_QUOTE_RATE_LIMIT = Object.freeze({ maxRequests: 60, windowMs: 60_000 });
+/**
+ * Each client's own quote bucket (D-084): 10 at once, one more every 6 s, so
+ * no one client can spend the shared window for everyone. Keyed by a salted
+ * hash of the client's address (`client-key.ts`), held in memory, never logged.
+ */
+export const SWAP_QUOTE_CLIENT_RATE_LIMIT = Object.freeze({ capacity: 10, refillMs: 6_000 });
+/** The most a swap may sell: a pool note holds a u128. */
+const U128_BOUND = 1n << 128n;
+/** Starknet contract addresses lie below 2^251. */
+const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -71,7 +91,8 @@ export interface BackendApiOptions {
   randomInt?: (maxInclusive: number) => number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
-  swapPlanner?: SwapPlannerPort;
+  /** avnu's keyless swap quotes (D-084). Without it, the quote route answers 503. */
+  swapQuotes?: SwapQuotePort;
   /** The backend's own degen list (D-067). Without it, degen mode stays off whatever the config says. */
   degenCatalog?: DegenCatalogPort;
   /** The Privacy Plaza's cached pool stats (D-076). Without it, that route answers 503. */
@@ -79,6 +100,10 @@ export interface BackendApiOptions {
   rateLimiter?: RequestRateLimiterPort;
   /** The pool-stats route's own rate window (D-076), apart from `rateLimiter`'s. */
   poolStatsRateLimiter?: RequestRateLimiterPort;
+  /** The swap quote route's own window (D-084), taken besides a slot in `rateLimiter`'s. */
+  swapQuoteRateLimiter?: RequestRateLimiterPort;
+  /** Each client's own quote bucket (D-084), taken before the route's window. */
+  swapQuoteClientRateLimiter?: PerClientRateLimiter;
   /** The Vault's two pinned public reads (D-077). Without it, both routes answer 503. */
   vault?: VaultRpcPort;
   /** Vesu's supply APY for the pinned vaults (D-079). Without it, that route answers 503. */
@@ -100,6 +125,8 @@ export class BackendApi {
   readonly metrics = new AggregateMetrics();
   private readonly limiter: RequestRateLimiterPort;
   private readonly poolStatsLimiter: RequestRateLimiterPort;
+  private readonly swapQuoteLimiter: RequestRateLimiterPort;
+  private readonly swapQuoteClientLimiter: PerClientRateLimiter;
   private readonly config: BackendConfig;
   private readonly requestTimeoutMs: number;
   private readonly paymaster: PaymasterPort;
@@ -107,7 +134,7 @@ export class BackendApi {
   private readonly authorizations: AuthorizationCodec;
   private readonly randomInt: (maxInclusive: number) => number;
   private readonly sleep: (ms: number) => Promise<void>;
-  private readonly swapPlanner?: SwapPlannerPort;
+  private readonly swapQuotes?: SwapQuotePort;
   private readonly degenCatalog?: DegenCatalogPort;
   private readonly poolStatsPort?: PoolStatsPort;
   private readonly vault?: VaultRpcPort;
@@ -128,7 +155,7 @@ export class BackendApi {
     this.authorizations = options.authorizations;
     this.randomInt = options.randomInt ?? ((max) => Math.floor(Math.random() * (max + 1)));
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.swapPlanner = options.swapPlanner;
+    this.swapQuotes = options.swapQuotes;
     this.degenCatalog = options.degenCatalog;
     this.poolStatsPort = options.poolStats;
     this.vault = options.vault;
@@ -142,6 +169,12 @@ export class BackendApi {
     );
     this.poolStatsLimiter = options.poolStatsRateLimiter ?? new AggregateRateLimiter(
       POOL_STATS_RATE_LIMIT.maxRequests, POOL_STATS_RATE_LIMIT.windowMs, now,
+    );
+    this.swapQuoteLimiter = options.swapQuoteRateLimiter ?? new AggregateRateLimiter(
+      SWAP_QUOTE_RATE_LIMIT.maxRequests, SWAP_QUOTE_RATE_LIMIT.windowMs, now,
+    );
+    this.swapQuoteClientLimiter = options.swapQuoteClientRateLimiter ?? new PerClientRateLimiter(
+      SWAP_QUOTE_CLIENT_RATE_LIMIT.capacity, SWAP_QUOTE_CLIENT_RATE_LIMIT.refillMs, now,
     );
     this.budget = options.sponsorshipBudget ?? new AggregateBudget(
       this.config.sponsorshipBudget.maxFeeAmount, this.config.sponsorshipBudget.windowMs, now,
@@ -192,7 +225,7 @@ export class BackendApi {
         switch (request.path) {
           case '/v1/private/fees': response = await abortable(this.fee(request.body, deadline.signal), deadline.signal); break;
           case '/v1/private/submissions': response = await abortable(this.submit(request.body, deadline.signal), deadline.signal); break;
-          case '/v1/private/swaps/prepare': response = await abortable(this.prepareSwap(request.body, deadline.signal), deadline.signal); break;
+          case SWAP_QUOTE_PATH: response = await abortable(this.swapQuote(request.body, request.client, deadline.signal), deadline.signal); break;
           case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
@@ -222,9 +255,6 @@ export class BackendApi {
     requireVersion(value);
     const route = requireRoute(value.route);
     const policy = this.routePolicy(route);
-    if (route === 'swap') {
-      throw new ApiFailure(400, 'Use the quote-bound swap preparation endpoint.');
-    }
     this.requireRelay();
     const feeToken = requireFelt(value.feeToken, 'fee token');
     const operationToken = requireFelt(value.operationToken, 'operation token');
@@ -292,15 +322,12 @@ export class BackendApi {
     const validity = requirePositiveInteger(value.proofValidityBlocks, 'proof validity');
     const claims = await this.authorizations.verify(value.feeAuthorization);
     if (!claims) throw new ApiFailure(401, 'Fee authorization is invalid.');
-    this.validateClaims(claims, route, validity, policy, await this.degenSwapAdmissions(route, claims, policy, signal));
-    if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
-      throw new ApiFailure(409, 'The private swap quote has expired.');
-    }
+    this.validateClaims(claims, route, validity, policy);
     validateServerActionRoute(route, artifact, {
       token: claims.token,
       recipient: claims.recipient,
       amount: claims.amount,
-    }, claims.operationToken, claims.swap);
+    }, claims.operationToken);
 
     await this.assertCurrentProofFreshness(claims, signal, 'Prepared proof has expired.');
     // D-066: a zero delay, the normal setting, goes straight to the queue. A
@@ -315,25 +342,14 @@ export class BackendApi {
         if (!this.config.globalEnabled) {
           throw new ApiFailure(503, 'Private operations are temporarily disabled.');
         }
-        const currentPolicy = this.routePolicy(route);
-        // Admission is checked again against the current degen list: a token
-        // avnu dropped since the quote no longer relays.
-        this.validateClaims(
-          claims,
-          route,
-          validity,
-          currentPolicy,
-          await this.degenSwapAdmissions(route, claims, currentPolicy, signal),
-        );
+        // Admission is checked again against the current policy.
+        this.validateClaims(claims, route, validity, this.routePolicy(route));
         await this.assertCurrentProofFreshness(
           claims,
           signal,
           'Prepared proof expired in the submission queue.',
         );
         throwIfAborted(signal);
-        if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
-          throw new ApiFailure(409, 'The private swap quote expired before submission.');
-        }
         const budgetAvailable = await this.budget.take(claims.amount);
         throwIfAborted(signal);
         if (!budgetAvailable) {
@@ -373,21 +389,28 @@ export class BackendApi {
     };
   }
 
-  private async prepareSwap(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
-    if (!this.swapPlanner) throw new ApiFailure(503, 'The private swap planner is unavailable.');
-    const value = requireRecord(
-      body,
-      ['v', 'sellToken', 'buyToken', 'sellAmount', 'minAmountOut', 'slippageBps'],
-    );
+  /**
+   * D-084: avnu's public, keyless swap quote and built call for the player's
+   * swap stand-in, fetched here so avnu never sees the player's IP next to
+   * that address and the amounts. A thin proxy: no key, no relay, no fee,
+   * nothing logged or kept. The request names two tokens, an amount, the
+   * stand-in and a slippage; the tokens must be ones the swap route admits
+   * (its allowlist, or the degen list, D-067), the slippage within the
+   * route's ceiling. The browser checks every field of the answer again.
+   */
+  private async swapQuote(body: unknown, client: string | undefined, signal: AbortSignal): Promise<ApiResponse> {
+    const value = requireRecord(body, ['v', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps']);
     requireVersion(value);
     const policy = this.routePolicy('swap');
-    // Before the quote as well as the fee: the planner is avnu too (D-070).
-    this.requireRelay();
-    const sellToken = requireFelt(value.sellToken, 'sell token');
-    const buyToken = requireFelt(value.buyToken, 'buy token');
+    if (!this.swapQuotes) throw new ApiFailure(503, 'The swap quotes are unavailable.');
+    const sellToken = requireNonzeroFelt(value.sellToken, 'sell token');
+    const buyToken = requireNonzeroFelt(value.buyToken, 'buy token');
+    const taker = requireNonzeroFelt(value.taker, 'taker');
     const sellAmount = requireBigintString(value.sellAmount, 'sell amount');
-    const minAmountOut = requireBigintString(value.minAmountOut, 'minimum output');
     const slippageBps = requirePositiveInteger(value.slippageBps, 'slippage');
+    if (sameAddress(sellToken, buyToken)) throw new ApiFailure(400, 'A swap needs two different tokens.');
+    if (BigInt(taker) >= CONTRACT_ADDRESS_BOUND) throw new ApiFailure(400, 'Invalid taker.');
+    if (sellAmount >= U128_BOUND) throw new ApiFailure(400, 'Invalid sell amount.');
     if (slippageBps > (policy.maxSlippageBps ?? 500)) {
       throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
     }
@@ -402,96 +425,39 @@ export class BackendApi {
         throw new ApiFailure(400, 'Swap token is not allowlisted.');
       }
     }
-
-    const [plan, block, poolConfig] = await Promise.all([
-      this.swapPlanner.prepare({ sellToken, buyToken, sellAmount, minAmountOut, slippageBps, signal }),
-      this.rpc.getBlockNumber(signal),
-      this.rpc.getPoolConfig(signal),
-    ]);
+    // A quote also takes a slot in its own window, which bounds what this
+    // service asks of avnu's public API for every player at once. Taken only
+    // once the request is admitted, so malformed or refused requests cannot
+    // spend it.
+    // The client's own bucket first, so one client cannot spend the shared
+    // window; a request with no key (a direct call in tests) shares one.
+    if (!this.swapQuoteClientLimiter.take(client ?? 'unkeyed')) throw new RateLimitedError();
+    if (!this.swapQuoteLimiter.take()) throw new RateLimitedError();
+    const quote = await this.swapQuotes.quote({ sellToken, buyToken, sellAmount, taker, slippageBps, signal });
     if (
-      typeof plan.quoteId !== 'string' ||
-      plan.quoteId.length === 0 ||
-      plan.chainId !== MAINNET_CHAIN_ID ||
-      !isFelt(plan.executorAddress) ||
-      BigInt(plan.executorAddress) === 0n ||
-      typeof plan.buyAmount !== 'bigint' ||
-      plan.buyAmount > MAX_UINT256 ||
-      plan.buyAmount < minAmountOut ||
-      !Number.isSafeInteger(plan.expiresAt) ||
-      plan.expiresAt <= this.clockNow() ||
-      plan.executorCalls.length === 0
+      quote.chainId !== MAINNET_CHAIN_ID
+      || quote.sellAmount !== sellAmount
+      || !sameAddress(quote.sellToken, sellToken)
+      || !sameAddress(quote.buyToken, buyToken)
+      || quote.calls.length !== 1
+      || quote.calls.some((call) => call.calldata.length > this.config.maxCalldataItems)
     ) {
-      throw new ApiFailure(409, 'AVNU returned a stale or invalid private quote.');
+      throw new ApiFailure(502, 'avnu returned an invalid swap quote.');
     }
-    for (const call of plan.executorCalls) {
-      if (
-        !isFelt(call.contractAddress) ||
-        BigInt(call.contractAddress) === 0n ||
-        !isFelt(call.selector) ||
-        !call.entrypoint ||
-        call.calldata.some((felt) => !isFelt(felt))
-      ) {
-        throw new ApiFailure(502, 'AVNU returned malformed private executor calls.');
-      }
-    }
-    const fee = await this.paymaster.buildFee({
-      route: 'swap',
-      poolAddress: this.config.poolAddress,
-      feeToken: this.config.feeToken,
-      operationToken: sellToken,
-      signal,
-    });
-    requireFelt(fee.token, 'paymaster fee token');
-    const feeAmount = requireProviderFeeAmount(fee.amount);
-    if (
-      !sameAddress(fee.token, this.config.feeToken) ||
-      feeAmount <= 0n ||
-      feeAmount > policy.maxRelayFee
-    ) {
-      throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
-    }
-    requireNonzeroFelt(fee.recipient, 'fee recipient');
-    const invokePrefix = [buyToken, ...serializeCairo1Calls(plan.executorCalls)];
-    // count + two TransferTo actions + Invoke header + buy token/open-note id
-    if (invokePrefix.length + 13 > this.config.maxCalldataItems) {
-      throw new ApiFailure(413, 'AVNU private executor plan is too large.');
-    }
-    const expiresAtBlock = safeBlockExpiry(block, poolConfig.proofValidityBlocks);
-    const claims: FeeAuthorizationClaims = {
-      v: 1,
-      route: 'swap',
-      feeToken: this.config.feeToken,
-      operationToken: sellToken,
-      token: fee.token,
-      recipient: fee.recipient,
-      amount: feeAmount,
-      issuedAtBlock: block,
-      expiresAtBlock,
-      swap: {
-        executor: plan.executorAddress,
-        sellToken,
-        buyToken,
-        sellAmount,
-        quoteExpiresAt: plan.expiresAt,
-        invokePrefix,
-      },
-    };
     return {
       status: 200,
       body: {
-        quoteId: plan.quoteId,
-        buyAmount: plan.buyAmount.toString(),
-        expiresAt: plan.expiresAt,
-        chainId: plan.chainId,
-        executorAddress: plan.executorAddress,
-        executorCalls: plan.executorCalls,
-        fee: {
-          token: fee.token,
-          recipient: fee.recipient,
-          amount: feeAmount.toString(),
-          authorization: await this.authorizations.issue(claims),
-          expiresAtBlock: claims.expiresAtBlock,
-        },
+        quoteId: quote.quoteId,
+        chainId: quote.chainId,
+        sellToken,
+        buyToken,
+        sellAmount: quote.sellAmount.toString(),
+        buyAmount: quote.buyAmount.toString(),
+        calls: quote.calls.map((call) => ({
+          contractAddress: call.contractAddress,
+          entrypoint: call.entrypoint,
+          calldata: [...call.calldata],
+        })),
       },
     };
   }
@@ -754,24 +720,6 @@ export class BackendApi {
       .filter((address) => typeof address === 'string' && isFelt(address) && BigInt(address) !== 0n);
   }
 
-  /**
-   * The degen list is consulted only for a swap whose tokens the static
-   * allowlist does not already cover, so an ordinary swap never waits on
-   * avnu's token list.
-   */
-  private async degenSwapAdmissions(
-    route: PrivateRoute,
-    claims: FeeAuthorizationClaims,
-    policy: RoutePolicy,
-    signal: AbortSignal,
-  ): Promise<readonly string[]> {
-    const swap = claims.swap;
-    if (route !== 'swap' || claims.route !== 'swap' || !swap) return [];
-    const listed = (token: string) => policy.allowedTokens.some((allowed) => sameAddress(allowed, token));
-    if ([claims.operationToken, swap.sellToken, swap.buyToken].every(listed)) return [];
-    return this.degenAdmissions(signal);
-  }
-
   private routePolicy(route: PrivateRoute): RoutePolicy {
     // An unconfigured optional route (stake, D-063) is disabled, not an error.
     const policy = this.config.routes[route];
@@ -792,17 +740,15 @@ export class BackendApi {
    * The enabled routes this relay refuses for want of a key (D-070), for its
    * one startup line. Read from the same switch the routes themselves check.
    */
-  relayRefusedRoutes(): readonly PrivateRoute[] {
+  relayRefusedRoutes(): readonly RelayRoute[] {
     return refusedRelayRoutes(this.config, this.paymaster.configured !== false);
   }
 
   private validateClaims(
     claims: FeeAuthorizationClaims,
-    route: PrivateRoute,
+    route: RelayRoute,
     validity: number,
     policy: RoutePolicy,
-    /** The degen list's current addresses (D-067); they widen the swap route only. */
-    degenTokens: readonly string[] = [],
   ): void {
     if (claims.v !== 1 || claims.route !== route) throw new ApiFailure(401, 'Fee authorization route mismatch.');
     if (!sameAddress(claims.feeToken, this.config.feeToken) || !sameAddress(claims.token, this.config.feeToken)) {
@@ -811,22 +757,8 @@ export class BackendApi {
     if (claims.amount <= 0n || claims.amount > policy.maxRelayFee) {
       throw new ApiFailure(401, 'Fee authorization exceeds policy.');
     }
-    const admitted = (token: string) =>
-      policy.allowedTokens.some((allowed) => sameAddress(allowed, token)) ||
-      (route === 'swap' && degenTokens.some((address) => sameAddress(address, token)));
-    if (!admitted(claims.operationToken)) {
+    if (!policy.allowedTokens.some((allowed) => sameAddress(allowed, claims.operationToken))) {
       throw new ApiFailure(401, 'Fee authorization operation token is no longer allowlisted.');
-    }
-    if ((route === 'swap') !== Boolean(claims.swap)) {
-      throw new ApiFailure(401, 'Fee authorization private-route binding is invalid.');
-    }
-    const swap = claims.swap;
-    if (swap && (
-      !sameAddress(swap.sellToken, claims.operationToken) ||
-      !admitted(swap.sellToken) ||
-      !admitted(swap.buyToken)
-    )) {
-      throw new ApiFailure(401, 'Fee authorization swap token is no longer allowlisted.');
     }
     requireFelt(claims.recipient, 'authorized fee recipient');
     if (
@@ -855,6 +787,10 @@ export class BackendApi {
   }
 
   private failure(error: unknown): ApiResponse {
+    if (error instanceof RateLimitedError) {
+      this.metrics.limited();
+      return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
+    }
     this.metrics.failure();
     // D-070: no key, or a key avnu rejects. One fixed answer, never avnu's text.
     if (error instanceof RelayNotConfiguredError) {
@@ -867,6 +803,14 @@ export class BackendApi {
       return { status: 504, body: { code: 'UPSTREAM_TIMEOUT', message: 'A private service dependency timed out.' } };
     }
     return { status: 502, body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' } };
+  }
+}
+
+/** A route's own rate window is spent (D-084): answered exactly as the shared limiter answers. */
+class RateLimitedError extends Error {
+  constructor() {
+    super('Service is busy. Try again shortly.');
+    this.name = 'RateLimitedError';
   }
 }
 
@@ -904,24 +848,6 @@ function requireBigintString(value: unknown, label: string): bigint {
   const parsed = BigInt(value);
   if (parsed > MAX_UINT256) throw new ApiFailure(400, `Invalid ${label}.`);
   return parsed;
-}
-
-function serializeCairo1Calls(
-  calls: Array<{ contractAddress: string; selector: string; calldata: string[] }>,
-): string[] {
-  return [
-    toFelt(BigInt(calls.length)),
-    ...calls.flatMap((call) => [
-      call.contractAddress,
-      call.selector,
-      toFelt(BigInt(call.calldata.length)),
-      ...call.calldata,
-    ]),
-  ];
-}
-
-function toFelt(value: bigint): string {
-  return `0x${value.toString(16)}`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1039,7 +965,7 @@ function validateBackendConfig(config: BackendConfig): void {
     swap.maxQueueDelayMs !== 0 ||
     !Number.isSafeInteger(swap.maxSlippageBps) ||
     (swap.maxSlippageBps ?? 0) <= 0 ||
-    (swap.maxSlippageBps ?? 0) > 1_000
+    (swap.maxSlippageBps ?? 0) > 300
   ) {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
   }

@@ -103,7 +103,6 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
   const ops = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission: gateway,
     supportedVersions: vi.fn(async () => ['0.10.3']),
     policy,
   });

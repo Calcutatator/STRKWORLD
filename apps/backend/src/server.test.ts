@@ -7,7 +7,7 @@ import {
   listenBackendServer,
   registerBackendShutdown,
 } from './runtime.js';
-import type { PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
+import type { PaymasterPort, PoolRpcPort, SwapQuotePort } from './types.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const POOL = '0x123';
@@ -76,8 +76,6 @@ function validEnvironment(overrides: Record<string, string> = {}): Record<string
     BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: `${STRK},0xabc`,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
-    BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
     BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: `${STRK},0xabc`,
     BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
     ...overrides,
@@ -88,10 +86,18 @@ describe('strict production backend environment', () => {
   it('constructs fixed route semantics and normalizes the named mainnet chain', () => {
     const parsed = parseBackendEnvironment(validEnvironment());
     expect(parsed.port).toBe(8080);
-    expect(parsed.swapPlanner.chainId).toBe(MAINNET_CHAIN_ID);
+    expect(parsed.swapQuotes.chainId).toBe(MAINNET_CHAIN_ID);
     expect(parsed.backend.routes.transfer).toMatchObject({ quoteBound: false, maxQueueDelayMs: 15_000 });
     expect(parsed.backend.routes.unshield).toMatchObject({ quoteBound: false, maxQueueDelayMs: 15_000 });
-    expect(parsed.backend.routes.swap).toMatchObject({ quoteBound: true, maxQueueDelayMs: 0 });
+    expect(parsed.backend.routes.swap).toMatchObject({ quoteBound: true, maxQueueDelayMs: 0, maxRelayFee: 0n });
+  });
+
+  it('reads no relay fee or queue delay for the swap, which is never relayed (D-084)', () => {
+    const parsed = parseBackendEnvironment(validEnvironment({
+      BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: 'not-a-number',
+      BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '1',
+    }));
+    expect(parsed.backend.routes.swap).toMatchObject({ maxRelayFee: 0n, maxQueueDelayMs: 0, maxSlippageBps: 50 });
   });
 
   it('accepts the maximum request timeout supported by the Node timer', () => {
@@ -157,7 +163,7 @@ describe('strict production backend environment', () => {
     ['unshield queue-delay overflow', { BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '2147483648' }],
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['negative transfer queue delay', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '-1' }],
-    ['delayed swap', { BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '1' }],
+    ['swap slippage above 3%', { BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '301' }],
     ['non-https pool value URL', { PLAZA_POOL_VALUE_URL: 'http://strkprice.example/api/pool' }],
     ['placeholder pool value URL', { PLAZA_POOL_VALUE_URL: 'https://REPLACE_ME.example/api/pool' }],
   ])('rejects %s', (_label, override) => {
@@ -219,17 +225,10 @@ describe('production backend composition and HTTP listener', () => {
       getReceipt: vi.fn(async (transactionHash) => ({ transactionHash, status: 'ACCEPTED_ON_L2' })),
       getBlockNumber: vi.fn(async () => 1_000),
     };
-    const swapPlanner: SwapPlannerPort = {
-      prepare: vi.fn(async () => ({
-        quoteId: 'quote-1',
-        buyAmount: 1n,
-        expiresAt: Date.now() + 60_000,
-        chainId: MAINNET_CHAIN_ID,
-        executorAddress: '0x999',
-        executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: [] }],
-      })),
+    const swapQuotes: SwapQuotePort = {
+      quote: vi.fn(async () => { throw new Error('no swap is quoted in this test'); }),
     };
-    const runtime = createBackendRuntime(validEnvironment(), { paymaster, rpc, swapPlanner });
+    const runtime = createBackendRuntime(validEnvironment(), { paymaster, rpc, swapQuotes });
     const running = await listenBackendServer(runtime.server, { port: 0 });
 
     try {

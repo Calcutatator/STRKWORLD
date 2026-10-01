@@ -302,6 +302,50 @@ Traps met on the way:
   per-frame CPU is about 0.1 ms at 100 figures. Real GPU cost needs a
   browser.
 
+### 2026-10-01 — avnu's public swap API is keyless, its exchange takes a keyless caller, a shadow account can return only what it gained, and Pragma checks the quote (D-084)
+
+`GET https://starknet.api.avnu.fi/swap/v3/quotes` and `POST /swap/v3/build`
+answer without any key: the build for a quote id, a `takerAddress`, a
+`slippage` and `includeApprove: false` is exactly one call, `multi_route_swap`
+on `0x04270219…b0f`, with the taker as beneficiary. The quote's `expiry` is
+`null`, so the swap sets its own (30 s). Over
+`https://api.cartridge.gg/x/starknet/mainnet` (block 15,726,513) the
+exchange's class `0x2ce86109…d236` has no account entry points, its source
+checks only `beneficiary == caller` and pulls exactly the sell amount, and
+avnu's own `PrivacySwapHelper`, a contract with only `privacy_invoke`, swapped
+through it as taker in `0x5d3af396…dd67` (block 15,724,143). How verified:
+`curl` against both endpoints, `starknet_getClassHashAt` and `starknet_getClass`
+for the exchange, the helper and the shadow account class, `starknet_getEvents`
+on the exchange for a helper-taker swap and its receipt, and the Cairo sources
+of avnu's exchange and StarkWare's anonymizer read on GitHub. Traps met:
+
+- **avnu's floor is one base unit lower than D-042's.** avnu rounds the
+  slippage up (430,588 at 1% gave 426,282; `protectedMinimumOut` gives
+  426,283). Requiring avnu's floor to meet ours rejects real quotes; the swap
+  re-encodes the head with its own floor instead.
+- **A second open note for leftovers reverts.** The anonymizer applies one
+  collect policy to every note, asserts each collects more than zero
+  (`ZERO_BALANCE`) and that no `diff` goes negative (`NEGATIVE_DIFF`), and
+  snapshots after the pool's withdraw. A sell-token note would revert every
+  swap that spends all it was given. The exchange's exact `transferFrom` and
+  residue check, and the transaction's atomicity, are what leave nothing
+  behind.
+- **The identity-read scanner flags `array[index]` with a variable index** in
+  any production source of the privacy package, test helpers under
+  `src/testing/` included (`forward-compatibility.test.ts`). Use `.at()`.
+- **Pragma prices the majors on mainnet, not strkBTC.** `get_data_median` on
+  `0x02a85bd6…875b` with calldata `[0x0, <pair short string>]` answers
+  `[price, decimals, last_updated, num_sources, expiration…]`: STRK/USD,
+  ETH/USD, USDC/USD (6 decimals), USDT/USD, WBTC/USD, WSTETH/USD, LORDS/USD and
+  EKUBO/USD answered with 3 to 11 sources; STRKBTC/USD answered all zeros, and
+  XSTRK/USD had only 2 sources. Cartridge's RPC accepts JSON-RPC batches.
+- **The edge forwards no client header**, so a per-client limit in the backend
+  needs the edge to send one: it sends a salted HMAC of the last
+  `X-Forwarded-For` entry as `x-strkworld-client`, never the address.
+- **starknet.js normalizes calldata but not `contractAddress`** when it hands a
+  `shadow_account_invoke` to the wallet: a padded address stays padded. The
+  swap canonicalizes every address it puts in an action.
+
 ### 2026-10-01 — Endur's withdrawal queue mints with a plain mint, so a keyless shadow account can hold an unstake request; Endur pays ready requests itself (D-085)
 
 A shadow account (class `0x70e76435…b78f`, live at `0x6ad69dce…aba4`) has

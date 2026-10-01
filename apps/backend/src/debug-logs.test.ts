@@ -410,8 +410,6 @@ describe('BACKEND_DEBUG_LOGS_ENABLED', () => {
       BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
       BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
       BACKEND_ROUTE_SWAP_ENABLED: 'false',
-      BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
-      BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '0',
       BACKEND_ROUTE_SWAP_ALLOWED_TOKENS: STRK,
       BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '50',
       ...overrides,
@@ -435,7 +433,7 @@ describe('BACKEND_DEBUG_LOGS_ENABLED', () => {
     const ports = {
       paymaster: { buildFee: vi.fn(), submit: vi.fn() },
       rpc: { getPoolConfig: vi.fn(), getPublicKey: vi.fn(), getReceipt: vi.fn(), getBlockNumber: vi.fn() },
-      swapPlanner: { prepare: vi.fn() },
+      swapQuotes: { quote: vi.fn() },
       debugLogs: new DebugLogSink({ write: (line) => lines.push(line) }),
     };
     for (const [flag, expected] of [['true', 202], ['', 404]] as const) {
