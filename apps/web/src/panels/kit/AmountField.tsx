@@ -24,6 +24,8 @@ export interface AmountFieldProps {
   readonly balance?: bigint | null;
   /** The balance line's words; the pool balance by default. */
   readonly balanceLabel?: string;
+  /** The message for an amount above `balance`; "More than your pool balance" by default. */
+  readonly exceedsMessage?: string;
   /**
    * Opt-in Max: absent, there is no Max button. Called at render; `null`
    * disables the button (no honest maximum, see `maxAfterReserve`).
@@ -43,13 +45,13 @@ export interface AmountFieldProps {
 
 export function AmountField({
   label, value, onChange, decimals, symbol, token, balance = null, balanceLabel = COPY.kit.poolBalance,
-  max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
+  exceedsMessage = COPY.kit.exceedsBalance, max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
 }: AmountFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   const hintId = `${id}-hint`;
   const check = checkAmount(value, { decimals, balance, minimum });
-  const message = amountMessage(check, minimum, decimals, symbol);
+  const message = amountMessage(check, minimum, decimals, symbol, exceedsMessage);
   const maximum = max ? max() : null;
   const halfValue = maximum === null ? null : fractionOf(maximum, 1n, 2n);
   const fill = (amount: bigint | null) => {
@@ -101,12 +103,12 @@ export function AmountField({
   );
 }
 
-function amountMessage(check: AmountCheck, minimum: bigint | null, decimals: number, symbol: string): string | null {
+function amountMessage(check: AmountCheck, minimum: bigint | null, decimals: number, symbol: string, exceeds: string): string | null {
   switch (check.status) {
     case 'invalid':
       return COPY.kit.invalidDetail;
     case 'exceeds-balance':
-      return COPY.kit.exceedsBalance;
+      return exceeds;
     case 'below-minimum':
       return minimum === null ? COPY.kit.belowMinimum : COPY.kit.belowMinimumDetail.replace('{minimum}', `${formatTokenAmountExact(minimum, decimals)} ${symbol}`);
     default:

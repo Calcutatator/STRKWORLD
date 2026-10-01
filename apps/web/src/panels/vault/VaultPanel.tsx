@@ -18,12 +18,16 @@ import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
+import { AmountField, DetailRows, checkAmount, feeReserve, maxAfterReserve, primaryAction, type DetailRow } from '../kit/index.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { routeDoor } from '../routes.js';
 import {
   ROUTE_BY_VAULT_MODE,
   createVaultPanel,
   noneInPoolLine,
+  poolBalanceOf,
+  positionOf,
+  redeemsWholePosition,
   vaultChoices,
   vaultListedMarkets,
   voyagerContractUrl,
@@ -361,12 +365,42 @@ function StandInLine({ address }: { address: string }) {
  * collateral-only one holding a position), the chosen market's pool, and for
  * a supply the line saying it comes from the pool balance, or, once a review
  * found none of the token there, that there is nothing to supply.
+ *
+ * D-089, the lending touches (Aave's and Vesu's, nothing from a swap): one
+ * amount field whose balance line is the pool balance for a supply (read when
+ * the player asks) or what is supplied for a redeem; a Max only where the
+ * figure is known; the market's supply APY and "You will supply / receive";
+ * and a button that says what is missing ("Enter an amount", "Insufficient
+ * USDC") before it offers the review.
  */
 function ComposeBlock({ state, token, panel }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine }) {
   const preparing = state.flow.name === 'preparing';
-  const all = state.mode === 'redeem' && state.redeemAll;
+  const supply = state.mode === 'supply';
   const noneHeld = state.holding.status === 'none' && sameAddress(state.holding.token, token.token);
   const choices = vaultChoices(state, state.mode);
+  const field = amountFieldFor(state, token);
+  const check = checkAmount(state.amountText, { decimals: token.decimals, balance: field.balance });
+  const everything = !supply && (state.redeemAll || (check.status === 'ok' && redeemsWholePosition(state, token, check.amount)));
+  const action = everything && check.status === 'empty'
+    ? { label: COPY.gameMode.reviewAction, disabled: preparing }
+    : primaryAction({
+        check,
+        symbol: token.symbol,
+        ready: COPY.gameMode.reviewAction,
+        busy: preparing ? COPY.flow.preparing : null,
+        ...(supply ? {} : { exceeds: COPY.vault.form.overSupplied }),
+      });
+  const rate = state.rates.status === 'loaded' ? state.rates.rates.find((candidate) => sameAddress(candidate.token, token.token)) : undefined;
+  const rows: DetailRow[] = [];
+  if (rate) rows.push({ id: 'apy', label: COPY.vault.rates.label, value: `${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}` });
+  if (check.status === 'ok') {
+    rows.push({
+      id: 'amount',
+      label: supply ? COPY.vault.form.willSupply : COPY.vault.form.willReceive,
+      value: formatExact(check.amount, token),
+      tone: 'emphasis',
+    });
+  }
   return (
     <form
       className="panel-compose"
@@ -400,41 +434,89 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
         {`${COPY.vault.pools.label}: ${poolLabel(token)}`}
       </p>
       {token.lendable ? null : <p className="vault-market-note">{COPY.vault.collateralOnly}</p>}
-      {state.mode === 'supply' ? (
+      {supply ? (
         noneHeld ? (
           <p className="vault-holding vault-holding-none" role="status">{noneInPoolLine(token)}</p>
         ) : (
           <p className="vault-holding">{`${COPY.vault.holding.neededLead} ${token.symbol} ${COPY.vault.holding.neededTail}`}</p>
         )
       ) : null}
-      {state.mode === 'redeem' ? (
-        <label className="vault-all">
-          <input
-            type="checkbox"
-            name="redeem-all"
-            checked={state.redeemAll}
-            onChange={(event) => panel.setRedeemAll(event.target.checked)}
-          />
-          {COPY.vault.redeemAll}
-        </label>
-      ) : null}
-      {all ? null : (
-        <label>
-          {`${COPY.vault.amount} (${token.symbol})`}
-          <input
-            name="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            value={state.amountText}
-            onChange={(event) => panel.setAmount(event.target.value)}
-          />
-        </label>
-      )}
-      <button type="submit" className="review" disabled={preparing}>
-        {preparing ? COPY.flow.preparing : COPY.gameMode.reviewAction}
+      {supply ? <BalanceRead state={state} onRead={() => void panel.refreshBalances()} /> : null}
+      <AmountField
+        label={COPY.vault.amount}
+        value={state.amountText}
+        onChange={(text) => panel.setAmount(text)}
+        decimals={token.decimals}
+        symbol={token.symbol}
+        balance={field.balance}
+        balanceLabel={supply ? COPY.kit.poolBalance : COPY.vault.form.supplied}
+        exceedsMessage={supply ? COPY.kit.exceedsBalance : COPY.vault.form.overSupplied}
+        {...(field.max ? { max: field.max } : {})}
+        hint={field.hint(state.amountText)}
+        disabled={preparing}
+      />
+      <DetailRows rows={rows} label={COPY.flow.review} />
+      <button type="submit" className="review" disabled={action.disabled}>
+        {action.label}
       </button>
       <p className="panel-hint">{COPY.gameMode.singleAction}</p>
     </form>
+  );
+}
+
+/**
+ * The amount field's figures for the chosen token (D-089). A supply checks
+ * against the pool balance the player read, and offers Max only when the
+ * wallet says what is spendable (D-022: an aggregate is not), leaving the
+ * pool fee behind in the fee token. A redeem checks against what is supplied,
+ * and Max is what the vault can pay out now: the whole position when it can,
+ * which redeems every share.
+ */
+function amountFieldFor(state: VaultState, token: VaultTokenView): {
+  balance: bigint | null;
+  max: (() => bigint | null) | null;
+  hint: (text: string) => string | null;
+} {
+  if (state.mode === 'supply') {
+    const held = poolBalanceOf(state, token.token);
+    const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
+    const reserve = feeReserve(token.token, fee);
+    const maximum = held && held.maturityKnown ? maxAfterReserve(held.spendable, reserve) : null;
+    return {
+      balance: held?.total ?? null,
+      max: held && held.maturityKnown ? () => maximum : null,
+      hint: (text) => maximum !== null && reserve !== null && reserve > 0n && text === formatTokenAmountExact(maximum, token.decimals)
+        ? COPY.balance.feeReserved
+        : null,
+    };
+  }
+  const held = positionOf(state, token.token);
+  if (held === undefined || held.shares === 0n) return { balance: null, max: null, hint: () => null };
+  const short = held.redeemable < held.assets;
+  return {
+    balance: held.assets,
+    max: held.redeemable > 0n ? () => held.redeemable : null,
+    hint: () => (short ? `${COPY.vault.form.payoutLead} ${formatHolding(held.redeemable, token)} ${COPY.vault.form.payoutTail}` : null),
+  };
+}
+
+/** The supply's pool balance, read only when the player asks: the wallet may ask first. */
+function BalanceRead({ state, onRead }: { state: VaultState; onRead: () => void }) {
+  const { balances } = state;
+  if (balances.status === 'loaded') return null;
+  return (
+    <p className="vault-balance-read" data-status={balances.status}>
+      {balances.status === 'loading' ? (
+        <span aria-busy="true">{COPY.vault.form.balanceLoading}</span>
+      ) : balances.status === 'failed' ? (
+        <>
+          <span role="alert">{COPY.vault.form.balanceUnavailable}</span>{' '}
+          <button type="button" className="ui-chip" onClick={onRead}>{COPY.vault.form.balanceAgain}</button>
+        </>
+      ) : (
+        <button type="button" className="ui-chip" onClick={onRead}>{COPY.vault.form.showBalance}</button>
+      )}
+    </p>
   );
 }
 

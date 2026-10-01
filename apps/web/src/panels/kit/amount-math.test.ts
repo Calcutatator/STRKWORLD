@@ -90,6 +90,11 @@ describe('primaryAction', () => {
     expect(primaryAction({ check: checkAmount('0.1', { decimals: 18, minimum: ONE }), symbol: 'STRK', ready })).toEqual({ label: COPY.kit.belowMinimum, disabled: true });
     expect(primaryAction({ check: checkAmount('1', { decimals: 18 }), symbol: 'STRK', ready })).toEqual({ label: ready, disabled: false });
   });
+
+  it('says a panel\'s own words for an amount above its figure, as a repay above the debt', () => {
+    expect(primaryAction({ check: checkAmount('11', { decimals: 18, balance: 10n * ONE }), symbol: 'USDC', ready, exceeds: 'More than you owe' }))
+      .toEqual({ label: 'More than you owe', disabled: true });
+  });
 });
 
 describe('balanceText', () => {

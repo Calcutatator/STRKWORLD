@@ -18,6 +18,7 @@ import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
+import { AmountField, BeforeAfter, DetailRows, checkAmount, primaryAction, type AmountCheck, type DetailRow, type DetailTone } from '../kit/index.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { voyagerContractUrl } from '../vault/vault-machine.js';
 import {
@@ -26,12 +27,14 @@ import {
   createBorrowPanel,
   loanFor,
   maxLtvFor,
+  takesEverything,
   type BorrowMode,
   type BorrowPairChoice,
   type BorrowPanel as BorrowPanelMachine,
   type BorrowState,
   type BorrowTokenView,
 } from './borrow-machine.js';
+import { maxBorrow, maxWithdraw, pairAssets, previewHealth, type PreviewHealth, type PreviewLoan } from './borrow-preview.js';
 
 /** Vesu's × 10^18 fraction as a percentage: "68.00%". */
 export function formatLtv(value: bigint): string {
@@ -358,7 +361,16 @@ function pairLabel(state: BorrowState, pair: BorrowPairChoice): string {
 /**
  * The form. To borrow: the collateral and debt tokens of a pair Vesu offers
  * now, its max LTV, collateral to add (optional) and the amount to borrow. To
- * change a loan: the loan, then the amount or "everything".
+ * change a loan: the loan, then the amount.
+ *
+ * D-089, the lending touches (Aave's, nothing from a swap): once the loans
+ * are read, "Available to borrow" with a Max that stops at a health factor of
+ * 1.25, the health factor before → after and the price the loan turns
+ * liquidatable at; a repay's Max is the debt and repays everything, a
+ * withdrawal's is the most that keeps health at 1.25 (everything when nothing
+ * is owed). The button says what is missing, and "Health factor too low"
+ * where the seam would refuse an amount for D-083's 1.05 floor. The seam
+ * still re-reads and decides; these figures only say it early.
  */
 function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanelMachine }) {
   const preparing = state.flow.name === 'preparing';
@@ -375,7 +387,18 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
   const collaterals = state.tokens.filter((token) => choices.some((choice) => sameAddress(choice.collateral, token.token)));
   const debts = choices.filter((choice) => sameAddress(choice.collateral, pair.collateral));
   const amountToken = state.mode === 'borrow' || state.mode === 'repay' ? debt : collateral;
-  const canAll = state.mode === 'repay' || state.mode === 'withdraw-collateral';
+  const preview = previewFor(state, pair, collateral, debt);
+  const action = preview.tooLow
+    ? { label: COPY.borrow.form.tooLow, disabled: true }
+    : preview.collateralCheck.status === 'invalid'
+      ? primaryAction({ check: preview.collateralCheck, symbol: collateral.symbol, ready: '' })
+      : primaryAction({
+          check: preview.check,
+          symbol: amountToken.symbol,
+          ready: COPY.gameMode.reviewAction,
+          busy: preparing ? COPY.flow.preparing : null,
+          ...(preview.exceeds ? { exceeds: preview.exceeds } : {}),
+        });
   return (
     <form
       className="panel-compose borrow-compose"
@@ -428,41 +451,163 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
       {maxLtv !== undefined ? <p className="borrow-max-ltv">{`${COPY.borrow.maxLtv} ${formatLtv(maxLtv)}`}</p> : null}
       {loan ? <HealthFigures health={loan.health} collateral={collateral} debt={debt} /> : null}
       {state.mode === 'borrow' ? (
-        <label>
-          {`${COPY.borrow.collateralAmount} (${collateral.symbol})`}
-          <input
-            name="collateral-amount"
-            inputMode="decimal"
-            autoComplete="off"
-            value={state.collateralText}
-            onChange={(event) => panel.setCollateralAmount(event.target.value)}
-          />
-        </label>
+        <AmountField
+          label={COPY.borrow.collateralAmount}
+          name="collateral-amount"
+          value={state.collateralText}
+          onChange={(text) => panel.setCollateralAmount(text)}
+          decimals={collateral.decimals}
+          symbol={collateral.symbol}
+          disabled={preparing}
+        />
       ) : null}
-      {canAll ? (
-        <label className="vault-all">
-          <input type="checkbox" name="all" checked={state.all} onChange={(event) => panel.setAll(event.target.checked)} />
-          {state.mode === 'repay' ? COPY.borrow.repayAll : COPY.borrow.withdrawAll}
-        </label>
-      ) : null}
-      {canAll && state.all ? null : (
-        <label>
-          {`${state.mode === 'borrow' ? COPY.borrow.borrowAmount : COPY.borrow.amount} (${amountToken.symbol})`}
-          <input
-            name="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            value={state.amountText}
-            onChange={(event) => panel.setAmount(event.target.value)}
-          />
-        </label>
-      )}
-      <button type="submit" className="review" disabled={preparing}>
-        {preparing ? COPY.flow.preparing : COPY.gameMode.reviewAction}
+      <AmountField
+        label={state.mode === 'borrow' ? COPY.borrow.borrowAmount : COPY.borrow.amount}
+        value={state.amountText}
+        onChange={(text) => panel.setAmount(text)}
+        decimals={amountToken.decimals}
+        symbol={amountToken.symbol}
+        balance={preview.balance}
+        {...(preview.balanceLabel ? { balanceLabel: preview.balanceLabel } : {})}
+        {...(preview.exceeds ? { exceedsMessage: preview.exceeds } : {})}
+        {...(preview.max ? { max: preview.max } : {})}
+        hint={preview.hint}
+        disabled={preparing}
+      />
+      {state.mode === 'borrow' && state.loans.status !== 'loaded' ? <p className="borrow-read-loans">{COPY.borrow.form.readLoans}</p> : null}
+      <DetailRows rows={preview.rows} label={COPY.flow.review} />
+      <button type="submit" className="review" disabled={action.disabled}>
+        {action.label}
       </button>
       <p className="panel-hint">{COPY.gameMode.singleAction}</p>
     </form>
   );
+}
+
+function healthText(health: PreviewHealth): string {
+  return health.status === 'priced' ? formatHealth(health.healthFactor) : COPY.borrow.form.noDebt;
+}
+
+/** The after figure's tone, written out in words too (the kit's rule). */
+function healthTone(health: PreviewHealth): { tone: DetailTone; note: string | null } {
+  if (health.status !== 'priced') return { tone: 'default', note: null };
+  switch (health.band) {
+    case 'liquidatable':
+      return { tone: 'danger', note: COPY.borrow.bands.liquidatable };
+    case 'too-close':
+      return { tone: 'danger', note: COPY.borrow.form.tooLow };
+    case 'warning':
+      return { tone: 'warning', note: COPY.borrow.bands.warning };
+    default:
+      return { tone: 'default', note: null };
+  }
+}
+
+/**
+ * The compose surface's figures (D-089), from the last loans and market
+ * reads. With the loans unread there is no "before", so no preview, no
+ * "Available to borrow" and no Max: an existing loan would change them all.
+ */
+function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: BorrowTokenView, debt: BorrowTokenView): {
+  check: AmountCheck;
+  collateralCheck: AmountCheck;
+  balance: bigint | null;
+  balanceLabel: string | null;
+  exceeds: string | null;
+  max: (() => bigint | null) | null;
+  hint: string | null;
+  rows: DetailRow[];
+  tooLow: boolean;
+} {
+  const mode = state.mode;
+  const loan = loanFor(state, pair);
+  const known = state.loans.status === 'loaded';
+  const market = state.market.status === 'loaded' ? state.market.market : null;
+  const held: PreviewLoan | null = known ? { collateralAmount: loan?.collateralAmount ?? 0n, debtAmount: loan?.debtAmount ?? 0n } : null;
+  const amountToken = mode === 'borrow' || mode === 'repay' ? debt : collateral;
+  const collateralCheck = mode === 'borrow' ? checkAmount(state.collateralText, { decimals: collateral.decimals }) : { status: 'empty' as const, amount: null };
+  const added = collateralCheck.status === 'ok' ? collateralCheck.amount : 0n;
+  let balance: bigint | null = null;
+  let balanceLabel: string | null = null;
+  let exceeds: string | null = null;
+  let max: (() => bigint | null) | null = null;
+  let maximum: bigint | null = null;
+  if (held && market) {
+    if (mode === 'borrow') {
+      maximum = maxBorrow(market, pair, { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount });
+      max = () => maximum;
+    } else if (mode === 'withdraw-collateral' && loan) {
+      maximum = maxWithdraw(market, pair, held, loan.health.maxLtv);
+      max = () => maximum;
+    }
+  }
+  if (held && loan && mode === 'repay') {
+    balance = loan.debtAmount;
+    balanceLabel = COPY.borrow.form.owed;
+    exceeds = COPY.borrow.form.overDebt;
+    max = () => loan.debtAmount;
+  }
+  if (held && loan && mode === 'withdraw-collateral') {
+    balance = loan.collateralAmount;
+    balanceLabel = COPY.borrow.form.held;
+    exceeds = COPY.borrow.form.overCollateral;
+  }
+  const check = checkAmount(state.amountText, { decimals: amountToken.decimals, balance });
+  const typed = check.status === 'ok' ? check.amount : null;
+  const everything = takesEverything(state, pair, typed);
+  const rows: DetailRow[] = [];
+  if (mode === 'borrow' && held && market) {
+    rows.push({ id: 'available', label: COPY.borrow.form.available, value: formatExact(maximum ?? 0n, debt) });
+  }
+  let tooLow = false;
+  const assets = market ? pairAssets(market, pair, loan?.health.maxLtv) : null;
+  if (held && assets && (typed !== null || (mode === 'borrow' && added > 0n))) {
+    const after = afterOf(mode, held, typed ?? 0n, added, everything);
+    const before = previewHealth(held, assets);
+    const next = previewHealth(after, assets);
+    if (before.status !== 'stale' && next.status !== 'stale') {
+      const { tone, note } = healthTone(next);
+      rows.push({
+        id: 'health',
+        label: COPY.borrow.form.health,
+        value: <BeforeAfter before={healthText(before)} after={healthText(next)} />,
+        tone,
+        ...(note ? { note } : {}),
+      });
+      if (next.status === 'priced' && next.liquidationPrice !== null) {
+        rows.push({ id: 'liquidation', label: COPY.borrow.form.liquidation, value: `${collateral.symbol} ${formatUsd(next.liquidationPrice)}` });
+      }
+      if (mode === 'repay') rows.push({ id: 'remaining', label: COPY.borrow.form.remaining, value: formatExact(after.debtAmount, debt) });
+      // Only an action that adds risk is held to the floor; repaying and adding collateral never are (D-083).
+      tooLow = (mode === 'borrow' || mode === 'withdraw-collateral') && next.status === 'priced'
+        && (next.band === 'too-close' || next.band === 'liquidatable');
+    }
+  }
+  const hint = mode === 'borrow' && max !== null
+    ? COPY.borrow.form.maxHint
+    : everything && mode === 'repay'
+      ? COPY.borrow.form.repayAllLine
+      : everything && mode === 'withdraw-collateral'
+        ? COPY.borrow.form.withdrawAllLine
+        : null;
+  return { check, collateralCheck, balance, balanceLabel, exceeds, max, hint, rows, tooLow };
+}
+
+/** The loan after the typed action, in the seam's conservative rounding. */
+function afterOf(mode: BorrowMode, held: PreviewLoan, amount: bigint, added: bigint, everything: boolean): PreviewLoan {
+  switch (mode) {
+    case 'borrow':
+      return { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount + (amount > 0n ? amount + 1n : 0n) };
+    case 'add-collateral':
+      return { collateralAmount: held.collateralAmount + amount, debtAmount: held.debtAmount };
+    case 'repay':
+      return { collateralAmount: held.collateralAmount, debtAmount: everything || amount >= held.debtAmount ? 0n : held.debtAmount - amount };
+    case 'withdraw-collateral': {
+      if (everything) return { collateralAmount: 0n, debtAmount: 0n };
+      const left = held.collateralAmount - amount;
+      return { collateralAmount: left > 0n ? left - 1n : 0n, debtAmount: held.debtAmount };
+    }
+  }
 }
 
 function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onConfirm: () => void; onCancel: () => void }) {

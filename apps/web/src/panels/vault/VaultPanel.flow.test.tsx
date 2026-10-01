@@ -152,8 +152,10 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     // STRK is chosen first, so no note about the fee's token.
     expect(panel.querySelector('.vault-fee-token')).toBeNull();
 
-    // Supply 5 STRK.
+    // Supply 5 STRK: the button says what is missing until an amount is in (D-089).
+    expect(button(COPY.kit.enterAmount).disabled).toBe(true);
     await type('5');
+    expect([...vault().querySelectorAll('.panel-compose .ui-detail')].map((row) => row.textContent)).toEqual([`${COPY.vault.form.willSupply}5 STRK`]);
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
     expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['5 STRK']);
@@ -173,11 +175,12 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.worth);
 
-    // Redeem everything: no amount to type, the vault's preview reviewed.
+    // Redeem everything: the field shows what is supplied, and Max fills the
+    // whole position, which redeems every share (D-089).
     await click(button(COPY.vault.redeem));
-    const all = vault().querySelector<HTMLInputElement>('input[name="redeem-all"]')!;
-    await click(all);
-    expect(vault().querySelector('input[name="amount"]')).toBeNull();
+    expect(vault().querySelector('.ui-amount-balance')?.textContent).toMatch(new RegExp(`^${COPY.vault.form.supplied}: [0-9.]+ STRK$`));
+    await click(button(COPY.kit.max));
+    expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).not.toBe('');
     await click(button(COPY.gameMode.reviewAction));
     const redeem = vault().querySelector('.panel-review')!;
     expect(redeem.textContent).toContain(COPY.vault.review.redeemAll);
@@ -213,7 +216,9 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     // Choose USDC: the amount is read in USDC, and the fee's token is explained.
     await choose(USDC);
     expect(vault().querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.feeInStrk);
-    expect(vault().textContent).toContain(`${COPY.vault.amount} (USDC)`);
+    expect(vault().querySelector('.ui-amount-symbol')?.textContent).toBe('USDC');
+    // The chosen market's APY sits in the form too (D-089).
+    expect(vault().querySelector('.panel-compose .ui-detail')?.textContent).toBe(`${COPY.vault.rates.label}3.09%, Vesu's figure`);
     await type('12.5');
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
@@ -368,12 +373,57 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     expect(options()).toContain(XSTRK);
     await choose(XSTRK);
     expect(vault().querySelector('.panel-compose .vault-market-note')?.textContent).toBe(COPY.vault.collateralOnly);
-    await click(vault().querySelector<HTMLInputElement>('input[name="redeem-all"]')!);
+    await click(button(COPY.kit.max));
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
     expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['20.4 xSTRK']);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.vaultSubmitted).toEqual([{ kind: 'redeem', token: XSTRK, amount: 20_400_000_000_000_000_000n, all: true }]);
+  });
+
+  it('shows the pool balance once asked, fills a Max that leaves the pool fee, and says what is short (D-089)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, [USDC]: 25n * 10n ** 6n },
+      poolConfig: { noteMaturityBlocks: 0 },
+    });
+    await openCounter(operations);
+    // Nothing read until the player asks: no balance line, no Max.
+    expect(vault().querySelector('.ui-amount-balance')).toBeNull();
+    expect([...vault().querySelectorAll('.panel-compose button')].some((node) => node.textContent === COPY.kit.max)).toBe(false);
+    await click(button(COPY.vault.form.showBalance));
+    expect(vault().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.kit.poolBalance}: 100 STRK`);
+
+    // Max on STRK, the fee token, leaves the 6 STRK pool fee behind, and says so.
+    await click(button(COPY.kit.max));
+    expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe('94');
+    expect(vault().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.balance.feeReserved);
+
+    // More than the pool balance: the field and the button both say so.
+    await type('200');
+    expect(vault().querySelector('.ui-amount-message')?.textContent).toBe(COPY.kit.exceedsBalance);
+    expect(button('Insufficient STRK').disabled).toBe(true);
+
+    // USDC pays no pool fee of its own, so Max is all of it.
+    await choose(USDC);
+    expect(vault().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.kit.poolBalance}: 25 USDC`);
+    await click(button(COPY.kit.max));
+    expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe('25');
+    expect(vault().querySelector('.ui-amount-hint')).toBeNull();
+    await click(button(COPY.gameMode.reviewAction));
+    await click(vault().querySelector<HTMLButtonElement>('.panel-review button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: USDC, amount: 25n * 10n ** 6n }]);
+  });
+
+  it('shows a wallet\'s one-total balance but no Max, since it says nothing of what is spendable (D-022, D-089)', async () => {
+    const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * 10n ** 18n }, poolConfig: { noteMaturityBlocks: 0 } });
+    const read = operations.balances.bind(operations);
+    // As the Wallet API adapter answers: `wallet_strk20Balances` gives one total per token.
+    operations.balances = async (tokens, signal) => (await read(tokens, signal))
+      .map((entry) => ({ ...entry, spendable: 0n, maturing: 0n, maturityKnown: false }));
+    await openCounter(operations);
+    await click(button(COPY.vault.form.showBalance));
+    expect(vault().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.kit.poolBalance}: 100 STRK`);
+    expect([...vault().querySelectorAll('.panel-compose button')].some((node) => node.textContent === COPY.kit.max)).toBe(false);
   });
 
   it('tells a wallet without shadow accounts so plainly, offers no form, and keeps the city open', async () => {

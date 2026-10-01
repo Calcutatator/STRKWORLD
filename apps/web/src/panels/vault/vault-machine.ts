@@ -3,6 +3,7 @@ import type {
   OperationStage,
   PreparedVaultBatch,
   PrivacyErrorKind,
+  PrivateBalance,
   PrivacyOperations,
   VaultAction,
   VaultOutcome,
@@ -222,6 +223,24 @@ export type VaultHoldingView =
   /** The last read found none of `token` in the pool balance. */
   | { readonly status: 'none'; readonly token: Address };
 
+/**
+ * The offered tokens' pool balances, read when the player asks (D-089), for
+ * the supply field's balance line and Max. One wallet read for every
+ * lendable token, which the wallet may confirm with the player first; the
+ * figures stay in this window, are never logged, and go stale (back to
+ * `unrequested`) after a submission. `fee` is the pool's live fee, read
+ * beside them, so a Max of the fee token leaves the fee behind.
+ */
+export type VaultBalancesView =
+  | { readonly status: 'unrequested' }
+  | { readonly status: 'loading' }
+  | {
+      readonly status: 'loaded';
+      readonly balances: readonly PrivateBalance[];
+      readonly fee: { readonly feeAmount: bigint; readonly feeToken: Address } | null;
+    }
+  | { readonly status: 'failed' };
+
 /** What the player agrees to, from the prepared batch rather than from a constant. */
 export interface VaultSummary {
   readonly action: VaultAction;
@@ -293,6 +312,8 @@ export interface VaultState {
   readonly rates: VaultRatesView;
   /** The chosen token in the pool balance, for a supply (D-081). */
   readonly holding: VaultHoldingView;
+  /** The pool balances the player asked to see, for the supply field (D-089). */
+  readonly balances: VaultBalancesView;
   readonly amountText: string;
   /** Redeem only: every share, by the vault's `redeem`, rather than an amount. */
   readonly redeemAll: boolean;
@@ -327,6 +348,8 @@ export interface VaultPanel {
   setToken(token: Address): void;
   setAmount(text: string): void;
   setRedeemAll(all: boolean): void;
+  /** Read the lendable tokens' pool balances, and the pool fee (D-089). The wallet may ask first. */
+  refreshBalances(signal?: AbortSignal): Promise<void>;
   /** Read the positions, and Vesu's rates with them. The wallet may ask first. */
   refreshPosition(signal?: AbortSignal): Promise<void>;
   prepare(signal?: AbortSignal): Promise<void>;
@@ -361,6 +384,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
   /** A newer read, or a submission that changed the position, retires a read. */
   let positionRead = 0;
   let ratesRead = 0;
+  let balancesRead = 0;
   let capabilityRead = 0;
   const begin = (): number => (attempt += 1);
   const current = (id: number): boolean => attempt === id;
@@ -513,6 +537,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       discardPrepared();
       positionRead += 1;
       ratesRead += 1;
+      balancesRead += 1;
       const { mode, token } = store.getState();
       stateStore.setState(freezeVaultState(initialState(mode, register, tokens, token)));
       // A transaction that settled while the window was shut is still the
@@ -536,6 +561,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       discardPrepared();
       positionRead += 1;
       ratesRead += 1;
+      balancesRead += 1;
       capabilityRead += 1;
     },
 
@@ -612,6 +638,32 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       patch({ redeemAll: all });
     },
 
+    async refreshBalances(signal?: AbortSignal): Promise<void> {
+      const mySession = session;
+      const read = ++balancesRead;
+      const lendable = tokens.filter((entry) => entry.lendable).map((entry) => entry.token);
+      if (lendable.length === 0) return;
+      patch({ balances: { status: 'loading' } });
+      try {
+        const [balances, pool] = await Promise.all([
+          operations.balances(lendable, signal),
+          // The fee is only for Max's reserve: a fee that cannot be read leaves Max off, nothing more.
+          operations.poolConfig(signal).then(
+            (config) => ({ feeAmount: config.feeAmount, feeToken: config.feeToken }),
+            () => null,
+          ),
+        ]);
+        if (session !== mySession || read !== balancesRead) return;
+        patch({ balances: { status: 'loaded', balances, fee: pool } });
+      } catch (error) {
+        if (session !== mySession || read !== balancesRead) return;
+        // A declined read is the player's answer, not a failure: back to asking.
+        const { kind } = toFailure(error);
+        if (kind !== 'user-rejected') report(kind);
+        patch({ balances: kind === 'user-rejected' ? { status: 'unrequested' } : { status: 'failed' } });
+      }
+    },
+
     async refreshPosition(signal?: AbortSignal): Promise<void> {
       const mySession = session;
       const read = ++positionRead;
@@ -660,7 +712,8 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       if (state.flow.name !== 'composing' && state.flow.name !== 'failed') return;
       const token = chosenToken();
       if (!token) return;
-      const all = state.mode === 'redeem' && state.redeemAll;
+      // D-089: Max on a redeem fills the whole position, which redeems every share.
+      const all = state.mode === 'redeem' && (state.redeemAll || redeemsWholePosition(state, token, amountFromText(token.decimals)));
       const amount = all ? null : amountFromText(token.decimals);
       if (!all && amount === null) {
         notice('error', COPY.notices.badAmount);
@@ -798,6 +851,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
         patch({
           flow: { name: 'submitted', transactionHash: result.transactionHash, outcome: result.outcome },
           position: { status: 'unrequested' },
+          balances: { status: 'unrequested' },
           notice: result.outcome === 'reverted' ? null : { tone: 'info', text: COPY.vault.position.changed },
           amountText: '',
           redeemAll: false,
@@ -848,11 +902,34 @@ function initialState(
     position: { status: 'unrequested' },
     rates: { status: 'unrequested' },
     holding: { status: 'unknown' },
+    balances: { status: 'unrequested' },
     amountText: '',
     redeemAll: false,
     notice: null,
     flow: { name: 'idle' },
   };
+}
+
+/** The last read's position in `token`, if the read found one. */
+export function positionOf(state: Pick<VaultState, 'position'>, token: Address): VaultTokenPosition | undefined {
+  if (state.position.status !== 'loaded') return undefined;
+  return state.position.positions.find((entry) => sameAddress(entry.token, token));
+}
+
+/** The pool balance the player last read for `token`, if any (D-089). */
+export function poolBalanceOf(state: Pick<VaultState, 'balances'>, token: Address): PrivateBalance | undefined {
+  if (state.balances.status !== 'loaded') return undefined;
+  return state.balances.balances.find((entry) => sameAddress(entry.token, token));
+}
+
+/**
+ * Whether `amount` is the whole position in `token` as last read, all of it
+ * payable now (D-089): Max's figure, which redeems every share by the vault's
+ * own `redeem`, so no dust of shares is left behind.
+ */
+export function redeemsWholePosition(state: Pick<VaultState, 'position'>, token: Pick<VaultTokenView, 'token'>, amount: bigint | null): boolean {
+  const held = positionOf(state, token.token);
+  return amount !== null && held !== undefined && held.shares > 0n && held.redeemable >= held.assets && amount === held.assets;
 }
 
 /** D-081: the plain line for a supply with none of its token in the pool balance. */
@@ -890,6 +967,13 @@ function freezeVaultState(state: VaultState): VaultState {
     position: position as VaultPositionView,
     rates: rates as VaultRatesView,
     holding: Object.freeze({ ...state.holding }) as VaultHoldingView,
+    balances: state.balances.status === 'loaded'
+      ? Object.freeze({
+          ...state.balances,
+          balances: Object.freeze(state.balances.balances.map((entry) => Object.freeze({ ...entry }))),
+          fee: state.balances.fee === null ? null : Object.freeze({ ...state.balances.fee }),
+        })
+      : Object.freeze({ ...state.balances }),
     notice: state.notice === null ? null : Object.freeze({ ...state.notice }),
     flow,
   });

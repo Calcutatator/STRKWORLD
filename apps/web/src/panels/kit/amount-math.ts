@@ -77,6 +77,8 @@ export function primaryAction(input: {
   readonly symbol: string | null;
   readonly ready: string;
   readonly busy?: string | null;
+  /** The words for an amount above the balance; "Insufficient {symbol}" by default. */
+  readonly exceeds?: string;
 }): { readonly label: string; readonly disabled: boolean } {
   if (input.busy) return { label: input.busy, disabled: true };
   if (input.symbol === null) return { label: COPY.kit.chooseToken, disabled: true };
@@ -86,7 +88,7 @@ export function primaryAction(input: {
     case 'invalid':
       return { label: COPY.kit.invalidAmount, disabled: true };
     case 'exceeds-balance':
-      return { label: COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
+      return { label: input.exceeds ?? COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
     case 'below-minimum':
       return { label: COPY.kit.belowMinimum, disabled: true };
     case 'ok':

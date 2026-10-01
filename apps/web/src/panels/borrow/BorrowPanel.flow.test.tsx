@@ -166,6 +166,43 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     expect(counter().querySelector('.vault-stand-in code')?.textContent).toBe(shortenAddress(DEMO_BORROW_STAND_IN));
   });
 
+  it('shows what can be borrowed once the loans are read, fills Max at a health of 1.25, and previews health before and after (D-089)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 20_000n * E18 },
+      poolConfig: { noteMaturityBlocks: 0 },
+    });
+    await openCounter(operations);
+    await choose('debt', USDC);
+    await type('collateral-amount', '10000');
+    // No loans read yet: an existing loan would change every figure, so none is shown.
+    expect(counter().querySelector('.borrow-read-loans')?.textContent).toBe(COPY.borrow.form.readLoans);
+    expect(counter().querySelector('.panel-compose .ui-detail')).toBeNull();
+
+    await click(button(COPY.borrow.loans.show));
+    await choose('debt', USDC);
+    await type('collateral-amount', '10000');
+    const rows = () => Object.fromEntries([...counter().querySelectorAll('.panel-compose .ui-detail')]
+      .map((row) => [row.querySelector('dt')!.textContent, row.querySelector('dd')!.textContent]));
+    // 10,000 demo STRK at $0.04 and 68% max LTV, at health 1.25: about 217.6 USDC.
+    const available = rows()[COPY.borrow.form.available]!;
+    expect(available).toMatch(/^217\.\d+ USDC$/);
+    await click(button(COPY.kit.max));
+    expect(counter().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.borrow.form.maxHint);
+    expect(counter().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe(available.replace(' USDC', ''));
+    // Before: nothing owed. After: 1.25, with the price STRK would have to fall to.
+    expect(rows()[COPY.borrow.form.health]).toBe(`${COPY.borrow.form.noDebt} →  to 1.25`);
+    expect(rows()[COPY.borrow.form.liquidation]).toMatch(/^STRK \$0\.03/);
+    expect(button(COPY.gameMode.reviewAction).disabled).toBe(false);
+
+    // Past the 1.05 floor the button will not offer a review.
+    await type('amount', '260');
+    expect(button(COPY.borrow.form.tooLow).disabled).toBe(true);
+    await type('amount', '245');
+    const health = counter().querySelector('.panel-compose .ui-detail[data-tone="warning"]');
+    expect(health?.querySelector('.ui-detail-note')?.textContent).toBe(COPY.borrow.bands.warning);
+    expect(button(COPY.gameMode.reviewAction).disabled).toBe(false);
+  });
+
   it('flags a loan near liquidation, and says why it refuses a withdrawal past the max LTV', async () => {
     const operations = new FakePrivacyOperations({
       balances: { [STRK]: 100n * E18 },
@@ -179,10 +216,15 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     expect(loan.querySelector('.borrow-band')?.textContent).toBe(COPY.borrow.bands.warning);
     expect(loan.querySelector('.borrow-warning')?.textContent).toBe(COPY.borrow.warningNote);
 
+    // D-089: the form says before any review that this would pass the max
+    // LTV, and the button will not offer it. The seam's own refusal stands
+    // behind it (borrow-machine.test.ts).
     await click(button(COPY.borrow.modes['withdraw-collateral']));
     await type('amount', '100');
-    await click(button(COPY.gameMode.reviewAction));
-    expect(counter().querySelector('.panel-notice')?.textContent).toBe(COPY.borrow.refusals['above-max-ltv']);
+    const health = counter().querySelector('.panel-compose .ui-detail[data-tone="danger"]')!;
+    expect(health.querySelector('dt')?.textContent).toBe(COPY.borrow.form.health);
+    expect(health.querySelector('.ui-detail-note')?.textContent).toBe(COPY.borrow.bands.liquidatable);
+    expect(button(COPY.borrow.form.tooLow).disabled).toBe(true);
     expect(counter().querySelector('.panel-review')).toBeNull();
     expect(operations.borrowSubmitted).toEqual([]);
   });
@@ -206,8 +248,10 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     await click(button(COPY.flow.back));
     await click(button(COPY.borrow.loans.show));
     await click(button(COPY.borrow.modes.repay));
-    await click(counter().querySelector<HTMLInputElement>('input[name="all"]')!);
-    expect(counter().querySelector('input[name="amount"]')).toBeNull();
+    // D-089: Max is the debt as read, and repays everything.
+    expect(counter().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.borrow.form.owed}: 3 USDC`);
+    await click(button(COPY.kit.max));
+    expect(counter().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.borrow.form.repayAllLine);
     await click(button(COPY.gameMode.reviewAction));
     const review = counter().querySelector('.panel-review')!;
     expect(review.textContent).toContain(COPY.borrow.review.repayAll);

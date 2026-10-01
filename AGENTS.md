@@ -259,6 +259,41 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — The wallet reports a per-token pool balance but no spendable split, so lending Max needs the fake; Max at 1.25 health (D-089)
+
+The Vault and Borrow forms gained Aave's and Vesu's touches (D-089). What
+held, and how it was checked:
+
+- `wallet_strk20Balances` takes a token list and answers one
+  `{ token, balance }` per token (`STRK20_BALANCE_ENTRY` in
+  `@starknet-io/types-js` 0.10.4 `wallet-api/components.d.ts`; the adapter's
+  `balances()` in `packages/privacy/src/wallet-api/operations.ts` rejects any
+  other key). So a per-token total is known, and a balance line can show it,
+  but it says nothing of maturity: the adapter sets `maturityKnown: false`
+  and zero `spendable`, and no Max may be derived (D-022). With a real wallet
+  the supply field shows "Pool balance" and no Max; the fake reports maturity,
+  so Max shows in demo and tests. Every read is on a player's press: the
+  wallet may confirm it first.
+- The shell cannot import the seam's runtime (`architecture.test.ts`), so the
+  borrow preview restates Vesu's formulas in `panels/borrow/borrow-preview.ts`.
+  Keep the seam's rounding (collateral down, debt up, a base unit more debt on
+  a borrow, a base unit less collateral on a withdrawal) or a Max lands a
+  hair over the line; `borrow-preview.test.ts` cross-checks against
+  `borrowHealth` and `assessBorrow`.
+- `BeforeAfter` renders a visually hidden " to " between the figures, so a
+  row's `textContent` reads `1.81 →  to 1.25` (two spaces). Assert on that,
+  not on what the eye sees.
+- Max filling the exact figure is what makes it "everything": the machines
+  turn an amount equal to the whole position (redeem), the debt as read
+  (repay) or a debt-free loan's collateral (withdraw) into the seam's `'all'`.
+
+*Verified:* `borrow-preview.test.ts`, `vault-machine.test.ts`,
+`borrow-machine.test.ts`, `VaultPanel.flow.test.tsx`,
+`BorrowPanel.flow.test.tsx`, `kit.test.tsx`, `amount-math.test.ts`, and
+offline renders in the working scratchpad (`renders/lendux-*.png`, not
+committed). **Not verified:** a real wallet's balance prompt; nobody has
+looked at the forms in a browser.
+
 ### 2026-10-01 — Menu Mode missed the Vault's BORROW and the Exchange's DEGEN SWAP; a new counter needs a Menu Mode tab too (D-088)
 
 An audit of every player feature against Menu Mode found two windows only

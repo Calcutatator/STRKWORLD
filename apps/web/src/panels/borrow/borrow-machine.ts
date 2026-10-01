@@ -242,6 +242,20 @@ export function maxLtvFor(state: Pick<BorrowState, 'market'>, pair: BorrowPairCh
   return state.market.market.pairs.find((entry) => sameAddress(entry.collateral, pair.collateral) && sameAddress(entry.debt, pair.debt))?.maxLtv;
 }
 
+/**
+ * Whether a typed repay or withdrawal is the whole of it, as Max fills it in
+ * (D-089): the debt as last read for a repay, which becomes a repay-all (the
+ * seam's buffer covers interest since); for a withdrawal, the whole
+ * collateral of a loan that owes nothing, which becomes a withdraw-all.
+ */
+export function takesEverything(state: Pick<BorrowState, 'mode' | 'loans'>, pair: BorrowPairChoice | null, amount: bigint | null): boolean {
+  const loan = loanFor(state, pair);
+  if (amount === null || loan === undefined) return false;
+  if (state.mode === 'repay') return loan.nominalDebt > 0n && amount === loan.debtAmount;
+  if (state.mode === 'withdraw-collateral') return loan.nominalDebt === 0n && loan.collateralShares > 0n && amount === loan.collateralAmount;
+  return false;
+}
+
 /** A refusal the seam named (`BorrowRefusedError`), read without trusting anything else about the error. */
 export function refusalOf(error: unknown): BorrowRefusal | null {
   if (!error || typeof error !== 'object') return null;
@@ -403,12 +417,16 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
         return { kind: 'add-collateral', collateral: pair.collateral, debt: pair.debt, amount };
       }
       case 'repay': {
-        const amount = state.all ? 'all' : amountIn(state.amountText, debt.decimals);
+        // D-089: Max fills the whole debt as read, which repays everything.
+        const typed = state.all ? null : amountIn(state.amountText, debt.decimals);
+        const amount = state.all || takesEverything(state, pair, typed) ? 'all' : typed;
         if (amount === null) return COPY.notices.badAmount;
         return { kind: 'repay', collateral: pair.collateral, debt: pair.debt, amount };
       }
       case 'withdraw-collateral': {
-        const amount = state.all ? 'all' : amountIn(state.amountText, collateral.decimals);
+        // D-089: with nothing owed, Max fills the whole collateral, which withdraws everything.
+        const typed = state.all ? null : amountIn(state.amountText, collateral.decimals);
+        const amount = state.all || takesEverything(state, pair, typed) ? 'all' : typed;
         if (amount === null) return COPY.notices.badAmount;
         return { kind: 'withdraw-collateral', collateral: pair.collateral, debt: pair.debt, amount };
       }
