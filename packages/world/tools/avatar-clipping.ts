@@ -465,7 +465,79 @@ function headwearClips(solids: readonly Solid[], key: AvatarSpriteKey, pose: str
  */
 export function clippingInFigure(root: Object3D, key: AvatarSpriteKey, pose: string): ClipFinding[] {
   const solids = collectSolids(root);
-  return [...movingClips(solids, key, pose), ...headwearClips(solids, key, pose)];
+  return [
+    ...movingClips(solids, key, pose),
+    ...headwearClips(solids, key, pose),
+    ...hairShowingThroughHeadwear(solids, key, pose),
+  ];
+}
+
+/**
+ * Every direction a viewer could look at the head from, not only the game's
+ * cameras: sixteen yaws at every 15 degrees of pitch from level to overhead.
+ */
+const EVERY_VIEW: readonly (readonly [number, number, number])[] = Array.from({ length: 7 }, (_, p) => (p * Math.PI) / 12)
+  .flatMap((pitch) =>
+    Array.from({ length: pitch === Math.PI / 2 ? 1 : 16 }, (_, i) => {
+      const yaw = (i / 16) * Math.PI * 2;
+      return [Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw)] as const;
+    }),
+  );
+
+/**
+ * Hair under headwear must not show at all, from any view: the headwear is
+ * its shell. Only the hair built to frame the face (`hair-face`, a fringe
+ * and locks inside a hood's opening) may be seen. The head is tested on its
+ * own, with nothing else in front of it, so a collar or a shoulder never
+ * hides a gap. The depth is the visible area, in square units.
+ */
+function hairShowingThroughHeadwear(solids: readonly Solid[], key: AvatarSpriteKey, pose: string): ClipFinding[] {
+  const head = solids.filter((s) => s.group === 'head');
+  const headwear = head.filter((s) => s.box.tag === 'headwear');
+  if (headwear.length === 0) return [];
+  const worst = new Map<string, ClipFinding>();
+  for (const hair of head.filter((s) => s.box.tag === 'hair')) {
+    const others = head.filter((s) => s !== hair);
+    for (let t = 0; t < hair.box.count; t += 1) {
+      const tri = hair.triangles.subarray(t * 9, t * 9 + 9);
+      const points = [...trianglePoints(hair.triangles, t * 9)];
+      const area = triangleArea(tri) / points.length;
+      const nx = hair.planes[t * 4]!;
+      const ny = hair.planes[t * 4 + 1]!;
+      const nz = hair.planes[t * 4 + 2]!;
+      for (const [x, y, z] of points) {
+        if (others.some((s) => depthInside(s, x, y, z) > 0)) continue;
+        const seen = EVERY_VIEW.some(([dx, dy, dz]) => {
+          // A face is seen from in front of it, not edge on.
+          if (nx * dx + ny * dy + nz * dz < 0.1) return false;
+          const ox = x + dx * VIEW_OFFSET;
+          const oy = y + dy * VIEW_OFFSET;
+          const oz = z + dz * VIEW_OFFSET;
+          return !head.some((solid) => rayHits(solid, ox, oy, oz, dx, dy, dz));
+        });
+        if (!seen) continue;
+        const id = label(hair);
+        const previous = worst.get(id);
+        worst.set(id, {
+          key,
+          pose,
+          check: 'headwear',
+          surface: headwear.map(label)[0]!,
+          inside: label(hair),
+          face: 'seen',
+          depth: (previous?.depth ?? 0) + area,
+          point: previous?.point ?? [x, y, z],
+        });
+      }
+    }
+  }
+  return [...worst.values()];
+}
+
+function triangleArea(tri: Float64Array): number {
+  const ux = tri[3]! - tri[0]!, uy = tri[4]! - tri[1]!, uz = tri[5]! - tri[2]!;
+  const vx = tri[6]! - tri[0]!, vy = tri[7]! - tri[1]!, vz = tri[8]! - tri[2]!;
+  return Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
 }
 
 /** Every clip in one look, across the given poses (all of them by default). */
@@ -478,7 +550,9 @@ export function findAvatarClipping(key: AvatarSpriteKey, poses: readonly Pose[] 
       const solids = collectSolids(figure.object);
       findings.push(...movingClips(solids, key, pose.name));
       // Headwear is part of the head: one rest pose says it all.
-      if (pose === poses[0]) findings.push(...headwearClips(solids, key, pose.name));
+      if (pose === poses[0]) {
+        findings.push(...headwearClips(solids, key, pose.name), ...hairShowingThroughHeadwear(solids, key, pose.name));
+      }
     } finally {
       figure.dispose();
     }

@@ -539,7 +539,8 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
   };
   const back = (length: number, thick = 0.1): void => {
     if (cover === 'hood') return;
-    const bottom = height + 0.01 - length;
+    // Under a helmet it ends inside the neck guard, not below it.
+    const bottom = Math.max(height + 0.01 - length, helmet ? helmetGuardBottom(d) + 0.01 : -Infinity);
     const top = Math.min(height + 0.01, ceiling);
     if (top <= bottom) return;
     b.box({
@@ -564,6 +565,8 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
   const fringeLift = cover === 'hood' ? 0 : 0.02;
   const fringe = (chunks: readonly FringeChunk[]): void => {
     if (cover === 'helmet') return;
+    // Framing the face: the one hair a hood is meant to show.
+    b.tag('hair-face');
     for (const chunk of chunks) {
       b.box({
         size: [chunk.w, chunk.h, 0.07],
@@ -572,6 +575,7 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
         color,
       });
     }
+    b.tag('hair');
   };
   const spike = (at: Vec3, size: number, tall: number, rotation: Vec3): void => {
     if (!crown) return;
@@ -632,13 +636,17 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
     case 'bob':
       cap(0.12);
       back(0.46);
+      // Under a hood the sides fill its cheeks, seen only through the face opening.
+      if (cover === 'hood') b.tag('hair-face');
       sides(0.36, depth * 0.8, 0.02);
+      b.tag('hair');
       fringe([
         { x: -0.15, w: 0.2, h: 0.21, tilt: 0.12 },
         { x: 0.02, w: 0.2, h: 0.23, tilt: -0.05 },
         { x: 0.17, w: 0.18, h: 0.2, tilt: -0.14 },
       ]);
       // Face-framing locks stay visible inside a hood's opening.
+      b.tag('hair-face');
       for (const s of SIDES) {
         b.box({
           size: [0.07, 0.3, 0.1],
@@ -646,6 +654,7 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
           color,
         });
       }
+      b.tag('hair');
       break;
     case 'swept':
       cap(0.15, 0.03, 0.04, -0.03);
@@ -725,26 +734,6 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
             color,
           });
         }
-      }
-      break;
-    case 'kitten':
-      // A short, soft cut: wispy fringe and two cheek locks curling in.
-      cap(0.12);
-      back(0.4);
-      sides(0.3, depth * 0.62, -0.02);
-      fringe([
-        { x: -0.15, w: 0.19, h: 0.18, tilt: 0.25 },
-        { x: 0, w: 0.18, h: 0.2, tilt: -0.06 },
-        { x: 0.15, w: 0.19, h: 0.17, tilt: -0.25 },
-      ]);
-      for (const s of SIDES) {
-        b.box({
-          size: [0.07, 0.24, 0.1],
-          at: [s * (halfWidth - 0.015), height - 0.21, halfDepth - 0.035],
-          rotation: [0, 0, -s * 0.1],
-          color,
-          chamfer: 0.02,
-        });
       }
       break;
     case 'shaggy':
@@ -871,6 +860,11 @@ function addHood(b: PartBuilder, color: number, d: BuildDims): void {
 /** How far below the crown a helmet's rim sits; hair under a helmet ends here. */
 const HELMET_RIM_DROP = 0.15;
 
+/** The bottom of a helmet's neck guard and cheek guards, in the head's frame. */
+function helmetGuardBottom(d: BuildDims): number {
+  return d.headHeight * 0.42 - 0.15;
+}
+
 /** Open-faced so the eyes stay visible; the nasal guard echoes the sprite's T visor. */
 function addHelmet(b: PartBuilder, metal: number, horn: number, d: BuildDims): void {
   b.tag('headwear');
@@ -892,15 +886,21 @@ function addHelmet(b: PartBuilder, metal: number, horn: number, d: BuildDims): v
     chamfer: chamfer + 0.075,
   });
   b.box({ size: [0.06, 0.2, 0.05], at: [0, height - 0.25, halfDepth + 0.05], color: metal });
+  // The neck guard reaches in to the head, closing the gap the hair would show through.
   b.box({
-    size: [width + 0.1, 0.3, 0.06],
-    at: [0, height * 0.42, -(halfDepth + 0.045)],
+    size: [width + 0.1, 0.3, 0.085],
+    at: [0, height * 0.42, -(halfDepth + 0.0325)],
     color: metal,
   });
+  // Cheek guards run back to the neck guard, so the sides are closed and no
+  // hair shows between them.
+  const guardFront = halfDepth + 0.01;
+  const guardBack = -(halfDepth + 0.02);
   for (const s of SIDES) {
+    // Their inner faces rest on the head, so nothing shows between.
     b.box({
-      size: [0.06, 0.3, 0.22],
-      at: [s * (halfWidth + 0.04), height * 0.45, halfDepth - 0.1],
+      size: [0.085, 0.3, guardFront - guardBack],
+      at: [s * (halfWidth + 0.0275), height * 0.45, (guardFront + guardBack) / 2],
       color: metal,
     });
     b.push([s * (halfWidth + 0.04), height - 0.01, 0], [0, 0, -s * 1.0]);
@@ -986,9 +986,6 @@ function buildTorso(look: AvatarLook, d: BuildDims): BufferGeometry {
         break;
       case 'satchel':
         addSatchel(b, item.color, surfaceDepth, d);
-        break;
-      case 'toolPouches':
-        addToolPouches(b, item.color, item.tool, surfaceDepth, d);
         break;
       case 'mantle':
         addMantle(b, item.color, outfit, d);
@@ -1210,21 +1207,6 @@ function addTail(b: PartBuilder, tail: AvatarTail, d: BuildDims): void {
     b.push([0, length, 0]);
   }
   for (let i = 0; i < segments.length * 2 + 1; i += 1) b.pop();
-}
-
-/** Two pouches on the belt at the front of the hips, a tool's handle up out of the right one. */
-function addToolPouches(b: PartBuilder, color: number, tool: number, surfaceDepth: number, d: BuildDims): void {
-  const { torsoWidth } = d;
-  b.tag('tool-pouches');
-  for (const s of SIDES) {
-    b.box({
-      size: [0.085, 0.08, 0.05],
-      at: [s * torsoWidth * 0.3, 0.06, surfaceDepth / 2 + 0.02],
-      color,
-      chamfer: 0.012,
-    });
-  }
-  b.box({ size: [0.026, 0.08, 0.026], at: [-torsoWidth * 0.3 + 0.012, 0.125, surfaceDepth / 2 + 0.022], color: tool });
 }
 
 /** Strap from the right shoulder to a pouch on the left hip. */

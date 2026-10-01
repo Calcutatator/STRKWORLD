@@ -189,16 +189,16 @@ describe('avatar figure shape', () => {
     }
   });
 
-  it('gives the cat girl (avatar-6 and avatar-14) her ears on the head and her tail on the torso, in both outfits', () => {
+  it('gives the cat girl (avatar-2 and avatar-10) her ears on the head and her tail on the torso, in both outfits', () => {
     const tags = (key: AvatarSpriteKey, name: string): string[] =>
       avatarPartBoxes(mesh(createAvatarFigure(key), name).geometry).map((box) => box.tag);
-    for (const key of ['avatar-6', 'avatar-14'] as const) {
+    for (const key of ['avatar-2', 'avatar-10'] as const) {
       // Two ears, each a fur block and an inner ear; they turn and nod with the head.
       expect(tags(key, 'avatar-head').filter((tag) => tag === 'ears'), key).toHaveLength(4);
+      expect(tags(key, 'avatar-head'), key).toContain('face');
       expect(tags(key, 'avatar-torso').filter((tag) => tag === 'tail'), key).toHaveLength(4);
-      expect(tags(key, 'avatar-torso'), key).toContain('tool-pouches');
     }
-    for (const key of AVATAR_SPRITE_KEYS.filter((k) => k !== 'avatar-6' && k !== 'avatar-14')) {
+    for (const key of AVATAR_SPRITE_KEYS.filter((k) => k !== 'avatar-2' && k !== 'avatar-10')) {
       expect(tags(key, 'avatar-head'), key).not.toContain('ears');
       expect(tags(key, 'avatar-torso'), key).not.toContain('tail');
     }

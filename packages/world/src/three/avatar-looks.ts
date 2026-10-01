@@ -28,8 +28,7 @@ export type AvatarHairStyle =
   | 'long'
   | 'buns'
   | 'mop'
-  | 'shaggy'
-  | 'kitten';
+  | 'shaggy';
 
 export interface AvatarHair {
   readonly style: AvatarHairStyle;
@@ -82,8 +81,6 @@ export type AvatarGear =
   | { readonly kind: 'hood'; readonly color: number }
   | { readonly kind: 'mantle'; readonly color: number }
   | { readonly kind: 'satchel'; readonly color: number }
-  /** Two pouches on the belt, a tool's handle standing out of one. */
-  | { readonly kind: 'toolPouches'; readonly color: number; readonly tool: number }
   | {
       readonly kind: 'coat';
       readonly color: number;
@@ -147,11 +144,18 @@ const CHARACTER_1: AvatarCharacter = {
   hair: { style: 'spiky', color: 0xb3540d },
 };
 
+// The cat girl: the workshop mechanic, her orange side ponytail and brass
+// goggles kept, with cat ears up through her hair, a curling tail and a
+// blush. Ears and tail are her hair's orange, their insides and tip paler, so
+// they read as hers rather than as a hat.
 const CHARACTER_2: AvatarCharacter = {
   id: 2,
   build: 'standard',
   skin: 0xf3b865,
   hair: { style: 'ponytail', color: 0xd9500b },
+  ears: { fur: 0xd9500b, inner: 0xf7c4a0 },
+  tail: { fur: 0xd9500b, tip: 0xfbe3cc },
+  face: { blush: 0xf0907a, mouth: 0x8a4030 },
 };
 
 const CHARACTER_3: AvatarCharacter = {
@@ -175,17 +179,11 @@ const CHARACTER_5: AvatarCharacter = {
   hair: { style: 'long', color: 0xe7a41e },
 };
 
-// The cat girl: the pocket mechanic with cat ears up through her pink hair, a
-// curling tail and a blush. Her ears and tail are the hair's pink, their
-// insides and tip paler, so they read as hers rather than as a hat.
 const CHARACTER_6: AvatarCharacter = {
   id: 6,
   build: 'small',
   skin: 0xf6c27a,
-  hair: { style: 'kitten', color: 0xe0404f },
-  ears: { fur: 0xe0404f, inner: 0xf8bfca },
-  tail: { fur: 0xe0404f, tip: 0xfbe2e6 },
-  face: { blush: 0xf09088, mouth: 0x8a4038 },
+  hair: { style: 'buns', color: 0xe0404f },
 };
 
 const CHARACTER_7: AvatarCharacter = {
@@ -279,10 +277,7 @@ const COSY_6: AvatarOutfit = {
   trousers: 0x1e3b45,
   boots: 0x4a2408,
   belt: { color: 0x183640, buckle: 0xd8b55f },
-  gear: [
-    { kind: 'goggles', frame: 0xb0701c, lens: 0x22505c },
-    { kind: 'toolPouches', color: 0x8c4a0c, tool: 0xd8b55f },
-  ],
+  gear: [{ kind: 'goggles', frame: 0xb0701c, lens: 0x22505c }],
   weapon: null,
 };
 
@@ -400,7 +395,7 @@ function deepFreeze<T>(value: T): T {
 export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepFreeze({
   // Auburn spiky-haired adventurer: teal scarf and tunic, leather harness, bare arms, bracers, wrapped boots.
   'avatar-1': look('avatar-1', 'cosy', CHARACTER_1, COSY_1),
-  // Red side-ponytail mechanic: olive work jacket, dark green trousers, brass goggles pushed up.
+  // Orange side-ponytail cat-girl mechanic: cat ears and tail, olive work jacket, dark green trousers, brass goggles pushed up.
   'avatar-2': look('avatar-2', 'cosy', CHARACTER_2, COSY_2),
   // Teal-haired ranger: cream hood and puffy mantle over a forest-green tunic, satchel.
   'avatar-3': look('avatar-3', 'cosy', CHARACTER_3, COSY_3),
@@ -408,7 +403,7 @@ export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepF
   'avatar-4': look('avatar-4', 'cosy', CHARACTER_4, COSY_4),
   // Long-haired blonde scholar: ankle-length cream-and-gold robe over a dark underdress.
   'avatar-5': look('avatar-5', 'cosy', CHARACTER_5, COSY_5),
-  // Small pink cat-girl mechanic: cat ears and tail, orange jumpsuit, dark teal tool belt and trousers, brass goggles.
+  // Small pink double-bun mechanic: orange jumpsuit, dark teal belt and trousers, brass goggles.
   'avatar-6': look('avatar-6', 'cosy', CHARACTER_6, COSY_6),
   // Large moss-haired woodsman: mossy cloak, cream fur collar, leather harness over a green tunic.
   'avatar-7': look('avatar-7', 'cosy', CHARACTER_7, COSY_7),
@@ -416,7 +411,7 @@ export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepF
   'avatar-8': look('avatar-8', 'cosy', CHARACTER_8, COSY_8),
   // Character 1 fighting: adds leather pauldrons and a sword.
   'avatar-9': look('avatar-9', 'fighting', CHARACTER_1, FIGHTING_1),
-  // Character 2 fighting: adds a hand wrench.
+  // Character 2 fighting: the cat girl with a hand wrench.
   'avatar-10': look('avatar-10', 'fighting', CHARACTER_2, FIGHTING_2),
   // Character 3 fighting: adds a crossbow.
   'avatar-11': look('avatar-11', 'fighting', CHARACTER_3, FIGHTING_3),
@@ -424,7 +419,7 @@ export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepF
   'avatar-12': look('avatar-12', 'fighting', CHARACTER_4, FIGHTING_4),
   // Character 5 fighting: adds an orb staff.
   'avatar-13': look('avatar-13', 'fighting', CHARACTER_5, FIGHTING_5),
-  // Character 6 fighting: the cat girl with a giant wrench.
+  // Character 6 fighting: adds a giant wrench.
   'avatar-14': look('avatar-14', 'fighting', CHARACTER_6, FIGHTING_6),
   // Character 7 fighting: horned bronze helm, bronze plate and pauldrons, mossy cape, halberd.
   'avatar-15': look('avatar-15', 'fighting', CHARACTER_7, FIGHTING_7),
