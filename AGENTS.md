@@ -894,6 +894,63 @@ triangles went from 71,449 to 85,609. An offline z-buffer render (not
 committed) changed 0.3-1.3% of the pixels of four street and sandbox views,
 4.0% at the road's closed west end, against 22-33% of the rooftop views.
 
+### 2026-09-29 — A Bridge runtime that landed in the Bank republished the Bank's stations
+
+`VisitLayer` called the visit controller's `refreshStations()` whenever
+`bridge.account` or `bridge.planner` changed, and the controller republished
+whichever building the player was in. Only the Bridge's `bridge:deposit`
+reads those capabilities (`resolveStation`), so any other building got its
+door snapshot again, unchanged. A runtime can land anywhere: the demo
+`BridgeProvider` imports `./demo-runtime.js` at boot, and a production load
+started at the Bridge can finish after the player walked on. That was the
+local full-run flake in the demo case of `App.after-gate.test.tsx` (the
+Bank's pair twice, at line 118). Alone, the chunk lands about 400 ms after
+its import starts, while the test reaches the Bank in 50 ms and finishes
+first. Under the full suite, the test's own steps slow down more than the
+chunk does. In a failing run, the chunk took 1.6 s, and the test had reached
+the Bank 50 ms before it landed. The refresh now names its building,
+`refreshStations('bridge')`, and publishes only while the player is inside
+that building. Players saw nothing: for a repeated snapshot the World only
+redraws the room, because `fixed-room.ts` steps up to a counter only when
+its status changes. Traps:
+
+- A test that waits for a real lazy chunk inherits the chunk's load time.
+  Holding the real demo runtime until the player was in the Bank made the
+  demo case wait for the chunk, which took 1.6 s under the full suite, and
+  the case timed out at 5 s. Vitest does not cancel a timed-out body, so its
+  pending async `act()` overlapped the next test in the file, whose gate then
+  never rendered. The test now lands a stand-in runtime (an account and a
+  planner, no chunk), and only after the provider has asked for it. A mocked
+  dynamic import still makes a round trip, so a latch released before the
+  request could let the runtime land after the assertion.
+- Vitest 4 detects an agent (`AI_AGENT`, `CLAUDECODE`) and uses its minimal
+  `agent` reporter, which prints no test's console output. Read logs from a
+  run with `--reporter=default`.
+- Under the same load, other tests fail in code this change does not touch,
+  and none was investigated here. They are timeouts, the first four also on
+  9638cc3: `deploy/smoke-images.test.mjs`, `deploy/fly/src/compose.test.ts`,
+  `deploy/backend/launch.test.mjs`, the demo case of `App.entry.test.tsx`,
+  three `packages/lobby` sandbox suites and `production/config.test.ts`. The
+  one exception is `connect/EntryGate.test.tsx`, which once found the gate
+  `ready` where it expected `checking`.
+
+*Verified:* temporary `console.log` probes in `enter()`, `refreshStations()`,
+the `VisitLayer` effect and the demo import, read with `--reporter=default`.
+In a failing full run on 9638cc3, the Bank's door snapshot went out at
+t=22962 ms, the demo runtime module loaded at t=23014 ms (1.6 s after its
+import started), and the effect republished `bank` at t=23035 ms. Alone, the
+runtime resolved after the demo test had unmounted. Holding
+`createDemoBridgeRuntime` until the player stood in the Bank failed 3/3 alone
+on 9638cc3. The after-gate demo case now lands its runtime at the Bank counter,
+and `bridge-entry.test.tsx` lands a production load after the player walked
+from the Bridge to the Bank. Against main's `VisitLayer.tsx` and
+`visit-controller.ts`, both fail 3/3 (a second, identical Bank snapshot);
+with the fix, both pass. On 9638cc3, the full `npx vitest run` failed the
+after-gate case in 2 of 4 runs. With the fix and the final tests, neither
+case failed in 10 full runs (5 on 9638cc3, 5 on 2f2a8a0), at load averages
+of 35 to 58 on 12 cores. `npm run typecheck` and
+`scripts/check-invariants.sh` pass.
+
 ### 2026-09-29 — A transfer's 118 is its recipient's, and stays in the Post Office (D-074)
 
 A registered, funded player who sent from the Post Office to an address the
@@ -949,7 +1006,8 @@ is internal and not exported from the package. Traps met on the way:
   most likely from `VisitLayer`'s `refreshStations()` effect when a Bridge
   capability resolves after the Bank entry. The test passes alone (three runs
   of three) and in CI, so it is a load-timing flake of the test, not a fault
-  this change introduced.
+  this change introduced. *Forward note:* confirmed and fixed by the finding
+  above on the Bank's stations.
 
 *Verified:* `wallet-api.test.ts` (the prepare-time preflight rejects the new
 kind before any fee quote or proof; a transfer proof's `{ code: 118 }`
@@ -1315,6 +1373,8 @@ two are refused with a 400.
   BridgePanel mounts), so `VisitLayer` calls the controller's
   `refreshStations()` whenever a Bridge capability changes. Activation still
   re-resolves, so a republished snapshot is presentation, never authority.
+  *Forward note:* the refresh now republishes only during a Bridge visit
+  (the 2026-09-29 finding above on the Bank's stations).
 - `FakePrivacyOperations.prepare` repeats the Wallet API adapter's review
   warnings. Removing the stake `public-leg` warning for D-064 had to land in
   both `wallet-api/operations.ts` and `testing/fake.ts`; with only the first,

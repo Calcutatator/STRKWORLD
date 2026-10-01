@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakePrivacyOperations, type WalletSession } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { BridgeRuntime } from './bridge/BridgeProvider.js';
 import { createEventBus } from './bus/event-bus.js';
 import { COPY } from './copy.js';
 import { createPresenceController } from './presence/presence-controller.js';
@@ -11,15 +12,47 @@ import { createPresenceController } from './presence/presence-controller.js';
 /**
  * After the entry gate (D-072), in both compositions: the city mounts late, so
  * everything in it must still learn the current wallet status, and a Bank
- * counter must open. Only the renderer is stood in; the HUD, the visit layer,
- * the providers and the gate are the real ones. The test plays the World by
- * emitting its semantic events.
+ * counter must open. Only the renderer and the demo Bridge runtime are stood
+ * in; the HUD, the visit layer, the providers and the gate are the real ones.
+ * The test plays the World by emitting its semantic events.
  */
+
+// The provider imports the demo Bridge runtime at boot, and where it landed
+// used to depend on the machine's load: under the full suite it could land
+// in the Bank and publish the Bank's stations a second time. This stand-in
+// carries the account and planner VisitLayer reads, loads no chunk, and
+// lands only once the provider has asked for it and the test says so.
+const demoBridge = vi.hoisted(() => {
+  let markRequested = (): void => undefined;
+  let land = (): void => undefined;
+  const requested = new Promise<void>((resolve) => {
+    markRequested = () => resolve();
+  });
+  const landing = new Promise<void>((resolve) => {
+    land = () => resolve();
+  });
+  return { requested, landing, markRequested: () => markRequested(), land: () => land() };
+});
 
 vi.mock('./privacy/demo-loader.js', async () => {
   const { createDemoOperations } = await import('./privacy/demo-operations.js');
   return { loadDemoOperations: async () => createDemoOperations({ funded: true }) };
 });
+vi.mock('./bridge/demo-runtime.js', () => ({
+  createDemoBridgeRuntime: async (): Promise<BridgeRuntime> => {
+    demoBridge.markRequested();
+    await demoBridge.landing;
+    return Object.freeze({
+      service: {} as never,
+      loadSources: async () => [],
+      readAccount: () => '0x123',
+      planner: { planMax: async () => { throw new Error('not planned in this test'); } },
+      account: '0x123',
+      available: () => true,
+      load: () => undefined,
+    });
+  },
+}));
 vi.mock('./world/WorldHost.js', () => ({
   WorldHost: () => <div data-testid="world-host">world</div>,
 }));
@@ -89,6 +122,15 @@ async function openBankCounter(worldOut: ReturnType<typeof createEventBus<WorldE
   await settle();
 }
 
+/** Let the held demo Bridge runtime land, once the provider has asked for it. */
+async function landDemoBridge(): Promise<void> {
+  await act(async () => {
+    await demoBridge.requested;
+    demoBridge.land();
+  });
+  await settle();
+}
+
 function bankStations(snapshots: ShellEvents['world:stations'][]): string[] {
   return snapshots
     .filter((snapshot) => snapshot.building === 'bank')
@@ -115,6 +157,9 @@ describe('the city behind the entry gate (D-072)', () => {
     expect(hudWallet()).not.toBe(COPY.hud.wallet.unknown);
 
     await openBankCounter(worldOut);
+    // The Bridge runtime lands with the player at the Bank counter. Only the
+    // Bridge's stations read it, so the Bank's door snapshot stays the only one.
+    await landDemoBridge();
     expect(bankStations(stations)).toEqual(['bank:shielding:available', 'bank:staking:available']);
     // The counter opens; in the demo the wallet still has to connect, as before D-072.
     expect(container!.textContent).toContain(COPY.connect.title);

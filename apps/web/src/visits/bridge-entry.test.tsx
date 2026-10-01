@@ -3,9 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakePrivacyOperations, type PublicShieldPlanner } from '@strkworld/privacy';
-import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { BuildingId, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from '../bus/event-bus.js';
-import { BridgeProvider, type BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
+import { BridgeProvider, type BridgeRuntimeLoader, type BridgeRuntimeSource } from '../bridge/BridgeProvider.js';
 import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { VisitLayer } from './VisitLayer.js';
 
@@ -55,10 +55,10 @@ function harness(loadRuntime: BridgeRuntimeLoader) {
       </PrivacyProvider>,
     );
   });
-  const bridgeStations = () => snapshots
-    .filter((snapshot) => snapshot.building === 'bridge')
+  const stationsOf = (building: BuildingId) => snapshots
+    .filter((snapshot) => snapshot.building === building)
     .map((snapshot) => snapshot.stations.map(({ station, status }) => `${station}:${status}`));
-  return { world, bridgeStations };
+  return { world, bridgeStations: () => stationsOf('bridge'), bankStations: () => stationsOf('bank') };
 }
 
 describe('entering the Bridge loads its runtime', () => {
@@ -87,6 +87,31 @@ describe('entering the Bridge loads its runtime', () => {
     await settle();
     expect(loadRuntime).toHaveBeenCalledOnce();
     expect(bridgeStations().at(-1)).toEqual(['bridge:deposit:available']);
+  });
+
+  it('republishes no room when a load started at the Bridge lands after the player walked on to the Bank', async () => {
+    let land = (): void => undefined;
+    const loadRuntime = vi.fn(() => new Promise<BridgeRuntimeSource>((resolve) => {
+      land = () => resolve({ service: {} as never, loadSources: async () => [] });
+    }));
+    const { world, bridgeStations, bankStations } = harness(loadRuntime);
+
+    await act(async () => world.emit('building:entered', { building: 'bridge' }));
+    await settle();
+    expect(loadRuntime).toHaveBeenCalledOnce();
+    await act(async () => world.emit('building:exited', { building: 'bridge' }));
+    await act(async () => world.emit('building:entered', { building: 'bank' }));
+    await act(async () => land());
+    await settle();
+
+    // No Bank station reads a Bridge capability, so its door snapshot stands.
+    expect(bankStations()).toEqual([['bank:shielding:available', 'bank:staking:available']]);
+    expect(bridgeStations()).toEqual([['bridge:deposit:locked']]);
+
+    // The Bridge's next door snapshot reads the runtime that landed.
+    await act(async () => world.emit('building:exited', { building: 'bank' }));
+    await act(async () => world.emit('building:entered', { building: 'bridge' }));
+    expect(bridgeStations()).toEqual([['bridge:deposit:locked'], ['bridge:deposit:available']]);
   });
 
   it('keeps the station locked when the optional runtime cannot load', async () => {

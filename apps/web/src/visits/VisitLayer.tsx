@@ -96,11 +96,15 @@ export function VisitLayer({
   }, [inBridge, loadBridge]);
 
   // The runtime arrives after the entry snapshot went out, so say again what
-  // the room's stations are whenever a Bridge capability changes mid-visit.
+  // the Bridge's stations are whenever a Bridge capability changes mid-visit.
+  // Only the Bridge's stations read these capabilities, and a runtime can land
+  // while the player stands in another building (the demo loads its runtime
+  // at boot; a load started at the Bridge can finish after the player left),
+  // so no other room is republished.
   const bridgeAccountAvailable = bridge.account !== null;
   const bridgePlannerAvailable = Boolean(bridge.planner);
   useEffect(() => {
-    controller.refreshStations();
+    controller.refreshStations('bridge');
   }, [controller, bridgeAccountAvailable, bridgePlannerAvailable]);
 
   useEffect(() => {

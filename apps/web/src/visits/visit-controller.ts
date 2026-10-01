@@ -41,12 +41,14 @@ export interface VisitController {
   dismissLocked(): void;
   handleEscape(): void;
   /**
-   * Re-publish the active room's station presentation. Capabilities can arrive
-   * after entry — the production Bridge runtime loads when the player walks in —
-   * and a snapshot published at the door would otherwise keep a station locked
-   * for the rest of the visit. Outside a visit this does nothing.
+   * Re-publish `building`'s station presentation while the player is inside
+   * it. Capabilities can arrive after entry — the production Bridge runtime
+   * loads when the player walks in — and a snapshot published at the door
+   * would otherwise keep a station locked for the rest of the visit. During a
+   * visit to any other building, or outside one, this does nothing: that
+   * room's door snapshot still stands.
    */
-  refreshStations(): void;
+  refreshStations(building: BuildingId): void;
 }
 
 /**
@@ -302,12 +304,12 @@ export function createVisitController(
     dismissLocked,
     handleEscape,
 
-    refreshStations(): void {
+    refreshStations(building): void {
       // Presentation only, like the entry snapshot: activation still resolves
       // the station again against the live capabilities.
       const state = store.getState();
-      if (state.name !== 'visiting') return;
-      publishStations(state.building);
+      if (state.name !== 'visiting' || state.building !== building) return;
+      publishStations(building);
     },
   });
 }
