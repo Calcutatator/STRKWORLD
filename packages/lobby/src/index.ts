@@ -75,6 +75,7 @@ export {
   SHARED_AREA_GRIDS,
   isAreaStepAllowed,
   isAreaWalkable,
+  isOverAreaGrid,
   normalizePresenceArea,
   type SharedPresenceArea,
 } from './areas';

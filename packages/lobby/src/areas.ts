@@ -52,6 +52,22 @@ export function normalizePresenceArea(raw: unknown): PresenceArea | null {
   return PRESENCE_AREAS.includes(raw as PresenceArea) ? (raw as PresenceArea) : null;
 }
 
+/**
+ * Whether a World pixel position lies anywhere on a shared room's grid,
+ * walkable or not. For the roof that is the Exchange tower's street
+ * footprint: no street player can legitimately stand there (it is the
+ * building, and its door tile takes them inside), so a roof observer is
+ * never sent a street peer from it, and any peer a roof player is drawn
+ * standing over the footprint is on the roof (D-087).
+ */
+export function isOverAreaGrid(area: SharedPresenceArea, x: number, y: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const grid = SHARED_AREA_GRIDS[area];
+  const tileX = Math.floor((x - grid.originX) / grid.tileSize);
+  const tileY = Math.floor((y - grid.originY) / grid.tileSize);
+  return tileX >= 0 && tileY >= 0 && tileX < grid.width && tileY < grid.height;
+}
+
 /** Whether a World pixel position stands on one of a shared room's walkable tiles. */
 export function isAreaWalkable(area: SharedPresenceArea, x: number, y: number): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;

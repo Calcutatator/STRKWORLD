@@ -22,7 +22,7 @@ import type {
   SandboxColumn,
   SandboxTile,
 } from '@strkworld/shared';
-import { isAreaStepAllowed, isAreaWalkable, normalizePresenceArea } from './areas.js';
+import { isAreaStepAllowed, isAreaWalkable, isOverAreaGrid, normalizePresenceArea } from './areas.js';
 import { MOVE_BURST, resolveRoomConfig } from './config.js';
 import {
   UpdateThrottle,
@@ -672,23 +672,40 @@ export class LobbyPresence {
    * The area comes first because the areas share coordinates: the roof lies
    * over the street, and the Studio is drawn over the hidden street near the
    * pitch, so distance alone would show a room's players on the street.
+   *
+   * One view is one-way on top of that: a roof observer also receives the
+   * street below, as the roof's view draws it, and no street observer ever
+   * receives the roof. Roof peers fill the cap first and street peers the
+   * rest, each nearest first, so a crowd below never pushes a roof player out
+   * of view. A street peer standing over the tower's footprint (only a
+   * hostile client can) is never sent to the roof, so whatever a roof player
+   * is shown over the footprint is on the roof.
    */
   visibleTo(sessionKey: string): PresenceEntry[] {
     const observer = this.#sessions.get(sessionKey);
     if (observer === undefined || observer.suspended) return [];
     const self = this.peers.get(observer.gameId);
     if (self === undefined) return [];
-    const others: PresenceEntry[] = [];
+    const roofView = observer.area === 'roof';
+    const same: PresenceEntry[] = [];
+    const below: PresenceEntry[] = [];
     for (const session of this.#sessions.values()) {
-      if (session === observer || session.suspended || session.area !== observer.area) continue;
+      if (session === observer || session.suspended) continue;
       const entry = this.peers.get(session.gameId);
-      if (entry !== undefined) others.push(entry);
+      if (entry === undefined) continue;
+      if (session.area === observer.area) same.push(entry);
+      else if (
+        roofView &&
+        session.area === 'street' &&
+        !isOverAreaGrid('roof', entry.position.x, entry.position.y)
+      ) {
+        below.push(entry);
+      }
     }
-    return selectVisible(
-      self,
-      others,
-      this.#interestRadius,
-      this.#maxVisiblePeers,
+    const near = selectVisible(self, same, this.#interestRadius, this.#maxVisiblePeers);
+    if (below.length === 0 || near.length >= this.#maxVisiblePeers) return near;
+    return near.concat(
+      selectVisible(self, below, this.#interestRadius, this.#maxVisiblePeers - near.length),
     );
   }
 

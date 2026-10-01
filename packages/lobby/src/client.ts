@@ -28,11 +28,12 @@
  *
  * A connected client is live in one presence area: the street after a join
  * or a resume, or the area named by its last `enterArea`. The room sends it
- * only peers in that area. Switching is one message; until the room's copy
- * of this avatar shows the new placement, `peers()` is empty, so peers of
- * the area left are never drawn in the area entered. The sandbox and the
- * ball are on the street: away from it, pick, place and kick send nothing and
- * the snapshot carries nothing.
+ * the peers in that area and, on the roof, the street's peers below it too
+ * (one way: the street is never sent the roof). Switching is one message;
+ * until the room's copy of this avatar shows the new placement, `peers()` is
+ * empty, so peers of the area left are never drawn in the area entered. The
+ * sandbox and the ball are on the street: away from it, pick, place and kick
+ * send nothing and the snapshot carries nothing.
  *
  * ## Identity is the server's to assign
  *

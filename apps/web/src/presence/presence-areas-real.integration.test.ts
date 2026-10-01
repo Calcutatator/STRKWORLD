@@ -99,12 +99,18 @@ describe('real shell presence across shared areas (D-087)', () => {
     a.world.emit('area:moved', { position: roof(5, 3), facing: 'up' });
     a.world.emit('rooftop:entered', {});
     await waitFor(() => a.presence.getState().status, (status) => status === 'connected', 'A live on the roof');
+    // One way: A on the roof sees B on the street below; B does not see A.
+    await count(a, 1, 'B below, seen from the roof');
+    expect(a.peers()[0]).toMatchObject({ x: 1340, y: 420 });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(b.peers()).toEqual([]);
     // B follows A up: they meet on the roof; nobody below sees either.
     b.world.emit('building:entered', { building: 'exchange' });
     b.world.emit('area:moved', { position: roof(2, 2), facing: 'up' });
     b.world.emit('rooftop:entered', {});
-    await count(a, 1, 'B on the roof with A');
+    await waitFor(() => a.peers()[0]?.x, (x) => x === roof(2, 2).x, 'B on the roof with A');
     await count(b, 1, 'A on the roof with B');
+    expect(a.peers()).toHaveLength(1);
     expect(a.peers()[0]).toMatchObject(roof(2, 2));
 
     // B rides down: suspended again, gone from the roof.
@@ -114,6 +120,8 @@ describe('real shell presence across shared areas (D-087)', () => {
     b.world.emit('player:moved', { position: { x: 1340, y: 420 }, facing: 'down' });
     b.world.emit('building:exited', { building: 'exchange' });
     await waitFor(() => b.presence.getState().status, (status) => status === 'connected', 'B back on the street');
-    await count(b, 0, 'nobody on the street but B');
+    await count(a, 1, 'B below again, seen from the roof');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(b.peers()).toEqual([]);
   }, 30_000);
 });

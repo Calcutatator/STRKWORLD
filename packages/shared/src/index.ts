@@ -329,9 +329,11 @@ export interface FootballGoal {
 //
 // Only the overworld and two approved rooms are multiplayer. Every other
 // interior is a private solo instance: entering it suspends presence (D-019).
-// A live player is in exactly one area, and sees and is seen only by players
-// in the same area. The area is the lobby's server-side bookkeeping, never a
-// field of `PresenceState`, so no player's area is ever broadcast.
+// A live player is in exactly one area, and sees and is seen by players in the
+// same area. One view is one-way on top of that: a roof player also sees the
+// street below, and no street player sees the roof. The area is the lobby's
+// server-side bookkeeping, never a field of `PresenceState`, so no player's
+// area is ever broadcast.
 
 /**
  * Where a live player is. `street` is the overworld (the road, the sandbox,
@@ -353,6 +355,9 @@ export interface PresenceAreaGrid {
   readonly originY: number;
   /** World pixels per tile. */
   readonly tileSize: number;
+  /** The whole grid, in its own tiles: for the roof, the tower's street footprint. */
+  readonly width: number;
+  readonly height: number;
   /** Walkable tile rectangles, in the grid's own tiles. Every other tile is solid. */
   readonly walkable: readonly TileRect[];
 }
@@ -368,6 +373,8 @@ export const ROOF_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
   originX: (STREET_ORIGIN_X + 12) * 32,
   originY: 5 * 32,
   tileSize: 32,
+  width: 7,
+  height: 6,
   walkable: Object.freeze([Object.freeze({ x: 1, y: 1, width: 5, height: 4 })]),
 });
 
@@ -381,6 +388,8 @@ export const STUDIO_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
   originX: 2 * 32,
   originY: 2 * 32,
   tileSize: 32,
+  width: 18,
+  height: 12,
   walkable: Object.freeze([
     Object.freeze({ x: 1, y: 1, width: 16, height: 10 }),
     Object.freeze({ x: 8, y: 0, width: 2, height: 1 }),

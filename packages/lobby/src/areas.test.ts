@@ -4,6 +4,7 @@ import {
   AREA_STEP_SLACK_PX,
   isAreaStepAllowed,
   isAreaWalkable,
+  isOverAreaGrid,
   normalizePresenceArea,
 } from './areas';
 
@@ -59,6 +60,19 @@ describe('isAreaWalkable (D-087)', () => {
   it('refuses non-finite positions', () => {
     expect(isAreaWalkable('roof', Number.NaN, 200)).toBe(false);
     expect(isAreaWalkable('studio', 200, Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe('isOverAreaGrid (D-087)', () => {
+  it('covers the roof’s whole grid, ledge ring included: the tower’s street footprint', () => {
+    for (let y = -1; y <= 6; y += 1) {
+      for (let x = -1; x <= 7; x += 1) {
+        const over = x >= 0 && x < 7 && y >= 0 && y < 6;
+        const { x: px, y: py } = roof(x, y);
+        expect(isOverAreaGrid('roof', px, py), `roof tile ${x},${y}`).toBe(over);
+      }
+    }
+    expect(isOverAreaGrid('roof', Number.NaN, 0)).toBe(false);
   });
 });
 

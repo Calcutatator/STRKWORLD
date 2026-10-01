@@ -4816,7 +4816,7 @@ Railway.
 
 ## D-087 — Only the overworld, the Exchange roof and the Avatar Studio are multiplayer, each a presence area of its own
 
-**2026-10-01 · Accepted by the product owner (the multiplayer-scope rule: interiors stay private solo instances; only the overworld is multiplayer, plus two approved shared areas, the roof of the avnu building and the avatar changing room) · supersedes D-019 in part (the Exchange roof and the Avatar Studio no longer suspend presence) · supersedes D-047 in part (its "entering it suspends lobby presence") · extends D-011's shared seam with `PresenceArea`, `PRESENCE_AREAS`, `ROOF_PRESENCE_GRID` and `STUDIO_PRESENCE_GRID`, and D-047's WorldEvents with `rooftop:entered`, `rooftop:exited` and `area:moved` · adds one lobby verb, `area` · changes no `PresenceState` field and no D-024 disclosure · builds on D-086's per-patch interest sync and keeps its overflow**
+**2026-10-01 · Accepted by the product owner (the multiplayer-scope rule: interiors stay private solo instances; only the overworld is multiplayer, plus two approved shared areas, the roof of the avnu building and the avatar changing room) · supersedes D-019 in part (the Exchange roof and the Avatar Studio no longer suspend presence) · supersedes D-047 in part (its "entering it suspends lobby presence") · extends D-011's shared seam with `PresenceArea`, `PRESENCE_AREAS`, `ROOF_PRESENCE_GRID` and `STUDIO_PRESENCE_GRID`, and D-047's WorldEvents with `rooftop:entered`, `rooftop:exited` and `area:moved` · adds one lobby verb, `area` · changes no `PresenceState` field and no D-024 disclosure · builds on D-086's per-patch interest sync and keeps its overflow · amended the same day by the lead (the roof also sees the street below, one way; see the amendment at the end)**
 
 **Context.** The product owner set the multiplayer scope. Building interiors
 are private solo instances, as they are today: the Bank, the Vault, the Post
@@ -4838,7 +4838,8 @@ peers below.
   area is the lobby's own server-side bookkeeping (`Session.area` in
   `presence.ts`), not a schema field, so no client is told another player's
   area — only shown the players in its own.
-- **Strictly one area per view, the roof included.** The roof's view keeps
+- **Strictly one area per view, the roof included.** *(Superseded the same
+  day by the one-way roof view amendment below.)* The roof's view keeps
   drawing the street's buildings below, but not its passers-by: street
   players never see roof players and roof players never see street players.
   The alternative (roof observers also receive street peers, one way) is
@@ -4925,3 +4926,54 @@ jitter is now one FIFO per room (it could reorder two frames due in the same
 millisecond). Not verified: real browsers (drawing,
 the roof's remote heights, the Studio's crowd), real networks, and the
 product owner's view of a roof without the street's passers-by.
+
+**2026-10-01 one-way roof view amendment.** The lead asked for the roof to
+show the street's passers-by below again, as it did before this decision.
+This replaces the "strictly one area per view" bullet above; everything else
+in it stands.
+
+- **One view is one-way.** A roof observer is sent the roof's players and the
+  street's, from the same once-per-patch view sync (D-086), inside the same
+  interest radius and the same cap of 24 drawn peers: roof players fill the
+  cap first, nearest first, and street players the rest, so a crowd below
+  never pushes a roof player out of view. No street observer is ever sent a
+  roof player, and the Studio stays strict both ways. The rule lives in
+  `LobbyPresence.visibleTo` alone.
+- **A roof peer is told from a street peer by where it stands, not by a
+  field.** The roof's grid is the tower's street footprint, and every
+  footprint tile is solid on the street except the Exchange's door, which
+  takes a player inside (a World test checks the footprint). So the lobby never sends
+  a roof observer a street player standing over the footprint, which only a
+  hostile client can do, and the presenter stands any peer over the footprint
+  on the deck and every other on the street (`isOverAreaGrid`, and the grid's
+  new `width` and `height`). `PresenceState` is unchanged; no area is sent.
+- **Privacy.** The roof is shown what a player at the tower's foot is shown:
+  street positions and sprites, nothing financial. The street still learns
+  nothing of the roof, and is not told it is being watched from it.
+- **A placement waits a patch after an erasure.** The real-server test that
+  timed out on CI was meeting a real fault, not only a slow runner: a suspend
+  then an area switch, or a suspend then a resume, in back-to-back messages
+  erased an entry and placed its successor under the same `gameId` key inside
+  one patch. `@colyseus/schema@4.0.30` encodes that as one `DELETE_AND_ADD`
+  and filters it per view by the new entry alone, so a view that held the old
+  entry and was not to see the new one was sent nothing and kept a frozen
+  ghost of it. The room now holds such a placement until the patch carrying
+  the erasure has gone out (`PresenceRoom`'s `#placeAgain`, at most two
+  patches). The lift ride is longer than a patch, so play rarely met it; the
+  fault predates D-087 for a fast suspend and resume.
+
+**Consequences of the amendment.** Lobby tests cover the one-way view, the
+cap's order and a hostile street player over the footprint
+(`presence-areas.test.ts`, `areas.test.ts`); the real-server test
+(`area-room.test.ts`) waits on conditions, the room's counters and a
+street player's step seen by each observer instead of fixed sleeps, runs
+each case under a 20 s budget like the other lobby wire tests, and adds a
+regression test for the ghost, which fails against the old room. The
+presenter and grid tests cover the deck/street split, and the web
+integration test the one-way view through three real controllers. The
+load test's `--mixed` scenario at 100 bots, 20 ms of jitter: 2.92 KB/s per
+client while on the roof (2.34 KB/s with the strict rule, same seed), 3.78
+on the street, 2.46 in the Studio; 2.87 KB/s per client overall; tick p95
+7.7 ms, 11.0% of a core; 0 of 722,399 peer sightings in a wrong area and
+20,838 street sightings from the roof; 0 decode failures. Not verified: a
+real browser drawing the street's crowd from the roof.

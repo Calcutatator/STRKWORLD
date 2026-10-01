@@ -301,6 +301,22 @@ lobby now keeps one presence area per live session (`street`, `roof`,
   throw from `emit`.
 - **A switch drains the move bucket, like a resume**, so about 1% of moves are
   dropped right after one in the mixed scenario; the client resends them.
+- **Erasing an entry and placing its successor inside one patch leaves a
+  ghost.** `peers` is keyed by `gameId`, so a suspend and then a switch or a
+  resume before the next encode is one `DELETE_AND_ADD` of that key, which
+  `@colyseus/schema@4.0.30` filters per view by the new entry alone: a view
+  that is not to see the new one keeps the old one, frozen. No error is
+  logged. The room holds such a placement a patch (`#placeAgain` in
+  `room.ts`). This, not only a slow runner, is what timed
+  `area-room.test.ts` out on CI.
+- **A negative wire check needs a barrier, not a sleep.** "Not shown X" holds
+  trivially before the patch that would show X arrives. `area-room.test.ts`
+  waits for `settled`: a street player steps and each observer is shown the
+  step, so each has decoded a patch encoded after the thing checked.
+- **The roof's one-way view tells deck from street by position.** No street
+  player can stand over the tower's footprint (solid but for the door), so
+  the lobby sends a roof observer none from there and the presenter stands
+  any peer over it on the deck (`isOverAreaGrid`).
 
 ### 2026-10-01 — Multiplayer lag was dropped moves, frozen peers and an O(n³) view sync, not bandwidth (D-086)
 

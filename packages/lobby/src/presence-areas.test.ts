@@ -1,8 +1,9 @@
 /**
  * D-087: presence areas in the registry. A live session is in exactly one of
  * the street, the Exchange roof or the Avatar Studio; it sees and is seen
- * only by sessions in the same one; a shared room holds its players to its
- * own walkable tiles; and every other interior still suspends.
+ * by sessions in the same one, and a roof session also sees the street below
+ * (one way); a shared room holds its players to its own walkable tiles; and
+ * every other interior still suspends.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -51,11 +52,12 @@ function mulberry32(seed: number): () => number {
 }
 
 describe('area isolation (D-087)', () => {
-  it('keeps street, roof and Studio players out of each other’s views, however close their coordinates', () => {
+  it('keeps the street from the roof and the Studio from both, however close their coordinates; the roof sees the street below', () => {
     const registry = new LobbyPresence();
     // The roof lies over the Exchange's street footprint, and the Studio is
     // drawn over the hidden street by the pitch: each pair below stands at
-    // the same World pixels in two areas.
+    // the same World pixels in two areas. `below` stands inside the tower's
+    // footprint, where only a hostile client can.
     const below = join(registry, 'below', roof(3, 3));
     const outside = join(registry, 'outside', { x: roof(3, 3).x, y: roof(3, 3).y + 3 * T });
     const up1 = join(registry, 'up1', centre(0, 0));
@@ -75,15 +77,59 @@ describe('area isolation (D-087)', () => {
     expect(visibleIds(registry, 'below')).toEqual([outside]);
     expect(visibleIds(registry, 'outside')).toEqual([below]);
     expect(visibleIds(registry, 'pitch')).toEqual([]);
-    // Roof players see each other, and nobody else.
-    expect(visibleIds(registry, 'up1')).toEqual([up2]);
-    expect(visibleIds(registry, 'up2')).toEqual([up1]);
+    // Roof players see each other and the street below — but never a street
+    // peer over the tower's footprint, nor the Studio.
+    expect(visibleIds(registry, 'up1')).toEqual([up2, outside].sort());
+    expect(visibleIds(registry, 'up2')).toEqual([up1, outside].sort());
     // Studio players see each other with their current look, and nobody else.
     expect(visibleIds(registry, 'dresser1')).toEqual([dresser2]);
     expect(visibleIds(registry, 'dresser2')).toEqual([dresser1]);
     expect(registry.areaFor('below')).toBe('street');
     expect(registry.areaFor('up1')).toBe('roof');
     expect(registry.areaFor('dresser1')).toBe('studio');
+  });
+
+  it('fills a roof view with roof players first, then the nearest street players, within one cap', () => {
+    const registry = new LobbyPresence({ maxVisiblePeers: 4 });
+    const roofIds: string[] = [];
+    for (const [n, at] of [roof(1, 1), roof(5, 4)].entries()) {
+      const session = `roof${n}`;
+      roofIds.push(join(registry, session, centre(0, 0)));
+      registry.enterArea(session, { area: 'roof', ...at }, 1000);
+    }
+    const observer = join(registry, 'observer', centre(0, 0));
+    registry.enterArea('observer', { area: 'roof', ...roof(3, 2) }, 1000);
+    // Six street players in front of the tower, nearer to the observer than
+    // the far roof corner is, and one out of the interest box.
+    const street: string[] = [];
+    for (let n = 0; n < 6; n += 1) {
+      street.push(join(registry, `street${n}`, { x: roof(3, 2).x + (n - 3) * 8, y: roof(3, 2).y + (5 + n) * T }));
+    }
+    join(registry, 'far', { x: roof(3, 2).x + 30 * T, y: roof(3, 2).y + 6 * T });
+    const seen = visibleIds(registry, 'observer');
+    expect(seen).toHaveLength(4);
+    for (const id of roofIds) expect(seen).toContain(id);
+    // The two nearest street players take the rest.
+    expect(seen.filter((id) => street.includes(id)).sort()).toEqual([street[0], street[1]].sort());
+    // And nobody on the street sees anyone on the roof.
+    for (let n = 0; n < 6; n += 1) {
+      const view = visibleIds(registry, `street${n}`);
+      expect(view).not.toContain(observer);
+      for (const id of roofIds) expect(view).not.toContain(id);
+    }
+  });
+
+  it('keeps the Studio strict both ways, with no one-way view of the street', () => {
+    const registry = new LobbyPresence();
+    const walker = join(registry, 'walker', studio(6, 5));
+    const dresser = join(registry, 'dresser', studio(6, 6));
+    registry.enterArea('dresser', { area: 'studio', ...studio(6, 6) }, 1000);
+    const climber = join(registry, 'climber', centre(0, 0));
+    registry.enterArea('climber', { area: 'roof', ...roof(2, 2) }, 1000);
+    expect(visibleIds(registry, 'dresser')).toEqual([]);
+    expect(visibleIds(registry, 'walker')).toEqual([]);
+    expect(visibleIds(registry, 'climber')).not.toContain(dresser);
+    expect(visibleIds(registry, 'climber')).not.toContain(walker);
   });
 
   it('applies the interest radius and cap inside a shared room as on the street', () => {

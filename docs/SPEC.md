@@ -408,11 +408,11 @@ Office, the Bridge, and the Exchange's ground floor and degen floor suspend
 presence as before.
 
 A live player is in exactly one presence area, `street`, `roof` or `studio`,
-and sees and is seen only by players in the same one: street players never
-see the roof's or the Studio's players, and those rooms never show the street's
-passers-by (the roof's view of the street below shows its buildings, not its
-people). The area is the lobby's server-side bookkeeping; no wire field names
-it. Neither room carries money: the roof has no station and the Studio only
+and sees and is seen by players in the same one. One view is one-way on top
+of that: the roof also shows the street's passers-by below, as it did before
+D-087, but street players never see the roof's players, and the Studio and
+the street never see each other. The area is the lobby's server-side
+bookkeeping; no wire field names it. Neither room carries money: the roof has no station and the Studio only
 the cosmetic sprite field. Reaching the roof tells observers there that a
 player came through the Exchange — the same inference D-019 already accepts
 at its door — and their stay on the floors below is bracketed by suspend and

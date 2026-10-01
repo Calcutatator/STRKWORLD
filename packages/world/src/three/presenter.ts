@@ -117,12 +117,19 @@ const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
 
-/** A building's roof deck height above the street, in world units; 0 for a building without one. */
-function rooftopHeight(building: BuildingId): number {
+/**
+ * A building's roof deck height above the street, in world units, if `x`, `z`
+ * (world units, one per street tile) lie over its roof's footprint; null
+ * otherwise, and for a building without a roof.
+ */
+function rooftopHeightAt(building: BuildingId, x: number, z: number): number | null {
   for (const level of FIXED_ROOM_LEVELS[building] ?? []) {
-    if (level.rooftop) return level.rooftop.height;
+    const roof = level.rooftop;
+    if (!roof) continue;
+    const over = x >= roof.x && z >= roof.y && x < roof.x + level.width && z < roof.y + level.height;
+    return over ? roof.height : null;
   }
-  return 0;
+  return null;
 }
 
 /** Which interior a floor is drawn as: the ground floor by its building, others by floor. */
@@ -154,13 +161,18 @@ export function createPresenter(options: PresenterOptions): Presenter {
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
   /**
-   * Where a remote peer stands (D-087). The lobby sends only peers in the
-   * player's own presence area, so on a roof every peer is on that roof's
-   * deck; in an interior or the Studio the floor is flat; on the street,
-   * the street's own surface.
+   * Where a remote peer stands (D-087). On a roof the lobby sends the roof's
+   * players and the street's passers-by below, and never a street player
+   * over the tower's footprint, so a peer over the footprint is on the deck
+   * and any other is on the street. Off a roof the lobby sends only the
+   * player's own area: the street's surface, or a flat floor indoors and in
+   * the Studio.
    */
   const remoteHeight = (x: number, z: number): number => {
-    if (rooftop !== null) return rooftopHeight(rooftop);
+    if (rooftop !== null) {
+      const deck = rooftopHeightAt(rooftop, x, z);
+      if (deck !== null) return deck;
+    }
     return streetVisible ? streetHeight(x, z) : 0;
   };
 
