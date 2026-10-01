@@ -48,6 +48,8 @@ ARG VITE_STRK20_VAULT_ALLOWED_TOKENS
 # D-069: test deployments only. Unset, as on every launch, the debug logger is
 # not compiled into the bundle at all.
 ARG VITE_DEBUG_LOGS
+# Temporary testing switch: true skips D-072's pool-balance entry check.
+ARG VITE_ENTRY_GATE_BYPASS
 
 COPY apps apps
 COPY packages packages

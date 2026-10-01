@@ -26,7 +26,7 @@ import {
   useWalletSessionOptional,
 } from '../wallet/WalletSessionProvider.js';
 import { WalletAttentionCue } from '../wallet/WalletAttentionCue.js';
-import { detectRoutePolicy } from './config.js';
+import { detectEntryGateBypass, detectRoutePolicy } from './config.js';
 
 /**
  * Builds the Bridge's reserve shield planner (D-061). The privacy seam loads
@@ -235,6 +235,25 @@ function WalletCapabilityGate({
     // account generation, so another account starts the gate over; the gate
     // also re-reads the session's account (no wallet prompt) before an
     // answer counts, so one that races that replacement is dropped.
+    if (detectEntryGateBypass()) {
+      // Temporary testing switch (VITE_ENTRY_GATE_BYPASS): skip D-072's
+      // pool-balance check and go straight into the city.
+      return (
+        <ConnectedProductionApp
+          key={`${snapshot.generation}:${snapshot.account ?? ''}`}
+          session={session}
+          initialConnectState={state}
+          worldOut={worldOut}
+          shellIn={shellIn}
+          presence={presence}
+          createPresence={createPresence}
+          bridge={bridge}
+          shieldPlanner={shieldPlanner}
+          degenCatalog={degenCatalog}
+          poolStats={poolStats}
+        />
+      );
+    }
     return (
       <EntryGate
         key={`${snapshot.generation}:${snapshot.account ?? ''}`}

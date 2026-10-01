@@ -6,6 +6,7 @@ import {
   parseProductionWalletConfig,
   parseRoutePolicy,
   usesProductionWallet,
+  entryGateBypassFrom,
 } from './config.js';
 import { VAULT_MARKET_GROUPS, VAULT_MARKET_METADATA } from './vesu-markets.js';
 import { EXCHANGE_CATALOG } from '../panels/exchange/catalog.js';
@@ -809,5 +810,15 @@ describe('production Vault admission (D-077, D-079, D-081)', () => {
     for (const name of ['VITE_STRK20_VAULT_ENABLED', 'VITE_STRK20_VAULT_ALLOWED_TOKENS']) {
       expect(dockerfile, name).toMatch(new RegExp(`^ARG ${name}$`, 'm'));
     }
+  });
+});
+
+describe('the temporary entry-gate bypass', () => {
+  it('is on only for exactly "true"', () => {
+    expect(entryGateBypassFrom({ VITE_ENTRY_GATE_BYPASS: 'true' })).toBe(true);
+    expect(entryGateBypassFrom({ VITE_ENTRY_GATE_BYPASS: '1' })).toBe(false);
+    expect(entryGateBypassFrom({ VITE_ENTRY_GATE_BYPASS: true })).toBe(false);
+    expect(entryGateBypassFrom({})).toBe(false);
+    expect(entryGateBypassFrom(undefined)).toBe(false);
   });
 });
