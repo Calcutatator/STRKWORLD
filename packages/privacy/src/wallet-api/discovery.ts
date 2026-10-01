@@ -13,13 +13,22 @@ export function createSupportedVersionsReader(
   wallet: WalletWithStarknetFeatures,
 ): SupportedVersionsReader {
   return async (signal) => {
-    if (signal?.aborted) throw new DOMException('Operation cancelled.', 'AbortError');
+    if (isAborted(signal)) throw new DOMException('Operation cancelled.', 'AbortError');
     // The exact direct pins still contain two structurally equivalent v6 type
     // copies. Keep that packaging mismatch at this one boundary.
     const versions = await walletV6.supportedWalletApi(
       wallet as Parameters<typeof walletV6.supportedWalletApi>[0],
     );
-    if (signal?.aborted) throw new DOMException('Operation cancelled.', 'AbortError');
+    if (isAborted(signal)) throw new DOMException('Operation cancelled.', 'AbortError');
     return versions;
   };
+}
+
+function isAborted(signal?: AbortSignal): boolean {
+  try {
+    return signal?.aborted === true;
+  } catch {
+    // A malformed cancellation object must fail closed before wallet access.
+    return true;
+  }
 }
