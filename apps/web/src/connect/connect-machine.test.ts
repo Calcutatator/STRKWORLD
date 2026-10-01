@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FakePrivacyOperations, PrivacyError, type PrivacyOperations } from '@strkworld/privacy';
+import {
+  FakePrivacyOperations,
+  PrivacyError,
+  WalletApiPrivacyOperations,
+  type PrivacyOperations,
+  type WalletStrk20Account,
+} from '@strkworld/privacy';
 import { createConnectFlow, toWalletStatus } from './connect-machine.js';
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
@@ -68,6 +74,79 @@ describe('connect flow', () => {
     expect(state.name).toBe('unsupported-wallet');
     expect(state.name === 'unsupported-wallet' && state.walletApiVersion).toBe('0.9.0');
     expect(flow.status()).toBe('unsupported');
+  });
+
+  it('marks a reported version below the required one as too old', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations({
+      capability: { supportsStrk20: false, walletApiVersion: '0.9.0' },
+    }));
+    expect(await flow.connect()).toEqual({ name: 'unsupported-wallet', walletApiVersion: '0.9.0', versionTooOld: true });
+  });
+
+  it('does not call a wallet with no parseable version too old', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations({
+      capability: { supportsStrk20: false, walletApiVersion: null },
+    }));
+    expect(await flow.connect()).toEqual({ name: 'unsupported-wallet', walletApiVersion: null });
+  });
+
+  it('admits a wallet with the base STRK20 methods but no shadow accounts', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations({
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', supportsShadowAccounts: false },
+    }));
+    expect(await flow.connect()).toMatchObject({
+      name: 'connected',
+      capability: { supportsStrk20: true, supportsShadowAccounts: false },
+    });
+  });
+
+  describe('a capability probe that fails, through the Wallet API adapter', () => {
+    function flowFailing(failure: unknown) {
+      const wallet = {
+        address: '0xabc',
+        strk20Balances: vi.fn(),
+        strk20PrepareInvoke: vi.fn(),
+        strk20InvokeTransaction: vi.fn(),
+      } as unknown as WalletStrk20Account;
+      const operations = new WalletApiPrivacyOperations({
+        wallet,
+        pool: {} as never,
+        supportedVersions: async () => { throw failure; },
+        policy: {
+          maxIntents: 1,
+          maxRelayFee: 0n,
+          enabledRoutes: [],
+          allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+        },
+      });
+      return { flow: createConnectFlow(operations), wallet };
+    }
+
+    it.each([
+      ['-32601 method not found', { code: -32601, message: 'Method not found' }],
+      ['"Not implemented"', new Error('Not implemented')],
+      ['"Unknown method"', new Error('Unknown method')],
+      ['162', { code: 162, message: 'An error occurred (API_VERSION_NOT_SUPPORTED)' }],
+    ] as const)('sends a wallet that answers %s to the unsupported room, not "Cannot reach your wallet"', async (_label, failure) => {
+      const { flow, wallet } = flowFailing(failure);
+      expect(await flow.connect()).toEqual({ name: 'unsupported-wallet', walletApiVersion: null });
+      expect(flow.status()).toBe('unsupported');
+      expect(wallet.strk20Balances).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a dropped transport', new TypeError('Failed to fetch')],
+      ['a timeout', new Error('Request timed out')],
+      ['a popup closed without a code', new Error('User closed the popup')],
+    ] as const)('keeps %s in the unreachable room, with its retry', async (_label, failure) => {
+      const { flow } = flowFailing(failure);
+      expect(await flow.connect()).toEqual({ name: 'unreachable' });
+    });
+
+    it('sends a declined probe back to the connect room', async () => {
+      const { flow } = flowFailing({ code: 113, message: 'User rejected' });
+      expect(await flow.connect()).toEqual({ name: 'disconnected' });
+    });
   });
 
   it('routes an unregistered account to not-registered, which admits it to the entry gate (D-072)', async () => {

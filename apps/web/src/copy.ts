@@ -81,6 +81,8 @@ export const COPY = freezeCopy({
   unsupported: {
     title: "{Wallet} can't open the privacy pool yet",
     body: "{Wallet} is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your funds are fine. Connect a wallet that supports STRK20 private balances, or check again once {wallet} adds them.",
+    /** A wallet whose capability answer named a version below the city's. */
+    tooOld: "{Wallet} is connected, but it reports Wallet API {version} and STRKWORLD needs {required} or later, so the city stays closed. Your funds are fine. Update {wallet} and check again, or connect a wallet that supports STRK20 private balances.",
     unnamed: 'Your wallet',
     unnamedInline: 'your wallet',
     action: 'Connect a different wallet',

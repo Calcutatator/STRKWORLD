@@ -201,10 +201,11 @@ describe('ProductionRoot', () => {
     // D-073: the room names the connected wallet by the picker's display name.
     const room = container.querySelector('[data-testid="wallet-capability-gate"]');
     expect(room?.querySelector('h2')?.textContent).toBe("Ready can't open the privacy pool yet");
-    expect(room?.textContent).toContain(
-      "Ready is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed.",
+    // A reported version below the required one says so plainly, naming both.
+    expect(room?.querySelector('p')?.textContent).toBe(
+      'Ready is connected, but it reports Wallet API 0.9.0 and STRKWORLD needs 0.10.3 or later, so the city stays closed. Your funds are fine. Update Ready and check again, or connect a wallet that supports STRK20 private balances.',
     );
-    expect(room?.textContent).toContain('or check again once Ready adds them.');
+    expect(room?.querySelector('.room-detail')).toBeNull();
     expect(room?.querySelector('button')?.textContent).toBe(COPY.unsupported.action);
     expect(captured.current).toBeNull();
     expect(createPresence).not.toHaveBeenCalled();

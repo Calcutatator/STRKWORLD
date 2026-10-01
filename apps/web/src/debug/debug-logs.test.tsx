@@ -363,6 +363,10 @@ describe('what it captures', () => {
       },
     } as never);
     await unsupported.connect();
+    const tooOld = createConnectFlow({
+      capability: async () => ({ supportsStrk20: false, walletApiVersion: '0.9.0', registration: 'unknown' }),
+    } as never);
+    await tooOld.connect();
     await tick();
     expect(entries().filter((entry) => entry.event !== 'debug.on').map(({ level, event, detail }) => [level, event, detail])).toEqual([
       ['info', 'connect.state', 'detecting'],
@@ -375,6 +379,8 @@ describe('what it captures', () => {
           'cause="An error occurred (API_VERSION_NOT_SUPPORTED)"',
       ],
       ['info', 'connect.state', 'unsupported-wallet walletApi=null'],
+      ['info', 'connect.state', 'detecting'],
+      ['info', 'connect.state', 'unsupported-wallet walletApi=0.9.0 tooOld=true'],
     ]);
   });
 

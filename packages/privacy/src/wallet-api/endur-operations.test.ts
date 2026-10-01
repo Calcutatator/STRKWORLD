@@ -68,7 +68,13 @@ function read(overrides: Partial<EndurUnstakeRead> = {}): EndurUnstakeRead {
   };
 }
 
-function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowAddress?: string } = {}) {
+function fixture(options: {
+  routes?: WalletRoutePolicy['enabledRoutes'];
+  shadowAddress?: string;
+  versions?: readonly string[];
+  /** What the wallet's commitment call does instead of answering. */
+  commitmentFails?: unknown;
+} = {}) {
   const invoked: STRK20_ACTION[][] = [];
   const commitments: string[] = [];
   const unstakeReads: string[] = [];
@@ -87,6 +93,7 @@ function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowA
     },
     async strk20ShadowAccountCommitment(dappName: string) {
       commitments.push(dappName);
+      if (options.commitmentFails !== undefined) throw options.commitmentFails;
       return PARTIAL;
     },
   };
@@ -117,7 +124,7 @@ function fixture(options: { routes?: WalletRoutePolicy['enabledRoutes']; shadowA
   const operations = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    supportedVersions: async () => ['0.10.3', '0.10.4'],
+    supportedVersions: async () => [...(options.versions ?? ['0.10.3', '0.10.4'])],
     policy: policy(options.routes),
     endur,
     sleep: async () => undefined,
@@ -138,6 +145,32 @@ describe('Endur staking, switched on (D-085)', () => {
     ]]);
     // Staking never touches a shadow account.
     expect(f.commitments).toEqual([]);
+  });
+});
+
+describe('a wallet with STRK20 but no shadow accounts (D-085)', () => {
+  it('still stakes, while unstaking says shadow-accounts-unsupported below Wallet API 0.10.4 and asks nothing', async () => {
+    const f = fixture({ versions: ['0.10.3'] });
+    await expect(f.operations.capability()).resolves.toMatchObject({ supportsStrk20: true, supportsShadowAccounts: false });
+    await expect(f.operations.endurUnstakePosition()).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    await expect(f.operations.prepareEndurUnstake(ONE)).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    await expect(f.operations.prepareEndurClaim()).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    expect(f.commitments).toEqual([]);
+    expect(f.unstakeReads).toEqual([]);
+    expect(f.invoked).toEqual([]);
+    // The rest of the city: staking is a pool route, with no shadow account.
+    const batch = await f.operations.prepare([{ kind: 'stake', tokenIn: STRK, tokenOut: XSTRK, amountIn: ONE }]);
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    expect(f.invoked).toHaveLength(1);
+    expect(f.commitments).toEqual([]);
+  });
+
+  it('reads a commitment refused as method not found as shadow-accounts-unsupported, and sends nothing', async () => {
+    const f = fixture({ commitmentFails: { code: -32601, message: 'Method not found' } });
+    await expect(f.operations.endurUnstakePosition()).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    await expect(f.operations.prepareEndurUnstake(ONE)).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+    expect(f.unstakeReads).toEqual([]);
+    expect(f.invoked).toEqual([]);
   });
 });
 

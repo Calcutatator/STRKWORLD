@@ -5,7 +5,7 @@ import type { ConnectFlow, ConnectState } from './connect-machine.js';
 import { DiscoveryRescan } from './DiscoveryRescan.js';
 import { GetAWallet } from './GetAWallet.js';
 import { NotRegisteredNotice } from './NotRegisteredNotice.js';
-import { selectedWalletName, unsupportedCopy } from './unsupported-copy.js';
+import { selectedWalletName, unsupportedRoomCopy } from './unsupported-copy.js';
 import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/WalletSessionProvider.js';
 
 /**
@@ -58,14 +58,12 @@ export function ConnectRoomView({
 
     case 'unsupported-wallet': {
       // D-073: named by the picker's display-only projection, or "Your wallet".
-      const copy = unsupportedCopy(selectedWalletName(wallet?.snapshot));
+      const copy = unsupportedRoomCopy(selectedWalletName(wallet?.snapshot), connectState);
       return (
         <section className="room room-unsupported">
           <h2>{copy.title}</h2>
           <p>{copy.body}</p>
-          {connectState.walletApiVersion ? (
-            <p className="room-detail">Wallet API {connectState.walletApiVersion}</p>
-          ) : null}
+          {copy.detail ? <p className="room-detail">{copy.detail}</p> : null}
           <button type="button" onClick={() => void connect.recheck()}>
             {COPY.unsupported.action}
           </button>
