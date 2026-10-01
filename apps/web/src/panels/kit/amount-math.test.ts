@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COPY } from '../../copy.js';
-import { balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, tidyFloor } from './amount-math.js';
+import { balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor } from './amount-math.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
@@ -36,6 +36,20 @@ describe('Max less the pool fee', () => {
   it('keeps every wei of a balance far past Number.MAX_SAFE_INTEGER', () => {
     const balance = 123_456_789_012_345_678_901_234_567n;
     expect(maxAfterReserve(balance, 6n * ONE)).toBe(123_456_783_012_345_678_901_234_567n);
+  });
+});
+
+describe('maxBasis (D-090)', () => {
+  it('uses the spendable figure when the wallet splits it', () => {
+    expect(maxBasis({ total: 10n * ONE, spendable: 7n * ONE, maturityKnown: true })).toBe(7n * ONE);
+  });
+
+  it("uses the per-token total wallet_strk20Balances returns when it does not", () => {
+    expect(maxBasis({ total: 10n * ONE, spendable: 0n, maturityKnown: false })).toBe(10n * ONE);
+  });
+
+  it('has no basis before a balance read', () => {
+    expect(maxBasis(null)).toBeNull();
   });
 });
 

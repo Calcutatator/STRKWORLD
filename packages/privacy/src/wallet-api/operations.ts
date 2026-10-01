@@ -642,10 +642,12 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   if (intents.length === 0) throw new PrivacyError('unknown', 'prepare called with no intents');
   if (intents.length > policy.maxIntents) throw new PrivacyError('unknown', 'Too many intents in one batch.');
   for (const intent of intents) {
+    // D-090: a swap may carry the player's own slippage, as an own data property.
+    const swapSlippage = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'slippageBps') !== undefined;
     const expectedKeys = intent.kind === 'shield'
       ? ['kind', 'token', 'amount']
       : intent.kind === 'swap'
-        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut']
+        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut', ...(swapSlippage ? ['slippageBps'] : [])]
         : intent.kind === 'stake'
           ? ['kind', 'tokenIn', 'tokenOut', 'amountIn']
           : ['kind', 'token', 'amount', 'recipient'];
@@ -668,6 +670,16 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
       (typeof intent.minAmountOut !== 'bigint' || intent.minAmountOut <= 0n || intent.minAmountOut > MAX_UINT256)
     ) {
       throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
+    }
+    if (intent.kind === 'swap' && swapSlippage) {
+      const ceiling = policy.swap?.slippageBps;
+      const chosen = intent.slippageBps;
+      if (
+        typeof chosen !== 'number' || !Number.isSafeInteger(chosen) || chosen <= 0
+        || typeof ceiling !== 'number' || chosen > ceiling
+      ) {
+        throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");
+      }
     }
     const inputToken = twoSided ? intent.tokenIn : intent.token;
     assertAddress(inputToken, 'token');

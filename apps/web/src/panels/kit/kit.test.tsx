@@ -122,6 +122,22 @@ describe('AmountField', () => {
     expect(input.getAttribute('aria-describedby')).toBe(container!.querySelector('.ui-amount-hint')!.id);
   });
 
+  it('shows a read-only figure with no Max and no validation, a skeleton while busy, dimmed when stale', () => {
+    render(<AmountField label="Buy" decimals={18} symbol="ETH" value="2" onChange={() => {}} readOnly max={() => ONE} balance={ONE} />);
+    const input = container!.querySelector('input')!;
+    expect(input.readOnly).toBe(true);
+    expect(input.value).toBe('2');
+    expect(container!.querySelectorAll('button')).toHaveLength(0);
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    act(() => root!.render(<AmountField label="Buy" decimals={18} symbol="ETH" value="2" onChange={() => {}} readOnly busy />));
+    expect(input.value).toBe('');
+    expect(input.getAttribute('aria-busy')).toBe('true');
+    expect(container!.querySelector('.ui-amount')!.getAttribute('data-busy')).toBe('true');
+    act(() => root!.render(<AmountField label="Buy" decimals={18} symbol="ETH" value="2" onChange={() => {}} readOnly stale />));
+    expect(input.value).toBe('2');
+    expect(container!.querySelector('.ui-amount')!.getAttribute('data-stale')).toBe('true');
+  });
+
   it('takes a token selector in its slot', () => {
     render(<Field token={<TokenSelect label="Token" labelHidden value={STRK} options={[{ token: STRK, symbol: 'STRK', decimals: 18 }]} onChange={() => {}} />} />);
     expect(container!.querySelector('.ui-amount-token select')).not.toBeNull();
@@ -183,6 +199,26 @@ describe('SettingsPopover', () => {
     type(custom, '2.5');
     expect(custom.value).toBe('2.5');
     expect(container!.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+  });
+
+  it('keeps a typed custom value that passes through a preset on the way', () => {
+    render(<Slippage />);
+    act(() => cog().click());
+    const custom = container!.querySelector<HTMLInputElement>('.ui-settings-custom input')!;
+    type(custom, '1');
+    expect(custom.value).toBe('1');
+    expect(button('1%').getAttribute('aria-pressed')).toBe('false');
+    type(custom, '1.5');
+    expect(custom.value).toBe('1.5');
+    act(() => button('0.5%').click());
+    expect(custom.value).toBe('');
+    expect(button('0.5%').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows its hint under the title', () => {
+    render(<SettingsPopover title="Max slippage" value="0.5" onChange={() => {}} presets={[{ value: '0.5', label: '0.5%' }]} hint="Your swap will not go through if the price moves more than this." />);
+    act(() => button(`${COPY.kit.settings}: Max slippage`).click());
+    expect(container!.querySelector('.ui-settings-hint')!.textContent).toBe('Your swap will not go through if the price moves more than this.');
   });
 
   it('shows its warning slot', () => {

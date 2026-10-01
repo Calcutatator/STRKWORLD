@@ -10,9 +10,17 @@ import { PanelFrame } from '../PanelFrame.js';
 import { isSwappable, type ExchangeAsset } from './catalog.js';
 import { degenExchangeCatalog, policyAdmitsSwapToken } from './degen-catalog.js';
 import { useDegenCatalog } from './DegenCatalogProvider.js';
-import { AmountField, feeReserve, maxAfterReserve } from '../kit/index.js';
+import {
+  AmountField, DetailRows, FlipButton, InvertibleRate, SettingsPopover, TokenSelect,
+  checkAmount, feeReserve, maxAfterReserve, maxBasis, primaryAction,
+  type DetailRow, type TokenOption,
+} from '../kit/index.js';
 import { formatTokenAmountExact } from '../../format.js';
-import { buyChoices, createExchangePanel, holdingOf, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
+import {
+  LIVE_QUOTE_DELAY_MS, PRICE_IMPACT_WARN_BPS, SLIPPAGE_PRESETS_BPS, SLIPPAGE_WARN_BPS,
+  bpsText, buyChoices, canFlip, createExchangePanel, holdingOf, parseSlippage, swapRequest,
+  type ExchangePanel as ExchangeMachine, type ExchangeState, type LiveQuote,
+} from './exchange-machine.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { ReceiptNextStep } from '../JourneyNotice.js';
@@ -41,6 +49,9 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
     register,
     canStartFinancialAction: () => { const state = submissionUncertainty.store.getState(); return !state.active || state.acknowledged; },
     ...(catalog ? { catalog } : {}),
+    // D-090: quote while the player types, and offer slippage up to the build's own ceiling.
+    liveQuoteDelayMs: LIVE_QUOTE_DELAY_MS,
+    ...slippageCeiling(),
   }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register, catalog]);
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -58,13 +69,12 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
     state.balances === 'loading',
     state.flow.name === 'submitting' ? state.flow.stage : null,
   );
-  const compose = <Compose state={state} onBalance={() => void panel.refreshBalances()} onSell={(token) => panel.setSell(token)} onBuy={(token) => panel.setBuy(token)} onAmount={(value) => panel.setAmount(value)} onReview={() => void panel.prepare()} />;
+  const compose = <Compose state={state} panel={panel} />;
   return <div className="exchange-experience" data-experience={experience} data-mode={mode}>
     <WalletAttentionCue active={walletAttention !== null} kind={walletAttention ?? 'confirm'} />
     <PanelFrame title={COPY.buildings.exchange} building="exchange" brand={degen ? 'degen' : undefined} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose} counters={counters}>
       {degen ? <p className="degen-eyebrow">{COPY.degen.eyebrow}</p> : null}
       <ReceiptNextStep building="exchange" transactionHash={state.flow.name === 'submitted' ? state.flow.transactionHash : null} register={register} />
-      <p className="panel-hint">{COPY.exchange.oneSwap}</p>
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :
         state.flow.name === 'submitted' ? <div className="flow-done"><p>{state.flow.restored ? COPY.flow.receiptWaiting : COPY.flow.submitted} <code>{state.flow.transactionHash}</code></p><button type="button" onClick={() => panel.acknowledge()}>{COPY.flow.back}</button></div> :
         blocked ? null : committing ? <Review state={state} onConfirm={() => void panel.confirm()} onCancel={() => panel.cancelPrepared()} onAcknowledge={(value) => panel.acknowledgeUncheckedPrice(value)} /> :
@@ -77,45 +87,149 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
   </div>;
 }
 
-/** An option's text: the ticker, and the name where the list gives one (the degen floor). */
-function assetLabel(asset: ExchangeAsset): string {
-  return asset.name ? `${asset.symbol} · ${asset.name}` : asset.symbol;
-}
-
-function Compose({ state, onBalance, onSell, onBuy, onAmount, onReview }: { state: ExchangeState; onBalance: () => void; onSell: (token: string) => void; onBuy: (token: string) => void; onAmount: (value: string) => void; onReview: () => void }) {
-  if (state.balances !== 'loaded') return <div className="panel-balance"><p>{state.balances === 'loading' ? COPY.balance.loading : COPY.balance.unrequested}</p><button type="button" onClick={onBalance}>{state.balances === 'failed' ? COPY.balance.refreshAgain : COPY.balance.refresh}</button></div>;
-  return <form className="panel-compose" onSubmit={(event) => { event.preventDefault(); onReview(); }}>
-    <label>{COPY.exchange.sell}<select value={state.sell?.token ?? ''} onChange={(event) => onSell(event.target.value)}><option value="">{COPY.exchange.chooseAsset}</option>{state.sellChoices.map((asset) => <option key={asset.token} value={asset.token}>{assetLabel(asset)}</option>)}</select></label>
-    <label>{COPY.exchange.buy}<select value={state.buy?.token ?? ''} onChange={(event) => onBuy(event.target.value)}>{buyChoices(state).map((asset) => <option key={asset.token} value={asset.token}>{assetLabel(asset)}</option>)}</select></label>
-    <SellAmount state={state} onAmount={onAmount} />
-    <button type="submit" disabled={!state.sell || !state.buy || state.flow.name === 'preparing'}>{state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}</button>
-  </form>;
+/** The build's own slippage ceiling (D-090), where this build has a swap policy. */
+function slippageCeiling(): { slippageCeilingBps?: number } {
+  const ceiling = detectRoutePolicy()?.swap?.slippageBps;
+  return ceiling === undefined ? {} : { slippageCeilingBps: ceiling };
 }
 
 /**
- * The amount to sell, with the pool balance and a Max (the kit's proof of
- * use). Max is the spendable balance less the pool fee when the sell asset
- * pays it (a swap's whole cost is the pool fee, D-084), and is off when the
- * wallet reports only an aggregate, since that is not a spendable figure
- * (D-022).
+ * A token choice: the ticker alone. The pool balance is the balance line's,
+ * beside 50% and Max, and the degen floor's names are on its board.
  */
-function SellAmount({ state, onAmount }: { state: ExchangeState; onAmount: (value: string) => void }) {
-  const sell = state.sell;
+function tokenOption(asset: ExchangeAsset): TokenOption {
+  return { token: asset.token, symbol: asset.symbol, decimals: asset.decimals };
+}
+
+/**
+ * The swap, laid out as swap apps lay it out (D-090): Sell with its pool
+ * balance, 50% and Max; the flip arrow; Buy, read-only, filled from the live
+ * quote; the rate; four rows; one button. Slippage is behind the cog. The
+ * review and its confirm are unchanged: this view only composes.
+ */
+function Compose({ state, panel }: { state: ExchangeState; panel: ExchangeMachine }) {
+  if (state.balances !== 'loaded') return <div className="panel-balance"><p>{state.balances === 'loading' ? COPY.balance.loading : COPY.balance.unrequested}</p><button type="button" onClick={() => void panel.refreshBalances()}>{state.balances === 'failed' ? COPY.balance.refreshAgain : COPY.balance.refresh}</button></div>;
+  const { sell, buy } = state;
+  const preparing = state.flow.name === 'preparing';
   const holding = sell ? holdingOf(state, sell.token) : null;
+  // Max leaves the pool fee behind only when the sell asset is the fee's own
+  // token (a swap's whole cost is the pool fee, D-084); the wallet may pay the
+  // fee from another token, so a typed amount above it is still allowed.
   const reserve = sell ? feeReserve(sell.token, state.pool) : null;
-  const max = () => holding && holding.maturityKnown ? maxAfterReserve(holding.spendable, reserve) : null;
+  const max = () => maxAfterReserve(maxBasis(holding), reserve);
   const maximum = max();
   const reserved = maximum !== null && reserve !== null && reserve > 0n && sell !== null
     && state.amountText === formatTokenAmountExact(maximum, sell.decimals);
-  return <AmountField
-    label={COPY.bank.amount}
-    value={state.amountText}
-    onChange={onAmount}
-    decimals={sell?.decimals ?? 18}
-    symbol={sell?.symbol ?? ''}
-    balance={holding?.total ?? null}
-    {...(sell ? { max } : {})}
-    hint={reserved ? COPY.balance.feeReserved : null}
+  const request = swapRequest(state);
+  const quote = currentQuote(state.live, request?.key ?? null);
+  const check = checkAmount(state.amountText, { decimals: sell?.decimals ?? 18, balance: holding?.total ?? null });
+  const slippage = parseSlippage(state.slippageText, state.slippageCeilingBps);
+  const action = check.status === 'ok' && slippage.status !== 'ok'
+    ? { label: COPY.exchange.slippageFix, disabled: true }
+    : primaryAction({ check, symbol: sell?.symbol ?? null, ready: COPY.exchange.review, busy: preparing ? COPY.flow.preparing : null });
+  return <form className="panel-compose exchange-swap" onSubmit={(event) => { event.preventDefault(); void panel.prepare(); }}>
+    <div className="exchange-swap-bar"><SlippageCog state={state} onChange={(value) => panel.setSlippage(value)} /></div>
+    <AmountField
+      label={COPY.exchange.sell}
+      value={state.amountText}
+      onChange={(value) => panel.setAmount(value)}
+      decimals={sell?.decimals ?? 18}
+      symbol={sell?.symbol ?? ''}
+      token={<TokenSelect label={COPY.exchange.sellToken} labelHidden value={sell?.token ?? ''} placeholder={COPY.exchange.chooseAsset} options={state.sellChoices.map(tokenOption)} onChange={(token) => panel.setSell(token)} />}
+      balance={holding?.total ?? null}
+      {...(sell ? { max, half: true } : {})}
+      usd={quote?.summary.sellUsd ?? null}
+      hint={reserved ? COPY.balance.feeReserved : null}
+    />
+    <FlipButton onFlip={() => panel.flip()} disabled={preparing || !canFlip(state)} />
+    <AmountField
+      label={COPY.exchange.buy}
+      name="buy-amount"
+      readOnly
+      value={quote && buy ? formatOutput(quote.expectedAmountOut, buy.decimals) : ''}
+      onChange={() => {}}
+      decimals={buy?.decimals ?? 18}
+      symbol={buy?.symbol ?? ''}
+      token={<TokenSelect label={COPY.exchange.buyToken} labelHidden value={buy?.token ?? ''} options={buyChoices(state).map(tokenOption)} onChange={(token) => panel.setBuy(token)} />}
+      usd={quote?.summary.expectedBuyUsd ?? null}
+      busy={request !== null && state.live.status === 'quoting'}
+      stale={quote?.stale ?? false}
+      hint={request === null ? null : liveNote(state.live, quote)}
+    />
+    {quote && sell ? <QuoteDetails quote={quote} feeInSellToken={reserve !== null && reserve > 0n} /> : null}
+    <button type="submit" disabled={action.disabled || !buy}>{action.label}</button>
+  </form>;
+}
+
+type ReadyQuote = Extract<LiveQuote, { status: 'ready' }>;
+
+/** The live quote, if it answers the swap on show now. */
+function currentQuote(live: LiveQuote, key: string | null): ReadyQuote | null {
+  return live.status === 'ready' && key !== null && live.key === key ? live : null;
+}
+
+/** The Buy field's line under the figure: why there is none, or that it ran out. */
+function liveNote(live: LiveQuote, quote: ReadyQuote | null): string | null {
+  if (quote?.stale) return COPY.exchange.quoteStale;
+  if (live.status === 'quoting') return COPY.exchange.quoting;
+  if (live.status === 'paused') return COPY.exchange.quotePaused;
+  if (live.status === 'failed') return live.message;
+  return null;
+}
+
+/** At most eight decimal places of the quoted output, truncated: never more than avnu said. */
+function formatOutput(amount: bigint, decimals: number): string {
+  const exact = formatTokenAmountExact(amount, decimals);
+  const [whole, fraction] = exact.split('.');
+  const trimmed = fraction ? fraction.slice(0, 8).replace(/0+$/, '') : '';
+  return trimmed ? `${whole}.${trimmed}` : whole!;
+}
+
+/** The rate, invertible, and the four rows a swap app shows under it. */
+function QuoteDetails({ quote, feeInSellToken }: { quote: ReadyQuote; feeInSellToken: boolean }) {
+  const impact = quote.priceImpactBps;
+  const highImpact = impact !== null && impact > PRICE_IMPACT_WARN_BPS;
+  const rows: DetailRow[] = [
+    { id: 'minimum', label: COPY.exchange.receiveAtLeast, value: quote.summary.protectedMinimum, tone: 'emphasis' },
+    {
+      id: 'impact',
+      label: COPY.exchange.priceImpact,
+      value: impact === null ? COPY.exchange.priceImpactUnknown : `${(impact / 100).toFixed(2)}%`,
+      ...(highImpact ? { tone: 'warning' as const, note: COPY.exchange.priceImpactHigh } : {}),
+    },
+    {
+      id: 'fee',
+      label: COPY.bank.poolFee,
+      value: quote.summary.poolFee,
+      ...(feeInSellToken ? {} : { note: COPY.exchange.poolFeeToken }),
+    },
+    { id: 'route', label: COPY.exchange.route, value: COPY.exchange.routeAvnu },
+  ];
+  return <div className="exchange-quote" data-stale={quote.stale ? 'true' : undefined}>
+    <p className="exchange-rate"><span className="ui-visually-hidden">{COPY.exchange.rate}: </span><InvertibleRate forward={quote.summary.rate} inverse={quote.summary.inverseRate} /></p>
+    <DetailRows rows={rows} />
+  </div>;
+}
+
+/** The slippage cog (D-090): 0.1%, 0.5%, 1% and a custom value, up to the build's ceiling. */
+function SlippageCog({ state, onChange }: { state: ExchangeState; onChange: (value: string) => void }) {
+  const presets = SLIPPAGE_PRESETS_BPS
+    .filter((bps) => bps <= state.slippageCeilingBps)
+    .map((bps) => ({ value: bpsText(bps), label: `${bpsText(bps)}%` }));
+  const check = parseSlippage(state.slippageText, state.slippageCeilingBps);
+  const warning = check.status === 'over' ? COPY.exchange.slippageOver.replace('{cap}', bpsText(check.ceilingBps))
+    : check.status === 'zero' || check.status === 'empty' ? COPY.exchange.slippageZero
+      : check.status === 'invalid' ? COPY.exchange.slippageInvalid
+        : check.status === 'ok' && check.bps > SLIPPAGE_WARN_BPS ? COPY.exchange.slippageHigh
+          : null;
+  return <SettingsPopover
+    title={COPY.exchange.slippageTitle}
+    presets={presets}
+    value={state.slippageText}
+    onChange={onChange}
+    custom={{ label: COPY.exchange.slippageCustom, unit: '%' }}
+    hint={COPY.exchange.slippageHint}
+    warning={warning}
   />;
 }
 

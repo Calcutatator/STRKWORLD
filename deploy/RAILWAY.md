@@ -248,7 +248,7 @@ live shadow-account swap yet; this probe is that evidence.
    | `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS` | `50` |
    | `VITE_STRK20_SWAP_ENABLED` | `true` |
    | `VITE_STRK20_SWAP_ALLOWED_TOKENS` | `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d,0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7,0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb,0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8,0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac,0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135` (STRK, ETH, USDC, USDT, WBTC, strkBTC) |
-   | `VITE_STRK20_SWAP_SLIPPAGE_BPS` | `50` (at most the backend's ceiling, or every quote is refused) |
+   | `VITE_STRK20_SWAP_SLIPPAGE_BPS` | `50` (at most the backend's ceiling, or every quote is refused). Since D-090 it is the widest slippage the Exchange's cog offers, so at `50` the cog shows only 0.1% and 0.5%; `300` here and for `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS` opens its 1% preset and custom values up to 3% |
 
    Leave `VITE_STRK20_SWAP_DEGEN_ENABLED` and `BACKEND_DEGEN_*` unset for the
    first probe; the degen floor below opens afterwards.

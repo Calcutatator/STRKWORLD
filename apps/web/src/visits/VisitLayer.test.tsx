@@ -375,7 +375,8 @@ describe('VisitLayerView', () => {
   it('renders Exchange Menu and station as one-swap surfaces with no batch vocabulary', () => {
     for (const surface of [{ name: 'menu' }, { name: 'station', station: 'exchange:swap' }] as const) {
       const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface }} connected onOpenMenu={() => {}} onRequestExit={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
-      expect(markup).toContain('This Exchange prepares and confirms one swap at a time.');
+      // D-090: no subtitle; the single-swap rule (D-042) shows as the absence of any batch control.
+      expect(markup).toContain('data-building="exchange"');
       expect(markup).not.toContain('Add to this visit');
       expect(markup).not.toContain('Nothing queued yet');
     }

@@ -18,7 +18,8 @@ export interface TxResult {
  * A shielded balance for one token.
  *
  * `spendable` and `maturing` are split because freshly created notes are not
- * immediately spendable. Any "max" affordance must use `spendable` only.
+ * immediately spendable. A "max" affordance uses `spendable` when the split
+ * is known, and otherwise `total` (D-090, amending D-022).
  */
 export interface PrivateBalance {
   token: Address;
@@ -29,9 +30,10 @@ export interface PrivateBalance {
   /** Arriving once the maturity window elapses. */
   maturing: bigint;
   /**
-   * False when the wallet exposes only one aggregate balance. In that case
-   * `spendable` and `maturing` are conservative zeroes; do not derive MAX from
-   * them. The wallet remains authoritative at proof time.
+   * False when the wallet exposes only one aggregate balance per token. In
+   * that case `spendable` and `maturing` are conservative zeroes, never a
+   * MAX; a MAX uses `total` (D-090). The wallet remains authoritative at
+   * proof time.
    */
   maturityKnown: boolean;
 }

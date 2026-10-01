@@ -28,6 +28,8 @@ export interface ExchangeReview {
   readonly disclosures: readonly string[];
   /** D-084: the quote's implied rate, "1 STRK ≈ 0.0431 USDC". */
   readonly rate: string;
+  /** D-090: the same rate the other way up, "1 USDC ≈ 23.2 STRK", for the rate line's invert. */
+  readonly inverseRate: string;
   /** D-084: the oracle's USD value of each side, where the oracle prices it. */
   readonly sellUsd: string | null;
   readonly expectedBuyUsd: string | null;
@@ -56,6 +58,35 @@ export type ExchangeCatalogState =
     }
   | { readonly status: 'idle' | 'loading' | 'failed' };
 
+/**
+ * D-090: the compose view's live quote, the figure the Buy field shows while
+ * the player types. A live quote is a prepared batch like a Review press
+ * makes, held until the player presses Review (which takes it as is, with no
+ * second request) or edits the swap (which discards it).
+ *
+ * `paused`: live quoting has stopped asking, because the counter's own budget
+ * for this minute is spent or the last live quote failed; Review still asks.
+ */
+export type LiveQuote =
+  | { readonly status: 'idle' | 'quoting' | 'paused' }
+  | { readonly status: 'failed'; readonly message: string }
+  | {
+      readonly status: 'ready';
+      /** Which swap this answers: sell, buy, amount and slippage. */
+      readonly key: string;
+      readonly summary: ExchangeReview;
+      readonly expectedAmountOut: bigint;
+      readonly minimumAmountOut: bigint;
+      /**
+       * How far the expected output sits below the input's value at Pragma's
+       * price, in bps (avnu's fee and the route's impact together); `null`
+       * when Pragma prices only one side or neither.
+       */
+      readonly priceImpactBps: number | null;
+      /** The quote ran out: the figures stay on show, dimmed, and Review asks again. */
+      readonly stale: boolean;
+    };
+
 export interface ExchangeState {
   readonly door: DoorState;
   readonly catalog: ExchangeCatalogState;
@@ -72,6 +103,12 @@ export interface ExchangeState {
   readonly holdings: readonly PrivateBalance[];
   /** The pool's fee and fee token from `open()`, for a Max that leaves the fee behind. */
   readonly pool: { readonly feeAmount: bigint; readonly feeToken: string } | null;
+  /** D-090: the slippage cog's text, a percentage ("0.5"). */
+  readonly slippageText: string;
+  /** D-090: the widest slippage this build lets the player choose, in bps. */
+  readonly slippageCeilingBps: number;
+  /** D-090: the Buy field's live quote. */
+  readonly live: LiveQuote;
 }
 
 export interface ExchangePanel {
@@ -85,6 +122,10 @@ export interface ExchangePanel {
   setSell(token: string): void;
   setBuy(token: string): void;
   setAmount(text: string): void;
+  /** D-090: the slippage cog's value, a percentage as typed. */
+  setSlippage(text: string): void;
+  /** D-090: swap the two sides, carrying the live output into the Sell field. */
+  flip(): void;
   prepare(signal?: AbortSignal): Promise<void>;
   confirm(signal?: AbortSignal): Promise<void>;
   cancelPrepared(): void;
@@ -116,6 +157,17 @@ export function createExchangePanel(options: {
   quoteSpacingMs?: number;
   /** How the counter waits out the quote spacing; a test passes its own. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * D-090: quote while the player types, this long after the last edit
+   * (`LIVE_QUOTE_DELAY_MS` in the panel). Absent, there is no live quote and
+   * only a Review press asks, as before.
+   */
+  liveQuoteDelayMs?: number;
+  /**
+   * D-090: the widest slippage the cog offers, in bps: the build's own
+   * (`WalletRoutePolicy.swap.slippageBps`), at most `SLIPPAGE_CAP_BPS`.
+   */
+  slippageCeilingBps?: number;
 }): ExchangePanel {
   const { operations, receipts, onError } = options;
   const feeTolerance = options.feeTolerance ?? 0n;
@@ -125,7 +177,9 @@ export function createExchangePanel(options: {
   const quoteSpacingMs = options.quoteSpacingMs ?? QUOTE_SPACING_MS;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
   let lastQuoteAt: number | null = null;
-  const fresh = () => initialState(register, catalogPort !== undefined);
+  const liveDelayMs = options.liveQuoteDelayMs ?? null;
+  const slippageCeilingBps = ownSlippageCeiling(options.slippageCeilingBps);
+  const fresh = () => initialState(register, catalogPort !== undefined, slippageCeilingBps);
   const stateStore = createStore<ExchangeState>(freezeExchangeState(fresh()));
   const store: ReadableStore<ExchangeState> = Object.freeze({
     getState: stateStore.getState,
@@ -159,15 +213,14 @@ export function createExchangePanel(options: {
     if (store.getState().flow.name === 'preparing') {
       start();
       patch({ ...next, flow: { name: 'composing' } });
-      return;
-    }
-    if (store.getState().flow.name === 'review') {
+    } else if (store.getState().flow.name === 'review') {
       start();
       discard();
       patch({ ...next, flow: { name: 'composing' } });
-      return;
+    } else {
+      patch(next);
     }
-    patch(next);
+    scheduleLive();
   };
   const stageCopy = (stage: OperationStage) => ({ composing: COPY.flow.handingOver, 'awaiting-approval': COPY.flow.awaitingApproval, proving: COPY.flow.proving, submitting: COPY.flow.submitting, confirming: COPY.flow.confirming, done: COPY.flow.done, failed: COPY.errors.unknown }[stage]);
   const discard = () => {
@@ -200,12 +253,13 @@ export function createExchangePanel(options: {
    * does not describe what was asked. The batch is the caller's to keep or
    * discard.
    */
-  const quote = async (sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, signal?: AbortSignal): Promise<{ batch: PreparedBatch; summary: ExchangeReview } | null> => {
+  const quote = async (sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, slippageBps: number, signal?: AbortSignal): Promise<{ batch: PreparedBatch; summary: ExchangeReview } | null> => {
     // 1 is a request sentinel only. It never reaches the player-facing review.
-    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n }], signal);
+    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n, slippageBps }], signal);
     const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
     const review = batch.swapReview;
-    if (!validReview(intent, review, sell, buy, amountIn, now())) {
+    // D-090: the floor must be the one for the slippage the player chose.
+    if (!validReview(intent, review, sell, buy, amountIn, now()) || review!.slippageBps !== slippageBps) {
       batch.discard();
       return null;
     }
@@ -220,6 +274,7 @@ export function createExchangePanel(options: {
       poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
       disclosures: disclosuresForIntents(batch.intents, register),
       rate: `1 ${sell.symbol} ≈ ${formatRate((safeReview.expectedAmountOut * 10n ** BigInt(sell.decimals)) / intent.amountIn, buy.decimals)} ${buy.symbol}`,
+      inverseRate: `1 ${buy.symbol} ≈ ${formatRate((intent.amountIn * 10n ** BigInt(buy.decimals)) / safeReview.expectedAmountOut, sell.decimals)} ${sell.symbol}`,
       sellUsd: formatUsd(safeReview.priceCheck.sellUsd),
       expectedBuyUsd: formatUsd(safeReview.priceCheck.expectedBuyUsd),
       priceCheck: safeReview.priceCheck.status,
@@ -228,6 +283,131 @@ export function createExchangePanel(options: {
         : COPY.exchange.priceUnchecked,
     };
     return { batch, summary };
+  };
+
+  // -- D-090: the live quote ----------------------------------------------
+  //
+  // One quote at a time, `liveDelayMs` after the last edit and never inside
+  // the 1.5 s spacing a Review press keeps, from a budget that mirrors the
+  // backend's per-client bucket (`LIVE_QUOTE_BUDGET`), so typing can never
+  // spend what a Review press needs. A failure pauses live quoting until the
+  // next Review press, so a refusal in the wallet is not asked again on every
+  // keystroke.
+  let livePrepared: PreparedBatch | null = null;
+  let liveRun = 0;
+  let livePending: { readonly run: number; readonly key: string; requesting: boolean; readonly done: Promise<void> } | null = null;
+  let liveHalted = false;
+  let liveTokens: number = LIVE_QUOTE_BUDGET.capacity;
+  let liveTokensAt = now();
+  const takeLiveToken = () => {
+    const elapsed = now() - liveTokensAt;
+    const refilled = Math.floor(elapsed / LIVE_QUOTE_BUDGET.refillMs);
+    if (refilled > 0) {
+      liveTokens = Math.min(LIVE_QUOTE_BUDGET.capacity, liveTokens + refilled);
+      liveTokensAt = liveTokens === LIVE_QUOTE_BUDGET.capacity ? now() : liveTokensAt + refilled * LIVE_QUOTE_BUDGET.refillMs;
+    }
+    if (liveTokens <= 0) return false;
+    liveTokens -= 1;
+    return true;
+  };
+  const dropLive = () => {
+    ++liveRun;
+    livePending = null;
+    livePrepared?.discard();
+    livePrepared = null;
+  };
+  const scheduleLive = () => {
+    if (liveDelayMs === null) return;
+    dropLive();
+    const state = store.getState();
+    // Nothing is quoted while an earlier submission is unaccounted for: Review is gated then too.
+    const request = state.flow.name === 'composing' && options.canStartFinancialAction() ? swapRequest(state) : null;
+    if (request === null) {
+      if (state.live.status !== 'idle') patch({ live: { status: 'idle' } });
+      return;
+    }
+    if (liveHalted) {
+      patch({ live: { status: 'paused' } });
+      return;
+    }
+    const run = liveRun;
+    let settle!: () => void;
+    const done = new Promise<void>((resolve) => { settle = resolve; });
+    const pending = { run, key: request.key, requesting: false, done };
+    livePending = pending;
+    patch({ live: { status: 'quoting' } });
+    void (async () => {
+      try {
+        await sleep(liveDelayMs);
+        if (run !== liveRun) return;
+        const wait = lastQuoteAt === null ? 0 : lastQuoteAt + quoteSpacingMs - now();
+        if (wait > 0) {
+          await sleep(Math.min(wait, quoteSpacingMs));
+          if (run !== liveRun) return;
+        }
+        if (!takeLiveToken()) {
+          patch({ live: { status: 'paused' } });
+          return;
+        }
+        pending.requesting = true;
+        lastQuoteAt = now();
+        let quoted: Awaited<ReturnType<typeof quote>>;
+        try {
+          quoted = await quote(request.sell, request.buy, request.amountIn, request.slippageBps);
+        } catch (error) {
+          if (run !== liveRun) return;
+          liveHalted = true;
+          patch({ live: { status: 'failed', message: COPY.errors[toFailure(error).kind] } });
+          return;
+        }
+        if (run !== liveRun) { quoted?.batch.discard(); return; }
+        if (!quoted) {
+          liveHalted = true;
+          patch({ live: { status: 'failed', message: COPY.errors.unknown } });
+          return;
+        }
+        livePrepared = quoted.batch;
+        const review = quoted.batch.swapReview!;
+        const check = review.priceCheck;
+        patch({ live: {
+          status: 'ready',
+          key: request.key,
+          summary: quoted.summary,
+          expectedAmountOut: review.expectedAmountOut,
+          minimumAmountOut: review.minimumAmountOut,
+          priceImpactBps: check.status === 'checked' ? Math.max(0, check.shortfallBps ?? 0) : null,
+          stale: false,
+        } });
+        // The figures dim when the quote runs out; nothing re-asks on its own.
+        void sleep(Math.min(MAX_TIMER_MS, Math.max(0, review.expiresAt - now()))).then(() => {
+          const live = store.getState().live;
+          if (run === liveRun && live.status === 'ready' && !live.stale) patch({ live: { ...live, stale: true } });
+        });
+      } finally {
+        if (livePending === pending) livePending = null;
+        settle();
+      }
+    })();
+  };
+  /** A live quote for exactly this swap already being asked, to wait for rather than ask twice. */
+  const liveInFlight = (key: string): Promise<void> | null => {
+    const pending = livePending;
+    return pending && pending.key === key && pending.requesting ? pending.done : null;
+  };
+  /** Take the live quote for exactly this swap, or null when there is none fresh to take. */
+  const takeLive = (key: string): { batch: PreparedBatch; summary: ExchangeReview } | null => {
+    const current = store.getState().live;
+    const batch = livePrepared;
+    if (
+      current.status === 'ready' && current.key === key && !current.stale
+      && batch !== null && batch.swapReview !== undefined && batch.swapReview.expiresAt > now()
+    ) {
+      livePrepared = null;
+      ++liveRun;
+      livePending = null;
+      return { batch, summary: current.summary };
+    }
+    return null;
   };
 
   return Object.freeze<ExchangePanel>({
@@ -243,7 +423,7 @@ export function createExchangePanel(options: {
         patch({ pool: { feeAmount: config.feeAmount, feeToken: config.feeToken }, flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash, restored: true } : { name: 'composing' } });
       } catch (error) { fail(error, id, 'close'); }
     },
-    close() { start(); ++session; ++balanceRead; ++catalogRead; discard(); stateStore.setState(freezeExchangeState(fresh())); },
+    close() { start(); ++session; ++balanceRead; ++catalogRead; discard(); dropLive(); liveHalted = false; stateStore.setState(freezeExchangeState(fresh())); },
     async reloadCatalog(signal) {
       if (store.getState().catalog.status !== 'failed') return;
       await loadCatalog(signal);
@@ -263,6 +443,7 @@ export function createExchangePanel(options: {
         const buy = tradable.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
         const holdings = balances.filter((entry) => sellChoices.some((asset) => sameAddress(asset.token, entry.token)));
         patch({ balances: 'loaded', sellChoices, sell, buy, holdings });
+        scheduleLive();
       } catch (error) {
         if (id !== balanceRead || currentSession !== session) return;
         const failure = toFailure(error); onError?.(failure); patch({ balances: 'failed', notice: COPY.errors[failure.kind] });
@@ -280,6 +461,19 @@ export function createExchangePanel(options: {
       editComposition({ buy: asset, notice: null });
     },
     setAmount(amountText) { editComposition({ amountText, notice: null }); },
+    setSlippage(slippageText) { editComposition({ slippageText, notice: null }); },
+    flip() {
+      const state = store.getState();
+      if (!canFlip(state)) return;
+      const sell = state.sell!; const buy = state.buy!;
+      const nextSell = state.sellChoices.find((asset) => sameAddress(asset.token, buy.token))!;
+      // Carry the output across, as swap apps do; a stale or missing one carries nothing.
+      const request = swapRequest(state);
+      const carried = state.live.status === 'ready' && !state.live.stale && request !== null && state.live.key === request.key
+        ? formatTokenAmountExact(state.live.expectedAmountOut, buy.decimals)
+        : '';
+      editComposition({ sell: nextSell, buy: sell, amountText: carried, notice: null });
+    },
     async prepare(signal) {
       if (!gate()) return;
       const state = store.getState();
@@ -288,8 +482,27 @@ export function createExchangePanel(options: {
       if (!isListedSwappable(state, state.sell) || !isListedSwappable(state, state.buy)) { patch({ notice: COPY.degen.displayOnlyNotice }); return; }
       const amountIn = parseTokenAmount(state.amountText, state.sell.decimals);
       if (amountIn === null || amountIn <= 0n) { patch({ notice: COPY.notices.badAmount }); return; }
+      const slippage = parseSlippage(state.slippageText, state.slippageCeilingBps);
+      if (slippage.status !== 'ok') { patch({ notice: COPY.exchange.slippageFix }); return; }
       const id = start(); discard(); patch({ flow: { name: 'preparing' }, notice: null });
       try {
+        // D-090: the live quote for exactly this swap, if fresh, is the
+        // review; one being asked is waited for rather than asked twice.
+        const key = swapKey(state.sell, state.buy, amountIn, slippage.bps);
+        const inFlight = liveInFlight(key);
+        if (inFlight) {
+          await inFlight;
+          if (!live(id)) return;
+        }
+        const taken = takeLive(key);
+        // A Review press is the player asking, so live quoting may ask again after it.
+        liveHalted = false;
+        if (taken) {
+          prepared = taken.batch;
+          patch({ flow: { name: 'review', summary: taken.summary }, priceAcknowledged: false });
+          return;
+        }
+        dropLive();
         // D-084: at most one quote per spacing window. A press inside it
         // waits out the rest; a newer press replaces this one meanwhile.
         const wait = lastQuoteAt === null ? 0 : lastQuoteAt + quoteSpacingMs - now();
@@ -298,7 +511,7 @@ export function createExchangePanel(options: {
           if (!live(id)) return;
         }
         lastQuoteAt = now();
-        const quoted = await quote(state.sell, state.buy, amountIn, signal);
+        const quoted = await quote(state.sell, state.buy, amountIn, slippage.bps, signal);
         if (!live(id)) { quoted?.batch.discard(); return; }
         if (!quoted) {
           patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
@@ -336,7 +549,7 @@ export function createExchangePanel(options: {
           const reviewedPair = intent?.kind === 'swap' && sell && buy
             && sameAddress(sell.token, intent.tokenIn) && sameAddress(buy.token, intent.tokenOut);
           lastQuoteAt = now();
-          const fresh = reviewedPair ? await quote(sell!, buy!, intent.amountIn, signal) : null;
+          const fresh = reviewedPair ? await quote(sell!, buy!, intent.amountIn, batch.swapReview.slippageBps, signal) : null;
           if (!live(id)) { fresh?.batch.discard(); return; }
           if (!fresh) {
             discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } }); return;
@@ -391,13 +604,13 @@ export function createExchangePanel(options: {
         fail(error, id);
       }
     },
-    cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); },
+    cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); scheduleLive(); },
     acknowledgeUncheckedPrice(acknowledged) {
       const flow = store.getState().flow;
       if (flow.name !== 'review' || flow.summary.priceCheck !== 'unchecked') return;
       patch({ priceAcknowledged: acknowledged === true, notice: null });
     },
-    acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); } },
+    acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); scheduleLive(); } },
   });
 
   async function feeMovedPast(batch: PreparedBatch, signal?: AbortSignal): Promise<boolean> {
@@ -416,8 +629,92 @@ export const QUOTE_SPACING_MS = 1_500;
 /** The ground floor's fixed six (D-042): always ready, never loaded. */
 const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });
 
-function initialState(register: readonly RouteGrade[], loaded: boolean): ExchangeState {
-  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false, holdings: [], pool: null };
+function initialState(register: readonly RouteGrade[], loaded: boolean, slippageCeilingBps: number): ExchangeState {
+  return {
+    door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' }, priceAcknowledged: false, holdings: [], pool: null,
+    slippageText: bpsText(Math.min(DEFAULT_SLIPPAGE_BPS, slippageCeilingBps)), slippageCeilingBps, live: { status: 'idle' },
+  };
+}
+
+/**
+ * D-090: the slippage cog. Presets as swap apps offer them (1inch's 0.1%,
+ * 0.5% and 1%; Uniswap's default 0.5%), a custom value up to the build's
+ * ceiling, never above `SLIPPAGE_CAP_BPS` (3%: with D-084's 3% oracle bound no
+ * checked swap settles more than 6% under Pragma's price), and a warning
+ * above `SLIPPAGE_WARN_BPS`.
+ */
+export const SLIPPAGE_PRESETS_BPS: readonly number[] = Object.freeze([10, 50, 100]);
+export const DEFAULT_SLIPPAGE_BPS = 50;
+export const SLIPPAGE_CAP_BPS = 300;
+export const SLIPPAGE_WARN_BPS = 100;
+/** D-090: a price impact above this is shown as a warning. */
+export const PRICE_IMPACT_WARN_BPS = 300;
+/** The longest a timer can wait: a later expiry would fire at once instead. */
+const MAX_TIMER_MS = 2_147_483_647;
+/** D-090: how long after the last edit the counter quotes live. */
+export const LIVE_QUOTE_DELAY_MS = 800;
+/**
+ * D-090: the live quote's own budget, below the backend's per-client bucket
+ * (10 at once, one more every 6 s, D-084), so typing leaves room for the
+ * Review press and the confirm-time re-quote.
+ */
+export const LIVE_QUOTE_BUDGET = Object.freeze({ capacity: 7, refillMs: 6_000 });
+
+export type SlippageCheck =
+  | { readonly status: 'ok'; readonly bps: number }
+  | { readonly status: 'empty' | 'zero' | 'invalid' }
+  | { readonly status: 'over'; readonly ceilingBps: number };
+
+/** "0.5" as 50 bps; at most two decimal places, more than 0, at most the ceiling. */
+export function parseSlippage(text: string, ceilingBps: number): SlippageCheck {
+  const trimmed = text.trim().replace(/%$/, '').trim();
+  if (trimmed === '') return { status: 'empty' };
+  if (!/^\d{0,3}(\.\d{0,2})?$/.test(trimmed) || trimmed === '.') return { status: 'invalid' };
+  const [whole = '', fraction = ''] = trimmed.split('.');
+  const bps = Number(whole || '0') * 100 + Number(fraction.padEnd(2, '0'));
+  if (bps === 0) return { status: 'zero' };
+  if (bps > ceilingBps) return { status: 'over', ceilingBps };
+  return { status: 'ok', bps };
+}
+
+/** 50 bps as "0.5". */
+export function bpsText(bps: number): string {
+  return (bps / 100).toString();
+}
+
+function ownSlippageCeiling(value: number | undefined): number {
+  if (value === undefined) return SLIPPAGE_CAP_BPS;
+  if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError('The slippage ceiling must be a positive whole number of bps.');
+  return Math.min(value, SLIPPAGE_CAP_BPS);
+}
+
+function swapKey(sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, slippageBps: number): string {
+  return `${BigInt(sell.token).toString(16)}|${BigInt(buy.token).toString(16)}|${amountIn}|${slippageBps}`;
+}
+
+/**
+ * D-090: the swap the compose view describes, if it is one worth a live
+ * quote: the door open, both sides listed and swappable, an amount within the
+ * pool balance, a valid slippage. Anything else gets no quote.
+ */
+export function swapRequest(state: ExchangeState): { sell: ExchangeAsset; buy: ExchangeAsset; amountIn: bigint; slippageBps: number; key: string } | null {
+  const { sell, buy } = state;
+  if (!state.door.open || state.balances !== 'loaded' || !sell || !buy || sameAddress(sell.token, buy.token)) return null;
+  if (!isListedSwappable(state, sell) || !isListedSwappable(state, buy)) return null;
+  const amountIn = parseTokenAmount(state.amountText, sell.decimals);
+  if (amountIn === null || amountIn <= 0n) return null;
+  const holding = holdingOf(state, sell.token);
+  if (holding !== null && amountIn > holding.total) return null;
+  const slippage = parseSlippage(state.slippageText, state.slippageCeilingBps);
+  if (slippage.status !== 'ok') return null;
+  return { sell, buy, amountIn, slippageBps: slippage.bps, key: swapKey(sell, buy, amountIn, slippage.bps) };
+}
+
+/** D-090: the flip arrow works when the asset being bought can be sold: the pool holds some. */
+export function canFlip(state: ExchangeState): boolean {
+  const { sell, buy } = state;
+  if (!sell || !buy || state.balances !== 'loaded') return false;
+  return state.sellChoices.some((asset) => sameAddress(asset.token, buy.token));
 }
 
 /** The listed assets, or none until a loaded list is ready. */
@@ -520,6 +817,9 @@ function freezeExchangeState(state: ExchangeState): ExchangeState {
     sellChoices: Object.freeze(state.sellChoices.map(freezeAsset)),
     holdings: Object.isFrozen(state.holdings) ? state.holdings : Object.freeze(state.holdings.map((entry) => Object.freeze({ ...entry }))),
     pool: state.pool === null ? null : Object.freeze({ ...state.pool }),
+    live: Object.isFrozen(state.live) ? state.live : Object.freeze(state.live.status === 'ready'
+      ? { ...state.live, summary: Object.freeze({ ...state.live.summary, disclosures: Object.freeze([...state.live.summary.disclosures]) }) }
+      : { ...state.live }),
     sell: freezeOptional(state.sell),
     buy: freezeOptional(state.buy),
     flow,
