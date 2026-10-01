@@ -24,6 +24,17 @@
  * Suspend and resume follow the same rule: the shell calls `suspend()` on
  * interior entry (D-019) and `resume()` on exit. Neither happens by itself.
  *
+ * ## Presence areas (D-087)
+ *
+ * A connected client is live in one presence area: the street after a join
+ * or a resume, or the area named by its last `enterArea`. The room sends it
+ * the peers in that area and, on the roof, the street's peers below it too
+ * (one way: the street is never sent the roof). Switching is one message;
+ * until the room's copy of this avatar shows the new placement, `peers()` is
+ * empty, so peers of the area left are never drawn in the area entered. The
+ * sandbox and the ball are on the street: away from it, pick, place and kick
+ * send nothing and the snapshot carries nothing.
+ *
  * ## Identity is the server's to assign
  *
  * The session identifier is minted by the server and delivered to this client
@@ -73,6 +84,7 @@ import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/s
 import {
   FOOTBALL_WIN_SCORE,
   PITCH_AREA,
+  PRESENCE_AREAS,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
   type Facing,
@@ -80,6 +92,7 @@ import {
   type FootballPhase,
   type FootballSnapshot,
   type GameId,
+  type PresenceArea,
   type SandboxColumn,
   type SandboxSnapshot,
   type SandboxTile,
@@ -112,6 +125,8 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
 const INVALID_WELCOME_TIMEOUT_ERROR = 'Lobby welcome timeout is invalid.';
 const INVALID_RESUME_PLACEMENT_ERROR = 'Lobby resume placement is invalid.';
+const INVALID_AREA_ERROR = 'Lobby presence area is invalid.';
+const NO_PEERS: readonly PeerSnapshot[] = Object.freeze([]);
 const INVALID_WELCOME_ERROR = 'Lobby welcome identity is invalid.';
 
 export type LobbyStatus =
@@ -335,6 +350,15 @@ export class LobbyClient {
   /** The server-assigned identity. Null until the `welcome` message arrives. */
   #gameId: GameId | null = null;
 
+  /** D-087: the presence area this client is live in; null unless connected. */
+  #area: PresenceArea | null = null;
+  /**
+   * D-087: the placement of the last area switch, until the room's copy of
+   * this avatar shows it (or a move sent after it). Peers are withheld until
+   * then: the patch that moves this avatar is the one that swaps the views.
+   */
+  #areaSettle: { readonly x: number; readonly y: number } | null = null;
+
   /** The latest requested position not yet confirmed on the server. */
   #desired: Required<Placement> | null = null;
   #lastSentAt: number | null = null;
@@ -378,6 +402,11 @@ export class LobbyClient {
 
   get status(): LobbyStatus {
     return this.#status;
+  }
+
+  /** D-087: the presence area this client is live in, or null unless connected. */
+  get area(): PresenceArea | null {
+    return this.#area;
   }
 
   /**
@@ -445,6 +474,7 @@ export class LobbyClient {
    */
   suspend(): void {
     if (this.#status !== 'connected' || this.#room === null) return;
+    this.#areaSettle = null;
     this.#cancelReconcile();
     this.#cancelSandboxAction();
     this.#cancelKick();
@@ -455,8 +485,11 @@ export class LobbyClient {
     // suspended command overwrite that authoritative lifecycle state.
     if (this.#room !== room || this.#status !== 'connected') return;
     this.#setStatus('suspended');
-    // The server puts a carried block back on suspend; stop reporting it now
-    // rather than when the patch that erases our entry arrives.
+    // The server puts a carried block back on suspend, and empties this
+    // client's view; stop reporting either now rather than when the patch
+    // that erases our entry arrives. In a shared-looking room drawn over the
+    // street (D-087), stale street peers would otherwise show for a patch.
+    this.#emitPeers();
     this.#emitSandbox();
   }
 
@@ -513,6 +546,67 @@ export class LobbyClient {
   }
 
   /**
+   * Go live in a presence area at a placement in it (D-087): from a suspend,
+   * from another area, or within the current one to refresh the placement
+   * and the sprite. The shell calls it when the player reaches a shared room
+   * (the Exchange roof, the Avatar Studio) and, with `street`, when they walk
+   * out of one.
+   *
+   * The room checks the placement against the area: anywhere for the street,
+   * a walkable tile for a shared room. A refusal suspends the session there,
+   * so a client that disagrees with the room about where it stands is seen by
+   * no one rather than seen in the wrong place. Throws, like `resume`, when
+   * neither connected nor suspended, or when the area or placement is
+   * malformed.
+   */
+  enterArea(area: PresenceArea, placement: Placement, sprite?: LobbySprite): void {
+    const from = this.#status;
+    if ((from !== 'connected' && from !== 'suspended') || this.#room === null) {
+      throw new Error(`enterArea() requires a connected or suspended client, not "${from}"`);
+    }
+    if (!PRESENCE_AREAS.includes(area)) throw new Error(INVALID_AREA_ERROR);
+    if (placement === null || typeof placement !== 'object') {
+      throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
+    }
+    // Own data properties only, as for resume.
+    const x = normalizeCoordinate(ownDataField(placement, 'x'));
+    const y = normalizeCoordinate(ownDataField(placement, 'y'));
+    if (x === null || y === null) {
+      throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
+    }
+    const next: Required<Placement> = {
+      x,
+      y,
+      facing: normalizeFacing(ownDataField(placement, 'facing')),
+    };
+    // Anything waiting to go was meant for the area being left.
+    this.#cancelReconcile();
+    this.#desired = null;
+    if (area !== 'street') {
+      this.#cancelSandboxAction();
+      this.#cancelKick();
+    }
+    const room = this.#room;
+    room.send(MESSAGE.area, {
+      area,
+      ...next,
+      sprite: sprite ?? this.#options.sprite ?? DEFAULT_SPRITE,
+    });
+    // The transport may synchronously report its own closure while sending.
+    if (this.#room !== room || this.#status !== from) return;
+    // A refresh within the area (a new look) keeps the same peers in view.
+    const sameArea = from === 'connected' && this.#area === area;
+    this.#area = area;
+    if (!sameArea) this.#areaSettle = { x: next.x, y: next.y };
+    this.#lastSentAt = performance.now();
+    this.#lastSentPlacement = null;
+    if (from === 'suspended') this.#setStatus('connected');
+    if (sameArea || this.#room !== room || this.#status !== 'connected') return;
+    // Withdraw the area left's peers now, rather than at the next patch.
+    this.#emitRoomState();
+  }
+
+  /**
    * Subscribe to nearby players. Returns an unsubscribe function.
    *
    * Opens nothing. The listener fires once immediately with the current
@@ -559,6 +653,14 @@ export class LobbyClient {
     // entry indistinguishable from a peer and flash a duplicate local avatar.
     // The welcome handler emits again as soon as self-filtering is possible.
     if (room === null || this.#gameId === null) return [];
+    // A suspended client is in no area and the room sends it no one (D-019).
+    if (this.#status === 'suspended') return NO_PEERS;
+    if (this.#areaSettle !== null) {
+      // D-087: until the room shows this avatar where the switch put it, its
+      // view may still hold the area left.
+      if (!this.#areaSettled()) return NO_PEERS;
+      this.#areaSettle = null;
+    }
     const out: PeerSnapshot[] = [];
     room.state?.peers?.forEach((entry) => {
       const snapshot = readPeerSnapshot(entry);
@@ -716,7 +818,7 @@ export class LobbyClient {
    * floor and answers only through the ball.
    */
   kick(): boolean {
-    if (this.#status !== 'connected' || this.#room === null) return false;
+    if (!this.#onStreet() || this.#room === null) return false;
     if (this.#kickHandle !== null) return true;
     const now = performance.now();
     if (!isValidMonotonicTime(now)) return false;
@@ -744,7 +846,7 @@ export class LobbyClient {
 
   /** Send the kick, after the waiting position if `moveFirst`. */
   #sendKick(moveFirst: boolean): boolean {
-    if (this.#status !== 'connected' || this.#room === null) return false;
+    if (!this.#onStreet() || this.#room === null) return false;
     const now = performance.now();
     if (moveFirst) {
       const before = this.#room;
@@ -1046,6 +1148,17 @@ export class LobbyClient {
     }
   }
 
+  /** Whether the room's copy of this avatar shows the last area switch, or a move sent since. */
+  #areaSettled(): boolean {
+    const settle = this.#areaSettle;
+    if (settle === null) return true;
+    const self = this.#serverSelf();
+    if (self === null) return false;
+    if (self.x === settle.x && self.y === settle.y) return true;
+    const sent = this.#lastSentPlacement;
+    return sent !== null && self.x === sent.x && self.y === sent.y;
+  }
+
   /** The server's current position for this client's own avatar, if known. */
   #serverSelf(): Required<Placement> | null {
     const id = this.#gameId;
@@ -1072,8 +1185,21 @@ export class LobbyClient {
     }
   }
 
+  /** Live on the street (D-087): the only place with a sandbox and a ball. */
+  #onStreet(): boolean {
+    return this.#status === 'connected' && this.#area === 'street';
+  }
+
   #setStatus(status: LobbyStatus, reason?: LobbyStatusReason, code?: number): void {
     this.#status = status;
+    // D-087: a join and a resume go live on the street; `enterArea` names
+    // its area before it reports `connected`. Off the air, no area.
+    if (status !== 'connected') {
+      this.#area = null;
+      this.#areaSettle = null;
+    } else if (this.#area === null) {
+      this.#area = 'street';
+    }
     if (this.#statusListeners.size === 0) return;
     const event: LobbyStatusEvent = Object.freeze({
       status,
@@ -1320,7 +1446,7 @@ export class LobbyClient {
       return EMPTY_SANDBOX;
     }
     const columns = this.#sandboxColumns(room);
-    const carrying = this.#status === 'connected' ? this.#ownCarrying(room) : null;
+    const carrying = this.#onStreet() ? this.#ownCarrying(room) : null;
     if (columns.length === 0 && carrying === null) return EMPTY_SANDBOX;
     return Object.freeze({ columns, carrying });
   }
@@ -1411,7 +1537,7 @@ export class LobbyClient {
   }
 
   #sendSandboxAction(type: SandboxActionMessage, tile: SandboxTile): void {
-    if (this.#status !== 'connected' || this.#room === null) return;
+    if (!this.#onStreet() || this.#room === null) return;
     // Own data properties only, like resume: a caller-supplied accessor or
     // proxy is never invoked, and anything but an in-sandbox integer tile is
     // not sent at all.
@@ -1435,7 +1561,7 @@ export class LobbyClient {
     this.#cancelSandboxTimer();
     const pending = this.#pendingSandboxAction;
     if (pending === null) return;
-    if (this.#status !== 'connected' || this.#room === null) {
+    if (!this.#onStreet() || this.#room === null) {
       this.#pendingSandboxAction = null;
       return;
     }

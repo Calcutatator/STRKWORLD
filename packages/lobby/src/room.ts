@@ -3,9 +3,11 @@
  * `policy.ts`, `sandbox.ts`, `sandbox-rules.ts`, `football.ts` and
  * `football-rules.ts`.
  *
- * The room's whole client-facing surface is six message types and a join
+ * The room's whole client-facing surface is seven message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
- * to hold. That is the enforcement: not a filter that strips money out of
+ * to hold. The area verb (D-087) names one of three presence areas —
+ * `street`, `roof`, `studio` — and a placement, and the area is kept on the
+ * server's side: no field of the state says which area anyone is in. That is the enforcement: not a filter that strips money out of
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
  * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky
  * drop and a burst (D-071), each name a tile and nothing else. The kick
@@ -52,6 +54,7 @@ import {
 } from './config.js';
 import {
   LobbyPresence,
+  type AreaRequest,
   type MoveRequest,
   type PlacementRequest,
   type PresenceCounters,
@@ -131,6 +134,22 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /** Scratch set for `#syncView`, reused so a sync allocates no set. */
   readonly #wanted = new Set<PresenceEntry>();
 
+  /**
+   * Patches begun so far: the clock `#erasedAt` and `#held` count in. A
+   * change made before `onBeforePatch` returns is in that patch's encode,
+   * since nothing runs between the two.
+   */
+  #patches = 0;
+
+  /**
+   * Sessions whose entry was erased (a suspend, or a refused area switch),
+   * by the value of `#patches` then. D-087: see `#placeAgain`.
+   */
+  readonly #erasedAt = new Map<string, number>();
+
+  /** Placements held by `#placeAgain` until their session's erasure has gone out. */
+  readonly #held = new Map<string, () => void>();
+
   /** Aggregate counters for this room. Never per-connection. */
   get counters(): PresenceCounters {
     return this.#registry.counters();
@@ -186,7 +205,10 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     this.onMessage(MESSAGE.suspend, (client: Client) => {
-      if (this.#registry.suspend(client.sessionId)) {
+      // A placement still held is dropped: the player went back inside
+      // before it was applied.
+      this.#held.delete(client.sessionId);
+      if (this.#erasing(client.sessionId, () => this.#registry.suspend(client.sessionId))) {
         this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
@@ -194,11 +216,35 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     this.onMessage(MESSAGE.resume, (client: Client, payload: PlacementRequest) => {
-      if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
+      this.#placeAgain(client.sessionId, () => {
+        if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
+          this.#viewsStale = true;
+          this.#scheduleSpawn();
+          this.#scheduleFootball();
+        }
+      });
+    });
+
+    /*
+     * D-087. Go live in a presence area. The registry checks the placement
+     * against the area entered; a refusal suspends the session, silently,
+     * and the client learns it from its own entry. Views are synced at the next patch, so a switch
+     * drops the avatar from one area's views and adds it to the other's in
+     * the same encode. Leaving the street can return a carried block and
+     * leaves the ball, so both timers are re-armed as for a suspend. A switch
+     * that would place a session again in the patch that erased it is held
+     * a patch (`#placeAgain`).
+     */
+    this.onMessage(MESSAGE.area, (client: Client, payload: AreaRequest) => {
+      this.#placeAgain(client.sessionId, () => {
+        // A refused switch suspends the session, so views are stale either way.
+        this.#erasing(client.sessionId, () =>
+          this.#registry.enterArea(client.sessionId, payload ?? {}, performance.now()),
+        );
         this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
-      }
+      });
     });
 
     /*
@@ -260,6 +306,8 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     // safe for a session the registry never admitted. release() is a no-op on
     // an unknown session, so it is.
     this.#registry.release(client.sessionId);
+    this.#held.delete(client.sessionId);
+    this.#erasedAt.delete(client.sessionId);
     this.#viewsStale = true;
     this.#scheduleSpawn();
     this.#scheduleFootball();
@@ -281,6 +329,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
    */
   override onBeforePatch(): void {
     try {
+      this.#releaseHeld();
       if (this.#viewsStale) {
         // Still stale while anyone is joining, so their view is brought up to
         // date on the first patch after they are in; and only cleared once
@@ -296,6 +345,60 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       // take the process down with every room in it. A fixed, content-free
       // line, like the room clock's.
       console.error('lobby: interest sync failed');
+    } finally {
+      this.#patches += 1;
+    }
+  }
+
+  /**
+   * Run a registry call that may erase `sessionId`'s entry, and note it if
+   * it did. Returns the call's result.
+   */
+  #erasing<T>(sessionId: string, call: () => T): T {
+    const before = this.#registry.entryFor(sessionId);
+    const result = call();
+    if (before !== undefined && this.#registry.entryFor(sessionId) === undefined) {
+      this.#erasedAt.set(sessionId, this.#patches);
+    }
+    return result;
+  }
+
+  /**
+   * Put a session back into the shared state — a resume, or an area switch
+   * — now, or once the patch that erases its previous entry has gone out.
+   *
+   * The two must not share a patch. `peers` is keyed by `gameId`, so erasing
+   * an entry and placing its successor before the next encode makes one
+   * `DELETE_AND_ADD` of that key, and `@colyseus/schema@4.0.30` filters that
+   * one operation per view by the new entry alone: a view that held the old
+   * entry and is not to see the new one (a street neighbour of a player
+   * who went straight up to the roof) is sent nothing, and keeps a frozen
+   * ghost of the old entry where it stood. Held a patch, the erasure reaches
+   * every view that held the entry on its own, and the placement follows a
+   * patch later, which each view takes or not as it would any arrival. A real
+   * lift ride is longer than a patch; a back-to-back suspend and switch, or
+   * suspend and resume, is not (D-087).
+   *
+   * The latest held placement wins, and one that arrives while another is
+   * held is held too, so placements are applied in the order they came.
+   */
+  #placeAgain(sessionId: string, apply: () => void): void {
+    if (this.#held.has(sessionId) || this.#erasedAt.get(sessionId) === this.#patches) {
+      this.#held.set(sessionId, apply);
+      return;
+    }
+    this.#erasedAt.delete(sessionId);
+    apply();
+  }
+
+  /** Apply every held placement whose erasure an earlier patch carried. */
+  #releaseHeld(): void {
+    if (this.#held.size === 0) return;
+    for (const [sessionId, apply] of [...this.#held]) {
+      if ((this.#erasedAt.get(sessionId) ?? -1) >= this.#patches) continue;
+      this.#held.delete(sessionId);
+      this.#erasedAt.delete(sessionId);
+      apply();
     }
   }
 

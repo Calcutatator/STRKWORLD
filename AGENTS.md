@@ -259,6 +259,65 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — Shared rooms overlap the street's coordinates, so area must filter before distance; rooms publish `area:moved`, never `player:moved` (D-087)
+
+The product owner's scope: interiors stay private solo instances; only the
+overworld is multiplayer, plus the Exchange roof and the Avatar Studio. The
+lobby now keeps one presence area per live session (`street`, `roof`,
+`studio`) and pairs views within an area only. How verified:
+`packages/lobby/src/presence-areas.test.ts`, `areas.test.ts`,
+`area-room.test.ts` (real server and `LobbyClient`),
+`apps/web/src/presence/presence-areas.test.ts` and
+`presence-areas-real.integration.test.ts` (three real controllers),
+`packages/world/src/presence-area-grids.test.ts` and the D-087 block in
+`world-session.test.ts`, and `npx tsx packages/lobby/tools/load-test.ts
+--mixed` (0 of 708,534 peer sightings in the wrong area at 100 bots). Traps:
+
+- **The rooms share the street's numbers.** The roof's grid lies over the
+  Exchange's street footprint and the Studio is drawn at `ROOM_ORIGIN`, over
+  the hidden street by the pitch. A distance-only view would show roof
+  players to the street below and Studio players on the pitch, and the
+  sandbox, the ball and the sky drops would count a Studio player as standing
+  on the pitch. Filter by area first; the street toys count street sessions
+  only.
+- **Interior moves emitted nothing, and street consumers read every
+  `player:moved`.** The sandbox and football controllers take its position as
+  a street position, so a Studio position would land on the pitch. Rooms
+  publish `area:moved` instead; `player:moved` stays street-only.
+- **`LobbyClient.resume()` is a silent no-op while connected.** A client live
+  in a shared area is connected, so leaving the Studio needs
+  `enterArea('street', …)`; a resume there does nothing and the player stays
+  in the Studio for everyone.
+- **A switched client's decoded view still holds the area left until the
+  patch that moves its own entry.** That patch is also the one that swaps its
+  view, so `peers()` is held empty until the client's own avatar shows the
+  switch's placement (or a move sent after it).
+- **The load test's jitter could reorder frames.** One `setTimeout` per frame
+  fires out of order when two fall due in the same millisecond; it delivered a
+  street move after the area switch sent before it, which the roof rightly
+  refused. The uplink is now one FIFO per room, as TCP is.
+- **The web event bus isolates a handler's throw** (it logs and carries on),
+  so a test of a throwing controller handler asserts the state it left, not a
+  throw from `emit`.
+- **A switch drains the move bucket, like a resume**, so about 1% of moves are
+  dropped right after one in the mixed scenario; the client resends them.
+- **Erasing an entry and placing its successor inside one patch leaves a
+  ghost.** `peers` is keyed by `gameId`, so a suspend and then a switch or a
+  resume before the next encode is one `DELETE_AND_ADD` of that key, which
+  `@colyseus/schema@4.0.30` filters per view by the new entry alone: a view
+  that is not to see the new one keeps the old one, frozen. No error is
+  logged. The room holds such a placement a patch (`#placeAgain` in
+  `room.ts`). This, not only a slow runner, is what timed
+  `area-room.test.ts` out on CI.
+- **A negative wire check needs a barrier, not a sleep.** "Not shown X" holds
+  trivially before the patch that would show X arrives. `area-room.test.ts`
+  waits for `settled`: a street player steps and each observer is shown the
+  step, so each has decoded a patch encoded after the thing checked.
+- **The roof's one-way view tells deck from street by position.** No street
+  player can stand over the tower's footprint (solid but for the door), so
+  the lobby sends a roof observer none from there and the presenter stands
+  any peer over it on the deck (`isOverAreaGrid`).
+
 ### 2026-10-01 — Multiplayer lag was dropped moves, frozen peers and an O(n³) view sync, not bandwidth (D-086)
 
 The lead's "lag when locked into multiplayer" reproduces locally with

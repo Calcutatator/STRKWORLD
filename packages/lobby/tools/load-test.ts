@@ -16,6 +16,15 @@
  *                         850, then at the normal slow pace, so the window
  *                         sees a near-full sandbox (use --warmup 50)
  *   --json out.json       also write the full results as JSON
+ *   --mixed               D-087: every bot also visits the Avatar Studio and
+ *                         the Exchange roof. Street 4-10 s, then the Studio
+ *                         (one area switch) or the roof (a suspend, a 1-2 s
+ *                         ride through the private floors, then a switch),
+ *                         4-10 s there walking its floor, and back. Reports
+ *                         area switches, moves the rooms refused, every peer
+ *                         an observer saw in an area it should not see (a
+ *                         roof bot may see the street), and bytes per second
+ *                         a client receives in each area
  *
  * Every bot is the real `LobbyClient` — the browser's own client, with its
  * own send floor, reconcile and sandbox action floor — subscribed to peers,
@@ -40,13 +49,16 @@ import { fileURLToPath } from 'node:url';
 import { Room as SdkRoom } from '@colyseus/sdk';
 import {
   PITCH_AREA,
+  ROOF_PRESENCE_GRID,
   SANDBOX_AREA,
   STREET_ORIGIN_X,
+  STUDIO_PRESENCE_GRID,
   type Facing,
+  type PresenceAreaGrid,
   type SandboxTile,
 } from '@strkworld/shared';
 import { LobbyClient, type PeerSnapshot } from '../src/client.js';
-import { DEFAULT_SPRITE_KEYS } from '../src/config.js';
+import { DEFAULT_SPRITE_KEYS, type LobbySprite } from '../src/config.js';
 
 // --- Options ---------------------------------------------------------------
 
@@ -64,6 +76,7 @@ const JOIN_RATE = Number(option('join-rate', '25'));
 const SEED = Number(option('seed', '1'));
 const JSON_OUT = option('json', '');
 const FILL_SANDBOX = process.argv.includes('--fill-sandbox');
+const MIXED = process.argv.includes('--mixed');
 
 const TILE = 32;
 const WALK = 160;
@@ -88,12 +101,41 @@ function mulberry32(seed: number): () => number {
 const ROOM_STATE = 14;
 const ROOM_STATE_PATCH = 15;
 
+type BotArea = 'street' | 'studio' | 'roof' | 'lift';
+const BOT_AREAS: readonly BotArea[] = ['street', 'studio', 'roof', 'lift'];
+
 interface BotNet {
   bytes: number;
   patches: number;
   patchMs: number;
   fullStateBytes: number;
   movesSent: number;
+  /** D-087, with `--mixed`: bytes received and time spent in each area. */
+  area: BotArea;
+  areaSince: number;
+  areaBytes: Record<BotArea, number>;
+  areaMs: Record<BotArea, number>;
+}
+
+function freshNet(): BotNet {
+  return {
+    bytes: 0,
+    patches: 0,
+    patchMs: 0,
+    fullStateBytes: 0,
+    movesSent: 0,
+    area: 'street',
+    areaSince: performance.now(),
+    areaBytes: { street: 0, studio: 0, roof: 0, lift: 0 },
+    areaMs: { street: 0, studio: 0, roof: 0, lift: 0 },
+  };
+}
+
+/** Close the net's current area stretch at `now`, and open one in `area`. */
+function enterNetArea(net: BotNet, area: BotArea, now: number): void {
+  net.areaMs[net.area] += Math.max(0, now - net.areaSince);
+  net.area = area;
+  net.areaSince = now;
 }
 
 const netByRoom = new WeakMap<object, BotNet>();
@@ -105,7 +147,7 @@ function netFor(room: object): BotNet {
   let net = netByRoom.get(room);
   if (net === undefined) {
     // The bot whose join is in flight owns the first room that speaks.
-    net = pendingNet ?? { bytes: 0, patches: 0, patchMs: 0, fullStateBytes: 0, movesSent: 0 };
+    net = pendingNet ?? freshNet();
     pendingNet = null;
     netByRoom.set(room, net);
   }
@@ -118,6 +160,7 @@ sdkProto['onMessageCallback'] = function counted(this: unknown, ...args: unknown
   const net = netFor(this as object);
   const size = event.data.byteLength;
   net.bytes += size;
+  net.areaBytes[net.area] += size;
   const code = new Uint8Array(event.data, 0, 1)[0];
   if (code === ROOM_STATE_PATCH) {
     const start = performance.now();
@@ -133,24 +176,47 @@ sdkProto['onMessageCallback'] = function counted(this: unknown, ...args: unknown
 };
 
 // Uplink jitter: every outgoing frame waits a random 0..JITTER_MS, never
-// overtaking the previous one, as on a real connection.
+// overtaking the previous one, as on a real connection. One FIFO per room,
+// drained by one timer: a timer per frame could fire out of order when two
+// frames fall due in the same millisecond, which a TCP stream never does
+// (it once delivered a street move after the area switch sent before it).
 const jitterRandom = mulberry32(SEED ^ 0x5eed);
-const lastDelivery = new WeakMap<object, number>();
+interface Uplink {
+  readonly queue: Array<{ readonly at: number; readonly args: unknown[] }>;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+const uplinks = new WeakMap<object, Uplink>();
 const originalSend = sdkProto['send'] as AnyFn;
-sdkProto['send'] = function jittered(this: unknown, ...args: unknown[]) {
-  const room = this as object;
-  if (args[0] === 'move') netFor(room).movesSent += 1;
-  if (JITTER_MS <= 0) return originalSend.apply(this, args);
+function drainUplink(room: object, uplink: Uplink): void {
+  uplink.timer = null;
   const now = performance.now();
-  const at = Math.max(lastDelivery.get(room) ?? 0, now + jitterRandom() * JITTER_MS);
-  lastDelivery.set(room, at);
-  setTimeout(() => {
+  while (uplink.queue.length > 0 && uplink.queue[0]!.at <= now) {
+    const { args } = uplink.queue.shift()!;
     try {
       originalSend.apply(room, args);
     } catch {
       // The room closed while the frame was in flight; a real network drops it too.
     }
-  }, at - now);
+  }
+  const next = uplink.queue[0];
+  if (next !== undefined) uplink.timer = setTimeout(() => drainUplink(room, uplink), Math.max(0, next.at - now));
+}
+sdkProto['send'] = function jittered(this: unknown, ...args: unknown[]) {
+  const room = this as object;
+  if (args[0] === 'move') netFor(room).movesSent += 1;
+  if (JITTER_MS <= 0) return originalSend.apply(this, args);
+  const now = performance.now();
+  let uplink = uplinks.get(room);
+  if (uplink === undefined) {
+    uplink = { queue: [], timer: null };
+    uplinks.set(room, uplink);
+  }
+  const last = uplink.queue.at(-1)?.at ?? 0;
+  uplink.queue.push({ at: Math.max(last, now + jitterRandom() * JITTER_MS), args });
+  if (uplink.timer === null) {
+    const owned = uplink;
+    owned.timer = setTimeout(() => drainUplink(room, owned), Math.max(0, owned.queue[0]!.at - now));
+  }
   return undefined;
 };
 
@@ -192,6 +258,31 @@ const SANDBOX_MAX_Y = (SANDBOX_AREA.y + SANDBOX_AREA.height - 1) * TILE;
 const PITCH_MIN_X = (PITCH_AREA.x + 1) * TILE;
 const PITCH_MAX_X = (PITCH_AREA.x + PITCH_AREA.width - 1) * TILE;
 
+// --- The shared rooms (D-087) ----------------------------------------------
+
+/** A walkable rectangle of a shared room, in World pixels, kept a body clear of its edges. */
+function floorOf(grid: PresenceAreaGrid): { minX: number; maxX: number; minY: number; maxY: number } {
+  const rect = grid.walkable[0]!;
+  const inset = 10;
+  return {
+    minX: grid.originX + rect.x * grid.tileSize + inset,
+    maxX: grid.originX + (rect.x + rect.width) * grid.tileSize - inset,
+    minY: grid.originY + rect.y * grid.tileSize + inset,
+    maxY: grid.originY + (rect.y + rect.height) * grid.tileSize - inset,
+  };
+}
+const FLOORS = { studio: floorOf(STUDIO_PRESENCE_GRID), roof: floorOf(ROOF_PRESENCE_GRID) } as const;
+
+/**
+ * Where every bot really is, by game id, and since when: the truth an
+ * observer's peers are checked against. A peer that switched less than
+ * `SIGHTING_GRACE_MS` ago may still be in flight to the room or in the patch
+ * after it; anything older seen in the wrong area is a leak.
+ */
+const truth = new Map<string, { area: BotArea; at: number }>();
+const SIGHTING_GRACE_MS = 300;
+const mixedStats = { switches: 0, checked: 0, crossArea: 0, ownSwitchLeaks: 0, roofSawStreet: 0 };
+
 function inSandbox(x: number, y: number): boolean {
   return x >= SANDBOX_MIN_X && x < SANDBOX_MAX_X && y >= SANDBOX_MIN_Y && y < SANDBOX_MAX_Y;
 }
@@ -204,7 +295,7 @@ interface Observation {
 
 class Bot {
   readonly client: LobbyClient;
-  readonly net: BotNet = { bytes: 0, patches: 0, patchMs: 0, fullStateBytes: 0, movesSent: 0 };
+  readonly net: BotNet = freshNet();
   readonly random: () => number;
   x: number;
   y: number;
@@ -218,15 +309,23 @@ class Bot {
   refused = false;
   sandboxActions = 0;
   observation: Observation | null = null;
+  /** D-087, with `--mixed`: where this bot is, until when, and where its lift goes. */
+  area: BotArea = 'street';
+  areaUntil = Number.POSITIVE_INFINITY;
+  switchedAt = 0;
+  liftTo: 'roof' | 'street' = 'roof';
+  street = { x: 0, y: 0 };
+  readonly sprite: LobbySprite;
 
   constructor(endpoint: string, index: number, observe: boolean) {
     this.random = mulberry32(SEED * 7919 + index);
     this.x = STREET_MIN_X + this.random() * (STREET_MAX_X - STREET_MIN_X);
     this.y = STREET_MIN_Y + this.random() * (STREET_MAX_Y - STREET_MIN_Y);
+    this.sprite = DEFAULT_SPRITE_KEYS[index % DEFAULT_SPRITE_KEYS.length] as LobbySprite;
     this.client = new LobbyClient({
       endpoint,
       start: { x: this.x, y: this.y, facing: 'down' },
-      sprite: DEFAULT_SPRITE_KEYS[index % DEFAULT_SPRITE_KEYS.length] as string,
+      sprite: this.sprite,
     });
     // Subscribed like the shell: every patch builds what these listeners get.
     this.client.onPeers((peers) => this.#observe(peers));
@@ -245,6 +344,11 @@ class Bot {
     try {
       await this.client.connect();
       this.joinMs = performance.now() - start;
+      if (MIXED) {
+        const now = performance.now();
+        this.areaUntil = now + 4000 + this.random() * 6000;
+        this.#record(now);
+      }
     } catch {
       this.refused = true;
     } finally {
@@ -274,7 +378,77 @@ class Bot {
     this.pauseUntil = now;
   }
 
+  #record(now: number): void {
+    this.switchedAt = now;
+    enterNetArea(this.net, this.area, now);
+    if (this.client.gameId !== null) truth.set(this.client.gameId, { area: this.area, at: now });
+  }
+
+  /** D-087: move on to the next area when this one's time is up. */
+  #switchArea(now: number): void {
+    const dwell = () => now + 4000 + this.random() * 6000;
+    const enter = (area: 'studio' | 'roof', at: { x: number; y: number }) => {
+      this.client.enterArea(area, { ...at, facing: 'down' }, this.sprite);
+      this.area = area;
+      this.x = at.x;
+      this.y = at.y;
+      this.#pickFloorTarget(now);
+      this.areaUntil = dwell();
+    };
+    if (this.area === 'street') {
+      this.street = { x: this.x, y: this.y };
+      if (this.random() < 0.5) {
+        enter('studio', { x: (FLOORS.studio.minX + FLOORS.studio.maxX) / 2, y: FLOORS.studio.minY });
+      } else {
+        // Into the Exchange: private floors first, the lift to the roof after.
+        this.client.suspend();
+        this.area = 'lift';
+        this.liftTo = 'roof';
+        this.areaUntil = now + 1000 + this.random() * 1000;
+      }
+    } else if (this.area === 'lift') {
+      if (this.liftTo === 'roof') {
+        enter('roof', { x: FLOORS.roof.maxX, y: (FLOORS.roof.minY + FLOORS.roof.maxY) / 2 });
+      } else {
+        this.client.resume({ ...this.street, facing: 'down' }, this.sprite);
+        this.area = 'street';
+        this.x = this.street.x;
+        this.y = this.street.y;
+        this.#pickTarget(now);
+        this.areaUntil = dwell();
+      }
+    } else if (this.area === 'studio') {
+      this.client.enterArea('street', { ...this.street, facing: 'up' }, this.sprite);
+      this.area = 'street';
+      this.x = this.street.x;
+      this.y = this.street.y;
+      this.#pickTarget(now);
+      this.areaUntil = dwell();
+    } else {
+      // Down the lift, through the private floors, out of the door.
+      this.client.suspend();
+      this.area = 'lift';
+      this.liftTo = 'street';
+      this.areaUntil = now + 1000 + this.random() * 1000;
+    }
+    mixedStats.switches += 1;
+    this.#record(now);
+  }
+
+  #pickFloorTarget(now: number): void {
+    const floor = FLOORS[this.area as 'studio' | 'roof'];
+    this.target = {
+      x: floor.minX + this.random() * (floor.maxX - floor.minX),
+      y: floor.minY + this.random() * (floor.maxY - floor.minY),
+    };
+    this.sprinting = this.random() < 0.2;
+    this.pauseUntil = now;
+  }
+
   step(now: number, dtMs: number): void {
+    if (MIXED && now >= this.areaUntil && (this.client.status === 'connected' || this.client.status === 'suspended')) {
+      this.#switchArea(now);
+    }
     if (this.client.status !== 'connected') return;
     if (now >= this.pauseUntil) {
       const dx = this.target.x - this.x;
@@ -284,7 +458,8 @@ class Bot {
       if (distance <= stride) {
         this.x = this.target.x;
         this.y = this.target.y;
-        this.#pickTarget(now + 500 + this.random() * 2500);
+        if (this.area === 'street') this.#pickTarget(now + 500 + this.random() * 2500);
+        else this.#pickFloorTarget(now + 500 + this.random() * 2500);
         this.pauseUntil = now + 500 + this.random() * 2500;
       } else {
         this.x += (dx / distance) * stride;
@@ -296,7 +471,7 @@ class Bot {
     this.client.updatePosition(this.x, this.y, this.facing);
     if (now >= this.nextSandboxAt) {
       this.nextSandboxAt = now + 3000 + this.random() * 3000;
-      if (inSandbox(this.x, this.y)) this.#workSandbox();
+      if (this.area === 'street' && inSandbox(this.x, this.y)) this.#workSandbox();
     }
   }
 
@@ -322,7 +497,32 @@ class Bot {
     this.sandboxActions += 1;
   }
 
+  /**
+   * D-087: is every peer this bot is shown really in the bot's own area, or,
+   * for a bot on the roof, on the street below (the one-way view)? A bot
+   * between areas (on the lift) must be shown nobody. A peer that
+   * switched within the grace may still be in flight; one this bot itself
+   * just left behind may not: `LobbyClient` withholds peers until the room
+   * shows its switch, so those count with no grace.
+   */
+  #checkAreas(peers: readonly PeerSnapshot[]): void {
+    const now = performance.now();
+    for (const peer of peers) {
+      mixedStats.checked += 1;
+      const seen = truth.get(peer.gameId);
+      if (seen === undefined || seen.area === this.area) continue;
+      if (this.area === 'roof' && seen.area === 'street') {
+        mixedStats.roofSawStreet += 1;
+        continue;
+      }
+      if (now - seen.at < SIGHTING_GRACE_MS) continue;
+      if (this.switchedAt > seen.at) mixedStats.ownSwitchLeaks += 1;
+      else mixedStats.crossArea += 1;
+    }
+  }
+
   #observe(peers: readonly PeerSnapshot[]): void {
+    if (MIXED) this.#checkAreas(peers);
     const observation = this.observation;
     if (observation === null) return;
     const now = performance.now();
@@ -428,8 +628,40 @@ async function run(botCount: number): Promise<Record<string, unknown>> {
   const decodeErrorsStart = decodeErrors;
   await ask(child, 'reset', 'reset-done');
   const throttledBefore = Number((await ask(child, 'report', 'report'))['throttledTotal'] ?? 0);
+  const rejectedBefore = Number((await ask(child, 'report', 'report'))['rejectedTotal'] ?? 0);
+  mixedStats.switches = 0;
+  mixedStats.checked = 0;
+  mixedStats.crossArea = 0;
+  mixedStats.ownSwitchLeaks = 0;
+  mixedStats.roofSawStreet = 0;
+  const areaWindowStart = performance.now();
+  for (const bot of bots) {
+    const net = bot.net;
+    for (const area of BOT_AREAS) {
+      net.areaBytes[area] = 0;
+      net.areaMs[area] = 0;
+    }
+    net.areaSince = areaWindowStart;
+  }
+  // D-087: how the bots are spread over the areas, sampled through the window.
+  const spread = { street: 0, studio: 0, roof: 0, lift: 0, samples: 0 };
+  const sampler = setInterval(() => {
+    for (const bot of bots) if (!bot.refused) spread[bot.area] += 1;
+    spread.samples += 1;
+  }, 500);
   const windowStart = performance.now();
   await wait(SECONDS * 1000);
+  clearInterval(sampler);
+  const areaWindowEnd = performance.now();
+  for (const bot of bots) enterNetArea(bot.net, bot.net.area, areaWindowEnd);
+  // Bytes a client receives per second while in each area, over every bot.
+  const perClientByArea = Object.fromEntries(
+    BOT_AREAS.map((area) => {
+      const bytes = bots.reduce((total, bot) => total + bot.net.areaBytes[area], 0);
+      const ms = bots.reduce((total, bot) => total + bot.net.areaMs[area], 0);
+      return [area, ms > 0 ? bytes / (ms / 1000) : 0];
+    }),
+  ) as Record<BotArea, number>;
   const server = await ask(child, 'report', 'report');
   const seconds = (performance.now() - windowStart) / 1000;
 
@@ -460,6 +692,26 @@ async function run(botCount: number): Promise<Record<string, unknown>> {
     decodeErrors: decodeErrors - decodeErrorsStart,
     botGcMsPerSec: (gcMs - gcStart.ms) / seconds,
     botGcPerSec: (gcCount - gcStart.count) / seconds,
+    ...(MIXED
+      ? {
+          mixed: {
+            switchesPerSec: mixedStats.switches / seconds,
+            serverAreaSwitches: Number(server['areaSwitchesTotal'] ?? 0),
+            rejectedMoves: Number(server['rejectedTotal'] ?? 0) - rejectedBefore,
+            peerSightingsChecked: mixedStats.checked,
+            crossAreaSightings: mixedStats.crossArea,
+            ownSwitchLeaks: mixedStats.ownSwitchLeaks,
+            roofSawStreet: mixedStats.roofSawStreet,
+            clientBytesPerSecByArea: perClientByArea,
+            meanBots: {
+              street: spread.street / Math.max(1, spread.samples),
+              studio: spread.studio / Math.max(1, spread.samples),
+              roof: spread.roof / Math.max(1, spread.samples),
+              lift: spread.lift / Math.max(1, spread.samples),
+            },
+          },
+        }
+      : {}),
   };
 
   await Promise.all(bots.map((bot) => bot.client.disconnect().catch(() => undefined)));
@@ -485,13 +737,22 @@ function row(result: Record<string, any>): string {
     `  client         ${f(result['clientPatchMs'], 3)} ms per patch decoded+read   bot-process GC ${f(result['botGcMsPerSec'], 1)} ms/s`,
     `  decode errors  ${result['decodeErrors']} patch structures the clients could not apply (state diverged)`,
     `  sandbox        ${result['sandboxBlocks']} blocks at the end, ${result['sandboxActions']} bot actions`,
+    ...(result['mixed']
+      ? [
+          `  areas          mean bots street ${f(result['mixed'].meanBots.street, 1)} studio ${f(result['mixed'].meanBots.studio, 1)} roof ${f(result['mixed'].meanBots.roof, 1)} lift ${f(result['mixed'].meanBots.lift, 1)}   ${f(result['mixed'].switchesPerSec, 1)} switches/s`,
+          `  isolation      ${result['mixed'].crossAreaSightings} cross-area sightings, ${result['mixed'].ownSwitchLeaks} after an own switch, of ${result['mixed'].peerSightingsChecked} checked   ${result['mixed'].rejectedMoves} moves refused by a room's tiles`,
+          `  one-way        ${result['mixed'].roofSawStreet} street sightings from the roof (allowed)`,
+          `  per client     KB/s while on the street ${f(result['mixed'].clientBytesPerSecByArea.street / 1024, 2)}  roof ${f(result['mixed'].clientBytesPerSecByArea.roof / 1024, 2)}  studio ${f(result['mixed'].clientBytesPerSecByArea.studio / 1024, 2)}  lift ${f(result['mixed'].clientBytesPerSecByArea.lift / 1024, 2)}`,
+        ]
+      : []),
   ].join('\n');
 }
 
 const results: Record<string, unknown>[] = [];
 process.stdout.write(
   `lobby load test: bots ${BOT_COUNTS.join(',')}, ${SECONDS}s window, ${WARMUP}s warm-up, ` +
-    `${JITTER_MS} ms uplink jitter, capacity ${CAPACITY}, seed ${SEED}${FILL_SANDBOX ? ', sandbox filling' : ''}\n\n`,
+    `${JITTER_MS} ms uplink jitter, capacity ${CAPACITY}, seed ${SEED}${FILL_SANDBOX ? ', sandbox filling' : ''}` +
+    `${MIXED ? ', mixed areas (D-087)' : ''}\n\n`,
 );
 for (const count of BOT_COUNTS) {
   const result = await run(count);

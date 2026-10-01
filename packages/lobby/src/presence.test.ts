@@ -418,6 +418,8 @@ describe('counters', () => {
       suspensions: 1,
       resumptions: 1,
       throttled: 1,
+      rejected: 0,
+      areaSwitches: 0,
       peak: 2,
     });
   });

@@ -571,7 +571,7 @@ transaction composer.
 
 ## D-019 — Entering a building removes the avatar from lobby presence
 
-**2026-08-16 · Accepted · supersedes D-016's presence requirement**
+**2026-08-16 · Accepted · supersedes D-016's presence requirement · superseded in part by [D-087](#d-087--only-the-overworld-the-exchange-roof-and-the-avatar-studio-are-multiplayer-each-a-presence-area-of-its-own) (the Exchange roof and the Avatar Studio are shared presence areas: reaching them switches presence instead of suspending it; every other interior still suspends)**
 
 **Context.** D-016 required a player inside a building to remain visibly idle
 on the street so building choice could not be inferred. The project lead has
@@ -1828,8 +1828,12 @@ supplies the necessary account/permissions and values.
 **2026-08-19 · PARTIALLY SUPERSEDED — interior portal direction by
 [D-048](#d-048--the-avatar-studio-uses-a-top-wall-return-portal), runtime art
 geometry and final-art approval by
-[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas);
-remaining foundation implemented and rendered accepted on localhost**
+[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas), and its
+"entering it suspends lobby presence" by
+[D-087](#d-087--only-the-overworld-the-exchange-roof-and-the-avatar-studio-are-multiplayer-each-a-presence-area-of-its-own)
+(the Studio is a shared presence area: its players see each other, with their
+current look); remaining foundation implemented and rendered accepted on
+localhost**
 
 **Context.** The sprite studio is developing the player art independently from
 the World implementation. The current multiplayer contract has eight opaque
@@ -4977,3 +4981,169 @@ still draws at most 24 peers at 14 draw submissions each (7 meshes, all
 casting shadows). Not measured: real browsers (GPU time, draw-call overhead,
 frame pacing), real network latency and loss, and Linux TCP behaviour on
 Railway.
+
+---
+
+## D-087 — Only the overworld, the Exchange roof and the Avatar Studio are multiplayer, each a presence area of its own
+
+**2026-10-01 · Accepted by the product owner (the multiplayer-scope rule: interiors stay private solo instances; only the overworld is multiplayer, plus two approved shared areas, the roof of the avnu building and the avatar changing room) · supersedes D-019 in part (the Exchange roof and the Avatar Studio no longer suspend presence) · supersedes D-047 in part (its "entering it suspends lobby presence") · extends D-011's shared seam with `PresenceArea`, `PRESENCE_AREAS`, `ROOF_PRESENCE_GRID` and `STUDIO_PRESENCE_GRID`, and D-047's WorldEvents with `rooftop:entered`, `rooftop:exited` and `area:moved` · adds one lobby verb, `area` · changes no `PresenceState` field and no D-024 disclosure · builds on D-086's per-patch interest sync and keeps its overflow · amended the same day by the lead (the roof also sees the street below, one way; see the amendment at the end)**
+
+**Context.** The product owner set the multiplayer scope. Building interiors
+are private solo instances, as they are today: the Bank, the Vault, the Post
+Office, the Bridge, and the Exchange's ground floor and degen floor. Only the
+overworld is multiplayer — the street, the sandbox, the football pitch and the
+plaza — plus two explicitly approved shared areas: the roof of the avnu
+building (the Exchange tower's roof, reached by lift) and the avatar changing
+room (the Avatar Studio). Before this, the lobby had one interest rule over
+one coordinate space, and the only way off the street was D-019's suspend. The
+Studio suspended presence (D-047). The roof was reached inside the Exchange's
+suspended visit with no event of its own; its view drew the street's remote
+peers below.
+
+**Decision.**
+
+- **A live session is in exactly one presence area: `street`, `roof` or
+  `studio`; a suspended one is in none.** The room's interest sets pair
+  sessions in the same area only, with D-086's radius and cap inside it. The
+  area is the lobby's own server-side bookkeeping (`Session.area` in
+  `presence.ts`), not a schema field, so no client is told another player's
+  area — only shown the players in its own.
+- **Strictly one area per view, the roof included.** *(Superseded the same
+  day by the one-way roof view amendment below.)* The roof's view keeps
+  drawing the street's buildings below, but not its passers-by: street
+  players never see roof players and roof players never see street players.
+  The alternative (roof observers also receive street peers, one way) is
+  possible, since the deck lies over the tower's solid footprint where no
+  street player can stand, but it would make the client tell peers apart by
+  position and break "one rule for every view". Not built; the product
+  owner may ask for it.
+- **One room type, areas inside it.** Not a Colyseus room per area: a switch
+  would be a leave and a join, a new `gameId`, a join's full state and a
+  matchmaking round trip per lift ride, and overflow would have to place
+  three rooms together. Instead D-086's once-per-patch view sync filters by
+  area, and a switch keeps one entry and one `gameId`, which views drop and
+  pick up at the next patch, once each. D-086's overflow (capacity 48, then
+  a new `street` room) applies per lobby room; each room has its own street,
+  roof and Studio.
+- **One new verb, `area`** (`{ area, x, y, facing, sprite }`): go live in an
+  area from a suspend or from another area, or refresh the placement and
+  sprite in the current one. Like `resume` it always succeeds when well
+  formed and stamps the move floor, so it is no faster a write channel than
+  `move`. Leaving the street puts a carried block back and leaves the ball,
+  as a suspend does. A malformed switch, or one off the area's tiles,
+  suspends the session: a client that disagrees with the room about where it
+  stands is seen by no one rather than in the wrong place.
+- **Server-authoritative movement per area.** The rooms use their own
+  coordinate spaces: the roof's grid lies over the tower's street footprint,
+  the Studio's at the interiors' origin over the hidden street by the pitch.
+  The lobby holds a shared room's players to its walkable tiles, from
+  `ROOF_PRESENCE_GRID` and `STUDIO_PRESENCE_GRID` in `@strkworld/shared`
+  (a World test fails if they drift from `EXCHANGE_ROOF_LEVEL` and
+  `AVATAR_STUDIO_DEFINITION`): a placement must land on one, and a move must
+  land on one without its straight line crossing a solid tile. A step within
+  one tile (`AREA_STEP_SLACK_PX`) may clip a corner, because two real samples
+  a patch apart can lie either side of the Studio's portal jamb, and no wall
+  in either room is thinner than a tile. The street keeps its rule, a clamp
+  to the world. The sandbox, the ball and the sky drops count street players
+  only, since the rooms' coordinates overlap the street's.
+- **World events.** The session emits `rooftop:entered` when the lift reaches
+  the roof and `rooftop:exited` when it leaves (by lift, or by a Shell
+  release, before the street placement and `building:exited`), and
+  `area:moved` for every position in the roof or the Studio — the arrival
+  before the entered event, then every frame the player moves. Never
+  `player:moved`: street consumers (the sandbox and football controllers)
+  never read a room's coordinates.
+- **The Shell switches area for those two rooms and suspends for every other
+  interior.** The presence controller maps `avatar-studio:entered` and
+  `rooftop:entered` to `LobbyClient.enterArea` with the latest `area:moved`
+  placement, `avatar-studio:exited` to `enterArea('street', …)` and
+  `rooftop:exited` to a suspend (the floors below are private). A client
+  without `enterArea` keeps the old suspend, the safe fallback.
+- **The Studio.** Its players are drawn there with their current look, and a
+  look chosen in the Studio is shown at once: `avatar:selected` re-enters the
+  same area with the new sprite (the existing sprite field, nothing new).
+  D-047's input and camera ownership are unchanged; the session only keeps
+  remotes visible there. On the roof remotes stand on the deck's height.
+- **`LobbyClient` never shows the area left in the area entered.** After a
+  switch, `peers()` is empty until the room's copy of the client's own avatar
+  shows the new placement: the patch that moves it is the one that swaps the
+  views. A suspended client is shown nobody.
+- **Privacy (the second invariant; D-024's disclosures unchanged).** The
+  lobby still never sees money or wallet data: no
+  `PresenceState` field changed, the area travels only in the client's own
+  `area` message, and neither room carries anything financial — the roof has
+  no station and the Studio only the cosmetic sprite field. What the areas do
+  let an observer learn: a player arriving on the roof came through the
+  Exchange (D-019 already accepts that inference at its door), and the roof
+  arrival brackets their time on the floors below.
+
+**Consequences.** Lobby tests cover area isolation (street, roof and Studio
+players at the same pixels never see each other), movement validation per
+area, area switching and its fail-closed refusals, and suspend for every other
+interior; a real-server test drives the same through `LobbyClient`, and
+another through three real presence controllers. The load test's `--mixed`
+scenario (every bot spends 4–10 s on the street, in the Studio or on the roof,
+with a 1–2 s private ride between the street and the roof) at 100 bots in one
+room, 20 ms of jitter: tick p95 8.8 ms, 12.4% of a core, 2.76 KB/s per
+client, 20 area switches a second, 0 decode failures, 0 moves refused by a
+room's tiles, and 0 of 708,534 peer sightings in the wrong area. About 1% of
+moves are dropped by the floor because each switch drains the bucket, as a
+resume does; the client resends them, and observer stalls are 9.1%. Street
+only, the same load test is where D-086 left it (100 bots: tick p95 8.2 ms,
+13.2% of a core, 3.83 KB/s per client, 0 moves dropped, 7.5% stalls), so the
+area filter costs the street nothing measurable. The load test's uplink
+jitter is now one FIFO per room (it could reorder two frames due in the same
+millisecond). Not verified: real browsers (drawing,
+the roof's remote heights, the Studio's crowd), real networks, and the
+product owner's view of a roof without the street's passers-by.
+
+**2026-10-01 one-way roof view amendment.** The lead asked for the roof to
+show the street's passers-by below again, as it did before this decision.
+This replaces the "strictly one area per view" bullet above; everything else
+in it stands.
+
+- **One view is one-way.** A roof observer is sent the roof's players and the
+  street's, from the same once-per-patch view sync (D-086), inside the same
+  interest radius and the same cap of 24 drawn peers: roof players fill the
+  cap first, nearest first, and street players the rest, so a crowd below
+  never pushes a roof player out of view. No street observer is ever sent a
+  roof player, and the Studio stays strict both ways. The rule lives in
+  `LobbyPresence.visibleTo` alone.
+- **A roof peer is told from a street peer by where it stands, not by a
+  field.** The roof's grid is the tower's street footprint, and every
+  footprint tile is solid on the street except the Exchange's door, which
+  takes a player inside (a World test checks the footprint). So the lobby never sends
+  a roof observer a street player standing over the footprint, which only a
+  hostile client can do, and the presenter stands any peer over the footprint
+  on the deck and every other on the street (`isOverAreaGrid`, and the grid's
+  new `width` and `height`). `PresenceState` is unchanged; no area is sent.
+- **Privacy.** The roof is shown what a player at the tower's foot is shown:
+  street positions and sprites, nothing financial. The street still learns
+  nothing of the roof, and is not told it is being watched from it.
+- **A placement waits a patch after an erasure.** The real-server test that
+  timed out on CI was meeting a real fault, not only a slow runner: a suspend
+  then an area switch, or a suspend then a resume, in back-to-back messages
+  erased an entry and placed its successor under the same `gameId` key inside
+  one patch. `@colyseus/schema@4.0.30` encodes that as one `DELETE_AND_ADD`
+  and filters it per view by the new entry alone, so a view that held the old
+  entry and was not to see the new one was sent nothing and kept a frozen
+  ghost of it. The room now holds such a placement until the patch carrying
+  the erasure has gone out (`PresenceRoom`'s `#placeAgain`, at most two
+  patches). The lift ride is longer than a patch, so play rarely met it; the
+  fault predates D-087 for a fast suspend and resume.
+
+**Consequences of the amendment.** Lobby tests cover the one-way view, the
+cap's order and a hostile street player over the footprint
+(`presence-areas.test.ts`, `areas.test.ts`); the real-server test
+(`area-room.test.ts`) waits on conditions, the room's counters and a
+street player's step seen by each observer instead of fixed sleeps, runs
+each case under a 20 s budget like the other lobby wire tests, and adds a
+regression test for the ghost, which fails against the old room. The
+presenter and grid tests cover the deck/street split, and the web
+integration test the one-way view through three real controllers. The
+load test's `--mixed` scenario at 100 bots, 20 ms of jitter: 2.92 KB/s per
+client while on the roof (2.34 KB/s with the strict rule, same seed), 3.78
+on the street, 2.46 in the Studio; 2.87 KB/s per client overall; tick p95
+7.7 ms, 11.0% of a core; 0 of 722,399 peer sightings in a wrong area and
+20,838 street sightings from the roof; 0 decode failures. Not verified: a
+real browser drawing the street's crowd from the roof.

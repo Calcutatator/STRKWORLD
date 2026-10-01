@@ -141,6 +141,18 @@ disappear. The lobby receives no building ID or entry event. Building-choice
 and visit-timing inference from that disappearance is an accepted v1 trade-off
 (D-019).
 
+D-087 makes two interiors shared presence areas: the Exchange roof and the
+Avatar Studio. The World emits `rooftop:entered` / `rooftop:exited` when the
+lift reaches or leaves the roof, keeps `avatar-studio:entered` / `exited`, and
+publishes `area:moved` (never `player:moved`) for positions in either room.
+The Shell's presence controller switches the client's area
+(`LobbyClient.enterArea`) for those two and still suspends for every other
+interior. The lobby keeps each session's area server-side and pairs interest
+sets within an area, plus one one-way view: a roof session also receives the
+street's peers below (never one over the tower's footprint), and no street
+session receives the roof. It validates room positions against
+`ROOF_PRESENCE_GRID` / `STUDIO_PRESENCE_GRID` in `@strkworld/shared`.
+
 The D-047 Avatar Studio foundation is implemented and user-rendered-accepted
 on localhost as a hidden, non-financial 18×12 room outside `BuildingId` and
 `BUILDINGS`. The south path still ends at a bottom-edge trigger with no facade

@@ -1,6 +1,6 @@
 import type { EventBus } from '@strkworld/shared';
 import type { LobbyClientOptions, LobbyStatusEvent, PeerSnapshot } from '@strkworld/lobby/client';
-import type { AvatarSpriteKey, Facing, WorldEvents } from '@strkworld/shared';
+import type { AvatarSpriteKey, Facing, PresenceArea, WorldEvents } from '@strkworld/shared';
 import {
   DEFAULT_AVATAR_SPRITE,
   createRemotePeerSource,
@@ -20,6 +20,11 @@ export interface PresenceClient {
   updatePosition(x: number, y: number, facing: Facing): void;
   suspend(): void;
   resume(placement: { x: number; y: number; facing: Facing }, sprite: AvatarSpriteKey): void;
+  /**
+   * D-087: go live in a presence area. Optional: a client without it keeps
+   * the player solo (suspended) in the shared rooms too, the safe fallback.
+   */
+  enterArea?(area: PresenceArea, placement: { x: number; y: number; facing: Facing }, sprite: AvatarSpriteKey): void;
   disconnect(): Promise<void>;
   onStatus(listener: (event: LobbyStatusEvent) => void): () => void;
   onPeers(listener: (peers: readonly PeerSnapshot[]) => void): () => void;
@@ -42,6 +47,9 @@ function freezePresenceState(next: PresenceState): PresenceState {
   return Object.freeze({ ...next });
 }
 
+/** D-087: the two shared rooms. Every other interior is a private solo instance. */
+type SharedArea = Exclude<PresenceArea, 'street'>;
+
 export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel }): PresenceController {
   let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
@@ -49,6 +57,15 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let placement: { x: number; y: number; facing: Facing } | null = null;
   let currentSprite: AvatarSpriteKey = DEFAULT_AVATAR_SPRITE;
   let inside = false;
+  /**
+   * D-087. `sharedArea` is the shared room the World says the player is in
+   * (inside is then true too), `areaPlacement` where they stand there, and
+   * `clientArea` the shared room the owned client is live in — null on the
+   * street, while suspended, and whenever the state is not connected.
+   */
+  let sharedArea: SharedArea | null = null;
+  let areaPlacement: { x: number; y: number; facing: Facing } | null = null;
+  let clientArea: SharedArea | null = null;
   let reconnectRequested = false;
   let hasAttempted = false;
   let connecting: { readonly client: PresenceClient; retired: boolean } | null = null;
@@ -83,6 +100,9 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   };
   const setState = (next: PresenceState) => {
     if (destroyed) return;
+    // A client that is not live is in no area; a shared-area join names its
+    // area before it reports connected.
+    if (next.status !== 'connected') clientArea = null;
     state = freezePresenceState(next);
     // Deliver one transition to the subscriptions that owned its snapshot.
     // A replacement of the same function is a new subscription generation.
@@ -132,8 +152,15 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     if (destroyed) return;
     if (event.status === 'connected') {
       if (inside) {
+        // Live in the shared room the World put the player in (D-087): this
+        // is that join reporting in.
+        if (clientArea !== null && clientArea === sharedArea) {
+          setState({ status: 'connected', canReconnect: true });
+          return;
+        }
         const ownedClient = client;
-        if (ownedClient && state.status !== 'suspended') {
+        if (ownedClient && joinSharedArea(ownedClient)) return;
+        if (ownedClient && client === ownedClient && state.status !== 'suspended') {
           ownedClient.suspend();
           if (client !== ownedClient || state.status === 'unavailable') return;
         }
@@ -318,6 +345,17 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       }
       if (inside) {
         if (state.status === 'unavailable') return;
+        // D-087: the player walked into a shared room while the join was in
+        // flight; go live there rather than suspend.
+        if (clientArea !== null && clientArea === sharedArea && state.status === 'connected') {
+          if (settlingOwner === owner) settlingOwner = null;
+          return;
+        }
+        if (joinSharedArea(next)) {
+          if (settlingOwner === owner) settlingOwner = null;
+          return;
+        }
+        if (client !== next || owner.retired) return;
         if (state.status !== 'suspended') {
           next.suspend();
           if (client !== next || owner.retired) return;
@@ -361,6 +399,106 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       connect();
     }
   };
+  /** Retire a client whose lifecycle command threw, so the Shell can offer a fresh join. */
+  const retireFailedClient = (ownedClient: PresenceClient) => {
+    deactivateClientStatus();
+    try {
+      clearClientPeers();
+    } catch {
+      // Preserve the command failure while still retiring the owner.
+    }
+    client = null;
+    clientSprite = null;
+    try {
+      void Promise.resolve(ownedClient.disconnect()).catch(() => undefined);
+    } catch {
+      // The command failure remains the actionable error.
+    }
+    setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+  };
+  /**
+   * D-087: put the owned client live in the shared room the World has placed
+   * the player in. False, doing nothing, when there is no such room, no
+   * placement for it yet, a client that cannot share, or a client that is
+   * neither live nor suspended; the caller then keeps the player solo.
+   */
+  const joinSharedArea = (ownedClient: PresenceClient): boolean => {
+    const area = sharedArea;
+    const at = areaPlacement;
+    if (!inside || area === null || at === null || typeof ownedClient.enterArea !== 'function') return false;
+    if (client !== ownedClient || (state.status !== 'connected' && state.status !== 'suspended')) return false;
+    if (clientArea === area && state.status === 'connected') return true;
+    const generation = statusGeneration;
+    clientArea = area;
+    try {
+      ownedClient.enterArea(area, at, currentSprite);
+    } catch (error) {
+      if (client === ownedClient && statusGeneration === generation) retireFailedClient(ownedClient);
+      throw error;
+    }
+    if (client !== ownedClient || statusGeneration !== generation || clientArea !== area) return false;
+    clientSprite = currentSprite;
+    setState({ status: 'connected', canReconnect: true });
+    // The `connected` delivery may itself have moved the player on.
+    return client === ownedClient && clientArea === area;
+  };
+  /**
+   * D-087: leave a shared room. To the street (the Studio's portal, or a
+   * release from the roof that skipped its exit) the client goes live there
+   * at the street placement; back into a private interior (the lift down from
+   * the roof) it suspends.
+   */
+  const leaveSharedArea = (to: 'street' | 'interior') => {
+    const ownedClient = client;
+    const was = clientArea;
+    sharedArea = null;
+    areaPlacement = null;
+    if (!ownedClient || was === null || state.status !== 'connected') return false;
+    const generation = statusGeneration;
+    try {
+      if (to === 'street') {
+        if (!placement || typeof ownedClient.enterArea !== 'function') return false;
+        ownedClient.enterArea('street', placement, currentSprite);
+      } else {
+        ownedClient.suspend();
+      }
+    } catch (error) {
+      if (client === ownedClient && statusGeneration === generation) retireFailedClient(ownedClient);
+      throw error;
+    }
+    if (client !== ownedClient || statusGeneration !== generation) return true;
+    clientArea = null;
+    if (to === 'street') {
+      clientSprite = currentSprite;
+      reconnectRequested = false;
+      setState({ status: 'connected', canReconnect: true });
+    } else {
+      setState({ status: 'suspended', canReconnect: true });
+    }
+    return true;
+  };
+  const onAreaMoved = (value: WorldEvents['area:moved']) => {
+    const owned = ownMovementPayload(value);
+    if (!owned) return;
+    const { position, facing } = owned;
+    areaPlacement = { x: position.x, y: position.y, facing };
+    const ownedClient = client;
+    if (!ownedClient || sharedArea === null) return;
+    if (clientArea === sharedArea && state.status === 'connected') {
+      ownedClient.updatePosition(position.x, position.y, facing);
+    } else if (clientArea === null) {
+      // The room was announced before its first placement arrived.
+      joinSharedArea(ownedClient);
+    }
+  };
+  const onSharedEntered = (area: SharedArea) => {
+    inside = true;
+    sharedArea = area;
+    const ownedClient = client;
+    if (ownedClient && joinSharedArea(ownedClient)) return;
+    // No placement yet, or a client that cannot share: solo until it can.
+    if (area === 'studio') onEntered();
+  };
   const onEntered = () => {
     inside = true;
     const ownedClient = client;
@@ -398,7 +536,49 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     }
   };
   const onAvatarSelected = ({ sprite }: WorldEvents['avatar:selected']) => {
-    if (isAvatarSpriteKey(sprite)) currentSprite = sprite;
+    if (!isAvatarSpriteKey(sprite)) return;
+    currentSprite = sprite;
+    // D-087: in a shared room, others see the new look at once: the client
+    // re-enters the same area with it.
+    const ownedClient = client;
+    if (
+      ownedClient && clientArea !== null && clientArea === sharedArea && areaPlacement &&
+      state.status === 'connected' && typeof ownedClient.enterArea === 'function'
+    ) {
+      const generation = statusGeneration;
+      try {
+        ownedClient.enterArea(clientArea, areaPlacement, sprite);
+      } catch (error) {
+        if (client === ownedClient && statusGeneration === generation) retireFailedClient(ownedClient);
+        throw error;
+      }
+      if (client === ownedClient) clientSprite = sprite;
+    }
+  };
+  const onRooftopExited = () => {
+    if (sharedArea !== 'roof') return;
+    // Down the lift into the building's private floors, or (a release) about
+    // to leave the building, whose exit then resumes the street.
+    leaveSharedArea('interior');
+  };
+  const onStudioExited = () => {
+    if (sharedArea === 'studio' && clientArea === 'studio') {
+      inside = false;
+      if (leaveSharedArea('street')) return;
+    }
+    sharedArea = null;
+    areaPlacement = null;
+    onExited();
+  };
+  const onBuildingExited = () => {
+    // A release from the roof that did not announce leaving it (D-087).
+    if (sharedArea === 'roof' && clientArea === 'roof') {
+      inside = false;
+      if (leaveSharedArea('street')) return;
+    }
+    sharedArea = null;
+    areaPlacement = null;
+    onExited();
   };
   const onExited = () => {
     inside = false;
@@ -488,9 +668,14 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       try {
         stops.push(world.on('player:moved', onMoved));
         stops.push(world.on('building:entered', onEntered));
-        stops.push(world.on('building:exited', onExited));
-        stops.push(world.on('avatar-studio:entered', onEntered));
-        stops.push(world.on('avatar-studio:exited', onExited));
+        stops.push(world.on('building:exited', onBuildingExited));
+        // D-087: the Studio and the Exchange roof are shared presence areas;
+        // every other interior suspends.
+        stops.push(world.on('avatar-studio:entered', () => onSharedEntered('studio')));
+        stops.push(world.on('avatar-studio:exited', onStudioExited));
+        stops.push(world.on('rooftop:entered', () => onSharedEntered('roof')));
+        stops.push(world.on('rooftop:exited', onRooftopExited));
+        stops.push(world.on('area:moved', onAreaMoved));
         stops.push(world.on('avatar:selected', onAvatarSelected));
         return stop;
       } catch (error) {

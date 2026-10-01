@@ -117,6 +117,21 @@ const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
 
+/**
+ * A building's roof deck height above the street, in world units, if `x`, `z`
+ * (world units, one per street tile) lie over its roof's footprint; null
+ * otherwise, and for a building without a roof.
+ */
+function rooftopHeightAt(building: BuildingId, x: number, z: number): number | null {
+  for (const level of FIXED_ROOM_LEVELS[building] ?? []) {
+    const roof = level.rooftop;
+    if (!roof) continue;
+    const over = x >= roof.x && z >= roof.y && x < roof.x + level.width && z < roof.y + level.height;
+    return over ? roof.height : null;
+  }
+  return null;
+}
+
 /** Which interior a floor is drawn as: the ground floor by its building, others by floor. */
 function roomKey(building: BuildingId, level?: FixedRoomLevelId): string {
   return level === undefined || level === 'ground' ? building : `${building}:${level}`;
@@ -145,6 +160,21 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
+  /**
+   * Where a remote peer stands (D-087). On a roof the lobby sends the roof's
+   * players and the street's passers-by below, and never a street player
+   * over the tower's footprint, so a peer over the footprint is on the deck
+   * and any other is on the street. Off a roof the lobby sends only the
+   * player's own area: the street's surface, or a flat floor indoors and in
+   * the Studio.
+   */
+  const remoteHeight = (x: number, z: number): number => {
+    if (rooftop !== null) {
+      const deck = rooftopHeightAt(rooftop, x, z);
+      if (deck !== null) return deck;
+    }
+    return streetVisible ? streetHeight(x, z) : 0;
+  };
 
   // Every interior, keyed by `roomKey`: each ground floor (the Vault's only
   // when it is open, D-077), and floors reached by lift. A roof is not here:
@@ -294,7 +324,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
         const layer = createRemoteAvatarLayer3D({
           source: remotePeers,
           figures: options.figures,
-          surfaceHeight: streetHeight,
+          surfaceHeight: remoteHeight,
         });
         remote = layer;
         root.add(layer.group);

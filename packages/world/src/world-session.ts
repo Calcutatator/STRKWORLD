@@ -67,6 +67,7 @@ import { calculateMovementVelocity } from './movement-input.js';
 import {
   createStreetMovementAdapter,
   moveWithCollisionSubsteps,
+  resolveMovementFacing,
   type MovementInput,
   type MovementVelocity,
   type StreetMovementAdapter,
@@ -348,6 +349,10 @@ class Session implements WorldSession {
   private activeRoom?: BuildingId;
   /** The roof the view was last told the player stands on. */
   private rooftopShown: BuildingId | null = null;
+  /** D-087: whether the Shell was last told the player is on the roof, a shared presence area. */
+  private rooftopAnnounced = false;
+  /** D-087: the facing last published with `area:moved`. */
+  private areaFacing: Facing = 'down';
   private avatarStudio?: AvatarStudioController;
   private avatarStudioPresentation?: AvatarStudioPresentation;
   private avatarOutfit: AvatarOutfitSelection = NOOP_AVATAR_OUTFIT;
@@ -669,7 +674,10 @@ class Session implements WorldSession {
         setBodyEnabled: () => {},
         setGroundVisible: (visible) => this.view.setStreetVisible(visible),
         setDoorsVisible: (visible) => this.view.setDoorsVisible(visible),
-        setRemoteVisible: (visible) => this.view.setRemoteVisible(visible),
+        // D-087: the Studio is a shared presence area, so its peers are drawn
+        // there as on the street. The lobby sends only peers in the player's
+        // own area, so no street passer-by is drawn in the Studio.
+        setRemoteVisible: () => this.view.setRemoteVisible(true),
         setLabelsVisible: (visible) => this.view.setLabelsVisible(visible),
         setRoomVisible: (visible) => {
           if (!visible) this.view.showRoom(null);
@@ -804,6 +812,43 @@ class Session implements WorldSession {
     this.teleport(floorTileCentre(map, tile));
     if (map.rooftop) this.setElevation(map.rooftop.height);
     this.lastTile = { x: -1, y: -1 };
+    this.announceRooftop(onRoof);
+  }
+
+  /**
+   * D-087: tell the Shell the lift reached the roof, a shared presence area,
+   * or left it. Only on a change. Arrival publishes the player's place on the
+   * roof first, so the Shell has a placement when `rooftop:entered` lands.
+   *
+   * The flag flips before the emit and is not restored if a listener throws:
+   * the floor controller then rolls the ride back through `presentLevel`,
+   * which announces the way back, so the Shell is never left believing the
+   * player is somewhere shared that they are not.
+   */
+  private announceRooftop(onRoof: boolean): void {
+    if (onRoof === this.rooftopAnnounced) return;
+    this.rooftopAnnounced = onRoof;
+    if (onRoof) {
+      this.areaFacing = this.movement.facing;
+      this.publishAreaPosition();
+      if (this.cleanedUp || !this.rooftopAnnounced) return;
+      this.config?.out.emit('rooftop:entered', {});
+    } else {
+      this.config?.out.emit('rooftop:exited', {});
+    }
+  }
+
+  /**
+   * D-087: where the player stands in a shared area, with the facing the
+   * given velocity reads as (the last one when idle). Never on the street
+   * and never in a private interior: `player:moved` is the street's.
+   */
+  private publishAreaPosition(velocity?: MovementVelocity): void {
+    if (velocity) this.areaFacing = resolveMovementFacing(cardinalMovementInput(velocity), this.areaFacing);
+    this.config?.out.emit('area:moved', Object.freeze({
+      position: Object.freeze({ x: this.position.x, y: this.position.y }),
+      facing: this.areaFacing,
+    }));
   }
 
   /** Tell the view about a roof only when that changes, so rooms never see the call. */
@@ -830,8 +875,13 @@ class Session implements WorldSession {
       setLabelsVisible: (visible) => this.view.setLabelsVisible(visible),
       setRoomVisible: (visible) => {
         this.view.showRoom(visible ? definition.building : null);
-        // Leaving from the roof (or undoing an entry) points the camera level again.
-        if (!visible) this.showRooftop(null);
+        if (!visible) {
+          // Released from the roof (D-087): it stops being shared before the
+          // street placement and `building:exited` follow.
+          this.announceRooftop(false);
+          // Leaving from the roof (or undoing an entry) points the camera level again.
+          this.showRooftop(null);
+        }
       },
       setWorldBounds: (room) => {
         this.bounds = room ? roomBounds : this.streetBounds();
@@ -866,6 +916,9 @@ class Session implements WorldSession {
       this.avatarStudioActive = false;
       throw error;
     }
+    // D-087: the Studio's placement, ahead of `avatar-studio:entered`.
+    this.areaFacing = this.movement.facing;
+    this.publishAreaPosition();
   }
 
   private exitAvatarStudioRoom(): void {
@@ -941,11 +994,13 @@ class Session implements WorldSession {
       return;
     }
     const velocity = this.intendedVelocity(keyboard, cameraYaw);
-    this.stepPlayer(velocity, delta, {
+    const moved = this.stepPlayer(velocity, delta, {
       tileSize: FIXED_ROOM_TILE_SIZE,
       toTile: (x, y) => worldToFloorTile(map, x, y),
       isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
     });
+    // D-087: the roof is shared; every other floor is private.
+    if (moved && map.rooftop && this.rooftopAnnounced) this.publishAreaPosition(velocity);
   }
 
   private moveAvatarStudioPlayer(delta: number, cameraYaw: number): void {
@@ -961,6 +1016,9 @@ class Session implements WorldSession {
       isSolidAt: (x, y) => isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
     });
     if (!moved) return;
+    // D-087: before the tile report, which may walk the player out.
+    this.publishAreaPosition(velocity);
+    if (this.cleanedUp || !this.avatarStudioActive) return;
     this.movement.interiorUpdate(() => this.reportAvatarStudioTile());
   }
 

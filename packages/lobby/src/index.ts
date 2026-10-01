@@ -71,6 +71,16 @@ export {
 } from './policy';
 
 export {
+  AREA_STEP_SLACK_PX,
+  SHARED_AREA_GRIDS,
+  isAreaStepAllowed,
+  isAreaWalkable,
+  isOverAreaGrid,
+  normalizePresenceArea,
+  type SharedPresenceArea,
+} from './areas';
+
+export {
   FootballEntry,
   LobbyState,
   PositionSchema,

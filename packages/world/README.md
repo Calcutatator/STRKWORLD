@@ -48,6 +48,17 @@ presence while the local interior UI is open. The world emits the semantic
 event only; it never sends the building ID through lobby traffic. Other
 players seeing the avatar disappear is an accepted v1 trade-off (D-019).
 
+Two rooms are shared presence areas (D-087). When the Exchange lift reaches
+its roof the session emits `area:moved` (the arrival) and then
+`rooftop:entered`; leaving it, by lift or by a Shell release, emits
+`rooftop:exited` (before the street placement and `building:exited`). The
+Avatar Studio publishes its spawn as `area:moved` before
+`avatar-studio:entered`. While on the roof or in the Studio every frame the
+player moves emits `area:moved`, and never `player:moved`, so street consumers
+(the sandbox, the ball) never read a room's coordinates. Remote peers stay
+drawn in the Studio and on the roof — the lobby sends only peers in the
+player's own area — and on the roof they stand on its deck.
+
 ## What this must never do
 
 - Import `starknet`, any wallet package, or `@strkworld/privacy`
