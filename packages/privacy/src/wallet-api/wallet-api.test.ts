@@ -10,6 +10,7 @@ import {
   type WalletStrk20Account,
 } from '../index.js';
 import { mapTransferWalletError } from './errors.js';
+import { SWAP_TEST_PARTIAL, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const STRK_DECIMAL = BigInt(STRK).toString();
@@ -69,7 +70,6 @@ function fixture() {
   const ops = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission: gateway,
     supportedVersions,
     policy: {
       maxIntents: 8,
@@ -81,6 +81,34 @@ function fixture() {
     },
   });
   return { ops, wallet, pool, gateway, supportedVersions, invoked, prepared, artifact };
+}
+
+/**
+ * Operations with the swap route on (D-084): the wallet answers a
+ * shadow-account commitment and reports Wallet API 0.10.4, the backend
+ * answers the stand-in address, and avnu's quote comes from the test client.
+ */
+function swapOperations(wallet: WalletStrk20Account, pool: PoolReadClient) {
+  const shadowWallet: WalletStrk20Account = {
+    address: wallet.address,
+    strk20Balances: (tokens) => wallet.strk20Balances(tokens),
+    strk20PrepareInvoke: (actions, simulate) => wallet.strk20PrepareInvoke(actions, simulate),
+    strk20InvokeTransaction: (actions) => wallet.strk20InvokeTransaction(actions),
+    async strk20ShadowAccountCommitment() { return SWAP_TEST_PARTIAL; },
+  };
+  return new WalletApiPrivacyOperations({
+    wallet: shadowWallet,
+    pool,
+    swapQuotes: swapTestQuotes([2n]),
+    vault: swapTestReads(),
+    supportedVersions: async () => ['0.10.4'],
+    now: () => 1_000,
+    policy: {
+      maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
+      allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
+      swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+    },
+  });
 }
 
 describe('WalletApiPrivacyOperations capability and reads', () => {
@@ -101,7 +129,6 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(invoke).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
     expect(gateway.estimate).not.toHaveBeenCalled();
-    expect(gateway.prepareSwap).toBeUndefined();
   });
 
   it('preserves the exact u256 maximum intent boundary', async () => {
@@ -123,7 +150,7 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
         shield: [] as string[], unshield: [] as string[], transfer: [] as string[], swap: [] as string[],
       },
     };
-    const ops = new WalletApiPrivacyOperations({ wallet, pool, submission: gateway, supportedVersions, policy });
+    const ops = new WalletApiPrivacyOperations({ wallet, pool, supportedVersions, policy });
 
     policy.enabledRoutes.push('shield');
     policy.allowedTokens.shield.push(TOKEN);
@@ -406,28 +433,13 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   it.each(['shield', 'transfer', 'swap'] as const)(
     'rejects malformed live %s config before confirmation authority',
     async (route) => {
-      let { ops, pool, wallet, gateway } = fixture();
+      let { ops, pool, wallet } = fixture();
       const intent: Intent = route === 'shield'
         ? { kind: 'shield', token: TOKEN, amount: 1n }
         : route === 'transfer'
           ? { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }
           : { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 1n, minAmountOut: 1n };
-      if (route === 'swap') {
-        gateway.prepareSwap = vi.fn(async () => ({
-          quoteId: 'quote-1', buyAmount: 2n, expiresAt: 2_000,
-          chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-          executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-          fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-        }));
-        ops = new WalletApiPrivacyOperations({
-          wallet, pool, submission: gateway, supportedVersions: async () => ['0.10.3'], now: () => 1_000,
-          policy: {
-            maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
-            allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
-            swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-          },
-        });
-      }
+      if (route === 'swap') ops = swapOperations(wallet, pool);
       const batch = await ops.prepare([intent]);
       vi.spyOn(pool, 'config').mockResolvedValue({
         feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 0, noteMaturityBlocks: 10,
@@ -438,7 +450,6 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
       await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
       expect(invoke).not.toHaveBeenCalled();
       expect(prepare).not.toHaveBeenCalled();
-      expect(gateway.submit).not.toHaveBeenCalled();
     },
   );
 
@@ -778,127 +789,16 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
-  it('owns the executor-call array length without invoking proxy get substitution', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    const calls = [
-      { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] },
-      { contractAddress: '0x222', entrypoint: 'settle', calldata: ['0xbbb'] },
-    ];
-    let lengthReads = 0;
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-      executorCalls: new Proxy(calls, {
-        get(target, key, receiver) {
-          if (key === 'length') {
-            lengthReads += 1;
-            return 1;
-          }
-          return Reflect.get(target, key, receiver);
-        },
-      }),
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet, pool, submission: gateway, supportedVersions, now: () => 1_000,
-      policy: {
-        maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
-        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ])).resolves.toMatchObject({ swapReview: { expectedAmountOut: 95n } });
-    expect(lengthReads).toBe(0);
-  });
-
-  it('owns the validated executor before a stateful proxy can substitute it', async () => {
-    const { wallet, pool, gateway, supportedVersions, prepared } = fixture();
-    const target = {
-      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    };
-    let reads = 0;
-    gateway.prepareSwap = vi.fn(async () => new Proxy(target, {
-      get(source, key, receiver) {
-        if (key === 'executorAddress') return ++reads === 1 ? '0x999' : '0x888';
-        return Reflect.get(source, key, receiver);
-      },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet, pool, submission: gateway, supportedVersions, now: () => 1_000,
-      policy: {
-        maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
-        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    const batch = await ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n }]);
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-
-    expect(prepared[0]?.[0]).toMatchObject({ recipient: '0x999' });
-  });
-
-  it.each([
-    ['extra root field', {
-      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999', executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, extra: true,
-    }],
-    ['extra executor-call field', {
-      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999', executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'], extra: true }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }],
-    ['root ownKeys trap', new Proxy({}, { ownKeys() { throw new Error('keys trap'); } })],
-    ['call descriptor trap', {
-      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-      executorCalls: [new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }],
-  ])('rejects a swap plan with %s as an invalid provider result', async (_label, plan) => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => plan as never);
-    const ops = new WalletApiPrivacyOperations({
-      wallet, pool, submission: gateway, supportedVersions, now: () => 1_000,
-      policy: {
-        maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
-        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-
-    await expect(ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n }]))
-      .rejects.toMatchObject({ kind: 'unknown' });
-  });
-
   it.each(['shield', 'transfer', 'swap'] as const)(
     'rejects an out-of-u256 fee ceiling on %s before live reads or handoff',
     async (route) => {
-      let { ops, pool, wallet, gateway } = fixture();
+      let { ops, pool, wallet } = fixture();
       const intent: Intent = route === 'shield'
         ? { kind: 'shield', token: TOKEN, amount: 1n }
         : route === 'transfer'
           ? { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }
           : { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 1n, minAmountOut: 1n };
-      if (route === 'swap') {
-        gateway.prepareSwap = vi.fn(async () => ({
-          quoteId: 'quote-1', buyAmount: 2n, expiresAt: 2_000,
-          chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-          executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-          fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-        }));
-        ops = new WalletApiPrivacyOperations({
-          wallet, pool, submission: gateway, supportedVersions: async () => ['0.10.3'], now: () => 1_000,
-          policy: {
-            maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
-            allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
-            swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-          },
-        });
-      }
+      if (route === 'swap') ops = swapOperations(wallet, pool);
       const batch = await ops.prepare([intent]);
       const config = vi.spyOn(pool, 'config');
       const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
@@ -908,7 +808,6 @@ describe('Wallet API action routes', () => {
       expect(config).not.toHaveBeenCalled();
       expect(invoke).not.toHaveBeenCalled();
       expect(prepare).not.toHaveBeenCalled();
-      expect(gateway.submit).not.toHaveBeenCalled();
     },
   );
 
@@ -1283,765 +1182,10 @@ describe('Wallet API action routes', () => {
     ).rejects.toThrow(/allowlisted/i);
   });
 
-  it('proves the exact quote-bound AVNU plan and submits it without a second wallet signature', async () => {
-    const { wallet, pool, gateway, supportedVersions, prepared, artifact } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['shield', 'unshield', 'transfer', 'swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    const batch = await ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ]);
-    expect(batch.swapReview).toEqual({
-      expectedAmountOut: 95n,
-      minimumAmountOut: 95n,
-      slippageBps: 100,
-      expiresAt: 2_000,
-    });
-    expect(batch.intents).toEqual([{
-      kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 95n,
-    }]);
-    expect(Object.keys(batch.swapReview ?? {}).sort()).toEqual([
-      'expectedAmountOut',
-      'expiresAt',
-      'minimumAmountOut',
-      'slippageBps',
-    ]);
-    expect(batch.swapReview).not.toHaveProperty('quoteId');
-    expect(batch.swapReview).not.toHaveProperty('executorAddress');
-    expect(batch.swapReview).not.toHaveProperty('executorCalls');
-    expect(batch.swapReview).not.toHaveProperty('fee');
-    const reviewedOutput = batch.swapReview!.expectedAmountOut;
-    expect(Object.isFrozen(batch.swapReview)).toBe(true);
-    expect(Reflect.set(batch.swapReview!, 'expectedAmountOut', 1n)).toBe(false);
-    expect(batch.swapReview!.expectedAmountOut).toBe(reviewedOutput);
-    expect(batch.totalCost).toBe(POOL_FEE + 1n);
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
-      transactionHash: '0xprivate',
-    });
-    // Exact output of the real, unmocked SDK — no arrayContaining, no
-    // objectContaining. The invoke payload is recomputed here with the same
-    // pinned `starknet` helpers AVNU itself uses, so this pins the algorithm
-    // rather than a transcribed literal.
-    expect(prepared[0]).toEqual([
-      { type: 'withdraw', token: TOKEN, amount: '0x14', recipient: '0x999' },
-      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
-      { type: 'transfer', token: STRK, amount: 'OPEN', recipient: wallet.address },
-      {
-        type: 'invoke',
-        contract: '0x999',
-        calldata: [
-          STRK,
-          ...transaction.fromCallsToExecuteCalldata_cairo1([
-            { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] },
-          ]).map((felt) => num.toHex(felt)),
-          '${openNoteIds[0]}',
-        ],
-      },
-    ]);
-    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
-      route: 'swap',
-      artifact,
-      feeAuthorization: AUTH.authorization,
-    }));
-  });
-
-  it('canonicalizes the protected minimum with exact bigint truncation', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-rounding',
-      buyAmount: 101n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 333 },
-      },
-    });
-    const batch = await ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
-    ]);
-    expect(batch.intents[0]).toMatchObject({ minAmountOut: 98n });
-    expect(batch.swapReview).toMatchObject({ expectedAmountOut: 101n, minimumAmountOut: 98n, slippageBps: 333 });
-    expect(batch.swapReview?.minimumAmountOut).toBe(batch.intents[0]?.kind === 'swap'
-      ? batch.intents[0].minAmountOut
-      : undefined);
-  });
-
-  it('rejects a requested floor above AVNU’s protected minimum', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-floor',
-      buyAmount: 101n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 333 },
-      },
-    });
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 99n },
-    ])).rejects.toThrow(/protected minimum/i);
-  });
-
-  it('returns a swap receipt when the gateway throws after reporting acceptance', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    vi.mocked(gateway.submit).mockImplementation(async (input) => {
-      input.onAccepted?.({ transactionHash: '0xsettled-swap' });
-      throw new Error('response stream failed after acceptance');
-    });
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    const batch = await ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ]);
-
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
-      transactionHash: '0xsettled-swap',
-    });
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toThrow(/already confirmed/i);
-    expect(gateway.submit).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects a stale or wrong-chain private swap before proving', async () => {
-    const { wallet, pool, gateway, supportedVersions, prepared } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 999,
-      chainId: '0x534e5f5345504f4c4941',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ])).rejects.toThrow(/wrong network/i);
-    expect(prepared).toHaveLength(0);
-  });
-
-  it('rejects a malformed expected output before returning a swap review', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: Number.NaN as unknown as bigint,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ])).rejects.toThrow(/expected output/i);
-  });
-
-  it('rejects an expired quote before returning a swap review', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 999,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ])).rejects.toThrow(/expired/i);
-  });
-
-  it('rejects an expected output below the typed minimum before returning a review', async () => {
-    const { wallet, pool, gateway, supportedVersions } = fixture();
-    gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 89n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    const ops = new WalletApiPrivacyOperations({
-      wallet,
-      pool,
-      submission: gateway,
-      supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-      },
-    });
-    await expect(ops.prepare([
-      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-    ])).rejects.toThrow(/minimum output/i);
-  });
-
   it('does not attach swap review data to a pool-native batch', async () => {
     const { ops } = fixture();
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
     expect(batch.swapReview).toBeUndefined();
-  });
-});
-
-/**
- * The swap route's remaining fail-closed guards.
- *
- * These branches were already implemented but carried no test, while the
- * executor and its serialized calls end up inside proved calldata. WORKPLAN's
- * "Done when" asks for a *tested* allowlisted private route, so each guard is
- * pinned to reject before the wallet is asked to prove anything.
- */
-describe('quote-bound swap plan admission', () => {
-  it.each([NaN, Infinity, -1, 1.5, '1000'] as const)(
-    'rejects malformed clock output before publishing a swap review: %p',
-    async (now) => {
-      const base = fixture();
-      base.gateway.prepareSwap = vi.fn(async () => ({
-        quoteId: 'quote-clock',
-        buyAmount: 95n,
-        expiresAt: 2_000,
-        chainId: '0x534e5f4d41494e',
-        executorAddress: '0x999',
-        executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-        fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-      }));
-      const ops = new WalletApiPrivacyOperations({
-        wallet: base.wallet,
-        pool: base.pool,
-        submission: base.gateway,
-        supportedVersions: base.supportedVersions,
-        now: () => now as number,
-        policy: {
-          maxIntents: 8,
-          maxRelayFee: 10n,
-          enabledRoutes: ['swap'],
-          allowedTokens: {
-            shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-          },
-          swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
-        },
-      });
-
-      await expect(ops.prepare([
-        { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
-      ])).rejects.toMatchObject({ kind: 'unknown' });
-    },
-  );
-
-  it.each([
-    ['a number minimum output', 90],
-    ['a string minimum output', '90'],
-  ] as const)('rejects %s before accepting a swap review', async (_label, minAmountOut) => {
-    const { ops } = swapFixture();
-
-    await expect(ops.prepare([{ ...SWAP, minAmountOut } as never]))
-      .rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('rejects executor call fields supplied only by the object prototype', async () => {
-    const inheritedCall = Object.create({
-      contractAddress: '0x111',
-      entrypoint: 'swap',
-      calldata: ['0xaaa'],
-    });
-    const { ops } = swapFixture(undefined, { executorCalls: [inheritedCall] });
-
-    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('does not invoke an accessor-backed executor call field', async () => {
-    const accessorCall = { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] } as {
-      contractAddress: string;
-      entrypoint: string;
-      calldata: string[];
-    };
-    Object.defineProperty(accessorCall, 'entrypoint', {
-      configurable: true,
-      get() { throw new Error('executor call getter must not run'); },
-    });
-    const { ops } = swapFixture(undefined, { executorCalls: [accessorCall] });
-
-    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  const CHAIN = '0x534e5f4d41494e';
-  const MAX_U256 = (1n << 256n) - 1n;
-  const SWAP: Intent = { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n };
-
-  it('owns the gateway swap plan before publishing its review', async () => {
-    const base = fixture();
-    const plan = {
-      quoteId: 'quote-owned',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: CHAIN,
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    };
-    base.gateway.prepareSwap = vi.fn(async () => plan);
-    const ops = new WalletApiPrivacyOperations({
-      wallet: base.wallet,
-      pool: base.pool,
-      submission: base.gateway,
-      supportedVersions: base.supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: CHAIN, slippageBps: 100 },
-      },
-    });
-    const batch = await ops.prepare([SWAP]);
-    plan.executorAddress = '0x888';
-    plan.executorCalls[0]!.contractAddress = '0x777';
-    plan.fee.authorization = 'mutated-auth';
-
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-
-    expect(base.gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
-      feeAuthorization: AUTH.authorization,
-    }));
-    expect(base.prepared[0]?.[0]).toMatchObject({ recipient: '0x999' });
-  });
-
-  function swapFixture(
-    swapPolicy: unknown = { expectedChainId: CHAIN, slippageBps: 100 },
-    planOverrides: Record<string, unknown> = {},
-  ) {
-    const base = fixture();
-    base.gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: CHAIN,
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-      ...planOverrides,
-    }) as never);
-    const ops = new WalletApiPrivacyOperations({
-      wallet: base.wallet,
-      pool: base.pool,
-      submission: base.gateway,
-      supportedVersions: base.supportedVersions,
-      now: () => 1_000,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        ...(swapPolicy === null ? {} : { swap: swapPolicy }),
-      } as never,
-    });
-    return { ...base, ops };
-  }
-
-  it('binds a private swap to the account owned at operation construction', async () => {
-    const { ops, wallet, prepared } = swapFixture();
-    (wallet as { address: string }).address = '0xdef';
-
-    const batch = await ops.prepare([SWAP]);
-    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
-
-    expect(prepared[0]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'transfer', recipient: '0xabc' }),
-    ]));
-  });
-
-  it('does not hand a discarded swap batch to the wallet after its fee read', async () => {
-    const { ops, pool, wallet, gateway } = swapFixture();
-    const originalConfig = pool.config;
-    let configCalls = 0;
-    let release!: () => void;
-    let started!: () => void;
-    const readStarted = new Promise<void>((resolve) => { started = resolve; });
-    const pending = new Promise<void>((resolve) => { release = resolve; });
-    vi.spyOn(pool, 'config').mockImplementation(async (signal) => {
-      configCalls += 1;
-      if (configCalls === 1) return originalConfig(signal);
-      started();
-      await pending;
-      return originalConfig(signal);
-    });
-    const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
-    const batch = await ops.prepare([SWAP]);
-
-    const confirming = batch.confirm({ feeCeiling: POOL_FEE + 1n });
-    await readStarted;
-    batch.discard();
-    release();
-
-    await expect(confirming).rejects.toThrow(/discarded/i);
-    expect(walletPrepare).not.toHaveBeenCalled();
-    expect(gateway.submit).not.toHaveBeenCalled();
-  });
-
-  it('does not hand an aborted swap confirmation to the wallet after its fee read', async () => {
-    const { ops, pool, wallet, gateway } = swapFixture();
-    const originalConfig = pool.config;
-    let configCalls = 0;
-    let release!: () => void;
-    let started!: () => void;
-    const readStarted = new Promise<void>((resolve) => { started = resolve; });
-    const pending = new Promise<void>((resolve) => { release = resolve; });
-    vi.spyOn(pool, 'config').mockImplementation(async (signal) => {
-      configCalls += 1;
-      if (configCalls === 1) return originalConfig(signal);
-      started();
-      await pending;
-      return originalConfig(signal);
-    });
-    const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
-    const submit = vi.spyOn(gateway, 'submit');
-    const batch = await ops.prepare([SWAP]);
-    const controller = new AbortController();
-    const progress: string[] = [];
-    const confirming = batch.confirm({
-      feeCeiling: POOL_FEE + 1n,
-      signal: controller.signal,
-      onProgress: ({ stage }) => progress.push(stage),
-    });
-
-    await readStarted;
-    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
-    release();
-
-    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
-    expect(walletPrepare).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-    expect(progress).not.toContain('awaiting-approval');
-  });
-
-  it('does not submit a swap quote that expires while the wallet is proving', async () => {
-    const base = fixture();
-    let now = 1_000;
-    base.gateway.prepareSwap = vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: CHAIN,
-      executorAddress: '0x999',
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }));
-    vi.spyOn(base.wallet, 'strk20PrepareInvoke').mockImplementation(async () => {
-      now = 2_000;
-      return base.artifact;
-    });
-    const ops = new WalletApiPrivacyOperations({
-      wallet: base.wallet,
-      pool: base.pool,
-      submission: base.gateway,
-      supportedVersions: base.supportedVersions,
-      now: () => now,
-      policy: {
-        maxIntents: 8,
-        maxRelayFee: 10n,
-        enabledRoutes: ['swap'],
-        allowedTokens: {
-          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
-        },
-        swap: { expectedChainId: CHAIN, slippageBps: 100 },
-      },
-    });
-    const batch = await ops.prepare([SWAP]);
-
-    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toThrow(/expired/i);
-    expect(base.gateway.submit).not.toHaveBeenCalled();
-  });
-
-  it('accepts the maximum uint256 swap output', async () => {
-    const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 });
-
-    await expect(ops.prepare([SWAP])).resolves.toBeDefined();
-  });
-
-  it('rejects a swap output above uint256 before returning a review', async () => {
-    const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 + 1n });
-
-    await expect(ops.prepare([SWAP])).rejects.toThrow(/expected output/i);
-  });
-
-  it.each([
-    ['descriptor trap', new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
-    ['ownKeys trap', new Proxy({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, {
-      ownKeys() { throw new Error('keys trap'); },
-    })],
-    ['extra field', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH, provider: true }],
-    ['whitespace-only authorization', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: ' \t\n', expiresAtBlock: 1_450 }],
-    ['decimal fee token', { token: STRK_DECIMAL, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
-    ['0X-prefixed fee token', { token: STRK_UPPER_PREFIX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
-    ['non-pool fee token', { token: TOKEN, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }],
-  ])('rejects a swap relay fee with %s before returning a review', async (_label, fee) => {
-    const { ops, prepared } = swapFixture(undefined, { fee });
-
-    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
-    expect(prepared).toEqual([]);
-  });
-
-  it('accepts uppercase hex digits in a canonical swap relay fee token', async () => {
-    const { ops } = swapFixture(undefined, {
-      fee: { token: STRK_UPPER_HEX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    });
-
-    await expect(ops.prepare([SWAP])).resolves.toBeDefined();
-  });
-
-  it('rejects inherited swap relay fee fields before returning a review', async () => {
-    const inheritedFee = Object.create({
-      token: STRK,
-      recipient: FEE_RECIPIENT,
-      amount: 1n,
-      ...AUTH,
-    });
-    const { ops } = swapFixture(undefined, { fee: inheritedFee });
-
-    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('does not publish a swap batch after its quote read is aborted', async () => {
-    const { ops, gateway } = swapFixture();
-    const originalPrepareSwap = gateway.prepareSwap!;
-    let release!: () => void;
-    let started!: () => void;
-    const quoteStarted = new Promise<void>((resolve) => { started = resolve; });
-    const pending = new Promise<void>((resolve) => { release = resolve; });
-    gateway.prepareSwap = vi.fn(async (input) => {
-      started();
-      await pending;
-      return originalPrepareSwap(input);
-    });
-    const controller = new AbortController();
-    const preparing = ops.prepare([SWAP], controller.signal);
-
-    await quoteStarted;
-    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
-    release();
-
-    await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
-  });
-
-  it('locks the route when the swap policy is absent', async () => {
-    const { ops, gateway } = swapFixture(null);
-    await expect(ops.prepare([SWAP])).rejects.toThrow(/not configured/i);
-    expect(gateway.prepareSwap).not.toHaveBeenCalled();
-  });
-
-  it('locks the route when the gateway offers no swap preparation', async () => {
-    const { ops, gateway } = swapFixture();
-    delete (gateway as { prepareSwap?: unknown }).prepareSwap;
-    await expect(ops.prepare([SWAP])).rejects.toThrow(/not configured/i);
-  });
-
-  it.each([[0], [-100], [1.5]])(
-    'rejects a configured slippage of %s before requesting a quote',
-    async (slippageBps) => {
-      const { ops, gateway } = swapFixture({ expectedChainId: CHAIN, slippageBps });
-      await expect(ops.prepare([SWAP])).rejects.toThrow(/slippage/i);
-      expect(gateway.prepareSwap).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ['no executor calls', { executorCalls: [] }, /executor calls/i],
-    ['a non-array executor call container', { executorCalls: null }, /executor calls/i],
-    ['a call with a non-array calldata container', {
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: null }],
-    }, /malformed executor calls/i],
-    ['a zero call target', {
-      executorCalls: [{ contractAddress: '0x0', entrypoint: 'swap', calldata: [] }],
-    }, /call target/i],
-    ['an unnamed entry point', {
-      executorCalls: [{ contractAddress: '0x111', entrypoint: '', calldata: [] }],
-    }, /malformed executor calls/i],
-    ['a whitespace-only entry point', {
-      executorCalls: [{ contractAddress: '0x111', entrypoint: ' \t\n', calldata: [] }],
-    }, /malformed executor calls/i],
-    ['a non-string entry point', {
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 7, calldata: [] }],
-    }, /malformed executor calls/i],
-    ['non-felt call data', {
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['not-a-felt'] }],
-    }, /malformed executor calls/i],
-    ['a relay fee above the route ceiling', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 11n, ...AUTH },
-    }, /route policy/i],
-    ['a nonpositive relay fee', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 0n, ...AUTH },
-    }, /route policy/i],
-    ['a string relay fee amount', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: '1', ...AUTH },
-    }, /route policy/i],
-    ['a numeric relay fee amount', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1, ...AUTH },
-    }, /route policy/i],
-    ['a coercible relay fee amount', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: { valueOf: (): bigint => 1n }, ...AUTH },
-    }, /route policy/i],
-    ['a zero fee recipient', {
-      fee: { token: STRK, recipient: '0x0', amount: 1n, ...AUTH },
-    }, /fee recipient/i],
-    ['an unsigned relay fee', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: '', expiresAtBlock: 1_450 },
-    }, /fee authorization/i],
-    ['a whitespace-only relay fee authorization', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: ' \t\n', expiresAtBlock: 1_450 },
-    }, /fee authorization/i],
-    ['a decimal relay fee token', {
-      fee: { token: STRK_DECIMAL, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }, /fee token/i],
-    ['an uppercase-prefix relay fee token', {
-      fee: { token: STRK_UPPER_PREFIX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }, /fee token/i],
-    ['a coercible object relay fee token', {
-      fee: { token: { toString: (): string => STRK }, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    }, /fee token/i],
-    ['an unbounded relay fee', {
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: 'fee-auth', expiresAtBlock: 0 },
-    }, /fee authorization/i],
-    ['a zero executor', { executorAddress: '0x0' }, /executor/i],
-  ])('rejects a quote-bound plan with %s before proving', async (_label, overrides, message) => {
-    const { ops, prepared } = swapFixture({ expectedChainId: CHAIN, slippageBps: 100 }, overrides);
-    await expect(ops.prepare([SWAP])).rejects.toThrow(message);
-    expect(prepared).toEqual([]);
   });
 });
 
@@ -2140,7 +1284,7 @@ describe('Wallet API capability versions', () => {
       },
     });
     const ops = new WalletApiPrivacyOperations({
-      wallet, pool, submission: gateway, supportedVersions: async () => versions,
+      wallet, pool, supportedVersions: async () => versions,
       policy: {
         maxIntents: 8, maxRelayFee: 10n, enabledRoutes: ['transfer'],
         allowedTokens: { shield: [TOKEN], unshield: [TOKEN], transfer: [TOKEN], swap: [TOKEN] },
@@ -2170,8 +1314,7 @@ describe('Wallet API capability versions', () => {
     const ops = new WalletApiPrivacyOperations({
       wallet,
       pool,
-      submission: gateway,
-      supportedVersions: async () => ['not-a-version', '0.10.3-rc.1'],
+        supportedVersions: async () => ['not-a-version', '0.10.3-rc.1'],
       policy: {
         maxIntents: 8,
         maxRelayFee: 10n,
@@ -2195,8 +1338,7 @@ describe('Wallet API capability versions', () => {
     const ops = new WalletApiPrivacyOperations({
       wallet,
       pool,
-      submission: gateway,
-      supportedVersions: async () => [{ toString: () => '0.10.3' }] as never,
+        supportedVersions: async () => [{ toString: () => '0.10.3' }] as never,
       policy: {
         maxIntents: 8,
         maxRelayFee: 10n,
@@ -2220,8 +1362,7 @@ describe('Wallet API capability versions', () => {
     const ops = new WalletApiPrivacyOperations({
       wallet,
       pool,
-      submission: gateway,
-      supportedVersions: async () => ['00.10.3', '0.10.3-alpha..1', '0.10.3-01'],
+        supportedVersions: async () => ['00.10.3', '0.10.3-alpha..1', '0.10.3-01'],
       policy: {
         maxIntents: 8,
         maxRelayFee: 10n,

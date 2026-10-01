@@ -183,7 +183,6 @@ describe('the Wallet API adapter has the wallet submit unshield under the parsed
     const ops = new WalletApiPrivacyOperations({
       wallet,
       pool,
-      submission: gateway,
       supportedVersions: async () => ['0.10.3'],
       policy,
     });

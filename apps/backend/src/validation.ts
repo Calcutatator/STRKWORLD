@@ -1,4 +1,4 @@
-import type { BackendConfig, PreparedArtifact, PrivateRoute } from './types.js';
+import type { BackendConfig, PreparedArtifact, RelayRoute } from './types.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
@@ -47,8 +47,10 @@ export function isFelt(value: string): boolean {
   return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
 }
 
-export function requireRoute(value: unknown): PrivateRoute {
-  if (value !== 'transfer' && value !== 'unshield' && value !== 'swap' && value !== 'stake') {
+export function requireRoute(value: unknown): RelayRoute {
+  // D-084: a swap is wallet-submitted through its stand-in, never relayed.
+  if (value === 'swap') throw new ApiFailure(400, 'Swaps are not relayed.');
+  if (value !== 'transfer' && value !== 'unshield' && value !== 'stake') {
     throw new ApiFailure(400, 'Unknown private route.');
   }
   return value;

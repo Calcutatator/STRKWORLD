@@ -196,7 +196,7 @@ palette. Like every route, it stays locked until the build's policy enables it.
 
 D-067 adds `exchange:degen`, the Exchange tower's degen counter (DEGEN SWAP),
 on the same `exchange.swap` route, so it opens and locks exactly when the
-ground-floor swap does (production denies swap today, so both stay locked).
+ground-floor swap does (production keeps swap locked unless `VITE_STRK20_SWAP_ENABLED` switches it on, D-084, and admits degen tokens only with `VITE_STRK20_SWAP_DEGEN_ENABLED`).
 It runs the Exchange's own machine, flow and review over a loaded list: STRK
 first, then the backend's curated core and its filtered copy of avnu's live
 list from `GET /api/v1/degen/tokens` (`DegenCatalogProvider`; the demo loads a

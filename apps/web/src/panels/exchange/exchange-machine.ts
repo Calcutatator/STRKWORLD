@@ -91,12 +91,24 @@ export function createExchangePanel(options: {
    * every check below are the same.
    */
   catalog?: ExchangeCatalogPort;
+  /**
+   * D-084: the least time between two quote requests from this counter, so
+   * repeated Review presses never hammer avnu's rate-limited public API. A
+   * press inside the window waits out the rest of it, and a newer press
+   * replaces a waiting one. `QUOTE_SPACING_MS` by default.
+   */
+  quoteSpacingMs?: number;
+  /** How the counter waits out the quote spacing; a test passes its own. */
+  sleep?: (ms: number) => Promise<void>;
 }): ExchangePanel {
   const { operations, receipts, onError } = options;
   const feeTolerance = options.feeTolerance ?? 0n;
   const now = options.now ?? Date.now;
   const register = options.register ?? PRIVACY_REGISTER;
   const catalogPort = options.catalog;
+  const quoteSpacingMs = options.quoteSpacingMs ?? QUOTE_SPACING_MS;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+  let lastQuoteAt: number | null = null;
   const fresh = () => initialState(register, catalogPort !== undefined);
   const stateStore = createStore<ExchangeState>(freezeExchangeState(fresh()));
   const store: ReadableStore<ExchangeState> = Object.freeze({
@@ -167,6 +179,34 @@ export function createExchangePanel(options: {
     patch({ flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery } });
   };
 
+  /**
+   * Ask for one swap's quote and own its review, or null for a review that
+   * does not describe what was asked. The batch is the caller's to keep or
+   * discard.
+   */
+  const quote = async (sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, signal?: AbortSignal): Promise<{ batch: PreparedBatch; summary: ExchangeReview } | null> => {
+    // 1 is a request sentinel only. It never reaches the player-facing review.
+    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n }], signal);
+    const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
+    const review = batch.swapReview;
+    if (!validReview(intent, review, sell, buy, amountIn, now())) {
+      batch.discard();
+      return null;
+    }
+    const safeReview = review!;
+    const fee = (amount: bigint) => formatTokenAmountExact(amount, 18) + ' STRK';
+    const summary: ExchangeReview = {
+      sell: `${formatTokenAmountExact(intent.amountIn, sell.decimals)} ${sell.symbol}`,
+      expectedBuy: `${formatTokenAmountExact(safeReview.expectedAmountOut, buy.decimals)} ${buy.symbol}`,
+      protectedMinimum: `${formatTokenAmountExact(safeReview.minimumAmountOut, buy.decimals)} ${buy.symbol}`,
+      slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
+      expiresAt: new Date(safeReview.expiresAt).toISOString(),
+      poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
+      disclosures: disclosuresForIntents(batch.intents, register),
+    };
+    return { batch, summary };
+  };
+
   return Object.freeze<ExchangePanel>({
     store,
     async open(signal) {
@@ -226,60 +266,75 @@ export function createExchangePanel(options: {
       if (amountIn === null || amountIn <= 0n) { patch({ notice: COPY.notices.badAmount }); return; }
       const id = start(); discard(); patch({ flow: { name: 'preparing' }, notice: null });
       try {
-        // 1 is a request sentinel only. It never reaches the player-facing review.
-        const batch = await operations.prepare([{ kind: 'swap', tokenIn: state.sell.token, tokenOut: state.buy.token, amountIn, minAmountOut: 1n }], signal);
-        if (!live(id)) { batch.discard(); return; }
-        const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
-        const review = batch.swapReview;
-        if (!validReview(intent, review, state.sell, state.buy, amountIn, now())) {
-          batch.discard();
+        // D-084: at most one quote per spacing window. A press inside it
+        // waits out the rest; a newer press replaces this one meanwhile.
+        const wait = lastQuoteAt === null ? 0 : lastQuoteAt + quoteSpacingMs - now();
+        if (wait > 0) {
+          await sleep(Math.min(wait, quoteSpacingMs));
+          if (!live(id)) return;
+        }
+        lastQuoteAt = now();
+        const quoted = await quote(state.sell, state.buy, amountIn, signal);
+        if (!live(id)) { quoted?.batch.discard(); return; }
+        if (!quoted) {
           patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
           return;
         }
-        const safeReview = review!;
-        prepared = batch;
-        const fee = (amount: bigint) => formatTokenAmountExact(amount, 18) + ' STRK';
-        const summary: ExchangeReview = {
-          sell: `${formatTokenAmountExact(intent.amountIn, state.sell.decimals)} ${state.sell.symbol}`,
-          expectedBuy: `${formatTokenAmountExact(safeReview.expectedAmountOut, state.buy.decimals)} ${state.buy.symbol}`,
-          protectedMinimum: `${formatTokenAmountExact(safeReview.minimumAmountOut, state.buy.decimals)} ${state.buy.symbol}`,
-          slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
-          expiresAt: new Date(safeReview.expiresAt).toISOString(),
-          poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
-          disclosures: disclosuresForIntents(batch.intents, register),
-        };
-        patch({ flow: { name: 'review', summary } });
+        prepared = quoted.batch;
+        patch({ flow: { name: 'review', summary: quoted.summary } });
       } catch (error) { fail(error, id); }
     },
     async confirm(signal) {
       if (!gate()) return;
-      const state = store.getState(); const batch = prepared;
+      const state = store.getState(); let batch = prepared;
       if (state.flow.name !== 'review' || !batch) return;
-      const id = start(); const summary = state.flow.summary;
-      if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt) || batch.swapReview.expiresAt <= now()) {
+      const id = start(); let summary = state.flow.summary;
+      // The fee the player reviewed stays the ceiling, even after a re-quote.
+      const reviewedTotal = batch.totalCost;
+      if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt)) {
         discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } }); return;
       }
       patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
       try {
+        if (batch.swapReview.expiresAt <= now()) {
+          // D-084: a quote that ran out is asked for again before the wallet
+          // is. A fresh floor at or above the reviewed one goes ahead; a lower
+          // one goes back to review with the new figures.
+          const reviewedFloor = batch.swapReview.minimumAmountOut;
+          const sell = store.getState().sell; const buy = store.getState().buy;
+          const intent = batch.intents[0];
+          // The pair is the reviewed batch's, never whatever the counter shows now.
+          const reviewedPair = intent?.kind === 'swap' && sell && buy
+            && sameAddress(sell.token, intent.tokenIn) && sameAddress(buy.token, intent.tokenOut);
+          lastQuoteAt = now();
+          const fresh = reviewedPair ? await quote(sell!, buy!, intent.amountIn, signal) : null;
+          if (!live(id)) { fresh?.batch.discard(); return; }
+          if (!fresh) {
+            discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } }); return;
+          }
+          discard();
+          prepared = fresh.batch;
+          if (fresh.batch.swapReview!.minimumAmountOut < reviewedFloor) {
+            patch({ flow: { name: 'review', summary: fresh.summary }, notice: COPY.exchange.requoted });
+            return;
+          }
+          batch = fresh.batch; summary = fresh.summary;
+          patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
+        }
         const pool = await operations.poolConfig(signal);
         if (!live(id)) return;
-        if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt) || batch.swapReview.expiresAt <= now()) {
-          discard();
-          patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
-          return;
-        }
         if (!options.canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;
         }
-        if (pool.feeAmount + batch.gasEstimate > batch.totalCost + feeTolerance) { discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' } }); return; }
+        if (pool.feeAmount + batch.gasEstimate > reviewedTotal + feeTolerance) { discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' } }); return; }
         if (!options.canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;
         }
         signingOwner = id;
         signingBatch = batch;
-        const result = await batch.confirm({ feeCeiling: batch.totalCost + feeTolerance, signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
+        const result = await batch.confirm({ feeCeiling: reviewedTotal + feeTolerance, signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
         if (signingOwner === id) {
           signingOwner = null;
           signingBatch = null;
@@ -316,6 +371,13 @@ export function createExchangePanel(options: {
     catch { return false; }
   }
 }
+
+/**
+ * D-084: the least time between two quote requests from one counter. avnu's
+ * public API rate-limits by caller, and the backend asks it for every player,
+ * so the counter never asks faster than this however often Review is pressed.
+ */
+export const QUOTE_SPACING_MS = 1_500;
 
 /** The ground floor's fixed six (D-042): always ready, never loaded. */
 const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });

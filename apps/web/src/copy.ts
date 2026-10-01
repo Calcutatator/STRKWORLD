@@ -227,6 +227,11 @@ export const COPY = freezeCopy({
     slippage: 'Slippage',
     expiresAt: 'Quote expires',
     oneSwap: 'This Exchange prepares and confirms one swap at a time.',
+    /**
+     * D-084: the quote ran out before confirming, and avnu's fresh one would
+     * lower the protected minimum, so the review shows it instead.
+     */
+    requoted: 'The quote expired and the price moved. Check the new protected minimum, then confirm again.',
   },
 
   /**
@@ -840,7 +845,7 @@ export const COPY = freezeCopy({
     slippageReason:
       'in this build. It is not something you choose — fixing it is what lets the protected minimum above be a guarantee rather than an estimate.',
     quoteExpiry:
-      'After this time the quote is no longer valid. Confirming past it fails safely rather than trading at a stale price.',
+      'After this time the quote is asked for again before your wallet is. If the fresh price would lower the protected minimum, you see it first; nothing trades at a stale price.',
     refundAddress: 'Where funds are sent back if this deposit cannot be completed.',
     memo: 'A short tag the destination needs to identify your deposit. Leaving it out can cause the deposit to be delayed or lost.',
     poolFee: 'The protocol fee the STRK20 pool charges for this action. It is set by governance and read live, never hardcoded.',
@@ -904,18 +909,19 @@ export const COPY = freezeCopy({
     'submission-uncertain':
       'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
     /**
-     * D-070, narrowed by D-082: the deployment has no avnu key for its relay.
-     * Only a swap still uses the relay; the wallet submits everything else.
+     * D-070, narrowed by D-082 and D-084: the deployment has no avnu key for
+     * its relay. No player flow uses the relay any more, so this only reads
+     * if one ever did again.
      */
     'relay-not-configured':
-      "Swaps need the private relay, which isn't set up on this site yet. Nothing was sent.",
+      "This needs the private relay, which isn't set up on this site yet. Nothing was sent.",
     /**
-     * D-077: the Vault needs a wallet that runs STRK20 shadow accounts. A
-     * fact about the wallet's release, not the account: it stays in the
-     * Vault, and every other building works as before.
+     * D-077, D-084: the Vault and the Exchange need a wallet that runs STRK20
+     * shadow accounts. A fact about the wallet's release, not the account: it
+     * stays in the building, and every other one works as before.
      */
     'shadow-accounts-unsupported':
-      "Your wallet doesn't support shadow accounts yet, and the Vault needs one. Nothing was sent, and every other building works as before.",
+      "Your wallet doesn't support shadow accounts yet, and the Vault and the Exchange need one. Nothing was sent, and every other building works as before.",
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 

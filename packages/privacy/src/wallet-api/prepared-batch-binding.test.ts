@@ -4,9 +4,9 @@ import {
   WalletApiPrivacyOperations,
   type Intent,
   type PoolReadClient,
-  type PrivateSubmissionGateway,
   type WalletStrk20Account,
 } from '../index.js';
+import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
 
 /**
  * A prepared batch must prove the intents that were reviewed.
@@ -29,27 +29,20 @@ import {
  *   `readonly Intent[]` held the caller's own objects. `readonly` is erased at
  *   runtime; writing a field reached `confirm()`.
  *
- * The swap route needed this most, not least. Its action-binding guard
- * recomputes the expected action set from the canonical intent, so publishing
- * that same mutable object let a caller move the guard's authority and the
- * action it checks together — the tautology the executor-call snapshot already
- * avoids one level in, reintroduced one level out.
+ * The swap route (D-084) builds its actions once, at prepare, from the
+ * canonical intent and the owned quote, so a caller writing to the published
+ * intent can move neither the floor nor the actions.
  *
  * Every case below runs through the public `prepare(...)`/`confirm(...)` seam
  * against test doubles. No wallet, network, RPC, proof, signature or
- * submission is involved; the only real code exercised is the pinned
- * `@avnu/avnu-sdk` action builder and `starknet` serialization, both pure.
+ * submission is involved.
  */
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const TOKEN = '0x123';
 const BOB = '0x456';
-const FEE_RECIPIENT = '0x789';
-const EXECUTOR = '0x999';
 const TAKER = '0xabc';
 const POOL_FEE = 6n * 10n ** 18n;
-const AUTH = { authorization: 'fee-auth', expiresAtBlock: 1_450 };
-const CALL = { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] };
 
 /** An amount no reviewed batch in this file authorises. */
 const HOSTILE = 10n ** 30n;
@@ -74,6 +67,9 @@ function seam() {
       prepared.push(actions);
       return artifact;
     },
+    async strk20ShadowAccountCommitment() {
+      return SWAP_TEST_PARTIAL;
+    },
   };
   const pool: PoolReadClient = {
     async config() {
@@ -86,26 +82,12 @@ function seam() {
       throw new Error('no receipt read in this fixture');
     },
   };
-  const gateway: PrivateSubmissionGateway = {
-    estimate: vi.fn(async () => ({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })),
-    submit: vi.fn(async () => ({ transactionHash: '0xprivate' })),
-    prepareSwap: vi.fn(async () => ({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: EXECUTOR,
-      // A fresh copy per plan, matching swap-actions.test.ts: a fixture shared
-      // across cases lets one case corrupt the next case's expectation.
-      executorCalls: [{ ...CALL, calldata: [...CALL.calldata] }],
-      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
-    })),
-  };
   const ops = new WalletApiPrivacyOperations({
     wallet,
     pool,
-    submission: gateway,
-    supportedVersions: vi.fn(async () => ['0.10.3']),
+    swapQuotes: swapTestQuotes([95n]),
+    vault: swapTestReads(),
+    supportedVersions: vi.fn(async () => ['0.10.4']),
     now: () => 1_000,
     policy: {
       maxIntents: 8,
@@ -161,7 +143,7 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     // Never admitted: `0xdeadbeef` is on no allowlist and `0xbad` was never
     // registration-checked, because neither existed at prepare time.
     mine.push({ kind: 'unshield', token: '0xdeadbeef', amount: 5n, recipient: '0xbad' });
-    await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+    await batch.confirm({ feeCeiling: POOL_FEE });
 
     // The wallet proves and submits the reviewed transfer alone (D-082).
     expect(invoked).toEqual([[
@@ -174,7 +156,7 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
 
     expect(Reflect.set(batch.intents[0]!, 'amount', HOSTILE)).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+    await batch.confirm({ feeCeiling: POOL_FEE });
 
     expect(invoked[0]?.[0]).toEqual({ type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB });
   });
@@ -215,27 +197,26 @@ describe('a prepared batch does not read intent state the caller still owns', ()
   });
 
   it('F. keeps the reviewed sell amount when the published swap intent is written to', async () => {
-    const { ops, prepared } = seam();
+    const { ops, invoked } = seam();
     const batch = await ops.prepare([{ ...SWAP }]);
     // 95 less 1% slippage: what the player actually reviewed.
     expect(batch.swapReview).toMatchObject({ expectedAmountOut: 95n, minimumAmountOut: 95n - 95n / 100n });
 
-    // The binding guard recomputes from this object. If a caller can move it,
-    // the guard agrees with the corruption instead of catching it.
+    // The actions were built from this object at prepare; it must not move.
     expect(Reflect.set(batch.intents[0]!, 'amountIn', HOSTILE)).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+    await batch.confirm({ feeCeiling: POOL_FEE });
 
-    expect(prepared[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: EXECUTOR });
+    expect(invoked[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: SWAP_TEST_SHADOW });
   });
 
   it('G. keeps the allowlisted sell token when the published swap intent is written to', async () => {
-    const { ops, prepared } = seam();
+    const { ops, invoked } = seam();
     const batch = await ops.prepare([{ ...SWAP }]);
 
     expect(Reflect.set(batch.intents[0]!, 'tokenIn', '0xdeadbeef')).toBe(false);
-    await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+    await batch.confirm({ feeCeiling: POOL_FEE });
 
-    expect(prepared[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: EXECUTOR });
+    expect(invoked[0]?.[0]).toEqual({ type: 'withdraw', token: TOKEN, amount: '0x14', recipient: SWAP_TEST_SHADOW });
   });
 });
 

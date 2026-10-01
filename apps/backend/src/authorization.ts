@@ -4,9 +4,6 @@ function toWire(claims: FeeAuthorizationClaims) {
   return {
     ...claims,
     amount: claims.amount.toString(),
-    swap: claims.swap
-      ? { ...claims.swap, sellAmount: claims.swap.sellAmount.toString() }
-      : undefined,
   };
 }
 
@@ -17,34 +14,17 @@ function fromWire(value: unknown): FeeAuthorizationClaims | null {
     if (
       !hasOwnDataFields(record, ['v', 'route', 'feeToken', 'operationToken', 'token', 'recipient', 'amount', 'issuedAtBlock', 'expiresAtBlock']) ||
       record.v !== 1 ||
-      (record.route !== 'transfer' && record.route !== 'unshield' && record.route !== 'swap' && record.route !== 'stake') ||
+      (record.route !== 'transfer' && record.route !== 'unshield' && record.route !== 'stake') ||
       !isStringRecord(record, ['feeToken', 'operationToken', 'token', 'recipient']) ||
       !isCanonicalDecimal(record.amount) ||
       !Number.isSafeInteger(record.issuedAtBlock) ||
       !Number.isSafeInteger(record.expiresAtBlock)
     ) return null;
-    const swapDescriptor = Object.getOwnPropertyDescriptor(record, 'swap');
-    if (swapDescriptor && !('value' in swapDescriptor)) return null;
-    let swap: Record<string, unknown> | undefined;
-    const wireSwap = swapDescriptor?.value;
-    if (wireSwap !== undefined) {
-      if (
-        !isRecord(wireSwap) ||
-        !hasOwnDataFields(wireSwap, ['executor', 'sellToken', 'buyToken', 'sellAmount', 'quoteExpiresAt', 'invokePrefix']) ||
-        !isStringRecord(wireSwap, ['executor', 'sellToken', 'buyToken']) ||
-        !isCanonicalDecimal(wireSwap.sellAmount) ||
-        !Number.isSafeInteger(wireSwap.quoteExpiresAt) ||
-        !Array.isArray(wireSwap.invokePrefix) ||
-        wireSwap.invokePrefix.some((entry) => typeof entry !== 'string')
-      ) return null;
-      swap = wireSwap;
-    }
+    // D-084: a swap is never relayed, so no authorization carries a quote binding.
+    if (Object.getOwnPropertyDescriptor(record, 'swap') !== undefined) return null;
     return {
       ...record,
       amount: BigInt(record.amount),
-      swap: swap
-        ? { ...swap, sellAmount: BigInt(swap.sellAmount as string) }
-        : undefined,
     } as unknown as FeeAuthorizationClaims;
   } catch {
     return null;

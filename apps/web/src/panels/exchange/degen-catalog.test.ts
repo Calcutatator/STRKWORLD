@@ -121,7 +121,7 @@ describe('what this build can swap', () => {
     expect(policyAdmitsSwapToken(null, LORDS)).toBe(true);
   });
 
-  it('admits nothing under today\'s production policy, which enables no swap', () => {
+  it('admits nothing under the default production policy, which enables no swap', () => {
     const production = parseRoutePolicy({});
     expect(policyAdmitsSwapToken(production, STRK)).toBe(false);
     expect(policyAdmitsSwapToken(production, LORDS)).toBe(false);
@@ -139,6 +139,25 @@ describe('what this build can swap', () => {
     expect(policyAdmitsSwapToken(policy, DREAMS)).toBe(false);
     expect(policyAdmitsSwapToken({ ...policy, enabledRoutes: [] }, LORDS)).toBe(false);
     expect(policyAdmitsSwapToken({ enabledRoutes: null } as unknown as WalletRoutePolicy, LORDS)).toBe(false);
+  });
+
+  it('admits every listed token under a policy with the degen switch on, and none with swap off (D-084)', () => {
+    const policy = parseRoutePolicy({
+      VITE_STRK20_SWAP_ENABLED: 'true',
+      VITE_STRK20_SWAP_ALLOWED_TOKENS: STRK,
+      VITE_STRK20_SWAP_SLIPPAGE_BPS: '50',
+      VITE_STRK20_SWAP_DEGEN_ENABLED: 'true',
+    });
+    expect(policyAdmitsSwapToken(policy, DREAMS)).toBe(true);
+    expect(policyAdmitsSwapToken(policy, EKUBO)).toBe(true);
+    expect(policyAdmitsSwapToken({ ...policy, enabledRoutes: [] }, DREAMS)).toBe(false);
+    const ground = parseRoutePolicy({
+      VITE_STRK20_SWAP_ENABLED: 'true',
+      VITE_STRK20_SWAP_ALLOWED_TOKENS: STRK,
+      VITE_STRK20_SWAP_SLIPPAGE_BPS: '50',
+    });
+    expect(policyAdmitsSwapToken(ground, STRK)).toBe(true);
+    expect(policyAdmitsSwapToken(ground, DREAMS)).toBe(false);
   });
 });
 

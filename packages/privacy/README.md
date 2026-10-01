@@ -171,7 +171,7 @@ token is rejected. A zero governance pool fee is valid, but the public gas
 estimate must be positive so the reserve cannot be zero. The fake enforces
 Stark field/uint256 bounds and never reads a clock, network or market.
 
-For a successfully prepared single AVNU swap, `PreparedBatch.swapReview`
+For a successfully prepared single swap, `PreparedBatch.swapReview`
 contains only the display-safe `expectedAmountOut`, `minimumAmountOut`,
 `slippageBps` and quote `expiresAt`. It is review data, not relay authority:
 quote IDs, executor calls, calldata, authorizations, paymaster details and
@@ -184,43 +184,34 @@ quotes a swap between two rated tokens by floored bigint arithmetic, with
 AVNU's protected-minimum formula; any other swap falls back to `swapReview`.
 Those rates are demo fixtures, never prices.
 
-`buildStrk20Actions` is a validation-free array literal, and the relay's own
-binding check runs only *after* the wallet has minted an irrevocable proof. So
-before `strk20PrepareInvoke`, this package verifies that the four actions it is
-about to submit still describe the plan it validated: the sell leg funds the
-quoted executor and nobody else, the fee leg matches the authorized quote, the
-bought asset lands in an `OPEN` note owned by this account, and the single
-external call carries exactly the reviewed payload to that same executor.
+The swap runs on the player's STRK20 shadow account for `strkworld-swap`
+(D-084, `swap.ts`, `wallet-api/swap-operations.ts`). The stand-in address is
+resolved exactly as the Vault's is (`wallet-api/shadow-account.ts`): the
+wallet's partial commitment, the anonymizer's view through the backend, and the
+Primer derivation as the cross-check. The quote is avnu's public, keyless
+`/swap/v3/quotes` plus `/swap/v3/build` for that stand-in, fetched through the
+backend's proxy (`POST /v1/swap/quote`) so avnu never sees the player's IP
+next to it. `ownSwapQuote` refuses an answer for another chain, another token
+or amount, more than one call, any call but `multi_route_swap` on the pinned
+exchange, another beneficiary, an integrator fee, or empty routes. The swap
+then builds every action itself: withdraw the sell amount to the stand-in, one
+`OPEN` note of the bought token for the player, and one
+`shadow_account_invoke` that approves exactly the sell amount and calls the
+exchange with the stand-in as beneficiary and STRKWORLD's own floor, collecting
+what the swap gained (`diff`). Only avnu's route encoding is taken from the
+quote. The wallet proves and submits it (`wallet_strk20InvokeTransaction`): no
+relay, no avnu key, no relay fee.
 
-Binding that payload matters more than binding the target. `STRK20_INVOKE_ACTION`
-has no selector field, so the entry point and its arguments live inside calldata:
-checking only `contract` would leave the call itself unconstrained. The expected
-calldata is therefore recomputed from the validated `executorCalls` with the same
-pinned helpers AVNU uses — `fromCallsToExecuteCalldata_cairo1(...).map(num.toHex)`,
-prefixed by the buy token and suffixed by `${openNoteIds[0]}` — and compared by
-exact length and order, with felt values normalized and the placeholder pinned to
-the final slot. A reordering, a dropped or extra action, a public deposit leg, a
-retargeted inner call, a substituted selector or a rewritten argument is a
-mismatch, not a variant, and fails closed.
-
-The validated calls are snapshotted before the SDK sees them, and the SDK gets a
-separate copy: sharing one array would let an input-mutating SDK corrupt both the
-action and the authority it is checked against, making the comparison
-tautological. Only the guard's snapshot is frozen — freezing the SDK's input
-would turn a mutating SDK into a thrown `TypeError` reported as an unreachable
-network, and a mutating SDK is a plan mismatch, not an outage. The four-action
-shape is
-source-derived from the exact pinned SDK — an approved upgrade that changes it
-must fail here rather than quietly prove a different transaction. This is
-self-consistency only: it cannot tell a hostile plan from an honest one, because
-a hostile plan's actions match it faithfully.
-
-The incoming swap minimum is only a quote floor. After validating the plan,
-Chain computes AVNU's protected minimum as exact bigint arithmetic:
-`expectedAmountOut - (expectedAmountOut * slippageBps / 10_000)`. A floor above
-that result is rejected; otherwise both the prepared swap intent and
-`swapReview.minimumAmountOut` carry the protected value used again at confirm
-time.
+The floor is the protected minimum for the policy's slippage, computed as
+exact bigint arithmetic: `expectedAmountOut - (expectedAmountOut *
+slippageBps / 10_000)`. avnu's own build rounds the slippage up and can sit
+one base unit lower; it is not used. A caller's requested floor above the
+protected minimum is rejected; otherwise both the prepared swap intent and
+`swapReview.minimumAmountOut` carry it. A quote stands for `SWAP_QUOTE_TTL_MS`
+(30 s; avnu's quote has no expiry of its own). At confirmation an older quote
+is asked for again before the wallet is: a fresh floor at or above the
+reviewed one goes ahead with the fresh actions, and a lower one stops with
+nothing sent.
 
 The shipped Wallet API types expose one aggregate balance per token, not the
 spendable/maturing split used by the low-level SDK. Real wallet results therefore
@@ -240,14 +231,10 @@ on the route:
   AVNU's paymaster without the user's account signer. The submission port
   reports acceptance as soon as it knows the transaction hash; `confirm()`
   preserves that receipt if later gateway cleanup throws.
-- A quote-bound AVNU swap uses the same wallet proof artifact but never waits:
-  the backend neither delays nor queues it, since waiting risks submitting an
-  expired quote. (Since D-066 the pool-native routes carry no artificial delay
-  by default either; they may still wait for a free submission slot.) The backend chooses
-  the private quote and executor calls, then the browser passes that bounded
-  plan through AVNU's `buildStrk20Actions()`. The bought asset is created
-  directly as an `OPEN` pool note; there is no public output or second shield
-  step.
+- A swap (D-084) is proved and submitted by the wallet through the player's
+  shadow account, like the Vault: the bought asset is settled into an `OPEN`
+  pool note in the same transaction, with no public output and no second
+  shield step.
 - A shield starts with a public ERC-20 approval and cannot be funded from the
   pool. It is not the private queued path, and it is never bundled with the
   action it later funds.
@@ -370,8 +357,8 @@ confirmation attempt the caller must prepare again, which prevents a
 double-click from submitting the same financial intent twice.
 
 The offline adapter tests now cover ShieldUp-derived action construction,
-fee-ceiling rechecks, recipient preflight, proof submission and private AVNU
-swap shape. The remaining parity work is the funded Ready/paymaster run on the
+fee-ceiling rechecks, recipient preflight, proof submission and the
+shadow-account swap's exact actions (D-084). The remaining parity work is the funded Ready/paymaster run on the
 D-028 pre-launch checklist; no fixture claims it happened.
 
 Never put real key material or a real RPC key in a fixture.

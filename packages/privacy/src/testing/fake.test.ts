@@ -151,9 +151,9 @@ describe('the fee comes out of the balance being spent', () => {
   });
 });
 
-describe('the gas estimate follows the route (D-082)', () => {
-  // Only the relayed swap carries a relay estimate. Every other route is
-  // wallet-submitted, and the wallet prices its own network fee.
+describe('the gas estimate follows the route (D-082, D-084)', () => {
+  // Nothing is relayed: every route, the swap included, is wallet-submitted,
+  // and the wallet prices its own network fee.
   it('reports no relay estimate for a wallet-submitted spend, whatever the batch shape (D-082)', async () => {
     const ops = fresh();
     const one = await ops.prepare([
@@ -181,7 +181,7 @@ describe('the gas estimate follows the route (D-082)', () => {
     expect(batch.gasEstimate).toBe(0n);
   });
 
-  it('weights a private swap heavier than a single transfer', async () => {
+  it('reports no relay estimate for a swap, which the wallet submits through a shadow account (D-084)', async () => {
     const usdc = '0x1234';
     const ops = new FakePrivacyOperations({
       balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },
@@ -189,7 +189,32 @@ describe('the gas estimate follows the route (D-082)', () => {
     const swap = await ops.prepare([
       { kind: 'swap', tokenIn: usdc, tokenOut: STRK, amountIn: 10n ** 18n, minAmountOut: 1n },
     ]);
-    expect(swap.gasEstimate).toBe(RELAY_FEE * 2n);
+    expect(swap.gasEstimate).toBe(0n);
+    expect(swap.totalCost).toBe(SIX_STRK);
+  });
+
+  it('refuses a swap from a wallet without shadow accounts, as the adapter does (D-084)', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      capability: { supportsShadowAccounts: false },
+    });
+    await expect(ops.prepare([
+      { kind: 'swap', tokenIn: STRK, tokenOut: '0x1234', amountIn: 10n ** 18n, minAmountOut: 1n },
+    ])).rejects.toMatchObject({ kind: 'shadow-accounts-unsupported' });
+  });
+
+  it('quotes the next swap from what setSwapQuote says, as a re-quote would (D-084)', async () => {
+    const usdc = '0x1234';
+    const ops = new FakePrivacyOperations({
+      balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 10_000n, slippageBps: 100, expiresAt: 1_000 },
+    });
+    const intent = { kind: 'swap', tokenIn: usdc, tokenOut: STRK, amountIn: 10n ** 18n, minAmountOut: 1n } as const;
+    expect((await ops.prepare([intent])).swapReview).toMatchObject({ minimumAmountOut: 9_900n, expiresAt: 1_000 });
+    ops.setSwapQuote({ swapReview: { expectedAmountOut: 9_000n, slippageBps: 100, expiresAt: 5_000 } });
+    expect((await ops.prepare([intent])).swapReview).toMatchObject({ minimumAmountOut: 8_910n, expiresAt: 5_000 });
+    expect(() => ops.setSwapQuote({ swapReview: { expectedAmountOut: 0n, slippageBps: 100, expiresAt: 5_000 } }))
+      .toThrow(/swap review/i);
   });
 });
 

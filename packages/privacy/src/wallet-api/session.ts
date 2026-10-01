@@ -634,10 +634,12 @@ export function createProductionWalletSession(
         createOperations: (policy) => new WalletApiPrivacyOperations({
           wallet: connected,
           pool: backend,
-          submission: backend,
+          // D-084: avnu's keyless swap quotes, through the same backend.
+          swapQuotes: backend,
           supportedVersions: createSupportedVersionsReader(wallet),
           policy,
-          // D-077: the Vault's two public reads, through the same backend.
+          // D-077: the Vault's two public reads, through the same backend; the
+          // swap resolves its own stand-in address through the first (D-084).
           vault: backend,
           // D-083: the Borrow counter's reads, through the same backend.
           borrow: backend,
@@ -793,10 +795,15 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (swap !== undefined) {
     const expectedChainId = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId');
     const slippageBps = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps');
-    if (!isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000) {
+    // Optional (D-084): only exactly `true` opens the degen floor's tokens.
+    const degen = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>['degen']>(swap, 'degen');
+    if (
+      !isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000
+      || (degen !== undefined && typeof degen !== 'boolean')
+    ) {
       throw invalidPolicy();
     }
-    ownedSwap = Object.freeze({ expectedChainId, slippageBps });
+    ownedSwap = Object.freeze({ expectedChainId, slippageBps, ...(degen === true ? { degen: true } : {}) });
   }
   return Object.freeze({
     maxIntents,

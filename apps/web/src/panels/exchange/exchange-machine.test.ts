@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FakePrivacyOperations, PrivacyError, type PreparedBatch, type PrivacyOperations } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
-import { createExchangePanel } from './exchange-machine.js';
+import { QUOTE_SPACING_MS, createExchangePanel } from './exchange-machine.js';
 
 const [strk, eth, usdc] = EXCHANGE_CATALOG;
 const farFuture = 4_102_444_800_000;
@@ -12,7 +12,7 @@ function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: 
 function panel(review = true) {
   return createExchangePanel({
     operations: new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: review ? { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture } : undefined }),
-    receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+    receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0,
   });
 }
 async function ready(machine = panel()) {
@@ -65,7 +65,7 @@ describe('Exchange machine', () => {
         swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture },
       }),
       receipts: createReceiptLedger(),
-      canStartFinancialAction: () => true,
+      canStartFinancialAction: () => true, quoteSpacingMs: 0,
       register,
     });
 
@@ -123,7 +123,7 @@ describe('Exchange machine', () => {
       ],
       prepare: async () => { prepareEntered.resolve(); return prepared.promise; },
     };
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1');
 
     const preparing = machine.prepare();
@@ -154,7 +154,7 @@ describe('Exchange machine', () => {
     });
     operations.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
     const machine = await ready(createExchangePanel({
-      operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+      operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0,
     }));
     await machine.prepare();
     expect(machine.store.getState().flow).toEqual({
@@ -172,7 +172,7 @@ describe('Exchange machine', () => {
     let confirms = 0;
     const machine = await ready(createExchangePanel({
       operations: controlledOperations(Promise.resolve({ transactionHash: '0xstale' }), undefined, () => { confirms += 1; }),
-      receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+      receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0,
     }));
     await machine.prepare();
 
@@ -198,7 +198,7 @@ describe('Exchange machine', () => {
       { token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true },
       { token: usdc!.token, total: 100_000_000n, spendable: 100_000_000n, maturing: 0n, maturityKnown: true },
     ];
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
 
     machine.setSell(usdc!.token);
@@ -221,7 +221,7 @@ describe('Exchange machine', () => {
         50,
         () => { discards += 1; },
       ),
-      receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+      receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0,
     }));
     await machine.prepare();
 
@@ -237,7 +237,7 @@ describe('Exchange machine', () => {
     const machine = await ready(createExchangePanel({
       operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), undefined, undefined, undefined, 0),
       receipts: createReceiptLedger(),
-      canStartFinancialAction: () => true,
+      canStartFinancialAction: () => true, quoteSpacingMs: 0,
     }));
 
     await machine.prepare();
@@ -255,13 +255,15 @@ describe('Exchange machine', () => {
     expect(flow.summary.protectedMinimum).toBe('1.99 ETH');
     expect(flow.summary.expiresAt).toBe('2100-01-01T00:00:00.000Z');
     expect(flow.summary.poolFee).toBe('6 STRK');
-    expect(flow.summary.networkCost).toBe('0.002 STRK');
+    // D-084: the wallet submits the swap and prices its own network fee.
+    expect(flow.summary.networkCost).toBe('0 STRK');
+    expect(flow.summary.total).toBe('6 STRK');
     expect(flow.summary.disclosures).toEqual(['This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.']);
   });
 
   it('records the receipt under exchange and ignores a synchronous second confirmation', async () => {
     const ledger = createReceiptLedger(); const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture } });
-    const machine = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     await Promise.all([machine.confirm(), machine.confirm()]);
     expect(operations.submitted).toHaveLength(1);
@@ -275,7 +277,7 @@ describe('Exchange machine', () => {
   it('treats expiry as epoch milliseconds and discards an expired review', async () => {
     const machine = createExchangePanel({
       operations: new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 2_000 } }),
-      receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => 2_000,
+      receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0, now: () => 2_000,
     });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
@@ -284,7 +286,7 @@ describe('Exchange machine', () => {
   it('uses 6- and 8-decimal asset precision without truncating input', async () => {
     const wbtc = EXCHANGE_CATALOG[4]!;
     const operations = new FakePrivacyOperations({ balances: { [usdc!.token]: 2_000_000n, [wbtc.token]: 123_456_789n, [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture } });
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setSell(usdc!.token); machine.setAmount('1.000001'); await machine.prepare();
     expect(operations.submitted).toHaveLength(0); expect(machine.store.getState().flow.name).toBe('review');
     machine.cancelPrepared(); machine.setSell(wbtc.token); machine.setAmount('1.23456789'); await machine.prepare();
@@ -295,11 +297,11 @@ describe('Exchange machine', () => {
     const result = deferred<{ transactionHash: string }>();
     const ledger = createReceiptLedger();
     const entered = deferred<void>(); const operations = controlledOperations(result.promise, undefined, entered.resolve);
-    const machine = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     const confirming = machine.confirm(); await entered.promise; machine.close(); result.resolve({ transactionHash: '0xlate' }); await confirming;
     expect(ledger.pending('exchange')).toHaveLength(1);
-    const remount = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true }); await remount.open();
+    const remount = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true, quoteSpacingMs: 0 }); await remount.open();
     // Restored on reopen, not confirmed this session — the room was shut when it settled.
     expect(remount.store.getState().flow).toEqual({ name: 'submitted', transactionHash: '0xlate', restored: true });
   });
@@ -353,7 +355,7 @@ describe('Exchange machine', () => {
       depositStatus: async () => 'pending',
       ...UNUSED_VAULT,
     };
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
 
     const confirmingFirst = machine.confirm();
@@ -383,7 +385,7 @@ describe('Exchange machine', () => {
     const firstBatch = (await operations.prepare([])) as PreparedBatch;
     const secondBatch = { ...firstBatch, confirm: async () => { secondEntered.resolve(); return second.promise; }, discard: () => { secondDiscarded += 1; } } satisfies PreparedBatch;
     operations.prepare = async () => preparedCount++ === 0 ? firstBatch : secondBatch;
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     const confirmingFirst = machine.confirm();
     await firstEntered.promise;
@@ -412,7 +414,7 @@ describe('Exchange machine', () => {
     } satisfies PreparedBatch;
     let preparedCount = 0;
     operations.prepare = async () => preparedCount++ === 0 ? firstBatch : secondBatch;
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
 
     const confirmingFirst = machine.confirm();
@@ -429,7 +431,7 @@ describe('Exchange machine', () => {
   it('promotes a late hashless uncertainty after close and never permits a blind second confirm', async () => {
     const result = deferred<{ transactionHash: string }>(); const errors: string[] = [];
     const entered = deferred<void>(); let confirms = 0;
-    const machine = createExchangePanel({ operations: controlledOperations(result.promise, undefined, () => { confirms += 1; entered.resolve(); }), receipts: createReceiptLedger(), canStartFinancialAction: () => true, onError: (error) => errors.push(error.kind) });
+    const machine = createExchangePanel({ operations: controlledOperations(result.promise, undefined, () => { confirms += 1; entered.resolve(); }), receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0, onError: (error) => errors.push(error.kind) });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     const confirming = machine.confirm(); await entered.promise; machine.close(); result.reject(new PrivacyError('submission-uncertain', 'lost')); await confirming;
     expect(errors).toEqual(['submission-uncertain']);
@@ -451,7 +453,7 @@ describe('Exchange machine', () => {
     const machine = createExchangePanel({
       operations,
       receipts: createReceiptLedger(),
-      canStartFinancialAction: () => true,
+      canStartFinancialAction: () => true, quoteSpacingMs: 0,
     });
     await machine.open();
     await machine.refreshBalances();
@@ -472,7 +474,7 @@ describe('Exchange machine', () => {
   it('does not submit when the financial gate flips while reading the live fee', async () => {
     const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>(); let allowed = true;
     const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise);
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => allowed });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => allowed, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
     const confirming = machine.confirm(); allowed = false; pool.resolve({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }); await confirming;
     expect(machine.store.getState().flow.name).toBe('review');
@@ -481,7 +483,7 @@ describe('Exchange machine', () => {
 
   it('blocks a fee that moved above the reviewed ceiling before submission', async () => {
     const highFee = Promise.resolve({ feeAmount: 7n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
-    const machine = createExchangePanel({ operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), highFee), receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), highFee), receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare(); await machine.confirm();
     expect(machine.store.getState().flow).toMatchObject({ name: 'failed', message: 'The pool fee moved above the total you were shown, so nothing was signed. Prepare it again to see the new figure.' });
   });
@@ -489,23 +491,23 @@ describe('Exchange machine', () => {
   it('classifies a stale fee read when confirm rejects and a second pool read shows movement', async () => {
     const moved = Promise.resolve({ feeAmount: 7n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
     const old = Promise.resolve({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
-    const machine = createExchangePanel({ operations: controlledOperations(Promise.reject(new PrivacyError('unknown', 'ceiling')), old, undefined, moved), receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations: controlledOperations(Promise.reject(new PrivacyError('unknown', 'ceiling')), old, undefined, moved), receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare(); await machine.confirm();
     expect(machine.store.getState().flow).toMatchObject({ name: 'failed', message: 'The pool fee moved above the total you were shown, so nothing was signed. Prepare it again to see the new figure.' });
   });
 
   it('rejects a review that expires after preparation before wallet handoff', async () => {
     let current = farFuture - 1; let confirms = 0;
-    const machine = createExchangePanel({ operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), undefined, () => { confirms += 1; }), receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    const machine = createExchangePanel({ operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), undefined, () => { confirms += 1; }), receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0, now: () => current });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare(); current = farFuture; await machine.confirm();
     expect(confirms).toBe(0); expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
   });
 
-  it('rejects a review that expires while reading live pool validity before wallet handoff', async () => {
-    let current = farFuture - 1; let confirms = 0; let discards = 0;
+  it('leaves a quote that runs out during the live pool read to the batch, which asks again itself (D-084)', async () => {
+    let current = farFuture - 1; let confirms = 0;
     const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>();
-    const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise, () => { confirms += 1; }, undefined, 50, () => { discards += 1; });
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    const operations = controlledOperations(Promise.resolve({ transactionHash: '0xfine' }), pool.promise, () => { confirms += 1; });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0, now: () => current });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
 
     const confirming = machine.confirm();
@@ -513,16 +515,15 @@ describe('Exchange machine', () => {
     pool.resolve({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
     await confirming;
 
-    expect(confirms).toBe(0);
-    expect(discards).toBe(1);
-    expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
+    expect(confirms).toBe(1);
+    expect(machine.store.getState().flow).toMatchObject({ name: 'submitted', transactionHash: '0xfine' });
   });
 
   it('does not hand off a confirmation that closes before its live pool read settles', async () => {
     let confirms = 0;
     const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>();
     const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise, () => { confirms += 1; });
-    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0 });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
 
     const confirming = machine.confirm();
@@ -533,6 +534,113 @@ describe('Exchange machine', () => {
 
     expect(confirms).toBe(0);
     expect(machine.store.getState().flow.name).toBe('review');
+  });
+});
+
+describe('Exchange quotes on the shadow-account swap (D-084)', () => {
+  const funded = () => new FakePrivacyOperations({
+    balances: { [strk!.token]: 100n * 10n ** 18n },
+    swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 10_000 },
+  });
+
+  it('asks again for a quote that ran out, and goes ahead when the fresh floor holds', async () => {
+    let current = 1_000;
+    const operations = funded();
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    await ready(machine); await machine.prepare();
+    expect(machine.store.getState().flow).toMatchObject({ name: 'review', summary: { protectedMinimum: '1.99 ETH' } });
+
+    current = 10_000;
+    operations.setSwapQuote({ swapReview: { expectedAmountOut: 21n * 10n ** 17n, slippageBps: 50, expiresAt: 40_000 } });
+    await machine.confirm();
+
+    expect(machine.store.getState().flow).toMatchObject({ name: 'submitted' });
+    // The fresh quote's own floor went to the wallet: 2.1 ETH less 0.5%.
+    expect(operations.submitted).toEqual([[expect.objectContaining({ kind: 'swap', minAmountOut: 2_089500000000000000n })]]);
+  });
+
+  it('shows the fresh figures instead of confirming when the new quote would lower the floor', async () => {
+    let current = 1_000;
+    const operations = funded();
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    await ready(machine); await machine.prepare();
+
+    current = 10_000;
+    operations.setSwapQuote({ swapReview: { expectedAmountOut: 19n * 10n ** 17n, slippageBps: 50, expiresAt: 40_000 } });
+    await machine.confirm();
+
+    expect(operations.submitted).toEqual([]);
+    expect(machine.store.getState()).toMatchObject({
+      flow: { name: 'review', summary: { expectedBuy: '1.9 ETH', protectedMinimum: '1.8905 ETH' } },
+      notice: COPY.exchange.requoted,
+    });
+    // The player has now seen the new floor; confirming it goes ahead.
+    await machine.confirm();
+    expect(machine.store.getState().flow).toMatchObject({ name: 'submitted' });
+    expect(operations.submitted).toEqual([[expect.objectContaining({ minAmountOut: 1_890500000000000000n })]]);
+  });
+
+  it('keeps the reviewed fee as the ceiling through a re-quote, so a fee rise is never confirmed unseen', async () => {
+    let current = 1_000;
+    const operations = funded();
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    await ready(machine); await machine.prepare();
+
+    current = 10_000;
+    operations.setPoolFee(7n * 10n ** 18n);
+    operations.setSwapQuote({ swapReview: { expectedAmountOut: 21n * 10n ** 17n, slippageBps: 50, expiresAt: 40_000 } });
+    await machine.confirm();
+
+    expect(operations.submitted).toEqual([]);
+    expect(machine.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.notices.feeMoved, recovery: 'prepare-again' });
+  });
+
+  it('spaces quote requests: a press inside the window waits, and a newer press replaces it', async () => {
+    let current = 1_000;
+    const operations = funded();
+    const prepare = vi.spyOn(operations, 'prepare');
+    const waits: Array<{ ms: number; release: () => void }> = [];
+    const machine = createExchangePanel({
+      operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current,
+      quoteSpacingMs: QUOTE_SPACING_MS,
+      sleep: (ms) => new Promise<void>((resolve) => { waits.push({ ms, release: resolve }); }),
+    });
+    await ready(machine);
+    await machine.prepare();
+    expect(prepare).toHaveBeenCalledTimes(1);
+
+    current = 1_500;
+    const second = machine.prepare();
+    const third = machine.prepare();
+    await Promise.resolve();
+    expect(waits.map(({ ms }) => ms)).toEqual([1_000, 1_000]);
+    expect(prepare).toHaveBeenCalledTimes(1);
+
+    current = 2_500;
+    waits.forEach(({ release }) => release());
+    await Promise.all([second, third]);
+    // The replaced press asked nothing; the newest asked once.
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(machine.store.getState().flow).toMatchObject({ name: 'review' });
+
+    // Outside the window, no wait at all.
+    current = 10_000;
+    await machine.prepare();
+    expect(waits).toHaveLength(2);
+    expect(prepare).toHaveBeenCalledTimes(3);
+  });
+
+  it('tells a wallet without shadow accounts that the Exchange needs one', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture },
+      capability: { supportsShadowAccounts: false },
+    });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await ready(machine); await machine.prepare();
+    expect(machine.store.getState().flow).toMatchObject({
+      name: 'failed', kind: 'shadow-accounts-unsupported', message: COPY.errors['shadow-accounts-unsupported'],
+    });
   });
 });
 

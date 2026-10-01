@@ -1,4 +1,10 @@
 export type PrivateRoute = 'transfer' | 'unshield' | 'swap' | 'stake';
+/**
+ * The routes the relay still serves (D-082 kept it; the browser calls none
+ * of them). A swap is never relayed (D-084): the wallet submits it through
+ * the player's swap stand-in, and this service only proxies its quote.
+ */
+export type RelayRoute = Exclude<PrivateRoute, 'swap'>;
 
 export interface PreparedArtifact {
   call: {
@@ -400,47 +406,37 @@ export interface PoolStatsRpcPort {
 
 export interface FeeAuthorizationClaims extends RelayFee {
   v: 1;
-  route: PrivateRoute;
+  route: RelayRoute;
   feeToken: string;
   operationToken: string;
   issuedAtBlock: number;
   expiresAtBlock: number;
-  swap?: SwapAuthorizationBinding;
 }
 
-export interface SwapAuthorizationBinding {
-  executor: string;
+/**
+ * avnu's public swap quote and built call for a swap stand-in (D-084), as
+ * this service relays it to the browser, which checks every field again.
+ */
+export interface SwapQuote {
+  quoteId: string;
+  chainId: string;
   sellToken: string;
   buyToken: string;
   sellAmount: bigint;
-  quoteExpiresAt: number;
-  /** Invoke calldata excluding the wallet-resolved open-note id at the end. */
-  invokePrefix: string[];
-}
-
-export interface SwapPlan {
-  quoteId: string;
   buyAmount: bigint;
-  expiresAt: number;
-  chainId: string;
-  executorAddress: string;
-  executorCalls: Array<{
-    contractAddress: string;
-    entrypoint: string;
-    selector: string;
-    calldata: string[];
-  }>;
+  calls: ReadonlyArray<{ contractAddress: string; entrypoint: string; calldata: readonly string[] }>;
 }
 
-export interface SwapPlannerPort {
-  prepare(input: {
+/** avnu's keyless quote and build (D-084). No key, no integrator fee. */
+export interface SwapQuotePort {
+  quote(input: {
     sellToken: string;
     buyToken: string;
     sellAmount: bigint;
-    minAmountOut: bigint;
+    taker: string;
     slippageBps: number;
     signal?: AbortSignal;
-  }): Promise<SwapPlan>;
+  }): Promise<SwapQuote>;
 }
 
 export interface AuthorizationCodec {

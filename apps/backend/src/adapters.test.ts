@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
-import { AvnuSwapPlanner } from './avnu-swap-planner.js';
+import { AVNU_EXCHANGE, AvnuSwapQuotes } from './avnu-swap-quotes.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type { PreparedArtifact } from './types.js';
 
@@ -45,220 +45,111 @@ describe('AVNU paymaster adapter', () => {
   });
 });
 
-describe('AVNU private swap planner', () => {
-  it('selects an exact-input mainnet quote and asks AVNU for private executor calls', async () => {
-    const getQuotes = vi.fn(async () => [{
-      quoteId: 'quote-1',
-      sellTokenAddress: '0xabc',
-      buyTokenAddress: '0x4718',
-      sellAmount: 20n,
-      buyAmount: 95n,
-      expiry: 2,
-      chainId: '0x534e5f4d41494e',
-    }]);
-    const quoteToCalls = vi.fn(async () => ({
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      calls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-    }));
-    const toPaymasterCall = vi.fn(() => ({ to: '0x111', selector: '0x555', calldata: ['0xaaa'] }));
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 1_000,
-      functions: {
-        getQuotes: getQuotes as never,
-        quoteToCalls: quoteToCalls as never,
-        toPaymasterCall: toPaymasterCall as never,
-      },
+describe('avnu keyless swap quotes (D-084)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const TAKER = '0x771b47d5784bbcaa14e989adee560efae541c09b3f12db34e16562e392cf032';
+  const CHAIN = '0x534e5f4d41494e';
+  const input = { sellToken: STRK, buyToken: USDC, sellAmount: 10n ** 19n, taker: TAKER, slippageBps: 100 };
+  // The shapes avnu's public API answered on 2026-10-01, abridged.
+  const quoteBody = [{
+    quoteId: 'd390cd45-ab25-4cab-88c7-852ba847005a',
+    sellTokenAddress: '0x4718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+    sellAmount: '0x8ac7230489e80000',
+    buyTokenAddress: '0x33068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+    buyAmount: '0x691fc',
+    chainId: CHAIN,
+    expiry: null,
+  }];
+  const swapCall = {
+    contractAddress: '0x4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f',
+    entrypoint: 'multi_route_swap',
+    calldata: [
+      '0x4718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d', '0x8ac7230489e80000', '0x0',
+      '0x33068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb', '0x691fc', '0x0', '0x6812a', '0x0',
+      TAKER, '0x0', '0x0',
+      '0x1', '0x4718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+      '0x33068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+      '0x20d2431ba27021073cae53dab6d818b9e15f79e13639fd4f040f5b41a617fb6', '0xe8d4a51000', '0x1', '0x1',
+    ],
+  };
+  const buildBody = { chainId: CHAIN, calls: [swapCall], executorAddress: null };
+  const text = (body: unknown, status = 200) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) }) as Response;
+
+  function fetcher(quote: unknown = quoteBody, build: unknown = buildBody) {
+    return vi.fn(async (url: string, _init?: RequestInit) => (url.includes('/swap/v3/quotes') ? text(quote) : text(build)));
+  }
+
+  it('asks the public quote and build endpoints with no key, the stand-in as taker, and no approve', async () => {
+    const fetch = fetcher();
+    const quotes = new AvnuSwapQuotes({ chainId: CHAIN, fetch });
+
+    await expect(quotes.quote(input)).resolves.toEqual({
+      quoteId: 'd390cd45-ab25-4cab-88c7-852ba847005a',
+      chainId: CHAIN,
+      sellToken: STRK,
+      buyToken: USDC,
+      sellAmount: 10n ** 19n,
+      buyAmount: 430_588n,
+      calls: [{ contractAddress: AVNU_EXCHANGE, entrypoint: 'multi_route_swap', calldata: swapCall.calldata }],
     });
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-    })).resolves.toMatchObject({
-      quoteId: 'quote-1',
-      buyAmount: 95n,
-      expiresAt: 2_000,
-      executorAddress: '0x999',
-      executorCalls: [{ selector: '0x555', calldata: ['0xaaa'] }],
+    const [quoteUrl, quoteInit] = fetch.mock.calls[0]!;
+    const url = new URL(quoteUrl);
+    expect(`${url.origin}${url.pathname}`).toBe('https://starknet.api.avnu.fi/swap/v3/quotes');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      sellTokenAddress: STRK, buyTokenAddress: USDC, sellAmount: '0x8ac7230489e80000', takerAddress: TAKER, size: '1',
     });
-    expect(quoteToCalls).toHaveBeenCalledWith(
-      { quoteId: 'quote-1', slippage: 0.01, private: true },
-      undefined,
-    );
+    expect(quoteInit?.method).toBe('GET');
+    const [buildUrl, buildInit] = fetch.mock.calls[1]!;
+    expect(buildUrl).toBe('https://starknet.api.avnu.fi/swap/v3/build');
+    expect(JSON.parse(String(buildInit?.body))).toEqual({
+      quoteId: 'd390cd45-ab25-4cab-88c7-852ba847005a', takerAddress: TAKER, slippage: 0.01, includeApprove: false,
+    });
+    // No key header, and nothing but the content type.
+    expect(buildInit?.headers).toEqual({ 'content-type': 'application/json' });
+    expect(quoteInit?.headers).toBeUndefined();
   });
 
-  it('does not construct executor calls after quote retrieval is cancelled', async () => {
+  it('uses AVNU_BASE_URL when set', async () => {
+    const fetch = fetcher();
+    await new AvnuSwapQuotes({ chainId: CHAIN, fetch, baseUrl: 'https://avnu.example/' }).quote(input);
+    expect(fetch.mock.calls[0]![0]).toMatch(/^https:\/\/avnu\.example\/swap\/v3\/quotes\?/);
+  });
+
+  it.each([
+    ['no quote', [], buildBody],
+    ['a quote for another chain', [{ ...quoteBody[0], chainId: '0x534e5f5345504f4c4941' }], buildBody],
+    ['a quote for another sell amount', [{ ...quoteBody[0], sellAmount: '0x1' }], buildBody],
+    ['a quote buying another token', [{ ...quoteBody[0], buyTokenAddress: STRK }], buildBody],
+    ['a zero buy amount', [{ ...quoteBody[0], buyAmount: '0x0' }], buildBody],
+    ['an odd quote id', [{ ...quoteBody[0], quoteId: 'a b' }], buildBody],
+    ['an approve in the build', quoteBody, { ...buildBody, calls: [{ ...swapCall, entrypoint: 'approve' }, swapCall] }],
+    ['a build on another contract', quoteBody, { ...buildBody, calls: [{ ...swapCall, contractAddress: '0x123' }] }],
+    ['a build for another beneficiary', quoteBody, {
+      ...buildBody, calls: [{ ...swapCall, calldata: swapCall.calldata.map((felt, index) => (index === 8 ? '0xabc' : felt)) }],
+    }],
+    ['a non-felt in the calldata', quoteBody, { ...buildBody, calls: [{ ...swapCall, calldata: [...swapCall.calldata, 'x'] }] }],
+  ])('refuses %s', async (_label, quote, build) => {
+    const quotes = new AvnuSwapQuotes({ chainId: CHAIN, fetch: fetcher(quote, build) });
+    await expect(quotes.quote(input)).rejects.toThrow();
+  });
+
+  it('refuses an error status from avnu, and never builds after a failed quote', async () => {
+    const fetch = vi.fn(async () => text({ messages: ['Invalid quote id'] }, 400));
+    await expect(new AvnuSwapQuotes({ chainId: CHAIN, fetch }).quote(input)).rejects.toThrow(/400/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops on its own timeout and on the caller\'s cancellation', async () => {
+    const hang = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
+    await expect(new AvnuSwapQuotes({ chainId: CHAIN, fetch: hang, timeoutMs: 5 }).quote(input))
+      .rejects.toMatchObject({ name: 'TimeoutError' });
     const controller = new AbortController();
-    const reason = new Error('quote request cancelled');
-    const quoteToCalls = vi.fn(async () => ({
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      calls: [],
-    }));
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 1_000,
-      functions: {
-        getQuotes: vi.fn(async () => {
-          controller.abort(reason);
-          return [{
-            quoteId: 'quote-cancelled',
-            sellTokenAddress: '0xabc',
-            buyTokenAddress: '0x4718',
-            sellAmount: 20n,
-            buyAmount: 95n,
-            expiry: 2,
-            chainId: '0x534e5f4d41494e',
-          }];
-        }) as never,
-        quoteToCalls: quoteToCalls as never,
-        toPaymasterCall: vi.fn() as never,
-      },
-    });
-
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-      signal: controller.signal,
-    })).rejects.toBe(reason);
-    expect(quoteToCalls).not.toHaveBeenCalled();
-  });
-
-  it('does not publish an executor plan after call construction is cancelled', async () => {
-    const controller = new AbortController();
-    const reason = new Error('executor construction cancelled');
-    const toPaymasterCall = vi.fn(() => ({ to: '0x111', selector: '0x555', calldata: ['0xaaa'] }));
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 1_000,
-      functions: {
-        getQuotes: vi.fn(async () => [{
-          quoteId: 'quote-cancelled-after-calls',
-          sellTokenAddress: '0xabc',
-          buyTokenAddress: '0x4718',
-          sellAmount: 20n,
-          buyAmount: 95n,
-          expiry: 2,
-          chainId: '0x534e5f4d41494e',
-        }]) as never,
-        quoteToCalls: vi.fn(async () => {
-          controller.abort(reason);
-          return {
-            chainId: '0x534e5f4d41494e',
-            executorAddress: '0x999',
-            calls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-          };
-        }) as never,
-        toPaymasterCall: toPaymasterCall as never,
-      },
-    });
-
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-      signal: controller.signal,
-    })).rejects.toBe(reason);
-    expect(toPaymasterCall).not.toHaveBeenCalled();
-  });
-
-  it('rejects a quote below the requested minimum before call construction', async () => {
-    const quoteToCalls = vi.fn();
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 2_000,
-      functions: {
-        getQuotes: vi.fn(async () => [{
-          quoteId: 'quote-1',
-          sellTokenAddress: '0xabc',
-          buyTokenAddress: '0x4718',
-          sellAmount: 20n,
-          buyAmount: 89n,
-          expiry: 1,
-          chainId: '0x534e5f5345504f4c4941',
-        }]) as never,
-        quoteToCalls: quoteToCalls as never,
-        toPaymasterCall: vi.fn() as never,
-      },
-    });
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-    })).rejects.toThrow(/no quote/i);
-    expect(quoteToCalls).not.toHaveBeenCalled();
-  });
-
-  it('rejects a quote whose protected minimum is below the requested minimum', async () => {
-    const quoteToCalls = vi.fn();
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 1_000,
-      functions: {
-        getQuotes: vi.fn(async () => [{
-          quoteId: 'quote-protected-floor',
-          sellTokenAddress: '0xabc',
-          buyTokenAddress: '0x4718',
-          sellAmount: 20n,
-          buyAmount: 100n,
-          expiry: 2,
-          chainId: '0x534e5f4d41494e',
-        }]) as never,
-        quoteToCalls: quoteToCalls as never,
-        toPaymasterCall: vi.fn() as never,
-      },
-    });
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 100n,
-      slippageBps: 100,
-    })).rejects.toThrow(/no quote/i);
-    expect(quoteToCalls).not.toHaveBeenCalled();
-  });
-
-  it('uses AVNU bigint rounding for the protected minimum and accepts its exact boundary', async () => {
-    const quoteToCalls = vi.fn(async () => ({
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      calls: [],
-    }));
-    const planner = new AvnuSwapPlanner({
-      chainId: '0x534e5f4d41494e',
-      now: () => 1_000,
-      functions: {
-        getQuotes: vi.fn(async () => [{
-          quoteId: 'quote-rounding',
-          sellTokenAddress: '0xabc',
-          buyTokenAddress: '0x4718',
-          sellAmount: 20n,
-          buyAmount: 101n,
-          expiry: 2,
-          chainId: '0x534e5f4d41494e',
-        }]) as never,
-        quoteToCalls: quoteToCalls as never,
-        toPaymasterCall: vi.fn() as never,
-      },
-    });
-    await expect(planner.prepare({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 100n,
-      slippageBps: 100,
-    })).resolves.toMatchObject({ buyAmount: 101n });
-    expect(quoteToCalls).toHaveBeenCalledTimes(1);
+    const pending = new AvnuSwapQuotes({ chainId: CHAIN, fetch: hang }).quote({ ...input, signal: controller.signal });
+    controller.abort(new DOMException('gone', 'AbortError'));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

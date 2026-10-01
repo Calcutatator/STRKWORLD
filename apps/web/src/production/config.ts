@@ -42,6 +42,10 @@ export const BORROW_TOKENS: readonly string[] = Object.freeze([
 ]);
 /** Starknet contract addresses lie below 2^251, inside the field. */
 const CONTRACT_ADDRESS_BOUND = 1n << 251n;
+/** D-084: the most tokens the ground-floor swap allowlist may name. */
+export const MAX_SWAP_TOKENS = 16;
+/** D-084: the widest slippage a build may set, matching the backend's own ceiling. */
+export const MAX_SWAP_SLIPPAGE_BPS = 1_000;
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 
@@ -131,7 +135,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   const vault = parseVaultRoute(environment);
   const borrow = environment.VITE_STRK20_BORROW_ENABLED === 'true';
   const unstake = parseUnstakeRoute(environment);
-  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault' | 'borrow' | 'unstake'> = [];
+  const swap = parseSwapRoute(environment);
+  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault' | 'borrow' | 'unstake'> = [];
   const shieldTokens: string[] = [];
   const unshieldTokens: string[] = [];
   const transferTokens: string[] = [];
@@ -187,6 +192,11 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
     // (xSTRK in and STRK out are pinned), so it narrows nothing else.
     enabledRoutes.push('unstake');
   }
+  if (swap) {
+    // D-084: the wallet submits the swap through its own shadow account, one
+    // at a time, like the Vault: no intent bound and no relay-fee authority.
+    enabledRoutes.push('swap');
+  }
   if (enabledRoutes.length === 0) return denyAllPolicy();
 
   return Object.freeze({
@@ -198,7 +208,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
       shield: Object.freeze(shieldTokens),
       unshield: Object.freeze(unshieldTokens),
       transfer: Object.freeze(transferTokens),
-      swap: Object.freeze([]),
+      // D-084: empty, and the route off, unless this build switches swap on.
+      swap: Object.freeze(swap ? swap.allowedTokens : []),
       // Present only when staking is enabled: the adapter reads an absent list
       // as "nothing admitted" and requires a present one to name both tokens.
       ...(stake ? { stake: Object.freeze(stake.allowedTokens) } : {}),
@@ -208,7 +219,63 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
       // D-083: present only when borrowing is enabled, and always the pinned five.
       ...(borrow ? { borrow: Object.freeze([...BORROW_TOKENS]) } : {}),
     }),
+    ...(swap
+      ? {
+          swap: Object.freeze({
+            expectedChainId: MAINNET_CHAIN_ID,
+            slippageBps: swap.slippageBps,
+            ...(swap.degen ? { degen: true } : {}),
+          }),
+        }
+      : {}),
   });
+}
+
+/**
+ * D-084: the private swap at the Exchange (and, with the degen switch, its
+ * degen floor), through the player's STRK20 shadow account for
+ * `strkworld-swap`. The wallet proves and submits it: no relay, so no
+ * relay-fee ceiling. It needs `VITE_STRK20_SWAP_ENABLED=true`, a
+ * `VITE_STRK20_SWAP_ALLOWED_TOKENS` list of one to `MAX_SWAP_TOKENS` canonical
+ * token addresses naming STRK, and a whole `VITE_STRK20_SWAP_SLIPPAGE_BPS`
+ * from 1 to `MAX_SWAP_SLIPPAGE_BPS`. `VITE_STRK20_SWAP_DEGEN_ENABLED=true`
+ * additionally admits the degen floor's tokens, which the backend's quote
+ * route vets (D-067); anything else there leaves it off. Any missing,
+ * malformed, partial or disabled value keeps the swap locked, whole, without
+ * touching any other route; enabling it enables nothing else. The backend's
+ * BACKEND_ROUTE_SWAP_* block gates its quotes separately.
+ */
+function parseSwapRoute(environment: WalletEnvironment): { allowedTokens: string[]; slippageBps: number; degen: boolean } | null {
+  if (environment.VITE_STRK20_SWAP_ENABLED !== 'true') return null;
+  const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_SWAP_ALLOWED_TOKENS);
+  const slippageBps = parsePositiveSafeInteger(environment.VITE_STRK20_SWAP_SLIPPAGE_BPS);
+  if (
+    allowedTokens === null
+    || allowedTokens.length > MAX_SWAP_TOKENS
+    || !admitsStrkToken(allowedTokens)
+    || !allowedTokens.every(isContractAddressText)
+    || slippageBps === null
+    || slippageBps > MAX_SWAP_SLIPPAGE_BPS
+  ) {
+    return null;
+  }
+  return { allowedTokens, slippageBps, degen: environment.VITE_STRK20_SWAP_DEGEN_ENABLED === 'true' };
+}
+
+function admitsStrkToken(tokens: readonly string[]): boolean {
+  try {
+    return tokens.some((token) => BigInt(token) === BigInt(STRK_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
+function isContractAddressText(token: string): boolean {
+  try {
+    return BigInt(token) < CONTRACT_ADDRESS_BOUND;
+  } catch {
+    return false;
+  }
 }
 
 interface ParsedTransferRoute {

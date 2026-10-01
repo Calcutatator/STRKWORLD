@@ -1,5 +1,5 @@
 import type { AvnuPaymasterOptions } from './avnu-paymaster.js';
-import type { AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
+import type { AvnuSwapQuotesOptions } from './avnu-swap-quotes.js';
 import {
   DEGEN_MAX_CACHE_TTL_MS,
   DEGEN_MAX_MIN_DAILY_VOLUME_USD,
@@ -24,7 +24,8 @@ export interface ParsedBackendEnvironment {
   backend: BackendConfig;
   paymaster: AvnuPaymasterOptions;
   rpc: StarknetRpcOptions;
-  swapPlanner: AvnuSwapPlannerOptions;
+  /** D-084: avnu's keyless public swap API, for the quote proxy. */
+  swapQuotes: AvnuSwapQuotesOptions;
   authorizationSecret: string;
   /** D-080: the Privacy Plaza's external pool-value aggregate. */
   poolValue: { url: string };
@@ -90,7 +91,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       ...(paymasterBaseUrl ? { paymasterBaseUrl } : {}),
     },
     rpc: { rpcUrl, poolAddress, feeToken, noteMaturityBlocks },
-    swapPlanner: {
+    swapQuotes: {
       chainId: parseMainnetChainId(environment),
       ...(avnuBaseUrl ? { baseUrl: avnuBaseUrl } : {}),
     },
@@ -141,11 +142,17 @@ function parsePoolRoute(environment: Environment, name: 'TRANSFER' | 'UNSHIELD')
   };
 }
 
+/**
+ * The swap route (D-084): it is never relayed, so it has no relay fee and no
+ * queue; it admits the tokens the quote proxy may quote, and caps the
+ * slippage a quote may ask for. `BACKEND_ROUTE_SWAP_MAX_RELAY_FEE` and
+ * `BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS` are no longer read.
+ */
 function parseSwapRoute(environment: Environment): RoutePolicy {
   return {
     enabled: parseBoolean(environment, 'BACKEND_ROUTE_SWAP_ENABLED'),
-    maxRelayFee: parseUnsignedBigint(environment, 'BACKEND_ROUTE_SWAP_MAX_RELAY_FEE', MAX_U128),
-    maxQueueDelayMs: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS', 0, 0),
+    maxRelayFee: 0n,
+    maxQueueDelayMs: 0,
     quoteBound: true,
     allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_SWAP_ALLOWED_TOKENS'),
     maxSlippageBps: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS', 1, 1_000),

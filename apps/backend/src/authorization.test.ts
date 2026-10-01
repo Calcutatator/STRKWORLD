@@ -35,9 +35,11 @@ describe('authorization wire codecs', () => {
     await expect(codec.verify(token)).resolves.toBeNull();
   });
 
-  it('rejects a signed authorization with an incomplete swap binding', async () => {
+  it('rejects a signed authorization for a swap, or carrying a swap binding: a swap is never relayed (D-084)', async () => {
     const codec = new HmacAuthorizationCodec(SECRET);
-    const token = await codec.issue({ ...CLAIMS, route: 'swap', swap: { sellAmount: '7' } as never });
-    await expect(codec.verify(token)).resolves.toBeNull();
+    const swap = await codec.issue({ ...CLAIMS, route: 'swap' as never });
+    await expect(codec.verify(swap)).resolves.toBeNull();
+    const bound = await codec.issue({ ...CLAIMS, swap: { sellAmount: '7' } } as never);
+    await expect(codec.verify(bound)).resolves.toBeNull();
   });
 });

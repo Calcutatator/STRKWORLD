@@ -115,6 +115,16 @@ export {
   type BorrowTokenInfo,
 } from './borrow.js';
 
+// The private swap on a shadow account (D-084): the pinned exchange, entry
+// point and dapp name, and the quote lifetime.
+export {
+  AVNU_EXCHANGE,
+  AVNU_SWAP_ENTRYPOINT,
+  SWAP_DAPP_NAME,
+  SWAP_QUOTE_TTL_MS,
+  SWAP_SHADOW_NONCE,
+} from './swap.js';
+
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {
   DEMO_BORROW_PRICES,
@@ -151,11 +161,12 @@ export {
   type PublicShieldPlanInput,
   type PublicShieldPlanner,
   type PrivateSubmissionGateway,
-  type PreparedPrivateSwap,
   type RelayFeeQuote,
   type SupportedVersionsReader,
   type EndurReadClient,
   type EndurUnstakeRead,
+  type SwapQuoteAnswer,
+  type SwapQuoteClient,
   type VaultPositionRow,
   type VaultRateRow,
   type VaultReadClient,

@@ -86,8 +86,8 @@ describe('the degen counter in demo', () => {
       slippage: '0.50%',
       expiresAt: '2100-01-01T00:00:00.000Z',
       poolFee: '6 STRK',
-      networkCost: '0.002 STRK',
-      total: '6.002 STRK',
+      networkCost: '0 STRK',
+      total: '6 STRK',
       disclosures: [SWAP_DISCLOSURE],
     });
 
@@ -178,7 +178,7 @@ describe('the degen counter in demo', () => {
     await panel.prepare();
     const markup = render(panel, operations);
     const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
-    for (const value of ['10 STRK', '100 LORDS', '99.5 LORDS', '0.50%', '2100-01-01T00:00:00.000Z', '6.002 STRK', SWAP_DISCLOSURE]) {
+    for (const value of ['10 STRK', '100 LORDS', '99.5 LORDS', '0.50%', '2100-01-01T00:00:00.000Z', '6 STRK', SWAP_DISCLOSURE]) {
       expect(gate).toContain(value);
     }
     for (const definition of [COPY.glossary.protectedMinimum, COPY.glossary.quoteExpiry]) expect(gate).toContain(definition);

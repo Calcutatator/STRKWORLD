@@ -9,7 +9,7 @@ import { BackendApi } from './api.js';
 import { HmacAuthorizationCodec } from './authorization.js';
 import { AvnuDegenCatalog } from './avnu-degen-catalog.js';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
-import { AvnuSwapPlanner } from './avnu-swap-planner.js';
+import { AvnuSwapQuotes } from './avnu-swap-quotes.js';
 import type { DebugLogSink } from './debug-logs.js';
 import {
   parseBackendEnvironment,
@@ -26,7 +26,7 @@ import type {
   PaymasterPort,
   PoolRpcPort,
   PoolStatsPort,
-  SwapPlannerPort,
+  SwapQuotePort,
   VaultRatesPort,
   VaultRpcPort,
   EndurRpcPort,
@@ -36,7 +36,8 @@ import { VesuVaultRates } from './vesu-rates.js';
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
   rpc?: PoolRpcPort;
-  swapPlanner?: SwapPlannerPort;
+  /** avnu's keyless swap quotes (D-084); by default its public API. */
+  swapQuotes?: SwapQuotePort;
   degenCatalog?: DegenCatalogPort;
   /** The Privacy Plaza's pool stats (D-076); by default a cache over the RPC port. */
   poolStats?: PoolStatsPort;
@@ -196,7 +197,7 @@ function createBackendApi(
   // D-067: composed only while the BACKEND_DEGEN_* group is present. It makes
   // no request until a player opens the degen counter or quotes a degen swap.
   const degen = parsed.backend.degen;
-  const avnuBaseUrl = parsed.swapPlanner.baseUrl;
+  const avnuBaseUrl = parsed.swapQuotes.baseUrl;
   const rpc = overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc);
   // D-076: the plaza's stats read the same private RPC, in the background,
   // and only when the port offers their narrow reads. D-080: its USD value
@@ -223,7 +224,8 @@ function createBackendApi(
     ...(endur ? { endur } : {}),
     vaultRates,
     ...(borrow ? { borrow } : {}),
-    swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
+    // D-084: avnu's keyless public quote API, read by this service alone.
+    swapQuotes: overrides.swapQuotes ?? new AvnuSwapQuotes(parsed.swapQuotes),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
         config: degen,

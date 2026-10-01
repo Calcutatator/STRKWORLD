@@ -172,7 +172,7 @@ function demoMaxLtv(collateral: string, debt: string): bigint {
  *   - notes are unspendable until they mature
  *   - operation value and the complete private fee are charged in their own tokens
  *   - the fee can change between prepare and confirm
- *   - only the relayed swap carries a relay estimate; the wallet prices the rest (D-082)
+ *   - nothing is relayed: the wallet prices every network fee, a swap's too (D-082, D-084)
  *   - a shield cannot be batched with the transfer it funds
  *   - deposits are always to self
  */
@@ -270,30 +270,6 @@ const DEFAULT_POOL: PoolConfig = {
   noteMaturityBlocks: 10,
 };
 
-/** Relay cost unit the fake attributes to the relayed swap. */
-const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15
-
-/**
- * Deterministic relay estimate for a prepared batch.
- *
- * This is a FIXTURE, not a fee oracle. Since D-082 the wallet proves and
- * submits every route but the quote-bound swap itself, adding and pricing its
- * own network fee, so the production adapter reports a zero `gasEstimate` for
- * shield, unshield, transfer and stake, and so does this. Only a swap is still
- * relayed, and its relay fee comes with its quote; the fake counts it as two
- * units, since it drives an executor and mints an output note.
- *
- * It intentionally ignores the numeric amount — a larger felt is not more
- * calldata — so the estimate stays a predictable function of the batch shape.
- */
-function estimateRelayFee(intents: readonly Intent[]): bigint {
-  let units = 0n;
-  for (const intent of intents) {
-    if (intent.kind === 'swap') units += 2n;
-  }
-  return units * RELAY_FEE_PER_ACTION;
-}
-
 /** A fault the next matching call will raise. Consumed on use unless `sticky`. */
 export interface Fault {
   kind: PrivacyErrorKind;
@@ -347,8 +323,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
   /** Every confirmed batch's hash and what its receipt says of a deposit (D-072). */
   private readonly receipts = new Map<string, DepositStatus>();
   private readonly newDepositStatus: DepositStatus;
-  private readonly configuredSwapReview?: Omit<SwapReview, 'minimumAmountOut'>;
-  private readonly demoRates?: {
+  private configuredSwapReview?: Omit<SwapReview, 'minimumAmountOut'>;
+  private demoRates?: {
     readonly perStrk: ReadonlyMap<bigint, bigint>;
     readonly slippageBps: number;
     readonly expiresAt: number;
@@ -453,17 +429,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
     this.latency = latency;
     this.newDepositStatus = ownDepositStatus(config.deposits ?? 'landed');
-    if (config.swapReview !== undefined) {
-      if (!Number.isSafeInteger(config.swapReview.expiresAt) || config.swapReview.expiresAt <= 0) {
-        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
-      }
-      try {
-        protectedMinimumOut(config.swapReview.expectedAmountOut, config.swapReview.slippageBps);
-      } catch {
-        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
-      }
-      this.configuredSwapReview = Object.freeze({ ...config.swapReview });
-    }
+    if (config.swapReview !== undefined) this.configuredSwapReview = ownSwapReview(config.swapReview);
     if (config.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(config.demoSwapRates);
     if (config.vault !== undefined) this.ownVaultConfig(config.vault);
     if (config.borrow !== undefined) this.ownBorrowConfig(config.borrow);
@@ -618,6 +584,16 @@ export class FakePrivacyOperations implements PrivacyOperations {
     this.receipts.set(transactionHash, ownDepositStatus(status));
   }
 
+  /**
+   * Quote the next swaps differently (D-084): what avnu would answer once a
+   * quote has expired and the swap asks again. Deterministic, like every
+   * input here; a field left out keeps its current value.
+   */
+  setSwapQuote(quote: { swapReview?: Omit<SwapReview, 'minimumAmountOut'>; demoSwapRates?: FakeDemoSwapRates }): void {
+    if (quote.swapReview !== undefined) this.configuredSwapReview = ownSwapReview(quote.swapReview);
+    if (quote.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(quote.demoSwapRates);
+  }
+
   // -- PrivacyOperations ----------------------------------------------------
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
@@ -718,6 +694,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (kinds.has('swap') && reviewed.length > 1) {
       throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
     }
+    // D-084: a swap runs through the player's shadow account, so a wallet
+    // without shadow accounts cannot swap, as in the adapter.
+    if (kinds.has('swap') && this.cap.supportsShadowAccounts !== true) {
+      throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
+    }
     if (kinds.has('stake') && reviewed.length > 1) {
       throw new PrivacyError('unknown', 'A private stake must be prepared one at a time.');
     }
@@ -747,9 +728,6 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
     }
 
-    // Deterministic, and a function of the batch shape — not a constant.
-    const relayFee = estimateRelayFee(reviewed);
-
     // Charge spends in their own token and both private fees in the fee token.
     const spendByToken = new Map<string, bigint>();
     for (const intent of reviewed) {
@@ -763,7 +741,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       const feeToken = normalise(this.pool.feeToken);
       spendByToken.set(
         feeToken,
-        (spendByToken.get(feeToken) ?? 0n) + feeAtPrepare + relayFee,
+        (spendByToken.get(feeToken) ?? 0n) + feeAtPrepare,
       );
     }
     for (const [token, required] of spendByToken) {
@@ -775,8 +753,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
           `Needs ${required}, has ${have}. Remember the pool fee is paid in ${this.pool.feeToken}.`,
         );
       }
-      if (sameAddress(token, this.pool.feeToken) && remaining < feeAtPrepare + relayFee) {
-        warnings.push({ kind: 'leaves-below-fee', remaining, feeEstimate: feeAtPrepare + relayFee });
+      if (sameAddress(token, this.pool.feeToken) && remaining < feeAtPrepare) {
+        warnings.push({ kind: 'leaves-below-fee', remaining, feeEstimate: feeAtPrepare });
       }
     }
 
@@ -794,7 +772,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
       });
     }
 
-    const gasEstimate = relayFee;
+    // The wallet prices its own network fee for every route (D-082, D-084).
+    const gasEstimate = 0n;
     const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(reviewed);
     const publishedWarnings = freezeWarnings(warnings);
     const self = this;
@@ -822,7 +801,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
 
         // The fee can move between prepare and confirm. This is the guard.
-        const currentFee = self.pool.feeAmount + relayFee;
+        const currentFee = self.pool.feeAmount;
         if (currentFee > feeCeiling) {
           throw new PrivacyError(
             'unknown',
@@ -1545,6 +1524,18 @@ export class FakePrivacyOperations implements PrivacyOperations {
  * only, each token a valid address listed once, each rate a positive bounded
  * bigint, plus a valid slippage and a fixed positive expiry.
  */
+function ownSwapReview(review: Omit<SwapReview, 'minimumAmountOut'>): Omit<SwapReview, 'minimumAmountOut'> {
+  if (!Number.isSafeInteger(review.expiresAt) || review.expiresAt <= 0) {
+    throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+  }
+  try {
+    protectedMinimumOut(review.expectedAmountOut, review.slippageBps);
+  } catch {
+    throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+  }
+  return Object.freeze({ ...review });
+}
+
 function ownDemoSwapRates(config: FakeDemoSwapRates): {
   readonly perStrk: ReadonlyMap<bigint, bigint>;
   readonly slippageBps: number;

@@ -4,6 +4,16 @@ import { MAX_VAULT_MARKETS } from '../vault.js';
 import { BackendPrivacyClient } from './backend-client.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+/** The backend's answer to a swap quote (D-084), as JSON carries it. */
+const QUOTE_BODY = Object.freeze({
+  quoteId: 'quote-1',
+  chainId: '0x534e5f4d41494e',
+  sellToken: '0xabc',
+  buyToken: '0x4718',
+  sellAmount: '20',
+  buyAmount: '100',
+  calls: [{ contractAddress: '0x4270', entrypoint: 'multi_route_swap', calldata: ['0xabc', '0x14'] }],
+});
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 function response(body: unknown, status = 200): Response {
@@ -172,34 +182,6 @@ describe('BackendPrivacyClient', () => {
 
     await expect(client.publicKey('0xabc')).resolves.toBe('0x123');
     expect(receiver).toBeUndefined();
-  });
-
-  it('owns swap-prepare request fields before a caller proxy can substitute them', async () => {
-    const fetcher = vi.fn(async () => response({
-      quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
-      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-    }));
-    const source = {
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
-    };
-    let sellTokenReads = 0;
-    const input = new Proxy(source, {
-      get(target, key, receiver) {
-        if (key === 'sellToken') {
-          sellTokenReads += 1;
-          return sellTokenReads <= 2 ? '0xabc' : '0xdef';
-        }
-        return Reflect.get(target, key, receiver);
-      },
-    });
-    const client = new BackendPrivacyClient('https://backend.example', fetcher);
-
-    await client.prepareSwap(input);
-
-    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ sellToken: '0xabc' });
-    expect(sellTokenReads).toBe(0);
   });
 
   it('owns submission request fields before a caller proxy can substitute them', async () => {
@@ -390,28 +372,6 @@ describe('BackendPrivacyClient', () => {
   });
 
   it.each([
-    ['decimal sell token', { sellToken: '123' }],
-    ['zero buy token', { buyToken: '0x0' }],
-    ['zero sell amount', { sellAmount: 0n }],
-    ['number minimum output', { minAmountOut: 90 }],
-    ['zero slippage', { slippageBps: 0 }],
-    ['fractional slippage', { slippageBps: 1.5 }],
-  ] as const)('rejects an invalid swap-prepare request before transport: %s', async (_label, patch) => {
-    const fetcher = vi.fn(async () => response({}));
-    const client = new BackendPrivacyClient('https://backend.example', fetcher);
-
-    await expect(client.prepareSwap({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-      ...patch,
-    } as never)).rejects.toMatchObject({ kind: 'unknown' });
-    expect(fetcher).not.toHaveBeenCalled();
-  });
-
-  it.each([
     ['decimal', '123'],
     ['zero', '0x0'],
     ['field-prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
@@ -449,8 +409,8 @@ describe('BackendPrivacyClient', () => {
       proofValidityBlocks: 450,
       signal,
     })],
-    ['swap preparation', (client: BackendPrivacyClient, signal: AbortSignal) => client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100, signal,
+    ['swap quote', (client: BackendPrivacyClient, signal: AbortSignal) => client.quoteSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, taker: '0x5ad0', slippageBps: 100, signal,
     })],
   ] as const)('accepts a genuine cross-realm-like AbortSignal for %s', async (_label, invoke) => {
     const native = new AbortController().signal;
@@ -466,11 +426,7 @@ describe('BackendPrivacyClient', () => {
       ? { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 }
       : url.endsWith('/submissions')
         ? { transactionHash: '0xabc123' }
-        : {
-            quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
-            chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
-            fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-          }));
+        : QUOTE_BODY));
     const client = new BackendPrivacyClient('https://backend.example', fetcher);
 
     await expect(invoke(client, signal)).resolves.toBeDefined();
@@ -509,8 +465,8 @@ describe('BackendPrivacyClient', () => {
     const fetcher = vi.fn(async () => response({}));
     const client = new BackendPrivacyClient('https://backend.example', fetcher);
 
-    await expect(client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n,
+    await expect(client.quoteSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, taker: '0x5ad0',
       slippageBps: 100, signal: signal as never,
     })).rejects.toMatchObject({ kind: 'unknown' });
     expect(getterRead).toBe(false);
@@ -554,13 +510,9 @@ describe('BackendPrivacyClient', () => {
     }), {
       token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
     }],
-    ['swap preparation', (client: BackendPrivacyClient, signal: AbortSignal) => client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100, signal,
-    }), {
-      quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000, chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999', executorCalls: [],
-      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-    }],
+    ['swap quote', (client: BackendPrivacyClient, signal: AbortSignal) => client.quoteSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, taker: '0x5ad0', slippageBps: 100, signal,
+    }), QUOTE_BODY],
   ] as const)('does not return a stale %s result when its transport ignores cancellation', async (_name, read, body) => {
     let resolveResponse!: (value: Response) => void;
     const fetcher = vi.fn(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
@@ -710,141 +662,6 @@ describe('BackendPrivacyClient', () => {
     } finally {
       restore();
     }
-  });
-
-  it('rejects a nested swap fee field supplied only by the object prototype', async () => {
-    const restore = inheritResponseField('amount', '7');
-    try {
-      const client = new BackendPrivacyClient(
-        'https://backend.example',
-        async () => response({
-          quoteId: 'quote-1',
-          buyAmount: '100',
-          expiresAt: 2_000,
-          chainId: '0x534e5f4d41494e',
-          executorAddress: '0x999',
-          executorCalls: [],
-          fee: { token: '0x4718', recipient: '0x789', authorization: 'auth', expiresAtBlock: 1450 },
-        }),
-      );
-
-      await expect(client.prepareSwap({
-        sellToken: '0xabc',
-        buyToken: '0x4718',
-        sellAmount: 20n,
-        minAmountOut: 90n,
-        slippageBps: 100,
-      })).rejects.toMatchObject({ kind: 'unknown' });
-    } finally {
-      restore();
-    }
-  });
-
-  it('rejects a nested swap call field supplied only by the object prototype', async () => {
-    const restore = inheritResponseField('entrypoint', 'swap');
-    try {
-      const client = new BackendPrivacyClient(
-        'https://backend.example',
-        async () => response({
-          quoteId: 'quote-1',
-          buyAmount: '100',
-          expiresAt: 2_000,
-          chainId: '0x534e5f4d41494e',
-          executorAddress: '0x999',
-          executorCalls: [{ contractAddress: '0x111', calldata: ['0xaaa'] }],
-          fee: {
-            token: '0x4718',
-            recipient: '0x789',
-            amount: '7',
-            authorization: 'auth',
-            expiresAtBlock: 1450,
-          },
-        }),
-      );
-
-      await expect(client.prepareSwap({
-        sellToken: '0xabc',
-        buyToken: '0x4718',
-        sellAmount: 20n,
-        minAmountOut: 90n,
-        slippageBps: 100,
-      })).rejects.toMatchObject({ kind: 'unknown' });
-    } finally {
-      restore();
-    }
-  });
-
-  it.each(['executorCalls', 'calldata'] as const)('rejects a sparse %s response array', async (field) => {
-    const call = { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] };
-    const body = {
-      quoteId: 'quote-1',
-      buyAmount: '100',
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [call],
-      fee: {
-        token: '0x4718',
-        recipient: '0x789',
-        amount: '7',
-        authorization: 'auth',
-        expiresAtBlock: 1450,
-      },
-    } as { executorCalls: unknown[]; fee: Record<string, unknown> };
-    if (field === 'executorCalls') body.executorCalls = new Array(1);
-    else (body.executorCalls[0] as { calldata: unknown[] }).calldata = new Array(1);
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => objectResponse(body),
-    );
-
-    await expect(client.prepareSwap({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-    })).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('owns swap response array elements before a proxy can substitute them', async () => {
-    const calls = [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }];
-    const reads: PropertyKey[] = [];
-    const executorCalls = new Proxy(calls, {
-      get(target, key, receiver) {
-        reads.push(key);
-        if (key === '0') return { contractAddress: '0x222', entrypoint: 'forged', calldata: ['0xbbb'] };
-        return Reflect.get(target, key, receiver);
-      },
-    });
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => objectResponse({
-        quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
-        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls,
-        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-      }),
-    );
-
-    await expect(client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
-    })).resolves.toMatchObject({
-      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-    });
-    expect(reads).toEqual([]);
-  });
-
-  it('rejects an empty swap quote identifier', async () => {
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => response({
-        quoteId: '', buyAmount: '100', expiresAt: 2_000,
-        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
-        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-      }),
-    );
-    await expect(client.prepareSwap({ sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100 }))
-      .rejects.toMatchObject({ kind: 'unknown' });
   });
 
   it('maps the JSON wire format into bigint privacy ports', async () => {
@@ -1166,9 +983,6 @@ describe('BackendPrivacyClient', () => {
       const expected = { kind: 'relay-not-configured', message: refused.message };
       await expect(client.estimate({ route: 'unshield', feeToken: '0x4718', operationToken: '0x4718' }))
         .rejects.toMatchObject(expected);
-      await expect(client.prepareSwap({
-        sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 1n, slippageBps: 50,
-      })).rejects.toMatchObject(expected);
       await expect(client.submit(submission)).rejects.toMatchObject(expected);
       await expect(client.submit(submission)).rejects.toBeInstanceOf(PrivacyError);
     });
@@ -1213,123 +1027,6 @@ describe('BackendPrivacyClient', () => {
     });
   });
 
-  it('parses a quote-bound private swap plan without losing bigint amounts', async () => {
-    const fetcher = vi.fn(async () => response({
-      quoteId: 'quote-1',
-      buyAmount: '900719925474099312345',
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [{
-        contractAddress: '0x111',
-        entrypoint: 'swap',
-        selector: '0x555',
-        calldata: ['0xaaa'],
-      }],
-      fee: {
-        token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
-      },
-    }));
-    const client = new BackendPrivacyClient('https://backend.example', fetcher);
-    await expect(client.prepareSwap({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-    })).resolves.toMatchObject({
-      buyAmount: 900719925474099312345n,
-      fee: { amount: 7n, authorization: 'auth' },
-    });
-    expect(fetcher).toHaveBeenCalledWith(
-      'https://backend.example/v1/private/swaps/prepare',
-      expect.objectContaining({ body: expect.stringContaining('"sellAmount":"20"') }),
-    );
-  });
-
-  it('rejects a zero private swap output before publishing a plan', async () => {
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => response({
-        quoteId: 'quote-1', buyAmount: '0', expiresAt: 2_000,
-        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
-        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-      }),
-    );
-
-    await expect(client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 1n, slippageBps: 100,
-    })).rejects.toMatchObject({ kind: 'unknown' });
-  });
-
-  it('publishes an immutable private swap plan graph', async () => {
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => response({
-        quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
-        chainId: '0x534e5f4d41494e', executorAddress: '0x999',
-        executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
-        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-      }),
-    );
-
-    const plan = await client.prepareSwap({
-      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
-    });
-
-    expect(Object.isFrozen(plan)).toBe(true);
-    expect(Object.isFrozen(plan.executorCalls)).toBe(true);
-    expect(Object.isFrozen(plan.executorCalls[0])).toBe(true);
-    expect(Object.isFrozen(plan.executorCalls[0]?.calldata)).toBe(true);
-    expect(Object.isFrozen(plan.fee)).toBe(true);
-    expect(Reflect.set(plan.executorCalls[0]!, 'entrypoint', 'forged')).toBe(false);
-    expect(plan.executorCalls[0]?.entrypoint).toBe('swap');
-  });
-
-  it.each([
-    ['buy amount', (body: Record<string, unknown>) => ({ ...body, buyAmount: '1.5' })],
-    ['buy amount with whitespace', (body: Record<string, unknown>) => ({ ...body, buyAmount: ' 100' })],
-    ['buy amount with sign', (body: Record<string, unknown>) => ({ ...body, buyAmount: '+100' })],
-    ['buy amount with hex syntax', (body: Record<string, unknown>) => ({ ...body, buyAmount: '0x64' })],
-    ['fee amount', (body: Record<string, unknown>) => ({
-      ...body,
-      fee: { ...(body.fee as Record<string, unknown>), amount: '1.5' },
-    })],
-    ['fee amount with whitespace', (body: Record<string, unknown>) => ({
-      ...body,
-      fee: { ...(body.fee as Record<string, unknown>), amount: ' 7' },
-    })],
-    ['fee amount with sign', (body: Record<string, unknown>) => ({
-      ...body,
-      fee: { ...(body.fee as Record<string, unknown>), amount: '+7' },
-    })],
-    ['fee amount with hex syntax', (body: Record<string, unknown>) => ({
-      ...body,
-      fee: { ...(body.fee as Record<string, unknown>), amount: '0x7' },
-    })],
-  ])('maps malformed swap %s into a generic privacy error', async (_label, mutate) => {
-    const body = {
-      quoteId: 'quote-1',
-      buyAmount: '100',
-      expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e',
-      executorAddress: '0x999',
-      executorCalls: [],
-      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
-    };
-    const client = new BackendPrivacyClient(
-      'https://backend.example',
-      async () => response(mutate(body)),
-    );
-
-    await expect(client.prepareSwap({
-      sellToken: '0xabc',
-      buyToken: '0x4718',
-      sellAmount: 20n,
-      minAmountOut: 90n,
-      slippageBps: 100,
-    })).rejects.toMatchObject({ kind: 'unknown' });
-  });
 });
 
 describe('BackendPrivacyClient receipt lookup (D-072)', () => {
@@ -1506,6 +1203,116 @@ describe('BackendPrivacyClient Vault reads (D-077, D-079)', () => {
     await expect(off.vaultPositions(SHADOW)).rejects.toMatchObject({ kind: 'unreachable' });
     await expect(off.vaultRates()).rejects.toMatchObject({ kind: 'unreachable' });
     await expect(down.vaultRates()).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+});
+
+describe('BackendPrivacyClient swap quotes (D-084)', () => {
+  const request = { sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, taker: '0x5ad0', slippageBps: 100 };
+
+  it('posts the request to the keyless quote route and maps the answer to bigints', async () => {
+    const fetcher = vi.fn(async () => response({ ...QUOTE_BODY, buyAmount: '900719925474099312345' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.quoteSwap(request)).resolves.toEqual({
+      quoteId: 'quote-1',
+      chainId: '0x534e5f4d41494e',
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      buyAmount: 900719925474099312345n,
+      calls: [{ contractAddress: '0x4270', entrypoint: 'multi_route_swap', calldata: ['0xabc', '0x14'] }],
+    });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://backend.example/v1/swap/quote');
+    expect(JSON.parse(String(init.body))).toEqual({
+      v: 1, sellToken: '0xabc', buyToken: '0x4718', sellAmount: '20', taker: '0x5ad0', slippageBps: 100,
+    });
+  });
+
+  it('publishes an immutable answer graph', async () => {
+    const client = new BackendPrivacyClient('https://backend.example', async () => response(QUOTE_BODY));
+    const answer = await client.quoteSwap(request);
+
+    expect(Object.isFrozen(answer)).toBe(true);
+    expect(Object.isFrozen(answer.calls)).toBe(true);
+    expect(Object.isFrozen(answer.calls[0])).toBe(true);
+    expect(Object.isFrozen(answer.calls[0]?.calldata)).toBe(true);
+  });
+
+  it.each([
+    ['decimal sell token', { sellToken: '123' }],
+    ['zero buy token', { buyToken: '0x0' }],
+    ['zero taker', { taker: '0x0' }],
+    ['missing taker', { taker: undefined }],
+    ['zero sell amount', { sellAmount: 0n }],
+    ['number sell amount', { sellAmount: 20 }],
+    ['zero slippage', { slippageBps: 0 }],
+    ['fractional slippage', { slippageBps: 1.5 }],
+    ['slippage above 100%', { slippageBps: 10_001 }],
+  ] as const)('rejects an invalid request before transport: %s', async (_label, patch) => {
+    const fetcher = vi.fn(async () => response(QUOTE_BODY));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.quoteSwap({ ...request, ...patch } as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('owns request fields before a caller proxy can substitute them', async () => {
+    const fetcher = vi.fn(async () => response(QUOTE_BODY));
+    let takerReads = 0;
+    const input = new Proxy({ ...request }, {
+      get(target, key, receiver) {
+        if (key === 'taker') {
+          takerReads += 1;
+          return '0xdef';
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await client.quoteSwap(input);
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ taker: '0x5ad0' });
+    expect(takerReads).toBe(0);
+  });
+
+  it.each([
+    ['empty quote id', { ...QUOTE_BODY, quoteId: '' }],
+    ['zero buy amount', { ...QUOTE_BODY, buyAmount: '0' }],
+    ['hex buy amount', { ...QUOTE_BODY, buyAmount: '0x64' }],
+    ['signed sell amount', { ...QUOTE_BODY, sellAmount: '+20' }],
+    ['calls not an array', { ...QUOTE_BODY, calls: {} }],
+    ['numeric calldata', { ...QUOTE_BODY, calls: [{ contractAddress: '0x1', entrypoint: 'x', calldata: [1] }] }],
+    ['missing calls', { ...QUOTE_BODY, calls: undefined }],
+  ])('maps a malformed answer (%s) to a generic privacy error', async (_label, body) => {
+    const client = new BackendPrivacyClient('https://backend.example', async () => response(body));
+    await expect(client.quoteSwap(request)).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('rejects a sparse calls array and a call field supplied only by the prototype', async () => {
+    const sparse = new BackendPrivacyClient('https://backend.example', async () => objectResponse({
+      ...QUOTE_BODY, calls: new Array(1),
+    }));
+    await expect(sparse.quoteSwap(request)).rejects.toMatchObject({ kind: 'unknown' });
+
+    const restore = inheritResponseField('entrypoint', 'multi_route_swap');
+    try {
+      const inherited = new BackendPrivacyClient('https://backend.example', async () => response({
+        ...QUOTE_BODY, calls: [{ contractAddress: '0x4270', calldata: [] }],
+      }));
+      await expect(inherited.quoteSwap(request)).rejects.toMatchObject({ kind: 'unknown' });
+    } finally {
+      restore();
+    }
+  });
+
+  it('answers a disabled proxy as unreachable and a rate-limited one as a refusal, never as a quote', async () => {
+    const down = new BackendPrivacyClient('https://backend.example', async () => response({ code: 'SERVICE_DISABLED', message: 'off' }, 503));
+    await expect(down.quoteSwap(request)).rejects.toMatchObject({ kind: 'unreachable' });
+    const busy = new BackendPrivacyClient('https://backend.example', async () => response({ code: 'RATE_LIMITED', message: 'busy' }, 429));
+    await expect(busy.quoteSwap(request)).rejects.toMatchObject({ kind: 'unknown' });
   });
 });
 

@@ -75,7 +75,7 @@ describe('ExchangePanel review render', () => {
     const { operations, panel } = await reviewed();
     const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
     const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
-    for (const value of ['1 STRK', '2 ETH', '1.99 ETH', '0.50%', '2100-01-01T00:00:00.000Z', '6 STRK', '0.002 STRK', '6.002 STRK', 'This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.']) expect(gate).toContain(value);
+    for (const value of ['1 STRK', '2 ETH', '1.99 ETH', '0.50%', '2100-01-01T00:00:00.000Z', '6 STRK', '0 STRK', 'This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.']) expect(gate).toContain(value);
     expect(gate).toContain('class="confirm"');
   });
 

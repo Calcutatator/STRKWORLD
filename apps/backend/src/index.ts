@@ -1,7 +1,14 @@
-export { BackendApi, DEGEN_TOKENS_PATH, POOL_STATS_PATH, type BackendApiOptions } from './api.js';
+export {
+  BackendApi,
+  DEGEN_TOKENS_PATH,
+  POOL_STATS_PATH,
+  SWAP_QUOTE_PATH,
+  SWAP_QUOTE_RATE_LIMIT,
+  type BackendApiOptions,
+} from './api.js';
 export { AvnuDegenCatalog, type AvnuDegenCatalogOptions } from './avnu-degen-catalog.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
-export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
+export { AVNU_EXCHANGE, AvnuSwapQuotes, type AvnuSwapQuotesOptions } from './avnu-swap-quotes.js';
 export {
   DEBUG_LOGS_MAX_BODY_BYTES,
   DEBUG_LOGS_MAX_DETAIL_CHARS,
@@ -151,9 +158,9 @@ export type {
   RelayFee,
   RoutePolicy,
   ShadowAccountRead,
-  SwapAuthorizationBinding,
-  SwapPlan,
-  SwapPlannerPort,
+  RelayRoute,
+  SwapQuote,
+  SwapQuotePort,
   VaultPositionFigures,
   VaultPositionRead,
   VaultRateRead,
