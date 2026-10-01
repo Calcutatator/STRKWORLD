@@ -146,6 +146,12 @@ describe('preparing a shadow-account swap', () => {
 
   });
 
+  it('refuses a policy slippage above the 3% cap before asking avnu (D-084)', async () => {
+    const { ops, quotes } = seam({ policy: policy({ slippageBps: 301 }) });
+    await expect(ops.prepare([SWAP])).rejects.toThrow(/slippage policy is invalid/);
+    expect(quotes.requests).toEqual([]);
+  });
+
   it('refuses a swap of a token for itself', async () => {
     const { ops, quotes } = seam();
     await expect(ops.prepare([{ ...SWAP, tokenOut: STRK }])).rejects.toThrow(/two different tokens/);

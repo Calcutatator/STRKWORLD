@@ -965,7 +965,7 @@ function validateBackendConfig(config: BackendConfig): void {
     swap.maxQueueDelayMs !== 0 ||
     !Number.isSafeInteger(swap.maxSlippageBps) ||
     (swap.maxSlippageBps ?? 0) <= 0 ||
-    (swap.maxSlippageBps ?? 0) > 1_000
+    (swap.maxSlippageBps ?? 0) > 300
   ) {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
   }

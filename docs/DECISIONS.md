@@ -4667,7 +4667,11 @@ plan and its fee came together from avnu's paymaster, which refuses
   or address; it is cached 30 s. With both tokens priced, an expected output
   worth more than **3%** (`SWAP_PRICE_BOUND_BPS`, which covers avnu's 0.1%
   fee, the slippage and ordinary impact) below the input is refused before
-  the player sees it, and so is a pinned price that is missing, older than
+  the player sees it. So is a floor (`minAmountOut`, what the chain lets a
+  route deliver) below the oracle value × (1 − 3% − slippage), checked
+  itself rather than inferred from the quote; with slippage capped at 3%
+  (300 bps, browser and backend), no checked swap can settle more than 6%
+  under the oracle. So is a pinned price that is missing, older than
   30 minutes, from fewer than 3 sources, or unreadable: a token that should
   be checked is never quietly left unchecked. A re-quote passes the same
   check. A token with no feed (strkBTC, which answered zero, and most of the
@@ -4710,7 +4714,7 @@ plan and its fee came together from avnu's paymaster, which refuses
   `AVNU_PAYMASTER_API_KEY` is used by no player flow.
 - **The switch.** The browser admits the swap only with
   `VITE_STRK20_SWAP_ENABLED=true`, `VITE_STRK20_SWAP_ALLOWED_TOKENS` (1 to 16
-  tokens naming STRK) and `VITE_STRK20_SWAP_SLIPPAGE_BPS` (1 to 1000);
+  tokens naming STRK) and `VITE_STRK20_SWAP_SLIPPAGE_BPS` (1 to 300, matching the backend's ceiling);
   `VITE_STRK20_SWAP_DEGEN_ENABLED=true` also admits the degen floor's tokens,
   which the backend vets. Anything else keeps the Exchange and the degen
   floor locked; off in every environment file. The demo fake prices no relay

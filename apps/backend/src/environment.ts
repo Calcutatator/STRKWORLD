@@ -155,7 +155,8 @@ function parseSwapRoute(environment: Environment): RoutePolicy {
     maxQueueDelayMs: 0,
     quoteBound: true,
     allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_SWAP_ALLOWED_TOKENS'),
-    maxSlippageBps: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS', 1, 1_000),
+    // D-084: at most 3%, so the floor the chain enforces stays within 6% of the oracle.
+    maxSlippageBps: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS', 1, 300),
   };
 }
 

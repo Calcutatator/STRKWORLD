@@ -126,7 +126,7 @@ export {
   SWAP_SHADOW_NONCE,
 } from './swap.js';
 // D-084: the swap's independent price check against Pragma's oracle.
-export { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_PRICE_BOUND_BPS, USD_DECIMALS, type PriceFeed } from './swap-prices.js';
+export { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_MAX_SLIPPAGE_BPS, SWAP_PRICE_BOUND_BPS, USD_DECIMALS, type PriceFeed } from './swap-prices.js';
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {

@@ -44,8 +44,12 @@ export const BORROW_TOKENS: readonly string[] = Object.freeze([
 const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 /** D-084: the most tokens the ground-floor swap allowlist may name. */
 export const MAX_SWAP_TOKENS = 16;
-/** D-084: the widest slippage a build may set, matching the backend's own ceiling. */
-export const MAX_SWAP_SLIPPAGE_BPS = 1_000;
+/**
+ * D-084: the widest slippage a build may set, matching the backend's ceiling
+ * and the privacy package's `SWAP_MAX_SLIPPAGE_BPS`: with the 3% oracle bound,
+ * the enforced floor is never more than 6% below the oracle value.
+ */
+export const MAX_SWAP_SLIPPAGE_BPS = 300;
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 

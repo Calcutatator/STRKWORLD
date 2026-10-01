@@ -2,7 +2,7 @@ import type { STRK20_ACTION } from 'starknet';
 import type { BatchWarning, Intent, PoolConfig, PreparedBatch, SwapPriceCheck } from '../operations.js';
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback } from '../types.js';
 import { MAINNET_CHAIN_ID, SWAP_DAPP_NAME, SWAP_SHADOW_NONCE, ownSwapQuote, swapActions, type SwapQuote } from '../swap.js';
-import { checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
+import { SWAP_MAX_SLIPPAGE_BPS, checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
 import { mapShadowWalletError, mapWalletError } from './errors.js';
 import { ShadowAccountResolver } from './shadow-account.js';
 import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
@@ -102,7 +102,7 @@ export class ShadowSwap {
     if (!swapPolicy || !this.quotes) {
       throw new PrivacyError('unknown', 'The private swap quotes are not configured.');
     }
-    if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0 || swapPolicy.slippageBps > 10_000) {
+    if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0 || swapPolicy.slippageBps > SWAP_MAX_SLIPPAGE_BPS) {
       throw new PrivacyError('unknown', 'The private swap slippage policy is invalid.');
     }
     if (!sameAddress(swapPolicy.expectedChainId, MAINNET_CHAIN_ID)) {
@@ -229,6 +229,8 @@ export class ShadowSwap {
       buyToken: quote.buyToken,
       sellAmount: quote.sellAmount,
       buyAmount: quote.buyAmount,
+      minAmountOut: quote.minAmountOut,
+      slippageBps: quote.slippageBps,
       prices,
       nowMs: this.now(),
     });

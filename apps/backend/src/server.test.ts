@@ -163,7 +163,7 @@ describe('strict production backend environment', () => {
     ['unshield queue-delay overflow', { BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '2147483648' }],
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['negative transfer queue delay', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '-1' }],
-    ['swap slippage above 10%', { BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '1001' }],
+    ['swap slippage above 3%', { BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '301' }],
     ['non-https pool value URL', { PLAZA_POOL_VALUE_URL: 'http://strkprice.example/api/pool' }],
     ['placeholder pool value URL', { PLAZA_POOL_VALUE_URL: 'https://REPLACE_ME.example/api/pool' }],
   ])('rejects %s', (_label, override) => {

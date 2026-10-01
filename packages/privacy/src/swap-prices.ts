@@ -10,8 +10,10 @@ import { PrivacyError, type Address } from './types.js';
  * over the wallet's own RPC, never through STRKWORLD's backend or avnu.
  *
  * - Both tokens have a pinned feed: the expected output's USD value may fall
- *   at most `SWAP_PRICE_BOUND_BPS` below the sell amount's, or the swap is
- *   refused before the review. A pinned feed that cannot be read, is stale or
+ *   at most `SWAP_PRICE_BOUND_BPS` below the sell amount's, and the floor the
+ *   chain enforces (`minAmountOut`) at most the bound plus the slippage, or
+ *   the swap is refused before the review. The floor is what a hostile route
+ *   can actually deliver, so it is checked itself, not only the quote. A pinned feed that cannot be read, is stale or
  *   has too few sources refuses too: a token that should be checked is never
  *   quietly left unchecked.
  * - Either token has no pinned feed (most of the degen floor): the review says
@@ -22,7 +24,9 @@ import { PrivacyError, type Address } from './types.js';
  * 2026-10-01: the oracle's class is
  * `0x4d6370214accdaac8cc249db34a916c92464235b87cf03641a85889d2f6d8e7`, and
  * `get_data_median(SpotEntry(pair))` answered each pinned pair below with
- * 8 or 6 decimals, a timestamp within the minute and 3 to 11 sources.
+ * 8 or 6 decimals, a timestamp about 540 s old (Pragma pushes on
+ * deviation and heartbeat, not every block, hence the 30-minute staleness
+ * bound) and 3 to 11 sources.
  * strkBTC/USD answered all zeros: it has no feed, so it is unchecked.
  */
 
@@ -31,6 +35,12 @@ export const PRAGMA_ORACLE = '0x02a85bd616f912537c50a49a4076db02c00b29b2cdc8a197
 
 /** How far below the oracle value the expected output may sit: 3%, which covers avnu's 0.1% fee, the slippage and ordinary price impact. */
 export const SWAP_PRICE_BOUND_BPS = 300;
+
+/**
+ * The widest slippage a swap may use (D-084): with the 3% bound, the floor
+ * the chain enforces is never more than 6% below the oracle value.
+ */
+export const SWAP_MAX_SLIPPAGE_BPS = 300;
 
 /** A Pragma price older than this is stale, in seconds. */
 export const PRAGMA_MAX_AGE_S = 1_800;
@@ -97,6 +107,9 @@ export function checkSwapPrice(input: {
   readonly buyToken: Address;
   readonly sellAmount: bigint;
   readonly buyAmount: bigint;
+  /** The floor the chain enforces: `buy_token_min_amount`. */
+  readonly minAmountOut: bigint;
+  readonly slippageBps: number;
   readonly prices: readonly PragmaPrice[] | null;
   readonly nowMs: number;
 }): SwapPriceCheck {
@@ -125,8 +138,12 @@ export function checkSwapPrice(input: {
   if (input.prices === null) {
     throw new PrivacyError('unreachable', 'The swap could not read the oracle price to check this quote, so nothing was sent.');
   }
+  if (!Number.isSafeInteger(input.slippageBps) || input.slippageBps <= 0 || input.slippageBps > SWAP_MAX_SLIPPAGE_BPS) {
+    throw new PrivacyError('unknown', `A swap's slippage may be at most ${SWAP_MAX_SLIPPAGE_BPS / 100}%.`);
+  }
   const sellUsd = value(sellFeed, input.sellAmount);
   const expectedBuyUsd = value(buyFeed, input.buyAmount);
+  const floorUsd = value(buyFeed, input.minAmountOut);
   if (sellUsd <= 0n) {
     throw new PrivacyError('unknown', 'This amount is too small to check against the oracle price.');
   }
@@ -135,6 +152,15 @@ export function checkSwapPrice(input: {
     throw new PrivacyError(
       'unknown',
       `avnu's quote is ${(shortfallBps / 100).toFixed(2)}% below the oracle price, more than the ${SWAP_PRICE_BOUND_BPS / 100}% allowed, so it was refused.`,
+    );
+  }
+  // The floor itself: what the chain lets a route deliver. Refused unless
+  // minAmountOut ≥ oracle value × (1 − bound − slippage).
+  const floorAllowanceBps = BigInt(SWAP_PRICE_BOUND_BPS + input.slippageBps);
+  if (floorUsd * 10_000n < sellUsd * (10_000n - floorAllowanceBps)) {
+    throw new PrivacyError(
+      'unknown',
+      `The swap's minimum output is more than ${Number(floorAllowanceBps) / 100}% below the oracle price, so it was refused.`,
     );
   }
   return Object.freeze({ status: 'checked', boundBps: SWAP_PRICE_BOUND_BPS, sellUsd, expectedBuyUsd, shortfallBps });

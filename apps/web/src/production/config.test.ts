@@ -954,6 +954,10 @@ describe('production swap admission (D-084)', () => {
     expect(Object.isFrozen(policy.allowedTokens.swap)).toBe(true);
   });
 
+  it('admits a slippage up to the 3% cap (D-084)', () => {
+    expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_SLIPPAGE_BPS: '300' })).swap).toMatchObject({ slippageBps: 300 });
+  });
+
   it('opens the degen floor only on the literal switch', () => {
     expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: 'true' })).swap).toEqual({
       expectedChainId: '0x534e5f4d41494e', slippageBps: 50, degen: true,
@@ -982,7 +986,8 @@ describe('production swap admission (D-084)', () => {
     ['missing slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: undefined }],
     ['zero slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '0' }],
     ['a fractional slippage', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '0.5' }],
-    ['a slippage above 10%', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '1001' }],
+    ['a slippage above 3%', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '301' }],
+    ['the old 10% cap', { VITE_STRK20_SWAP_SLIPPAGE_BPS: '1000' }],
   ])('keeps the whole swap denied on %s, and touches no other route', (_label, override) => {
     const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...swap(override) });
     expect(policy.enabledRoutes).toEqual(['transfer']);

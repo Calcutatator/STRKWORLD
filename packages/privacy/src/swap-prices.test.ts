@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_PRICE_BOUND_BPS, checkSwapPrice, priceFeed, type PragmaPrice } from './swap-prices.js';
+import { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_MAX_SLIPPAGE_BPS, SWAP_PRICE_BOUND_BPS, checkSwapPrice, priceFeed, type PragmaPrice } from './swap-prices.js';
 import { PragmaPriceReader } from './wallet-api/pragma-prices.js';
 
 /** D-084: the swap's independent oracle check, and the reader that feeds it. */
@@ -10,8 +10,15 @@ const UNPRICED = '0x0666';
 const NOW = 1_790_000_000_000;
 const fresh = (pair: string, price: bigint, decimals = 8): PragmaPrice => ({ pair, price, decimals, updatedAt: NOW / 1000, sources: 10 });
 const PRICES = [fresh('STRK/USD', 4_310_000n), fresh('USDC/USD', 999_960n, 6)];
-const check = (buyAmount: bigint, prices: readonly PragmaPrice[] | null = PRICES, buyToken = USDC) => checkSwapPrice({
-  sellToken: STRK, buyToken, sellAmount: 10n ** 19n, buyAmount, prices, nowMs: NOW,
+/** At 1% slippage, with the protected minimum as the floor, unless one is given. */
+const check = (
+  buyAmount: bigint,
+  prices: readonly PragmaPrice[] | null = PRICES,
+  buyToken = USDC,
+  minAmountOut = buyAmount - (buyAmount * 100n) / 10_000n,
+  slippageBps = 100,
+) => checkSwapPrice({
+  sellToken: STRK, buyToken, sellAmount: 10n ** 19n, buyAmount, minAmountOut, slippageBps, prices, nowMs: NOW,
 });
 
 describe('checkSwapPrice', () => {
@@ -36,6 +43,23 @@ describe('checkSwapPrice', () => {
     expect(() => check(8_620n)).toThrow(/98\.00% below/);
   });
 
+  it('checks the floor the chain enforces itself: minAmountOut ≥ oracle value × (1 − 3% − slippage)', () => {
+    // A fair expected output with a floor a hostile route could deliver at 5% under: refused at 1% slippage.
+    expect(() => check(431_017n, PRICES, USDC, 409_466n)).toThrow(/minimum output is more than 4% below the oracle price/);
+    // At exactly 4% under ($0.41376 of $0.431) it stands; one base unit lower it does not.
+    expect(check(431_017n, PRICES, USDC, 413_777n)).toMatchObject({ status: 'checked' });
+    expect(() => check(431_017n, PRICES, USDC, 413_775n)).toThrow(/minimum output/);
+    // The allowance widens with the slippage, up to the 3% cap: at most 6% under.
+    expect(check(431_017n, PRICES, USDC, 405_157n, 300)).toMatchObject({ status: 'checked' });
+    expect(() => check(431_017n, PRICES, USDC, 405_150n, 300)).toThrow(/more than 6% below/);
+  });
+
+  it('refuses a slippage above the 3% cap, which would let the floor sit further below the oracle', () => {
+    expect(SWAP_MAX_SLIPPAGE_BPS).toBe(300);
+    expect(() => check(431_017n, PRICES, USDC, 400_000n, 301)).toThrow(/at most 3%/);
+    expect(() => check(431_017n, PRICES, USDC, 400_000n, 1_000)).toThrow(/at most 3%/);
+  });
+
   it.each([
     ['missing', [fresh('STRK/USD', 4_310_000n)]],
     ['stale', [...PRICES.slice(0, 1), { ...fresh('USDC/USD', 999_960n, 6), updatedAt: NOW / 1000 - 1_801 }]],
@@ -54,7 +78,7 @@ describe('checkSwapPrice', () => {
     expect(check(5n, PRICES, UNPRICED)).toEqual({ status: 'unchecked', boundBps: 300, sellUsd: 43_100_000n });
     expect(check(5n, null, UNPRICED)).toEqual({ status: 'unchecked', boundBps: 300 });
     expect(check(5n, [], UNPRICED)).toEqual({ status: 'unchecked', boundBps: 300 });
-    expect(checkSwapPrice({ sellToken: UNPRICED, buyToken: '0x0777', sellAmount: 1n, buyAmount: 1n, prices: PRICES, nowMs: NOW }))
+    expect(checkSwapPrice({ sellToken: UNPRICED, buyToken: '0x0777', sellAmount: 1n, buyAmount: 1n, minAmountOut: 1n, slippageBps: 100, prices: PRICES, nowMs: NOW }))
       .toEqual({ status: 'unchecked', boundBps: 300 });
   });
 });
