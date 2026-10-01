@@ -10,7 +10,7 @@ const CODE_TO_KIND = {
 } as const;
 
 export function mapWalletError(error: unknown): PrivacyError {
-  if (error instanceof PrivacyError) return error;
+  if (isPrivacyError(error)) return error;
   const code = readCode(error);
   const kind = isAbortError(error)
     ? 'user-rejected'
@@ -46,7 +46,7 @@ export function mapTransferWalletError(error: unknown): PrivacyError {
  * `mapWalletError` maps it, so a 118 is still `not-registered`.
  */
 export function mapShadowWalletError(error: unknown): PrivacyError {
-  if (error instanceof PrivacyError) return error;
+  if (isPrivacyError(error)) return error;
   const code = readCode(error);
   if (code === 162 || code === JSON_RPC_METHOD_NOT_FOUND) {
     return new PrivacyError('shadow-accounts-unsupported', safeMessage('shadow-accounts-unsupported'), error);
@@ -67,15 +67,27 @@ export function walletErrorCode(error: unknown): number | null {
 /** JSON-RPC 2.0's "method not found". */
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    try {
-      return error.name === 'AbortError';
-    } catch {
-      return false;
-    }
+function isPrivacyError(error: unknown): error is PrivacyError {
+  try {
+    return error instanceof PrivacyError;
+  } catch {
+    return false;
   }
-  return Boolean(error && typeof error === 'object' && readProperty(error, 'name') === 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+  try {
+    if (error instanceof DOMException) {
+      try {
+        return error.name === 'AbortError';
+      } catch {
+        return false;
+      }
+    }
+    return Boolean(error && typeof error === 'object' && readProperty(error, 'name') === 'AbortError');
+  } catch {
+    return false;
+  }
 }
 
 function readCode(error: unknown, seen = new Set<object>()): number | null {
