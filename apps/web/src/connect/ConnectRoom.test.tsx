@@ -180,7 +180,7 @@ describe('the choose-a-wallet card (D-073)', () => {
       link.getAttribute('rel'),
     ])).toEqual([
       ['Ready', 'https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb', '_blank', 'noopener noreferrer'],
-      ['Xverse', 'https://www.xverse.app', '_blank', 'noopener noreferrer'],
+      ['Xverse', 'https://chromewebstore.google.com/detail/xverse-wallet/idnnbdplmphpflfnlkomgpfbpcgelopg', '_blank', 'noopener noreferrer'],
     ]);
     await none.unmount();
 

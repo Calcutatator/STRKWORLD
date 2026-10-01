@@ -140,7 +140,7 @@ describe('shell copy', () => {
       expect(COPY.connect.getWallet).toBe('Get a wallet:');
       expect(COPY.connect.installLinks).toEqual([
         { label: 'Ready', href: 'https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb' },
-        { label: 'Xverse', href: 'https://www.xverse.app' },
+        { label: 'Xverse', href: 'https://chromewebstore.google.com/detail/xverse-wallet/idnnbdplmphpflfnlkomgpfbpcgelopg' },
       ]);
     });
   });

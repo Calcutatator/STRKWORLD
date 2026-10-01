@@ -51,7 +51,7 @@ export const COPY = freezeCopy({
     getWallet: 'Get a wallet:',
     installLinks: [
       { label: 'Ready', href: 'https://chromewebstore.google.com/detail/ready-x/dlcobpjiigpikoobohmabehhmhfoodbb' },
-      { label: 'Xverse', href: 'https://www.xverse.app' },
+      { label: 'Xverse', href: 'https://chromewebstore.google.com/detail/xverse-wallet/idnnbdplmphpflfnlkomgpfbpcgelopg' },
     ],
     refreshWallets: 'Look again',
     wrongNetwork: 'Switch this wallet to Starknet mainnet, then try again.',
