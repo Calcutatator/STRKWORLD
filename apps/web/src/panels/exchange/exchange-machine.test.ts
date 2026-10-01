@@ -550,10 +550,16 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
   };
 }
 
-/** D-077, D-079: the Exchange never touches the Vault. */
-const UNUSED_VAULT: Pick<PrivacyOperations, 'vaultPositions' | 'prepareVaultSupply' | 'prepareVaultRedeem' | 'vaultRates'> = {
+/** D-077, D-079, D-083: the Exchange never touches the Vault or the Borrow counter. */
+const UNUSED_VAULT: Pick<
+  PrivacyOperations,
+  'vaultPositions' | 'prepareVaultSupply' | 'prepareVaultRedeem' | 'vaultRates' | 'borrowMarket' | 'borrowPositions' | 'prepareBorrow'
+> = {
   vaultPositions: async () => { throw new Error('unused'); },
   prepareVaultSupply: async () => { throw new Error('unused'); },
   prepareVaultRedeem: async () => { throw new Error('unused'); },
   vaultRates: async () => { throw new Error('unused'); },
+  borrowMarket: async () => { throw new Error('unused'); },
+  borrowPositions: async () => { throw new Error('unused'); },
+  prepareBorrow: async () => { throw new Error('unused'); },
 };

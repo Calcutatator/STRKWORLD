@@ -14,6 +14,7 @@ import {
   routeRequiresDisclosure,
   routeReturnsToPool,
   ROUTE_BY_INTENT_KIND,
+  VAULT_BORROW_ROUTE,
   VAULT_ROUTES,
   vaultDoorOpen,
 } from './routes.js';
@@ -553,5 +554,51 @@ describe('the Vault switch (D-077, D-079, D-081)', () => {
     expect(vaultDoorOpen(PRIVACY_REGISTER, transferOnly)).toBe(false);
     expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, vaultOn).open).toBe(false);
     expect(routeDoor('bank.shield', PRIVACY_REGISTER, vaultOn).open).toBe(false);
+  });
+});
+
+describe('the Borrow switch (D-083)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const denyAll: WalletRoutePolicy = {
+    maxIntents: 0,
+    maxRelayFee: 0n,
+    enabledRoutes: [],
+    allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+  };
+  const borrow = (tokens: string[], routes: WalletRoutePolicy['enabledRoutes'] = ['vault', 'borrow']): WalletRoutePolicy => ({
+    ...denyAll,
+    maxIntents: 1,
+    enabledRoutes: routes,
+    allowedTokens: { ...denyAll.allowedTokens, vault: [STRK], borrow: tokens },
+  });
+
+  it('is its own graded route, with its own disclosure, never the Vault\'s', () => {
+    expect(VAULT_BORROW_ROUTE).toBe('vault.borrow');
+    expect(findRoute(VAULT_BORROW_ROUTE)?.building).toBe('vault');
+    expect(routeRequiresDisclosure(VAULT_BORROW_ROUTE)).toBe(true);
+    expect(routeDisclosure(VAULT_BORROW_ROUTE)).not.toBe(routeDisclosure('vault.supply'));
+    expect(routeReturnsToPool(VAULT_BORROW_ROUTE)).toBe(false);
+  });
+
+  it('opens with the borrow switch and a pair of pinned tokens, and stays shut otherwise', () => {
+    expect(routeDoor(VAULT_BORROW_ROUTE, PRIVACY_REGISTER, borrow([STRK, USDC])).open).toBe(true);
+    expect(routeDoor(VAULT_BORROW_ROUTE, PRIVACY_REGISTER, null).open).toBe(true);
+    expect(routeDoor(VAULT_BORROW_ROUTE, PRIVACY_REGISTER, denyAll)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+      message: COPY.locked.notEnabled.borrow,
+    });
+    // LORDS: no borrow pins it.
+    const LORDS = '0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49';
+    for (const policy of [borrow([STRK]), borrow([STRK, STRK]), borrow([STRK, LORDS]), borrow([STRK, USDC], ['vault'])]) {
+      expect(routeDoor(VAULT_BORROW_ROUTE, PRIVACY_REGISTER, policy).open).toBe(false);
+    }
+  });
+
+  it('leaves the Vault\'s door to the Vault\'s two routes: the borrow switch neither opens nor shuts it', () => {
+    expect(vaultDoorOpen(PRIVACY_REGISTER, borrow([STRK, USDC], ['borrow']))).toBe(false);
+    expect(vaultDoorOpen(PRIVACY_REGISTER, borrow([STRK, USDC]))).toBe(true);
+    expect(routeDoor('vault.supply', PRIVACY_REGISTER, borrow([STRK, USDC], ['borrow'])).open).toBe(false);
   });
 });

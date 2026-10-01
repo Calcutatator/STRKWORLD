@@ -517,7 +517,8 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       stateStore.setState(freezeVaultState(initialState(mode, register, tokens, token)));
       // A transaction that settled while the window was shut is still the
       // player's to see.
-      const outstanding = receipts.pending('vault')[0];
+      // The Borrow counter in the same room records its own (D-083).
+      const outstanding = receipts.pending('vault').find((receipt) => receipt.counter === undefined);
       if (outstanding) {
         patch({ flow: { name: 'submitted', transactionHash: outstanding.transactionHash, outcome: 'pending', restored: true } });
       } else {

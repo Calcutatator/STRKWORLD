@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  BORROW_TOKENS,
   MAX_VAULT_TOKENS,
   VAULT_TOKENS,
   parseProductionWalletConfig,
@@ -820,5 +821,51 @@ describe('the temporary entry-gate bypass', () => {
     expect(entryGateBypassFrom({ VITE_ENTRY_GATE_BYPASS: true })).toBe(false);
     expect(entryGateBypassFrom({})).toBe(false);
     expect(entryGateBypassFrom(undefined)).toBe(false);
+  });
+});
+
+describe('production Borrow counter admission (D-083)', () => {
+  const base = {
+    VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+    VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+    VITE_BACKEND_BASE_URL: '/api',
+  };
+  const vault = { VITE_STRK20_VAULT_ENABLED: 'true', VITE_STRK20_VAULT_ALLOWED_TOKENS: STRK_TOKEN };
+
+  it('pins the borrow tokens to the privacy package\'s, in its order', async () => {
+    const { BORROW_TOKENS: PINNED } = await import('@strkworld/privacy');
+    expect(BORROW_TOKENS).toEqual(PINNED);
+    expect(Object.isFrozen(BORROW_TOKENS)).toBe(true);
+  }, 30_000);
+
+  it('stays denied by default', () => {
+    const { policy } = parseProductionWalletConfig(base);
+    expect(policy.enabledRoutes).toEqual([]);
+    expect('borrow' in policy.allowedTokens).toBe(false);
+  });
+
+  it('opts in with one switch, admitting exactly the five pinned tokens and narrowing nothing', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...vault, VITE_STRK20_BORROW_ENABLED: 'true' });
+    expect(policy.enabledRoutes).toEqual(['vault', 'borrow']);
+    expect(policy.allowedTokens.borrow).toEqual(BORROW_TOKENS);
+    expect(policy.allowedTokens.vault).toEqual([STRK_TOKEN]);
+    expect(policy.maxRelayFee).toBe(0n);
+    expect(policy.maxIntents).toBe(1);
+    expect(Object.isFrozen(policy.allowedTokens.borrow)).toBe(true);
+  });
+
+  it.each([['false'], ['TRUE'], ['1'], [undefined]])('keeps it denied for the value %s', (value) => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...vault, VITE_STRK20_BORROW_ENABLED: value });
+    expect(policy.enabledRoutes).toEqual(['vault']);
+    expect('borrow' in policy.allowedTokens).toBe(false);
+  });
+
+  it('ships the example environment with borrowing denied, and declares its build argument', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    expect(example).toMatch(/^VITE_STRK20_BORROW_ENABLED=false$/m);
+    const dockerfile = readFileSync(new URL('../../../../deploy/fly/Dockerfile', import.meta.url), 'utf8');
+    expect(dockerfile).toMatch(/^ARG VITE_STRK20_BORROW_ENABLED$/m);
+    const railway = readFileSync(new URL('../../../../deploy/RAILWAY.md', import.meta.url), 'utf8');
+    expect(railway).toMatch(/\| `VITE_STRK20_BORROW_ENABLED` \| `true` \|/);
   });
 });

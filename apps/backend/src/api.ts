@@ -1,3 +1,4 @@
+import { BORROW_MARKET_PATH, BORROW_POSITION_PATH } from './borrow.js';
 import { DEBUG_LOGS_PATH, DebugLogSink } from './debug-logs.js';
 import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
 import { ENDUR_XSTRK_ASSET } from './endur.js';
@@ -26,6 +27,7 @@ import type {
   ApiResponse,
   AuthorizationCodec,
   BackendConfig,
+  BorrowRpcPort,
   DegenCatalogPort,
   FeeAuthorizationClaims,
   PaymasterPort,
@@ -79,6 +81,8 @@ export interface BackendApiOptions {
   vault?: VaultRpcPort;
   /** Vesu's supply APY for the pinned vaults (D-079). Without it, that route answers 503. */
   vaultRates?: VaultRatesPort;
+  /** The Borrow counter's two pinned public reads (D-083). Without it, both routes answer 503. */
+  borrow?: BorrowRpcPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
   /**
@@ -104,6 +108,7 @@ export class BackendApi {
   private readonly poolStatsPort?: PoolStatsPort;
   private readonly vault?: VaultRpcPort;
   private readonly vaultRates?: VaultRatesPort;
+  private readonly borrow?: BorrowRpcPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -123,6 +128,7 @@ export class BackendApi {
     this.poolStatsPort = options.poolStats;
     this.vault = options.vault;
     this.vaultRates = options.vaultRates;
+    this.borrow = options.borrow;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
@@ -188,6 +194,8 @@ export class BackendApi {
           case VAULT_SHADOW_ACCOUNT_PATH: response = await abortable(this.shadowAccount(request.body, deadline.signal), deadline.signal); break;
           case VAULT_POSITION_PATH: response = await abortable(this.vaultPosition(request.body, deadline.signal), deadline.signal); break;
           case VAULT_RATES_PATH: response = await abortable(this.vaultRateList(request.body, deadline.signal), deadline.signal); break;
+          case BORROW_MARKET_PATH: response = await abortable(this.borrowMarket(request.body, deadline.signal), deadline.signal); break;
+          case BORROW_POSITION_PATH: response = await abortable(this.borrowPosition(request.body, deadline.signal), deadline.signal); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -562,6 +570,79 @@ export class BackendApi {
           vault: rate.vault,
           supplyApy: { value: rate.supplyApy.value.toString(), decimals: rate.supplyApy.decimals },
         })),
+      },
+    };
+  }
+
+  /**
+   * D-083: the Borrow counter's market figures, from the pinned Prime pool:
+   * one row per pinned token and one per pinned pair, as decimal integers, or
+   * `ok: false` for a row whose reads failed. The request carries a version
+   * and nothing else, and the answer holds nothing about any player.
+   */
+  private async borrowMarket(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    requireVersion(requireRecord(body, ['v']));
+    if (!this.borrow) throw new ApiFailure(503, 'The borrow reads are unavailable.');
+    const market = await this.borrow.getBorrowMarket(signal);
+    return {
+      status: 200,
+      body: {
+        assets: market.assets.map((row) => (row.ok
+          ? {
+              token: row.token,
+              ok: true,
+              price: row.price.toString(),
+              priceValid: row.priceValid,
+              scale: row.scale.toString(),
+              floor: row.floor.toString(),
+              reserve: row.reserve.toString(),
+              totalNominalDebt: row.totalNominalDebt.toString(),
+              rateAccumulator: row.rateAccumulator.toString(),
+              maxUtilization: row.maxUtilization.toString(),
+            }
+          : { token: row.token, ok: false })),
+        pairs: market.pairs.map((row) => (row.ok
+          ? {
+              collateral: row.collateral,
+              debt: row.debt,
+              ok: true,
+              maxLtv: row.maxLtv.toString(),
+              liquidationFactor: row.liquidationFactor.toString(),
+              debtCap: row.debtCap.toString(),
+              totalNominalDebt: row.totalNominalDebt.toString(),
+            }
+          : { collateral: row.collateral, debt: row.debt, ok: false })),
+      },
+    };
+  }
+
+  /**
+   * D-083: a stand-in address's position in every pinned pair of the Prime
+   * pool, one row each, as decimal integers, or `ok: false` for a pair whose
+   * read failed. Public data, read here rather than from the browser so the
+   * player's IP never reaches a third-party RPC next to the address. The
+   * request names the address alone: never a pool, a pair or a token.
+   */
+  private async borrowPosition(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    const value = requireRecord(body, ['v', 'account']);
+    requireVersion(value);
+    const account = requireNonzeroFelt(value.account, 'account');
+    if (!this.borrow) throw new ApiFailure(503, 'The borrow reads are unavailable.');
+    const rows = await this.borrow.getBorrowPositions(account, signal);
+    return {
+      status: 200,
+      body: {
+        positions: rows.map((row) => (row.ok
+          ? {
+              collateral: row.collateral,
+              debt: row.debt,
+              ok: true,
+              collateralShares: row.collateralShares.toString(),
+              nominalDebt: row.nominalDebt.toString(),
+              collateralAmount: row.collateralAmount.toString(),
+              debtAmount: row.debtAmount.toString(),
+            }
+          : { collateral: row.collateral, debt: row.debt, ok: false })),
       },
     };
   }

@@ -87,12 +87,33 @@ export {
   type PinnedVault,
 } from './vault.js';
 export { VesuVaultRates, parseVesuPoolRates, type VesuVaultRatesOptions } from './vesu-rates.js';
+export {
+  ASSET_CONFIG_SELECTOR,
+  BORROW_MARKET_PATH,
+  BORROW_PAIRS,
+  BORROW_POOL,
+  BORROW_POSITION_PATH,
+  BORROW_TOKENS,
+  PAIR_CONFIG_SELECTOR,
+  PAIRS_SELECTOR,
+  POSITION_SELECTOR,
+  PRICE_SELECTOR,
+  type BorrowPair,
+} from './borrow.js';
 export type {
   ApiRequest,
   ApiResponse,
   AuthorizationCodec,
   AvnuTokenTag,
   BackendConfig,
+  BorrowAssetFigures,
+  BorrowAssetRead,
+  BorrowMarketRead,
+  BorrowPairFigures,
+  BorrowPairRead,
+  BorrowPositionFigures,
+  BorrowPositionRead,
+  BorrowRpcPort,
   ChainHead,
   DegenCatalogPort,
   DegenCatalogSnapshot,

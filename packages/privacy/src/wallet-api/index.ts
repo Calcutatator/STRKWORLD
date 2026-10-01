@@ -20,6 +20,11 @@ export {
   type WalletSessionSnapshot,
 } from './session.js';
 export type {
+  BorrowAssetRow,
+  BorrowMarketRead,
+  BorrowPairRow,
+  BorrowPositionRow,
+  BorrowReadClient,
   PoolNativeRoute,
   PrivateRoute,
   PoolReadClient,

@@ -566,6 +566,10 @@ describe('session admission of the stake policy', () => {
       prepareVaultSupply: async () => { throw new Error('unused'); },
       prepareVaultRedeem: async () => { throw new Error('unused'); },
       vaultRates: async () => { throw new Error('unused'); },
+      // D-083: not exercised here.
+      borrowMarket: async () => { throw new Error('unused'); },
+      borrowPositions: async () => { throw new Error('unused'); },
+      prepareBorrow: async () => { throw new Error('unused'); },
     };
   }
 

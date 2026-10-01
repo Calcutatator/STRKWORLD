@@ -479,7 +479,15 @@ export function describeGateState(state: unknown): { level: DebugLevel; event: s
  * error code. No amount, balance, address, commitment or transaction hash can
  * be written, whatever a caller passes.
  */
-const VAULT_KINDS = setOf({ supply: true, redeem: true });
+// D-083: the Borrow counter stands in the Vault's room and logs as the Vault does.
+const VAULT_KINDS = setOf({
+  supply: true,
+  redeem: true,
+  borrow: true,
+  'add-collateral': true,
+  repay: true,
+  'withdraw-collateral': true,
+});
 const VAULT_RECEIPTS = setOf({ succeeded: true, reverted: true, pending: true, unreadable: true });
 const VAULT_CONFIRM_STAGES = setOf({
   composing: true,

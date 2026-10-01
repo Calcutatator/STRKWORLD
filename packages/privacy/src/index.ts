@@ -20,10 +20,19 @@ export { PrivacyError } from './types.js';
 
 export type {
   BatchWarning,
+  BorrowAction,
+  BorrowAsset,
+  BorrowHealth,
+  BorrowMarket,
+  BorrowPair,
+  BorrowPosition,
+  BorrowPositions,
+  BorrowRequest,
   DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedBorrowBatch,
   PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
@@ -71,8 +80,33 @@ export {
   type VaultPoolCuration,
 } from './vault.js';
 
+// Borrowing on Vesu from a second shadow account (D-083): the pinned pool,
+// tokens and pairs, the dapp name, Vesu's arithmetic and the action builders.
+export {
+  BORROW_DAPP_NAME,
+  BORROW_PAIRS,
+  BORROW_POOL,
+  BORROW_REPAY_ALL_BUFFER_BPS,
+  BORROW_REPAY_ALL_BUFFER_UNITS,
+  BORROW_SHADOW_NONCE,
+  BORROW_TOKENS,
+  BORROW_TOKEN_INFO,
+  BORROW_WARNING_HEALTH,
+  BorrowRefusedError,
+  VESU_SCALE,
+  assessBorrow,
+  borrowHealth,
+  borrowPairOffered,
+  type AssessedBorrow,
+  type BorrowPairKey,
+  type BorrowRefusal,
+  type BorrowTokenInfo,
+} from './borrow.js';
+
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {
+  DEMO_BORROW_PRICES,
+  DEMO_BORROW_STAND_IN,
   DEMO_VAULT_STAND_IN,
   FakePrivacyOperations,
   type FakeConfig,
@@ -110,6 +144,11 @@ export {
   type VaultPositionRow,
   type VaultRateRow,
   type VaultReadClient,
+  type BorrowAssetRow,
+  type BorrowMarketRead,
+  type BorrowPairRow,
+  type BorrowPositionRow,
+  type BorrowReadClient,
   type WalletApiPrivacyOperationsOptions,
   type WalletRoutePolicy,
   type WalletChoice,
