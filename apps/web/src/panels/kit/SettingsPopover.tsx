@@ -27,13 +27,15 @@ export interface SettingsPopoverProps {
   readonly onChange: (value: string) => void;
   /** The custom input's label and unit; absent, there is no custom input. */
   readonly custom?: { readonly label?: string; readonly unit?: string; readonly inputMode?: 'decimal' | 'numeric' };
+  /** One plain line under the title: what the setting does. */
+  readonly hint?: ReactNode;
   /** Shown under the choices, e.g. "High slippage: you may get a poor price." */
   readonly warning?: ReactNode;
   /** Start open (tests, stories). */
   readonly defaultOpen?: boolean;
 }
 
-export function SettingsPopover({ title, presets, value, onChange, custom, warning, defaultOpen = false }: SettingsPopoverProps) {
+export function SettingsPopover({ title, presets, value, onChange, custom, hint, warning, defaultOpen = false }: SettingsPopoverProps) {
   const [open, setOpen] = useState(defaultOpen);
   const root = useRef<HTMLDivElement>(null);
   const cog = useRef<HTMLButtonElement>(null);
@@ -41,6 +43,10 @@ export function SettingsPopover({ title, presets, value, onChange, custom, warni
   const headingId = `${id}-title`;
   const customId = `${id}-custom`;
   const isPreset = presets.some((preset) => preset.value === value);
+  // What the player typed in the custom box, kept while it is the value, so
+  // typing "1.5" does not clear itself when "1" matches a preset on the way.
+  const [customText, setCustomText] = useState(isPreset ? '' : value);
+  const customShown = value === customText ? customText : isPreset ? '' : value;
 
   const close = (refocus: boolean) => {
     setOpen(false);
@@ -83,14 +89,15 @@ export function SettingsPopover({ title, presets, value, onChange, custom, warni
       {open ? (
         <div className="ui-settings-popover" id={id} role="group" aria-labelledby={headingId}>
           <p className="ui-settings-title" id={headingId}>{title}</p>
+          {hint ? <p className="ui-settings-hint">{hint}</p> : null}
           <div className="ui-settings-presets">
             {presets.map((preset) => (
               <button
                 key={preset.value}
                 type="button"
                 className="ui-chip"
-                aria-pressed={preset.value === value}
-                onClick={() => onChange(preset.value)}
+                aria-pressed={preset.value === value && customShown === ''}
+                onClick={() => { setCustomText(''); onChange(preset.value); }}
               >
                 {preset.label}
               </button>
@@ -103,8 +110,8 @@ export function SettingsPopover({ title, presets, value, onChange, custom, warni
                   inputMode={custom.inputMode ?? 'decimal'}
                   autoComplete="off"
                   placeholder={custom.label ?? COPY.kit.custom}
-                  value={isPreset ? '' : value}
-                  onChange={(event) => onChange(event.target.value)}
+                  value={customShown}
+                  onChange={(event) => { setCustomText(event.target.value); onChange(event.target.value); }}
                 />
                 {custom.unit ? <span aria-hidden="true">{custom.unit}</span> : null}
               </span>

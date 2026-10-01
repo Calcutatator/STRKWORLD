@@ -23,9 +23,11 @@
  *   ("Pool balance: 12.5 STRK"), Max and 50% (only when `max` is passed),
  *   USD line, hint and its own validation (invalid, exceeds balance, below
  *   minimum). `max` returns `null` for "no honest maximum", which disables
- *   the button; build it with `maxAfterReserve(spendable, feeReserve(...))`
- *   so a Max of the fee token leaves the pool fee behind. With a wallet
- *   that reports no maturity split, pass its per-token total (D-089).
+ *   the button; build it with `maxAfterReserve(maxBasis(balance), feeReserve(...))`
+ *   so a Max of the fee token leaves the pool fee behind. `maxBasis` is the
+ *   spendable figure, or the per-token total for a wallet that reports no
+ *   maturity split (D-089, D-090). `readOnly` makes it a figure to read, as a
+ *   swap's Buy side, with `busy` and `stale` for a quote in flight or run out.
  * - `RecipientField`: a send's "To" field with Paste and an inline
  *   invalid-address message, checked on blur and paste, never per keystroke.
  *   Whether the address can receive stays the panel's own check.
@@ -53,5 +55,5 @@ export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTon
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {
-  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, primaryAction, tidyFloor, type AmountCheck,
+  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor, type AmountCheck,
 } from './amount-math.js';

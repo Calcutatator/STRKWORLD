@@ -111,9 +111,14 @@ export class ShadowSwap {
     if (sameAddress(intent.tokenIn, intent.tokenOut)) {
       throw new PrivacyError('unknown', 'A swap needs two different tokens.');
     }
+    // D-090: the player's slippage, at or below the build's ceiling, or the ceiling itself.
+    const slippageBps = intent.slippageBps ?? swapPolicy.slippageBps;
+    if (!Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > swapPolicy.slippageBps) {
+      throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");
+    }
     const identity = await this.identity.resolve(signal, undefined);
     throwIfAborted(signal);
-    const { quote, check } = await this.quote(intent, identity.address, swapPolicy.slippageBps, signal);
+    const { quote, check } = await this.quote(intent, identity.address, slippageBps, signal);
     if (quote.minAmountOut < intent.minAmountOut) {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }

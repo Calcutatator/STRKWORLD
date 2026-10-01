@@ -235,7 +235,6 @@ export const COPY = freezeCopy({
     protectedMinimum: 'Protected minimum',
     slippage: 'Slippage',
     expiresAt: 'Quote expires',
-    oneSwap: 'This Exchange prepares and confirms one swap at a time.',
     /**
      * D-084: the quote ran out before confirming, and avnu's fresh one would
      * lower the protected minimum, so the review shows it instead.
@@ -255,6 +254,34 @@ export const COPY = freezeCopy({
       "No independent price check: Pragma's oracle has no price for at least one of these tokens, so nothing but avnu's quote says this rate is fair. The protected minimum only guards against the price moving after this quote.",
     acknowledgeUnchecked: 'I understand this swap has no independent price check.',
     acknowledgeFirst: 'Tick the box to confirm a swap with no independent price check.',
+    /**
+     * D-090: the compose view, in the words swap apps use (Uniswap's Sell,
+     * Buy, Receive at least, Max slippage and Route via; avnu's Price
+     * impact). Nothing here adds a privacy claim: the disclosure is at the
+     * commit point, as before.
+     */
+    sellToken: 'Token to sell',
+    buyToken: 'Token to buy',
+    review: 'Review swap',
+    receiveAtLeast: 'Receive at least',
+    priceImpact: 'Price impact',
+    /** Pragma prices one side or neither, so there is no independent figure to hold the output against. */
+    priceImpactUnknown: 'Not known',
+    priceImpactHigh: "Large price impact: you get noticeably less than Pragma's price for what you sell.",
+    route: 'Route',
+    routeAvnu: 'via avnu',
+    poolFeeToken: 'Set in STRK. Your wallet chooses which token in your pool balance pays it.',
+    quoting: 'Fetching a quote…',
+    quotePaused: 'Press Review swap for a quote.',
+    quoteStale: 'This quote ran out. Review swap asks for a fresh one.',
+    slippageTitle: 'Max slippage',
+    slippageHint: 'Your swap will not go through if the price moves more than this.',
+    slippageCustom: 'Custom slippage',
+    slippageHigh: 'High slippage: the price can move further against you before the swap stops it.',
+    slippageOver: 'Enter a value up to {cap}%.',
+    slippageZero: 'Enter a value larger than 0.',
+    slippageInvalid: 'Enter a percentage, such as 0.5.',
+    slippageFix: 'Check the slippage',
   },
 
   /**
@@ -926,9 +953,10 @@ export const COPY = freezeCopy({
       'The least amount you are guaranteed to receive, even if the market moves against you before this settles.',
     bridgeMinimum:
       'The least STRK this quote delivers if the bridge completes. If it cannot complete, 1Click refunds your deposit instead, so it is not a guarantee of arrival.',
-    slippageFixedAt: 'Slippage is fixed at',
+    /** D-090: the player sets the slippage with the cog; the review states what this swap carries. */
+    slippageFixedAt: 'This swap carries a slippage of',
     slippageReason:
-      'in this build. It is not something you choose — fixing it is what lets the protected minimum above be a guarantee rather than an estimate.',
+      'chosen with the settings cog. It is fixed once quoted, which is what lets the protected minimum above be a guarantee rather than an estimate.',
     quoteExpiry:
       'After this time the quote is asked for again before your wallet is. If the fresh price would lower the protected minimum, you see it first; nothing trades at a stale price.',
     refundAddress: 'Where funds are sent back if this deposit cannot be completed.',

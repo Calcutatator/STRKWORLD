@@ -43,25 +43,42 @@ export interface AmountFieldProps {
   readonly hint?: ReactNode;
   readonly name?: string;
   readonly disabled?: boolean;
+  /**
+   * A figure the player reads, not types: a swap's Buy side, filled from the
+   * quote. No validation, no Max.
+   */
+  readonly readOnly?: boolean;
+  /** The figure is being worked out (a quote in flight): shown as a skeleton, never as final. */
+  readonly busy?: boolean;
+  /** The figure is out of date (a quote that ran out): shown dimmed. */
+  readonly stale?: boolean;
 }
 
 export function AmountField({
   label, value, onChange, decimals, symbol, token, balance = null, balanceLabel = COPY.kit.poolBalance, balanceAction,
   exceedsMessage = COPY.kit.exceedsBalance, max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
+  readOnly = false, busy = false, stale = false,
 }: AmountFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   const hintId = `${id}-hint`;
-  const check = checkAmount(value, { decimals, balance, minimum });
+  const check = checkAmount(readOnly ? '' : value, { decimals, balance, minimum });
   const message = amountMessage(check, minimum, decimals, symbol, exceedsMessage);
-  const maximum = max ? max() : null;
+  const quick = max && !readOnly ? max : undefined;
+  const maximum = quick ? quick() : null;
   const halfValue = maximum === null ? null : fractionOf(maximum, 1n, 2n);
   const fill = (amount: bigint | null) => {
     if (amount !== null && amount > 0n) onChange(formatTokenAmountExact(amount, decimals));
   };
   const describedBy = [message ? messageId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
   return (
-    <div className="ui-amount" data-invalid={message ? 'true' : undefined}>
+    <div
+      className="ui-amount"
+      data-invalid={message ? 'true' : undefined}
+      data-readonly={readOnly ? 'true' : undefined}
+      data-busy={busy ? 'true' : undefined}
+      data-stale={stale && !busy ? 'true' : undefined}
+    >
       <div className="ui-amount-head">
         <label htmlFor={id}>{label}</label>
         {balance !== null ? (
@@ -70,7 +87,7 @@ export function AmountField({
           </span>
         ) : null}
         {balance !== null && balanceAction ? balanceAction : null}
-        {max ? (
+        {quick ? (
           <span className="ui-amount-quick">
             {half ? (
               <button type="button" className="ui-chip" aria-label={COPY.kit.halfLabel} disabled={disabled || halfValue === null || halfValue === 0n} onClick={() => fill(halfValue)}>
@@ -91,8 +108,10 @@ export function AmountField({
           autoComplete="off"
           spellCheck={false}
           placeholder="0"
-          value={value}
+          value={busy ? '' : value}
           disabled={disabled}
+          readOnly={readOnly}
+          aria-busy={busy ? true : undefined}
           aria-invalid={message ? true : undefined}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}

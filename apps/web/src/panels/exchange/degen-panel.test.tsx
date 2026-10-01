@@ -90,6 +90,7 @@ describe('the degen counter in demo', () => {
       total: '6 STRK',
       disclosures: [SWAP_DISCLOSURE],
       rate: '1 STRK ≈ 10 LORDS',
+      inverseRate: '1 LORDS ≈ 0.1 STRK',
       // The demo has no oracle (D-084); its fixture check carries no USD.
       sellUsd: null,
       expectedBuyUsd: null,
@@ -101,7 +102,7 @@ describe('the degen counter in demo', () => {
     const done = panel.store.getState().flow;
     expect(done.name).toBe('submitted');
     expect(operations.submitted).toEqual([[{
-      kind: 'swap', tokenIn: STRK, tokenOut: LORDS, amountIn: 10n * 10n ** 18n, minAmountOut: 99_500000000000000000n,
+      kind: 'swap', tokenIn: STRK, tokenOut: LORDS, amountIn: 10n * 10n ** 18n, minAmountOut: 99_500000000000000000n, slippageBps: 50,
     }]]);
     expect(receipts.pending('exchange')).toHaveLength(1);
   });
@@ -161,7 +162,8 @@ describe('the degen counter in demo', () => {
     expect(markup).toContain(`<p class="degen-eyebrow">${COPY.degen.eyebrow}</p>`);
     expect(markup).toContain(COPY.degen.intro);
     expect(markup).toContain(COPY.degen.demo.replaceAll("'", '&#x27;'));
-    expect(markup).toContain(COPY.exchange.oneSwap);
+    // D-090: no subtitle; the Route row says "via avnu" once.
+    expect(markup).not.toContain('one swap at a time');
     // Chips name avnu's tags in words.
     expect(markup).toMatch(/<span class="degen-token-symbol">LORDS<\/span><span class="degen-token-name">Lords<\/span><span class="degen-chips"><span class="degen-chip" data-tag="verified">Verified<\/span><span class="degen-chip" data-tag="avnu">AVNU<\/span><\/span>/);
     expect(markup).toContain('<span class="degen-chip" data-tag="unruggable">Unruggable</span>');
@@ -170,7 +172,8 @@ describe('the degen counter in demo', () => {
     expect(markup).toMatch(/<li class="degen-token" data-display-only="true"><span class="degen-token-symbol">SSTR<\/span>.*?data-tag="display-only">Display only<\/span>/);
     expect(markup).toContain(COPY.degen.displayOnlyNote);
     expect(markup).not.toMatch(new RegExp(`<option value="${SSTR}"`));
-    expect(markup).toMatch(new RegExp(`<option value="${LORDS}"( selected="")?>LORDS · Lords</option>`));
+    // D-090: the selector shows the ticker alone; the name is on the board.
+    expect(markup).toMatch(new RegExp(`<option value="${LORDS}"( selected="")?>LORDS</option>`));
     // The list scrolls on its own and can take keyboard focus.
     expect(markup).toMatch(/class="degen-board-scroll" role="region" aria-labelledby="[^"]+" tabindex="0"/);
   });

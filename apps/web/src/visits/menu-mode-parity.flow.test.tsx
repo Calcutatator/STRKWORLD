@@ -121,10 +121,10 @@ async function choose(name: string, value: string): Promise<void> {
   await chooseIn(select, value);
 }
 
-/** A select by its visible label, as the Exchange's compose form names them. */
+/** A select by its label, as the Exchange's compose form names them (D-090: a hidden label tied by `for`). */
 function selectLabelled(label: string): HTMLSelectElement {
-  const found = [...container!.querySelectorAll('label')].find((candidate) => candidate.firstChild?.textContent === label);
-  const control = found?.querySelector('select');
+  const found = [...container!.querySelectorAll('label')].find((candidate) => candidate.textContent === label);
+  const control = found?.htmlFor ? container!.querySelector<HTMLSelectElement>(`select[id="${found.htmlFor}"]`) : found?.querySelector('select');
   if (!control) throw new Error(`No select labelled ${label}`);
   return control;
 }
@@ -255,11 +255,11 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     const ground = onlyWindow();
     expect(ground.closest('.exchange-experience')?.getAttribute('data-mode')).toBe('ground');
     expect(ground.closest('.exchange-experience')?.getAttribute('data-experience')).toBe('menu');
-    expect(ground.textContent).toContain(COPY.exchange.oneSwap);
+    expect(ground.textContent).toContain(COPY.balance.refresh);
 
     await click(button(COPY.balance.refresh));
     await type('amount', '1');
-    await click(button(COPY.flow.review));
+    await click(button(COPY.exchange.review));
     const gate = onlyWindow().querySelector('.confirm-gate')!;
     expect(gate.querySelector('.commit-disclosures')?.textContent).toBe(disclosureOf('exchange.swap'));
     expect(gate.querySelector('.exchange-price-check')?.getAttribute('data-status')).toBe('unchecked');
@@ -294,9 +294,9 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     await openMenu('exchange', operations);
     await click(button('DEGEN SWAP'));
     await click(button(COPY.balance.refresh));
-    await chooseIn(selectLabelled(COPY.exchange.buy), DOG);
+    await chooseIn(selectLabelled(COPY.exchange.buyToken), DOG);
     await type('amount', '2');
-    await click(button(COPY.flow.review));
+    await click(button(COPY.exchange.review));
     const gate = onlyWindow().querySelector('.confirm-gate')!;
     expect(gate.textContent).toContain('2000 DOG');
     expect(gate.querySelector('.commit-disclosures')?.textContent).toBe(disclosureOf('exchange.swap'));

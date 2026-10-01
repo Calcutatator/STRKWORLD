@@ -291,6 +291,23 @@ Office and Bridge render and flow tests, and offline renders
 (`renders/bankux-*.png` in the working scratchpad, not committed).
 **Not verified:** no live wallet has shown these panels.
 
+### 2026-10-01 — `wallet_strk20Balances` is per token; what it lacks is maturity, not a split by token (D-022, D-090)
+
+`wallet_strk20Balances(tokens)` answers `[{ token, balance }, ...]`, one
+entry per requested token, and an empty list asks for every shielded token
+(the D-072 entry check). What it does not say is how much of a token's
+balance is still maturing: a note is spendable 10 blocks after it is created.
+D-022's "aggregate" meant spendable plus maturing, for one token, not a total
+across tokens, and the adapter reports `maturityKnown: false` with zero
+`spendable`, which is why every Max built on `spendable` was off for live
+players. D-089 found the same for the Vault's supply; D-090 lets the Exchange's Max
+fill from the per-token total too (`maxBasis` in the panel kit). How verified: the STRK20 corpus ("Show the shielded balance",
+`// [{ token, balance }, ...]`; "matures 10 blocks after creation") and the
+adapter's parser in `wallet-api/operations.ts`, which refuses any entry with
+other than those two keys. Not verified live: what a wallet does with a Max
+that counts a note still maturing (expected: it refuses the spend before
+submitting).
+
 ### 2026-10-01 — The wallet reports a per-token pool balance but no spendable split; Max uses that total, and a maturing note's refusal reads as "settling"; Max at 1.25 health (D-089)
 
 The Vault and Borrow forms gained Aave's and Vesu's touches (D-089). What

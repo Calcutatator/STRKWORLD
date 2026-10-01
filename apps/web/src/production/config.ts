@@ -243,7 +243,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
  * relay-fee ceiling. It needs `VITE_STRK20_SWAP_ENABLED=true`, a
  * `VITE_STRK20_SWAP_ALLOWED_TOKENS` list of one to `MAX_SWAP_TOKENS` canonical
  * token addresses naming STRK, and a whole `VITE_STRK20_SWAP_SLIPPAGE_BPS`
- * from 1 to `MAX_SWAP_SLIPPAGE_BPS`. `VITE_STRK20_SWAP_DEGEN_ENABLED=true`
+ * from 1 to `MAX_SWAP_SLIPPAGE_BPS`, the widest slippage the Exchange's cog
+ * offers (D-090). `VITE_STRK20_SWAP_DEGEN_ENABLED=true`
  * additionally admits the degen floor's tokens, which the backend's quote
  * route vets (D-067); anything else there leaves it off. Any missing,
  * malformed, partial or disabled value keeps the swap locked, whole, without

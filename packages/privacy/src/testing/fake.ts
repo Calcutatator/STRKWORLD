@@ -40,6 +40,7 @@ import type {
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
+import { SWAP_MAX_SLIPPAGE_BPS } from '../swap-prices.js';
 import {
   ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
   ENDUR_XSTRK,
@@ -677,6 +678,12 @@ export class FakePrivacyOperations implements PrivacyOperations {
       assertAddress(twoSided ? intent.tokenIn : intent.token, 'fake intent token');
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
         throw new PrivacyError('unknown', 'Minimum output must be positive.');
+      }
+      if (
+        intent.kind === 'swap' && intent.slippageBps !== undefined
+        && (!Number.isSafeInteger(intent.slippageBps) || intent.slippageBps <= 0 || intent.slippageBps > SWAP_MAX_SLIPPAGE_BPS)
+      ) {
+        throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");
       }
       if (twoSided) assertAddress(intent.tokenOut, `fake ${intent.kind} output token`);
       // Production pins the pair (the anonymizer pins none); so does the fake.
@@ -1430,7 +1437,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (!Number.isSafeInteger(configured.expiresAt) || configured.expiresAt <= 0) {
       throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
     }
-    const protectedMinimum = protectedMinimumOut(configured.expectedAmountOut, configured.slippageBps);
+    // D-090: the player's own slippage when the intent carries one, as the adapter does.
+    const slippageBps = intent.slippageBps ?? configured.slippageBps;
+    const protectedMinimum = protectedMinimumOut(configured.expectedAmountOut, slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }
@@ -1440,7 +1449,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       swapReview: Object.freeze({
         expectedAmountOut: configured.expectedAmountOut,
         minimumAmountOut: canonicalIntent.minAmountOut,
-        slippageBps: configured.slippageBps,
+        slippageBps,
         expiresAt: configured.expiresAt,
         priceCheck: Object.freeze({ ...(configured.priceCheck ?? FAKE_PRICE_CHECK) }),
       }),

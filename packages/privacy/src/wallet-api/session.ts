@@ -1318,6 +1318,8 @@ function validIntent(value: unknown): boolean {
     const tokenOut = Object.getOwnPropertyDescriptor(value, 'tokenOut');
     const amountIn = Object.getOwnPropertyDescriptor(value, 'amountIn');
     const minimum = Object.getOwnPropertyDescriptor(value, 'minAmountOut');
+    const slippage = Object.getOwnPropertyDescriptor(value, 'slippageBps');
+    if (slippage && (!('value' in slippage) || !Number.isSafeInteger(slippage.value) || slippage.value <= 0)) return false;
     return Boolean(
       tokenIn && 'value' in tokenIn && typeof tokenIn.value === 'string' && isNonzeroFelt(tokenIn.value)
       && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)

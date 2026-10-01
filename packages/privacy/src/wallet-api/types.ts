@@ -347,6 +347,11 @@ export interface WalletRoutePolicy {
   };
   swap?: {
     expectedChainId: string;
+    /**
+     * The widest slippage a swap may use, in bps (1 to 300), and the one a
+     * swap intent without its own `slippageBps` uses. Since D-090 the
+     * Exchange's slippage cog chooses at or below it.
+     */
     slippageBps: number;
     /**
      * D-067's degen floor (D-084): when true, a swap may name tokens beyond
