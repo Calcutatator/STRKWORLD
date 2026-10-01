@@ -84,6 +84,8 @@ export {
 // tokens and pairs, the dapp name, Vesu's arithmetic and the action builders.
 export {
   BORROW_DAPP_NAME,
+  BORROW_MIN_HEALTH_AFTER,
+  BORROW_REVIEW_TTL_MS,
   BORROW_PAIRS,
   BORROW_POOL,
   BORROW_REPAY_ALL_BUFFER_BPS,

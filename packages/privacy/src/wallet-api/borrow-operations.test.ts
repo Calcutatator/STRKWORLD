@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import {
   BORROW_PAIRS,
+  BORROW_REVIEW_TTL_MS,
   BORROW_TOKENS,
   BorrowRefusedError,
   PrivacyError,
@@ -125,6 +126,7 @@ function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = 
   let marketReads = 0;
   const stages: VaultStage[] = [];
   const state = {
+    clock: 0,
     fee: POOL_FEE,
     assets: assetRows() as unknown,
     pairs: pairRows() as unknown,
@@ -184,6 +186,7 @@ function fixture(options: { policy?: WalletRoutePolicy; withReads?: boolean } = 
     vault,
     ...(options.withReads === false ? {} : { borrow }),
     sleep: async () => {},
+    now: () => state.clock,
   });
   return {
     operations,
@@ -390,6 +393,31 @@ describe('the four flows through the wallet (D-083)', () => {
       .rejects.toThrow('The borrow counter does not offer that pair in this build.');
     await expect(f.operations.prepareBorrow({ kind: 'lend', collateral: ETH, debt: USDC } as never)).rejects.toThrow('The borrow request is invalid.');
     expect(f.commitments).toEqual([]);
+  });
+
+  it('refuses a review older than two minutes at confirm, before the wallet is asked (review fix)', async () => {
+    const f = fixture();
+    f.state.positions = positionRows({ [`${STRK}:${USDC}`]: { collateral: 10_000n * E18, debt: 100n * USDC_ONE } });
+    f.state.clock = 1_000;
+    const stale = await f.operations.prepareBorrow({ kind: 'repay', ...pairKey, amount: 'all' });
+    f.state.clock = 1_000 + BORROW_REVIEW_TTL_MS + 1;
+    await expect(stale.confirm({ feeCeiling: POOL_FEE })).rejects.toMatchObject({ kind: 'unknown', refusal: 'review-expired' });
+    expect(f.invoked).toEqual([]);
+    // Prepared again, it confirms; so does one confirmed just inside the two minutes.
+    const fresh = await f.operations.prepareBorrow({ kind: 'repay', ...pairKey, amount: 'all' });
+    f.state.clock += BORROW_REVIEW_TTL_MS;
+    await expect(fresh.confirm({ feeCeiling: POOL_FEE })).resolves.toMatchObject({ outcome: 'succeeded' });
+    expect(f.invoked).toHaveLength(1);
+  });
+
+  it('withdraws part of the collateral of a loan in a pair Vesu no longer offers, by that pair\'s own max LTV (review fix)', async () => {
+    const f = fixture();
+    f.state.pairs = pairRows({ [`${STRK}:${USDC}`]: { debtCap: 0n } });
+    f.state.positions = positionRows({ [`${STRK}:${USDC}`]: { collateral: 10_000n * E18, debt: 100n * USDC_ONE } });
+    const batch = await f.operations.prepareBorrow({ kind: 'withdraw-collateral', ...pairKey, amount: 1_000n * E18 });
+    expect(batch.after).toMatchObject({ band: 'safe', maxLtv: 680_000_000_000_000_000n });
+    const repaid = await f.operations.prepareBorrow({ kind: 'repay', ...pairKey, amount: 50n * USDC_ONE });
+    expect(repaid.after.band).toBe('safe');
   });
 
   it('refuses to sign above the fee ceiling', async () => {

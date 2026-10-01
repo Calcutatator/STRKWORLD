@@ -121,6 +121,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       poolConfig: (signal) => this.poolConfig(signal),
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+      now: this.now,
     });
   }
 

@@ -503,6 +503,10 @@ export const COPY = freezeCopy({
       'pair-not-offered': 'Vesu does not offer new loans in that pair right now.',
       'stale-price': "Vesu's price feed for that pair is stale, so Vesu refuses every change to it until the feed updates.",
       'above-max-ltv': "That would take the loan above the pair's max LTV, so Vesu would refuse it. Borrow less, or add more collateral.",
+      /** D-083: risk-adding actions keep a margin, since prices move while the wallet proves and sends. */
+      'too-close-to-liquidation':
+        "That would leave the loan too close to liquidation: Vesu's prices can move in the time your wallet takes to prove and send it. Borrow less or add more collateral; to take collateral back, withdraw less or repay some first.",
+      'review-expired': 'This review is more than two minutes old, and interest or prices may have moved since. Review it again.',
       'debt-below-floor': "Vesu needs a debt worth more than its minimum, about $10. Borrow more, or repay everything instead.",
       'collateral-below-floor': "Vesu needs collateral worth more than its minimum, about $10, while you owe anything.",
       'debt-cap': "That would pass the pair's debt cap on Vesu.",

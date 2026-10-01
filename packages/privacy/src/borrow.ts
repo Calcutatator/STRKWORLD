@@ -116,6 +116,23 @@ export const BORROW_PAIRS: readonly BorrowPairKey[] = Object.freeze(
 export const BORROW_WARNING_HEALTH = 1_150_000_000_000_000_000n;
 
 /**
+ * The least health, × 10^18, an action that adds risk (borrowing more,
+ * withdrawing collateral while owing) may leave a loan at (D-083). Proving
+ * and sending take time, and Vesu's prices move meanwhile, so a loan sent at
+ * a health of about 1 could land liquidatable. Repaying and adding
+ * collateral only ever raise health and are never held to it.
+ */
+export const BORROW_MIN_HEALTH_AFTER = 1_050_000_000_000_000_000n;
+
+/**
+ * How long a prepared borrow-counter batch may wait for its confirm (D-083):
+ * two minutes. Past it the confirm refuses before the wallet is asked, so a
+ * repay-all whose interest has outgrown its buffer, or a borrow whose prices
+ * have moved, is reviewed again rather than sent stale.
+ */
+export const BORROW_REVIEW_TTL_MS = 120_000;
+
+/**
  * Repay-all's buffer (D-083): 0.1% of the debt read at prepare time, plus two
  * base units for Vesu's rounding in its own favour. Interest accrues every
  * second until the transaction runs, so the exact amount is Vesu's to fix;
@@ -283,6 +300,13 @@ export function assessBorrow(
   request: BorrowRequest,
   market: BorrowMarket,
   position: Pick<BorrowPosition, 'collateralShares' | 'nominalDebt' | 'collateralAmount' | 'debtAmount'> | undefined,
+  /**
+   * The pair's own max LTV as Vesu reads it now, offered or not. A pair Vesu
+   * has stopped offering is absent from `market.pairs`, yet a loan in it is
+   * still measured by its own setting; omitted, such a loan's max LTV is
+   * unknown and only actions that need none pass.
+   */
+  pairMaxLtv?: bigint,
 ): AssessedBorrow {
   const refuse = (reason: BorrowRefusal): AssessedBorrow => Object.freeze({ ok: false, reason });
   const key = borrowPairKey(request.collateral, request.debt);
@@ -299,9 +323,13 @@ export function assessBorrow(
     debt: position?.debtAmount ?? 0n,
   };
   // A pair left out of the market (not offered) still has its position to
-  // unwind; its max LTV is then unknown here, so only actions that need none
-  // pass (repay, add collateral, withdrawing all with no debt).
-  const maxLtv = pair?.maxLtv ?? 0n;
+  // unwind, measured by its own max LTV when the caller read it; without
+  // one, only actions that need none pass (repay, add collateral,
+  // withdrawing all with no debt).
+  const maxLtv = pair?.maxLtv ?? (typeof pairMaxLtv === 'bigint' && pairMaxLtv >= 0n ? pairMaxLtv : 0n);
+  // Risk-adding actions must leave room before liquidation (BORROW_MIN_HEALTH_AFTER).
+  const tooClose = (collateralAfter: bigint, debtAfter: bigint): boolean =>
+    collateralValue(collateralAfter, collateral) * maxLtv < debtValue(debtAfter, debt) * BORROW_MIN_HEALTH_AFTER;
   const health = (collateralAfter: bigint, debtAfter: bigint): BorrowHealth => borrowHealth({
     collateralAmount: collateralAfter,
     debtAmount: debtAfter,
@@ -336,6 +364,7 @@ export function assessBorrow(
       if (!isCollateralized(collateralValue(collateralAfter, collateral), debtValue(debtAfter, debt), pair.maxLtv)) {
         return refuse('above-max-ltv');
       }
+      if (tooClose(collateralAfter, debtAfter)) return refuse('too-close-to-liquidation');
       const floor = floorRefusal(collateralAfter, debtAfter);
       if (floor) return refuse(floor);
       if (pair.totalDebt + borrowAmount + 1n > pair.debtCap) return refuse('debt-cap');
@@ -381,9 +410,10 @@ export function assessBorrow(
       // Vesu rounds the shares burned up: count a base unit less collateral.
       const collateralAfter = held.collateral - amount > 0n ? held.collateral - amount - 1n : 0n;
       if (held.nominal !== 0n) {
-        if (!pair || !isCollateralized(collateralValue(collateralAfter, collateral), debtValue(held.debt, debt), pair.maxLtv)) {
+        if (maxLtv === 0n || !isCollateralized(collateralValue(collateralAfter, collateral), debtValue(held.debt, debt), maxLtv)) {
           return refuse('above-max-ltv');
         }
+        if (tooClose(collateralAfter, held.debt)) return refuse('too-close-to-liquidation');
       }
       const floor = floorRefusal(collateralAfter, held.debt);
       if (floor) return refuse(floor);

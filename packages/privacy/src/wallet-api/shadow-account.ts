@@ -172,6 +172,8 @@ export function preparedShadowBatch<A, E extends object>(
   built: STRK20_ACTION[],
   config: PoolConfig,
   extra: E,
+  /** Runs at confirm before the fee check and the wallet; a throw refuses the confirm (D-083's expiry). */
+  guard?: () => void,
 ): Omit<PreparedVaultBatch, 'action'> & { readonly action: A } & E {
   // The wallet gets its own copy at confirm, so nothing it does to its
   // argument reaches this snapshot.
@@ -195,6 +197,7 @@ export function preparedShadowBatch<A, E extends object>(
       }
       attempted = true;
       throwIfAborted(signal);
+      guard?.();
       const current = await deps.poolConfig(signal);
       throwIfAborted(signal);
       if (current.feeAmount > feeCeiling) {

@@ -2,6 +2,7 @@ import type { STRK20_ACTION } from 'starknet';
 import {
   BORROW_DAPP_NAME,
   BORROW_PAIRS,
+  BORROW_REVIEW_TTL_MS,
   BORROW_SHADOW_NONCE,
   BorrowRefusedError,
   VESU_SCALE,
@@ -82,6 +83,8 @@ export interface ShadowBorrowOptions {
   readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly receiptWaitsMs?: readonly number[];
+  /** The clock a prepared batch's two-minute life is measured by; `Date.now` by default. */
+  readonly now?: () => number;
 }
 
 export class ShadowBorrow {
@@ -91,8 +94,10 @@ export class ShadowBorrow {
   private readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   private readonly identity: ShadowAccountResolver;
   private readonly batchDeps: ShadowBatchDeps;
+  private readonly now: () => number;
 
   constructor(options: ShadowBorrowOptions) {
+    this.now = options.now ?? Date.now;
     this.walletAddress = options.walletAddress;
     this.reads = options.reads;
     this.policy = options.policy;
@@ -151,7 +156,7 @@ export class ShadowBorrow {
     const market = await this.readMarket(tokens, signal, onStage);
     const [position] = await this.readPositions(identity.address, [pair], signal, onStage, market);
     if (!position) throw new PrivacyError('unknown', 'The borrow position read is invalid.');
-    const assessed = assessBorrow(owned, market, position);
+    const assessed = assessBorrow(owned, market, position, market.maxLtv.get(`${pair.collateral}:${pair.debt}`));
     if (!assessed.ok) throw new BorrowRefusedError(assessed.reason, refusalMessage(assessed.reason));
 
     let action: BorrowAction;
@@ -208,7 +213,16 @@ export class ShadowBorrow {
     }
     const config = await this.poolConfig(signal);
     throwIfAborted(signal);
-    return preparedShadowBatch(this.batchDeps, action, actions, config, { after: assessed.after });
+    // D-083: a review older than two minutes is refused at confirm, before the
+    // wallet is asked: interest may have outgrown a repay-all's buffer, and
+    // prices may have moved under a borrow.
+    const preparedAt = this.now();
+    const guard = (): void => {
+      if (this.now() - preparedAt > BORROW_REVIEW_TTL_MS) {
+        throw new BorrowRefusedError('review-expired', refusalMessage('review-expired'));
+      }
+    };
+    return preparedShadowBatch(this.batchDeps, action, actions, config, { after: assessed.after }, guard);
   }
 
   /**
@@ -381,6 +395,8 @@ export function refusalMessage(reason: BorrowRefusal): string {
     case 'pair-not-offered': return 'Vesu does not offer new loans in that pair right now.';
     case 'stale-price': return "Vesu's price feed for that pair is stale, so Vesu refuses every change to it until the feed updates.";
     case 'above-max-ltv': return "That would take the loan above the pair's max LTV, so Vesu would refuse it.";
+    case 'too-close-to-liquidation': return 'That would leave the loan too close to liquidation to send safely.';
+    case 'review-expired': return 'This review is more than two minutes old. Prepare it again.';
     case 'debt-below-floor': return "The debt left would be below Vesu's minimum. Repay it all instead, or borrow more.";
     case 'collateral-below-floor': return "The collateral left would be below Vesu's minimum for a loan.";
     case 'debt-cap': return "That would pass the pair's debt cap.";

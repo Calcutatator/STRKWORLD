@@ -4505,6 +4505,16 @@ valid price.
   debt, more collateral than held, all of it while debt remains. A refusal
   is a `BorrowRefusedError` (kind `unknown`, with an own `refusal` code), and
   the counter says which rule in its own words without reporting a failure.
+  Actions that add risk (borrowing more, withdrawing collateral while owing)
+  must also leave a health of at least 1.05 (`BORROW_MIN_HEALTH_AFTER`):
+  prices move while the wallet proves and sends, so a loan sent at about 1
+  could land liquidatable. Repaying and adding collateral are never held to
+  it. A loan in a pair Vesu stopped offering is assessed by that pair's own
+  max LTV, read live.
+- **A review lives two minutes** (`BORROW_REVIEW_TTL_MS`). Past it, confirm
+  refuses with `review-expired` before the fee check or the wallet, and the
+  counter offers a fresh review: interest may have outgrown a repay-all's
+  buffer, or prices moved under a borrow.
 - **Health in the browser, from public reads.** Each loan carries Vesu's
   LTV, max LTV, a health factor (`collateral_value × max_ltv / debt_value`),
   the collateral price at which it turns liquidatable if the debt token

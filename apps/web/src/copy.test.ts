@@ -440,8 +440,8 @@ describe('shell copy', () => {
     it('words every refusal the seam can name', async () => {
       expect(Object.keys(refusals).sort()).toEqual([
         'above-max-ltv', 'amount', 'collateral-below-floor', 'debt-below-floor', 'debt-cap', 'nothing-to-repay',
-        'pair-not-offered', 'repay-exceeds-debt', 'stale-price', 'unknown-pair', 'utilization',
-        'withdraw-all-with-debt', 'withdraw-exceeds-collateral',
+        'pair-not-offered', 'repay-exceeds-debt', 'review-expired', 'stale-price', 'too-close-to-liquidation',
+        'unknown-pair', 'utilization', 'withdraw-all-with-debt', 'withdraw-exceeds-collateral',
       ]);
     });
   });

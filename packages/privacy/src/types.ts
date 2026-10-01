@@ -139,6 +139,10 @@ export type BorrowRefusal =
   | 'pair-not-offered'
   | 'stale-price'
   | 'above-max-ltv'
+  /** The loan would end with health under `BORROW_MIN_HEALTH_AFTER`: too close to liquidation to send. */
+  | 'too-close-to-liquidation'
+  /** The prepared review is older than `BORROW_REVIEW_TTL_MS`: interest and prices may have moved. */
+  | 'review-expired'
   | 'debt-below-floor'
   | 'collateral-below-floor'
   | 'debt-cap'

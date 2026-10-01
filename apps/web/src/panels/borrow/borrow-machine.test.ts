@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BORROW_TOKENS as PINNED_BORROW_TOKENS, DEMO_BORROW_STAND_IN, FakePrivacyOperations, type FakeConfig, type PrivacyOperations, type WalletRoutePolicy } from '@strkworld/privacy';
+import { BORROW_TOKENS as PINNED_BORROW_TOKENS, BorrowRefusedError, DEMO_BORROW_STAND_IN, FakePrivacyOperations, type FakeConfig, type PrivacyOperations, type WalletRoutePolicy } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import { attachDebugTap, type DebugTap, type VaultDebugStep } from '../../debug/debug-tap.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
@@ -251,6 +251,45 @@ describe('the Borrow counter (D-083)', () => {
     await panel.prepare();
     expect(panel.store.getState().notice?.text).toBe(COPY.errors['submission-uncertain']);
     expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('says a review went stale at confirm, offers a fresh one, and reports nothing (review fix)', async () => {
+    const operations = fake();
+    const real = operations.prepareBorrow.bind(operations);
+    vi.spyOn(operations, 'prepareBorrow').mockImplementation(async (request, options) => {
+      const batch = await real(request, options);
+      return { ...batch, confirm: async () => { throw new BorrowRefusedError('review-expired', 'expired'); } };
+    });
+    const { panel, failures, receipts } = machine(operations);
+    await panel.open();
+    panel.setPair(STRK, USDC);
+    panel.setCollateralAmount('10000');
+    panel.setAmount('100');
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().flow).toEqual({
+      name: 'failed',
+      kind: 'unknown',
+      message: COPY.borrow.refusals['review-expired'],
+      recovery: 'prepare-again',
+    });
+    expect(failures).toEqual([]);
+    expect(receipts.pending('vault')).toEqual([]);
+    panel.cancelPrepared();
+    await panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('review');
+  });
+
+  it('refuses a borrow that would land too close to liquidation, saying what to do (review fix)', async () => {
+    const { panel } = machine(fake());
+    await panel.open();
+    panel.setPair(STRK, USDC);
+    // 10,000 demo STRK at $0.04 at 0.68 lends at most $272; $265 leaves a health of about 1.03.
+    panel.setCollateralAmount('10000');
+    panel.setAmount('265');
+    await panel.prepare();
+    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.borrow.refusals['too-close-to-liquidation'] });
+    expect(COPY.borrow.refusals['too-close-to-liquidation']).toMatch(/Borrow less or add more collateral/);
   });
 
   it('keeps WBTC pairs in its list', async () => {

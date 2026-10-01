@@ -882,7 +882,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
     this.borrowIdentity(onStage);
     emitVaultStage(onStage, { stage: 'position', ok: true });
     const loan = this.demoLoan(key.collateral, key.debt);
-    const assessed = assessBorrow(request, this.demoBorrowMarket(), loan);
+    const assessed = assessBorrow(request, this.demoBorrowMarket(), loan, demoMaxLtv(key.collateral, key.debt));
     if (!assessed.ok) throw new BorrowRefusedError(assessed.reason, `The demo borrow counter refuses this: ${assessed.reason}.`);
     const id = `${key.collateral}:${key.debt}`;
     const holding = () => {

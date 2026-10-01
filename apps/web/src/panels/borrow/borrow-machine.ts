@@ -691,6 +691,16 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
         trace('submitted');
       } catch (error) {
         if (signingBatch === batch) signingBatch = null;
+        // A refusal at confirm (a review past its two minutes) asked the wallet
+        // nothing: say so and offer a fresh review, without reporting a failure.
+        const refusal = refusalOf(error);
+        if (refusal !== null) {
+          if (!current(id)) return;
+          discardPrepared();
+          patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.borrow.refusals[refusal], recovery: 'prepare-again' } });
+          trace('failed');
+          return;
+        }
         fail(error, 'prepare-again', id);
         if (current(id)) trace('failed');
       }

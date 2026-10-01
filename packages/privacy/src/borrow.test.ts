@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CairoCustomEnum, CallData, hash } from 'starknet';
 import {
   BORROW_DAPP_NAME,
+  BORROW_MIN_HEALTH_AFTER,
   BORROW_PAIRS,
   BORROW_POOL,
   BORROW_SHADOW_NONCE,
@@ -384,9 +385,31 @@ describe('assessing an action before the wallet is asked (D-083)', () => {
     // $432.7872 × 0.68 = $294.295296, which at $0.999939 a USDC is 294.313249… USDC,
     // less the base unit counted for Vesu's rounding.
     const limit = 294_313_248n;
-    expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 10_000n * E18, borrowAmount: limit }, market(), undefined).ok).toBe(true);
     expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 10_000n * E18, borrowAmount: limit + 1n }, market(), undefined))
       .toEqual({ ok: false, reason: 'above-max-ltv' });
+    // At the limit itself Vesu would accept, but health would be 1.00: too close to send.
+    expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 10_000n * E18, borrowAmount: limit }, market(), undefined))
+      .toEqual({ ok: false, reason: 'too-close-to-liquidation' });
+  });
+
+  it('keeps a margin on actions that add risk: health after must be at least 1.05 (review fix)', () => {
+    expect(BORROW_MIN_HEALTH_AFTER).toBe(1_050_000_000_000_000_000n);
+    // $294.295296 / 1.05 = $280.281234…, at $0.999939 a USDC 280.298… USDC, less a base unit.
+    const margin = 280_298_331n;
+    const ok = assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 10_000n * E18, borrowAmount: margin }, market(), undefined);
+    expect(ok.ok).toBe(true);
+    expect(ok.ok && ok.after.healthFactor! >= BORROW_MIN_HEALTH_AFTER).toBe(true);
+    expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 10_000n * E18, borrowAmount: margin + 1n }, market(), undefined))
+      .toEqual({ ok: false, reason: 'too-close-to-liquidation' });
+    // A withdrawal is held to it too: $99.9939 needs $157.40 of STRK at 0.68 × 1.05, about 3,567.6 STRK.
+    const held = position(10_000n * E18, 100n * USDC_ONE);
+    expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 6_432n * E18 }, market(), held).ok).toBe(true);
+    expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 6_433n * E18 }, market(), held))
+      .toEqual({ ok: false, reason: 'too-close-to-liquidation' });
+    // Repaying and adding collateral only raise health: never held to the margin, even at 1.01.
+    const thin = position(10_000n * E18, 290n * USDC_ONE);
+    expect(assessBorrow({ kind: 'repay', ...STRK_USDC, amount: USDC_ONE }, market(), thin).ok).toBe(true);
+    expect(assessBorrow({ kind: 'add-collateral', ...STRK_USDC, amount: E18 }, market(), thin).ok).toBe(true);
   });
 
   it('refuses everything on a pair with a stale price, repay included', () => {
@@ -407,8 +430,23 @@ describe('assessing an action before the wallet is asked (D-083)', () => {
     expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 0n, borrowAmount: 1n }, notOffered, held)).toEqual({ ok: false, reason: 'pair-not-offered' });
     expect(assessBorrow({ kind: 'repay', ...STRK_USDC, amount: 'all' }, notOffered, held).ok).toBe(true);
     expect(assessBorrow({ kind: 'add-collateral', ...STRK_USDC, amount: E18 }, notOffered, held).ok).toBe(true);
-    // Its max LTV is unknown here, so withdrawing collateral with debt is refused.
+    // Without its max LTV, withdrawing collateral with debt is refused.
     expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: E18 }, notOffered, held)).toEqual({ ok: false, reason: 'above-max-ltv' });
+  });
+
+  it('measures a loan in a pair no longer offered by the max LTV the caller read (review fix)', () => {
+    const notOffered = market({ pairs: [pair(ETH, USDC, 780_000_000_000_000_000n)] });
+    const held = position(10_000n * E18, 100n * USDC_ONE);
+    const maxLtv = 680_000_000_000_000_000n;
+    // An improving action reads healthy, not liquidatable.
+    const repaid = assessBorrow({ kind: 'repay', ...STRK_USDC, amount: 50n * USDC_ONE }, notOffered, held, maxLtv);
+    expect(repaid.ok && repaid.after).toMatchObject({ status: 'priced', band: 'safe', maxLtv });
+    const added = assessBorrow({ kind: 'add-collateral', ...STRK_USDC, amount: E18 }, notOffered, held, maxLtv);
+    expect(added.ok && added.after.band).toBe('safe');
+    // A partial withdrawal within the margin passes; new debt still does not.
+    expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: E18 }, notOffered, held, maxLtv).ok).toBe(true);
+    expect(assessBorrow({ kind: 'borrow', ...STRK_USDC, collateralAmount: 0n, borrowAmount: 20n * USDC_ONE }, notOffered, held, maxLtv))
+      .toEqual({ ok: false, reason: 'pair-not-offered' });
   });
 
   it('refuses a debt at or under Vesu\'s floor, and a partial repay that would leave one', () => {
@@ -440,7 +478,7 @@ describe('assessing an action before the wallet is asked (D-083)', () => {
   it('blocks a withdrawal that would breach the max LTV, and all of the collateral while debt remains', () => {
     const held = position(10_000n * E18, 100n * USDC_ONE);
     // $99.9939 needs $147.0498 of collateral at 0.68: 3,397.75… STRK.
-    expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 6_600n * E18 }, market(), held).ok).toBe(true);
+    expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 6_300n * E18 }, market(), held).ok).toBe(true);
     expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 6_610n * E18 }, market(), held)).toEqual({ ok: false, reason: 'above-max-ltv' });
     expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 'all' }, market(), held)).toEqual({ ok: false, reason: 'withdraw-all-with-debt' });
     expect(assessBorrow({ kind: 'withdraw-collateral', ...STRK_USDC, amount: 10_001n * E18 }, market(), held)).toEqual({ ok: false, reason: 'withdraw-exceeds-collateral' });
