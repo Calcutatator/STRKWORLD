@@ -4435,3 +4435,125 @@ rules the relay used to enforce, one recipient per send (D-065) and one
 withdrawal per unshield, are kept in the accumulator. The first live
 unshield, send and stake through the wallet are the evidence for these
 routes on Ready.
+
+---
+
+## D-083 — Borrowing on Vesu from a second shadow account, at its own counter in the Vault
+
+**2026-10-01 · Accepted by the user (the product owner's decisions: its own shadow account, a second counter in the Vault's room, Prime only in five tokens, four flows each one wallet-submitted private transaction, a health display, a build switch off by default) · extends D-077 (the canonical shadow-account anonymizer, to Vesu's pool contract itself) · extends D-036's frozen seam by three methods and their shapes · adds one register route (`vault.borrow`) with its own disclosure, and changes no D-024 string · builds on D-081 (the pinned Prime markets) and D-082 (wallet submission)**
+
+**Context.** The Vault lends through Vesu's vTokens from the player's shadow
+account (D-077, D-079, D-081); borrowing was the open half. The research
+pass (2026-09-30, not committed) read Vesu V2's sources (`vesuxyz/vesu-v2`
+`src/pool.cairo`, `src/common.cairo`, `src/data_model.cairo`) against the
+deployed Prime pool class: one entry point, `modify_position(ModifyPositionParams)`,
+moves collateral and debt together; `assert_ownership` passes when the
+caller is the position's `user`, so a shadow account calling for itself
+needs no delegation; risk-raising changes must stay collateralised
+(`collateral_value × max_ltv ≥ debt_value × SCALE`) and under the asset's
+`max_utilization`; every change needs both oracle prices valid, a nonzero
+debt above the debt asset's floor and, with debt, collateral above its
+floor; new debt must fit the pair's `debt_cap`; and anyone may liquidate an
+undercollateralised position. On 2026-10-01 (block 15,725,569) all twenty
+ordered pairs among STRK, ETH, USDC, USDT and WBTC in Prime read a max LTV
+of 0.68 to 0.93, a 0.90 or 0.95 liquidation factor and a nonzero debt cap;
+every one of the five reads a $10 floor, a 0.95 utilization ceiling and a
+valid price.
+
+**Decision.**
+
+- **Its own shadow account.** `dapp_name` `strkworld-borrow`, nonce 0, fixed
+  for good (`BORROW_DAPP_NAME`). The address resolves exactly as the Vault's
+  does, through a resolver both now share
+  (`packages/privacy/src/wallet-api/shadow-account.ts`): the wallet's
+  partial commitment for that name, the anonymizer's `get_shadow_accounts`
+  through the backend's existing `/v1/rpc/shadow-account` route (nonce 0),
+  cross-checked against the address derived here; a mismatch fails closed.
+  Supply and loans are therefore on different public addresses.
+- **Scope v1.** Vesu Prime only, STRK, ETH, USDC, USDT and WBTC as collateral
+  or debt (`BORROW_TOKENS`, each the Vault's own pinned Prime market). The
+  pair settings are read live, never pinned. A pair whose max LTV or debt
+  cap reads zero is not offered: Vesu reads a zero cap as uncapped, so this
+  is the conservative reading of the product owner's rule and can only hide
+  a pair. A loan already in such a pair still shows, measured by its own max
+  LTV, and can be repaid or topped up.
+- **Four flows, each one private transaction the wallet proves and submits**
+  (`wallet_strk20InvokeTransaction`, D-082), no relay, no avnu key, one pool
+  fee (`packages/privacy/src/borrow.ts`):
+  - *open or borrow more*: withdraw the collateral (if any) to the account,
+    an OPEN note of the debt token, then `approve` the pool and one
+    `modify_position` adding both, collecting `diff`;
+  - *add collateral*: withdraw, `approve`, `modify_position` with the debt
+    untouched (`Native` 0), collecting `exact 0`;
+  - *repay part*: withdraw exactly the amount, `approve`, a negative
+    `Assets` debt, collecting `exact 0`; *repay all*: withdraw the debt read
+    at prepare plus 0.1 % and two base units, `approve` that, repay the
+    whole nominal debt in `Native` so Vesu fixes the figure when it runs,
+    and one OPEN note of the debt token collecting `all`: the unused buffer.
+    `diff` cannot say it, because the buffer reaches the account before the
+    invoke and the invoke only loses that token; the borrow account holds no
+    balance of it that is not the player's own;
+  - *withdraw collateral*: an OPEN note of the collateral token and a
+    negative `Assets` collateral, or every collateral share in `Native` once
+    no debt remains, collecting `diff`.
+- **Refused before the wallet is asked.** `prepareBorrow` reads the market
+  and the position fresh and runs `assessBorrow`, Vesu's own rules in
+  bigints, conservatively (a base unit more debt on a borrow, one less
+  collateral on a withdrawal): a stale price, a pair not offered for new
+  debt, a result above the max LTV, a debt or collateral at or under the
+  floor, the debt cap, the utilization ceiling, a partial repay of the whole
+  debt, more collateral than held, all of it while debt remains. A refusal
+  is a `BorrowRefusedError` (kind `unknown`, with an own `refusal` code), and
+  the counter says which rule in its own words without reporting a failure.
+- **Health in the browser, from public reads.** Each loan carries Vesu's
+  LTV, max LTV, a health factor (`collateral_value × max_ltv / debt_value`),
+  the collateral price at which it turns liquidatable if the debt token
+  holds its price, and a band: safe, warning below 1.15, liquidatable below
+  1, none with no debt, and no figure at all with a stale price. Each
+  prepared batch carries the health after the action. The backend reads
+  Vesu's `price`, `asset_config`, `pair_config`, `pairs` and `position`
+  through two new pinned routes, `/v1/rpc/borrow-market` (a version only)
+  and `/v1/rpc/borrow-position` (the stand-in address only), and logs
+  nothing per request. The shadow-to-wallet link never reaches the backend
+  or the lobby (D-024's sense: the lobby never sees money).
+- **The seam (D-036).** `PrivacyOperations` gains `borrowMarket`,
+  `borrowPositions` and `prepareBorrow`, with `BorrowAsset`, `BorrowPair`,
+  `BorrowMarket`, `BorrowPosition`, `BorrowPositions`, `BorrowRequest`,
+  `BorrowAction`, `BorrowHealth` and `PreparedBorrowBatch` (the Vault's
+  confirm contract). The session wrapper owns a borrow batch as it owns a
+  Vault batch, and checks its action and health.
+- **The counter.** `vault:borrow`, labelled BORROW, at tile (14, 3) in the
+  Vault's room beside SUPPLY / REDEEM, which is unchanged; its own station
+  because its route has its own disclosure (D-030). Dressed in the Vault's
+  Vesu look (`VESU_BORROW_STATION_THEME`): a loan card with two token fields,
+  a segmented health bar in Vesu's blues and the primary button, no figure.
+  The room draws 31 calls by its test's count (23 before), under its 40.
+  Its window (`apps/web/src/panels/borrow/`) previews the disclosure while
+  composing, explains liquidation in three plain lines, and needs the
+  player's request before reading loans, as the Vault does. Menu Mode keeps
+  the Vault's one window; borrowing is Game Mode only for now.
+- **The register.** `vault.borrow`, `anonymous`, approved by calc on
+  2026-10-01 under this decision: "Your loans sit on a second stand-in
+  address, not your wallet and not your Vault one. That address, its
+  collateral, its debt and every change you make, with their amounts, are
+  public on-chain, and like any Vesu loan anyone can liquidate it if its
+  collateral loses too much value. Only its link to your wallet is hidden,
+  and matching amounts or timing can still give that link away." The
+  wording follows the product owner's direction; the lead should read it
+  before the switch goes on anywhere players are.
+- **The switch.** `VITE_STRK20_BORROW_ENABLED=true` adds the `borrow` policy
+  route over the five pinned tokens; anything else keeps the counter locked,
+  and it enables nothing else. The counter is reached only through the
+  Vault's door, which still follows the Vault's two routes. Off in
+  `.env.production.example`; the Railway probe is in `deploy/RAILWAY.md`.
+
+**Consequences.** A player can borrow against private funds with the loan
+on a public, liquidatable address whose link to the wallet is hidden; amounts
+and timing around it can still correlate. A flash loan cannot run through a
+shadow account (it has no callback), so no leverage helper follows from
+this. A stale Vesu feed freezes every change to a loan, repaying included,
+and the counter says so. **No borrow through a shadow account has been made
+on mainnet**: D-077's probe exercised vTokens only, never the pool
+contract, so the first live borrow on the Railway probe is the evidence for
+this route, and a revert there (for example the pool refusing the account as
+caller) stops it until a new decision.
