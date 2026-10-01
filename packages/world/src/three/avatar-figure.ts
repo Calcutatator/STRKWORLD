@@ -18,10 +18,13 @@ import { PLAYER_SPRINT_MULTIPLIER } from '../movement-input.js';
 import {
   avatarLook,
   type AvatarBuild,
+  type AvatarEars,
+  type AvatarFace,
   type AvatarGear,
   type AvatarHair,
   type AvatarLook,
   type AvatarOutfit,
+  type AvatarTail,
   type AvatarWeapon,
 } from './avatar-looks.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
@@ -37,8 +40,12 @@ import type { AvatarFigure, AvatarMotion } from './types.js';
  *
  * Rig: root (caller-owned position and yaw) > body (uniform build scale) >
  * hips (bob) > legs, and hips > upper body (lean, twist, breath) > torso,
- * head, arms. Limbs pivot at the hips and shoulders. The body scales about the
- * feet, which sit on y = 0; the front faces +Z.
+ * head, arms. Legs pivot just below the hip band's hem, arms at the shoulders.
+ * The body scales about the feet, which sit on y = 0; the front faces +Z.
+ *
+ * No part passes through another in any pose: `tools/avatar-clipping.ts`
+ * checks every look, using the boxes each part records (`avatarPartBoxes`).
+ * Boxes that a limb or the head is meant to sit in are built as sockets.
  */
 
 type Vec3 = readonly [number, number, number];
@@ -79,6 +86,10 @@ const LEAN_SPRINT = 0.16;
 const BOB_WALK = 0.022;
 const BOB_SPRINT = 0.028;
 const TORSO_TWIST = 0.08;
+/** How much of the body's forward lean the head takes back. */
+const HEAD_COUNTER_LEAN = 0.25;
+/** A long robe's stride against everyone else's. */
+const ROBE_STRIDE = 0.58;
 /** Time constant for easing between idle, walk and sprint, so state changes never pop. */
 const GAIT_BLEND_SECONDS = 0.1;
 /** A stalled tab can deliver seconds in one frame; advance at most this much. */
@@ -124,7 +135,7 @@ const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
   small: {
     legLength: 0.26,
     legWidth: 0.14,
-    legDepth: 0.16,
+    legDepth: 0.15,
     legSpacing: 0.09,
     bootHeight: 0.09,
     torsoWidth: 0.36,
@@ -177,8 +188,38 @@ const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
   },
 };
 
-function shoulderX(d: BuildDims): number {
-  return d.torsoWidth / 2 + d.armWidth / 2 + 0.006;
+/**
+ * How far the torso's outermost layer stands out beside the arms, beyond the
+ * shirt: a coat's shell (and the belt over a closed robe, level with its
+ * cuffs) or a full chest plate. The arms hang that much further out, so they
+ * swing clear of it.
+ */
+function torsoFlare(outfit: AvatarOutfit): number {
+  const coat = findGear(outfit, 'coat');
+  const plate = findGear(outfit, 'breastplate');
+  let flare = 0;
+  if (coat) flare = outfit.belt && coat.length === 'ankle' ? 0.032 : 0.02;
+  if (plate?.coverage === 'full') flare = Math.max(flare, 0.022);
+  if (findGear(outfit, 'cloak')) flare = Math.max(flare, 0.005);
+  return flare;
+}
+
+function shoulderX(d: BuildDims, outfit: AvatarOutfit): number {
+  return d.torsoWidth / 2 + torsoFlare(outfit) + d.armWidth / 2 + 0.006;
+}
+
+/** Whether a look's pauldrons reach in under the head (the standard build's do). */
+function pauldronsUnderHead(d: BuildDims, outfit: AvatarOutfit): boolean {
+  if (!findGear(outfit, 'pauldrons')) return false;
+  return shoulderX(d, outfit) + 0.01 - (d.armWidth + 0.1) / 2 < d.headWidth / 2 + 0.005;
+}
+
+/**
+ * How far the shoulder rises above its pivot: below the head, with room for
+ * the swing, and lower still under pauldrons that sit low.
+ */
+function shoulderTop(d: BuildDims, outfit: AvatarOutfit): number {
+  return d.armWidth * (pauldronsUnderHead(d, outfit) ? 0.12 : 0.3);
 }
 
 function shoulderY(d: BuildDims): number {
@@ -188,6 +229,17 @@ function shoulderY(d: BuildDims): number {
 function headChamfer(d: BuildDims): number {
   return d.headWidth * 0.14;
 }
+
+/**
+ * How far below the hip line the legs swing from. The hip band (in the torso,
+ * which bobs, leans and twists) ends 0.05 below the hip line, and bobs down
+ * 0.028 at most; a thigh turning about a point above the band's hem would
+ * sweep out through its front and back, so the legs turn about a point below
+ * it, and their tops stay up inside the band.
+ */
+const LEG_PIVOT_DROP = 0.1;
+/** How far a leg's top reaches above its pivot, up inside the hip band. */
+const LEG_TOP = 0.06;
 
 /** How far the boot toe reaches ahead of the leg axis; the hips lift by it as a leg swings. */
 function footReach(d: BuildDims): number {
@@ -228,6 +280,43 @@ function hang(attach: Vec3, length: number, rotation: Vec3): { at: Vec3; rotatio
   return { at: [attach[0] - top.x, attach[1] - top.y, attach[2] - top.z], rotation };
 }
 
+/** Which moving parts may sit inside a box, and the open faces they leave it through. */
+export interface AvatarSocket {
+  readonly holds: readonly ('arm' | 'leg' | 'head')[];
+  readonly open: readonly ('top' | 'bottom')[];
+}
+
+/**
+ * One box of a part geometry, for the offline clipping check
+ * (`tools/avatar-clipping.ts`). Triangles `first .. first + count - 1` of the
+ * geometry are this box. It has no runtime meaning: nothing in the World reads it.
+ */
+export interface AvatarPartBox {
+  /** What the box is: `skin`, `hair` and `headwear` are read by the check; the rest name findings. */
+  readonly tag: string;
+  readonly socket: AvatarSocket | null;
+  readonly first: number;
+  readonly count: number;
+}
+
+const PART_BOXES = 'avatarPartBoxes';
+
+/** The boxes a part geometry was built from, in order; empty for a geometry this module did not build. */
+export function avatarPartBoxes(geometry: BufferGeometry): readonly AvatarPartBox[] {
+  const boxes: unknown = geometry.userData[PART_BOXES];
+  return Array.isArray(boxes) ? (boxes as AvatarPartBox[]) : [];
+}
+
+// Sockets: the joints where a limb or the head is meant to pass into a part.
+function socket(holds: AvatarSocket['holds'], open: AvatarSocket['open']): AvatarSocket {
+  return Object.freeze({ holds: Object.freeze([...holds]), open: Object.freeze([...open]) });
+}
+const HIP_SOCKET = socket(['leg'], ['bottom']);
+const SHOULDER_SOCKET = socket(['arm'], ['bottom']);
+const NECK_SOCKET = socket(['head'], ['top']);
+/** A cape over the shoulders: the head sits in its top, the arms leave through its underside. */
+const YOKE_SOCKET = socket(['head', 'arm'], ['top', 'bottom']);
+
 /**
  * Accumulates flat-shaded, vertex-coloured boxes into one non-indexed geometry.
  * Faces are split per triangle so each carries its own normal and colour.
@@ -238,6 +327,15 @@ class PartBuilder {
   private readonly colors: number[] = [];
   private readonly stack: Matrix4[] = [new Matrix4()];
   private readonly color = new Color();
+  private readonly boxes: AvatarPartBox[] = [];
+  private currentTag = 'part';
+  private currentSocket: AvatarSocket | null = null;
+
+  /** Name the boxes that follow (and the joint they hold, if any) for the clipping check. */
+  tag(tag: string, socket: AvatarSocket | null = null): void {
+    this.currentTag = tag;
+    this.currentSocket = socket;
+  }
 
   /** Nest the following boxes in a local frame, such as a hand grip or a horn root. */
   push(at: Vec3, rotation: Vec3 = ZERO, scale = 1): void {
@@ -261,6 +359,7 @@ class PartBuilder {
     const normalMatrix = new Matrix3().getNormalMatrix(matrix);
     // Hex colours are sRGB; setHex converts to the linear working space vertex colours use.
     this.color.setHex(spec.color);
+    const first = this.positions.length / 9;
     const count = outline.length;
     for (let i = 1; i < count - 1; i += 1) {
       this.triangle(bottom[0]!, bottom[i]!, bottom[i + 1]!, matrix, normalMatrix);
@@ -271,6 +370,12 @@ class PartBuilder {
       this.triangle(bottom[i]!, bottom[j]!, top[j]!, matrix, normalMatrix);
       this.triangle(bottom[i]!, top[j]!, top[i]!, matrix, normalMatrix);
     }
+    this.boxes.push(Object.freeze({
+      tag: this.currentTag,
+      socket: this.currentSocket,
+      first,
+      count: this.positions.length / 9 - first,
+    }));
   }
 
   build(): BufferGeometry {
@@ -280,6 +385,7 @@ class PartBuilder {
     geometry.setAttribute('color', new Float32BufferAttribute(this.colors, 3));
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
+    geometry.userData[PART_BOXES] = Object.freeze([...this.boxes]);
     return geometry;
   }
 
@@ -354,6 +460,7 @@ interface FringeChunk {
 function buildHead(look: AvatarLook, d: BuildDims): BufferGeometry {
   const b = new PartBuilder();
   const { headWidth: width, headHeight: height, headDepth: depth } = d;
+  b.tag('skin');
   b.box({
     size: [width, height, depth],
     at: [0, height / 2, 0],
@@ -363,11 +470,48 @@ function buildHead(look: AvatarLook, d: BuildDims): BufferGeometry {
   const hood = findGear(look.outfit, 'hood');
   const helmet = findGear(look.outfit, 'hornedHelmet');
   const goggles = findGear(look.outfit, 'goggles');
+  const { ears, face } = look.character;
+  if (face) addFace(b, face, d);
   addHair(b, look.character.hair, d, helmet ? 'helmet' : hood ? 'hood' : 'none');
+  // Ears stand up through the hair; headwear would have to cover them, so none is worn with them.
+  if (ears && !hood && !helmet) addEars(b, ears, d);
   if (hood) addHood(b, hood.color, d);
   if (helmet) addHelmet(b, helmet.color, helmet.horn, d);
   if (goggles) addGoggles(b, goggles.frame, goggles.lens, d);
   return b.build();
+}
+
+/**
+ * Cat ears on the crown, rooted down in the hair and leaning out a little:
+ * a tapered fur block, its inner ear a paler panel on the front face. They
+ * are part of the head, so they turn and nod with it.
+ */
+function addEars(b: PartBuilder, ears: AvatarEars, d: BuildDims): void {
+  const { headWidth: width, headHeight: height } = d;
+  b.tag('ears');
+  for (const s of SIDES) {
+    b.push([s * width * 0.26, height + 0.005, -0.03], [-0.1, 0, -s * 0.3]);
+    b.box({ size: [0.21, 0.22, 0.1], at: [0, 0.085, 0], color: ears.fur, taper: [0.14, 0.4] });
+    b.box({ size: [0.13, 0.14, 0.02], at: [0, 0.065, 0.045], color: ears.inner, taper: [0.14, 1] });
+    b.pop();
+  }
+}
+
+/** Blushed cheeks below the eyes and a small cat mouth between them. */
+function addFace(b: PartBuilder, face: AvatarFace, d: BuildDims): void {
+  const halfDepth = d.headDepth / 2;
+  const eyeY = EYE_HEIGHT * d.headHeight;
+  b.tag('face');
+  for (const s of SIDES) {
+    b.box({ size: [0.075, 0.035, 0.012], at: [s * (EYE_X + 0.035), eyeY - 0.085, halfDepth + 0.004], color: face.blush });
+    // The mouth's two strokes meet in the middle, like a little w.
+    b.box({
+      size: [0.034, 0.013, 0.01],
+      at: [s * 0.015, eyeY - 0.115, halfDepth + 0.004],
+      rotation: [0, 0, s * 0.55],
+      color: face.mouth,
+    });
+  }
 }
 
 /** Headwear hides the crown (and a helmet the fringe), so those boxes are left out. */
@@ -378,6 +522,11 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
   const chamfer = headChamfer(d);
   const color = hair.color;
   const crown = cover === 'none';
+  // Under a helmet the hair stops inside its rim, since the dome above narrows,
+  // and keeps clear of the rim's bevelled corners.
+  const helmet = cover === 'helmet';
+  const ceiling = helmet ? height - HELMET_RIM_DROP : height + 0.01;
+  b.tag('hair');
 
   const cap = (thick: number, over = 0.03, lift = 0.02, z = 0): void => {
     if (!crown) return;
@@ -390,31 +539,43 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
   };
   const back = (length: number, thick = 0.1): void => {
     if (cover === 'hood') return;
+    // Under a helmet it ends inside the neck guard, not below it.
+    const bottom = Math.max(height + 0.01 - length, helmet ? helmetGuardBottom(d) + 0.01 : -Infinity);
+    const top = Math.min(height + 0.01, ceiling);
+    if (top <= bottom) return;
     b.box({
-      size: [width + 0.06, length, thick],
-      at: [0, height - length / 2 + 0.01, -halfDepth - 0.01],
+      size: [helmet ? width * 0.7 : width + 0.06, top - bottom, thick],
+      at: [0, (top + bottom) / 2, -halfDepth - 0.01],
       color,
     });
   };
   const sides = (length: number, sideDepth: number, z = 0, thick = 0.06): void => {
+    const bottom = height - length;
+    const top = Math.min(height, ceiling);
+    if (top <= bottom) return;
     for (const s of SIDES) {
       b.box({
-        size: [thick, length, sideDepth],
-        at: [s * (halfWidth + 0.015), height - length / 2, z],
+        size: [thick, top - bottom, helmet ? Math.min(sideDepth, depth * 0.55) : sideDepth],
+        at: [s * (halfWidth + 0.015), (top + bottom) / 2, z],
         color,
       });
     }
   };
+  // A hood's brim comes lower than the hairline, so a fringe under it starts lower too.
+  const fringeLift = cover === 'hood' ? 0 : 0.02;
   const fringe = (chunks: readonly FringeChunk[]): void => {
     if (cover === 'helmet') return;
+    // Framing the face: the one hair a hood is meant to show.
+    b.tag('hair-face');
     for (const chunk of chunks) {
       b.box({
         size: [chunk.w, chunk.h, 0.07],
-        at: [chunk.x, height - chunk.h / 2 + 0.02, halfDepth + 0.02],
+        at: [chunk.x, height - chunk.h / 2 + fringeLift, halfDepth + 0.02],
         rotation: [0, 0, chunk.tilt],
         color,
       });
     }
+    b.tag('hair');
   };
   const spike = (at: Vec3, size: number, tall: number, rotation: Vec3): void => {
     if (!crown) return;
@@ -475,13 +636,17 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
     case 'bob':
       cap(0.12);
       back(0.46);
+      // Under a hood the sides fill its cheeks, seen only through the face opening.
+      if (cover === 'hood') b.tag('hair-face');
       sides(0.36, depth * 0.8, 0.02);
+      b.tag('hair');
       fringe([
         { x: -0.15, w: 0.2, h: 0.21, tilt: 0.12 },
         { x: 0.02, w: 0.2, h: 0.23, tilt: -0.05 },
         { x: 0.17, w: 0.18, h: 0.2, tilt: -0.14 },
       ]);
       // Face-framing locks stay visible inside a hood's opening.
+      b.tag('hair-face');
       for (const s of SIDES) {
         b.box({
           size: [0.07, 0.3, 0.1],
@@ -489,6 +654,7 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
           color,
         });
       }
+      b.tag('hair');
       break;
     case 'swept':
       cap(0.15, 0.03, 0.04, -0.03);
@@ -515,11 +681,13 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
         { x: -0.12, w: 0.22, h: 0.18, tilt: 0.28 },
         { x: 0.12, w: 0.22, h: 0.18, tilt: -0.28 },
       ]);
-      sides(0.52, depth * 0.55, 0.06, 0.08);
+      // Locks end at the jaw; below the head the hair narrows between the arms.
+      sides(0.48, depth * 0.55, 0.06, 0.08);
       if (cover !== 'hood') {
-        b.box({ size: [width + 0.06, 0.8, 0.1], at: [0, height - 0.39, -halfDepth - 0.03], color });
+        b.box({ size: [width + 0.06, height + 0.01, 0.1], at: [0, (height + 0.01) / 2, -halfDepth - 0.03], color });
+        b.box({ size: [width * 0.78, 0.3, 0.1], at: [0, -0.13, -halfDepth - 0.03], color });
         b.box({
-          size: [width + 0.12, 0.14, 0.12],
+          size: [width * 0.8, 0.14, 0.12],
           at: [0, height - 0.76, -halfDepth - 0.04],
           color,
           chamfer: 0.04,
@@ -593,28 +761,49 @@ function addHair(b: PartBuilder, hair: AvatarHair, d: BuildDims, cover: HairCove
   if (hair.beard !== undefined) addBeard(b, hair.beard, color, d);
 }
 
+/**
+ * The back of the beard where it hangs below the chin. It hangs in front of
+ * the chest, clear of whatever the torso wears there as the head nods.
+ */
+function beardBack(d: BuildDims): number {
+  return d.headDepth / 2 + 0.005;
+}
+
 /** Kept below the eyes so the face stays readable. */
 function addBeard(b: PartBuilder, beard: number, brows: number, d: BuildDims): void {
+  b.tag('beard');
   const halfWidth = d.headWidth / 2;
   const halfDepth = d.headDepth / 2;
   const eyeY = EYE_HEIGHT * d.headHeight;
+  // On the face, from the chin up.
   b.box({
-    size: [d.headWidth * 0.8, 0.22, 0.12],
-    at: [0, eyeY - 0.185, halfDepth + 0.02],
+    size: [d.headWidth * 0.8, eyeY - 0.075, 0.12],
+    at: [0, (eyeY - 0.075) / 2, halfDepth + 0.02],
+    color: beard,
+    chamfer: 0.03,
+  });
+  // Below the chin: the beard proper, then its point, in front of the chest.
+  const below = 0.14;
+  const thick = 0.085;
+  const back = beardBack(d);
+  b.box({
+    size: [d.headWidth * 0.8, below, thick],
+    at: [0, -below / 2 + 0.02, back + thick / 2],
     color: beard,
     chamfer: 0.03,
   });
   b.box({
-    size: [d.headWidth * 0.46, 0.13, 0.1],
-    at: [0, eyeY - 0.36, halfDepth + 0.02],
+    size: [d.headWidth * 0.46, 0.11, 0.07],
+    at: [0, -below - 0.035, back + 0.04],
     rotation: [0, 0, Math.PI],
     taper: [0.4, 0.8],
     color: beard,
   });
   for (const s of SIDES) {
+    // Sideburns end at the jaw, above anything worn at the shoulders.
     b.box({
-      size: [0.08, 0.26, 0.22],
-      at: [s * (halfWidth - 0.01), eyeY - 0.1, halfDepth - 0.08],
+      size: [0.08, eyeY - 0.02, 0.22],
+      at: [s * (halfWidth - 0.01), (eyeY - 0.02) / 2 + 0.06, halfDepth - 0.08],
       color: beard,
     });
     b.box({
@@ -632,6 +821,7 @@ function addBeard(b: PartBuilder, beard: number, brows: number, d: BuildDims): v
 }
 
 function addHood(b: PartBuilder, color: number, d: BuildDims): void {
+  b.tag('headwear');
   const { headWidth: width, headHeight: height, headDepth: depth } = d;
   const halfWidth = width / 2;
   const halfDepth = depth / 2;
@@ -667,8 +857,17 @@ function addHood(b: PartBuilder, color: number, d: BuildDims): void {
   }
 }
 
+/** How far below the crown a helmet's rim sits; hair under a helmet ends here. */
+const HELMET_RIM_DROP = 0.15;
+
+/** The bottom of a helmet's neck guard and cheek guards, in the head's frame. */
+function helmetGuardBottom(d: BuildDims): number {
+  return d.headHeight * 0.42 - 0.15;
+}
+
 /** Open-faced so the eyes stay visible; the nasal guard echoes the sprite's T visor. */
 function addHelmet(b: PartBuilder, metal: number, horn: number, d: BuildDims): void {
+  b.tag('headwear');
   const { headWidth: width, headHeight: height, headDepth: depth } = d;
   const halfWidth = width / 2;
   const halfDepth = depth / 2;
@@ -682,33 +881,42 @@ function addHelmet(b: PartBuilder, metal: number, horn: number, d: BuildDims): v
   });
   b.box({
     size: [width + 0.15, 0.06, depth + 0.15],
-    at: [0, height - 0.15, 0],
+    at: [0, height - HELMET_RIM_DROP, 0],
     color: metal,
     chamfer: chamfer + 0.075,
   });
   b.box({ size: [0.06, 0.2, 0.05], at: [0, height - 0.25, halfDepth + 0.05], color: metal });
+  // The neck guard reaches in to the head, closing the gap the hair would show through.
   b.box({
-    size: [width + 0.1, 0.3, 0.06],
-    at: [0, height * 0.42, -(halfDepth + 0.045)],
+    size: [width + 0.1, 0.3, 0.085],
+    at: [0, height * 0.42, -(halfDepth + 0.0325)],
     color: metal,
   });
+  // Cheek guards run back to the neck guard, so the sides are closed and no
+  // hair shows between them.
+  const guardFront = halfDepth + 0.01;
+  const guardBack = -(halfDepth + 0.02);
   for (const s of SIDES) {
+    // Their inner faces rest on the head, so nothing shows between.
     b.box({
-      size: [0.06, 0.3, 0.22],
-      at: [s * (halfWidth + 0.04), height * 0.45, halfDepth - 0.1],
+      size: [0.085, 0.3, guardFront - guardBack],
+      at: [s * (halfWidth + 0.0275), height * 0.45, (guardFront + guardBack) / 2],
       color: metal,
     });
     b.push([s * (halfWidth + 0.04), height - 0.01, 0], [0, 0, -s * 1.0]);
+    b.tag('horn');
     b.box({ size: [0.1, 0.15, 0.1], at: [0, 0.075, 0], color: horn, taper: [0.75, 0.75] });
     b.push([0, 0.14, 0], [0, 0, s * 0.8]);
     b.box({ size: [0.075, 0.12, 0.075], at: [0, 0.06, 0], color: horn, taper: [0.15, 0.15] });
     b.pop();
     b.pop();
+    b.tag('headwear');
   }
 }
 
 /** Pushed up onto the hairline, strap proud of the hair all round. */
 function addGoggles(b: PartBuilder, frame: number, lens: number, d: BuildDims): void {
+  b.tag('goggles');
   const { headWidth: width, headHeight: height, headDepth: depth } = d;
   const halfDepth = depth / 2;
   const y = height - 0.05;
@@ -731,6 +939,7 @@ function addGoggles(b: PartBuilder, frame: number, lens: number, d: BuildDims): 
 
 function buildEyes(): BufferGeometry {
   const b = new PartBuilder();
+  b.tag('eyes');
   for (const s of SIDES) {
     b.box({ size: [EYE_WIDTH, EYE_TALL, 0.03], at: [s * EYE_X, 0, 0], color: EYE_COLOR });
     // The sun is high in the south-west, so both highlights sit up and to screen-left.
@@ -748,12 +957,16 @@ function buildTorso(look: AvatarLook, d: BuildDims): BufferGeometry {
   const coat = findGear(outfit, 'coat');
   // Straps and plates sit on whatever the outermost layer is.
   const surfaceDepth = coat ? torsoDepth + 0.04 : torsoDepth;
+  // The hip band: the legs' tops sit in it and leave through its underside.
+  b.tag('hips', HIP_SOCKET);
   b.box({
-    size: [torsoWidth - 0.02, 0.13, torsoDepth - 0.02],
+    // As deep as the shirt, so a thigh at full sprint stays inside it.
+    size: [torsoWidth - 0.02, 0.13, torsoDepth],
     at: [0, 0.015, 0],
     color: outfit.trousers,
     chamfer: 0.02,
   });
+  b.tag('top');
   b.box({
     size: [torsoWidth, torsoHeight - 0.06, torsoDepth],
     at: [0, 0.06 + (torsoHeight - 0.06) / 2, 0],
@@ -762,6 +975,7 @@ function buildTorso(look: AvatarLook, d: BuildDims): BufferGeometry {
   });
   if (coat) addCoat(b, coat, outfit.top, d);
   if (outfit.belt) addBelt(b, outfit.belt.color, outfit.belt.buckle, coat, d);
+  if (look.character.tail) addTail(b, look.character.tail, d);
   for (const item of outfit.gear) {
     switch (item.kind) {
       case 'scarf':
@@ -774,30 +988,46 @@ function buildTorso(look: AvatarLook, d: BuildDims): BufferGeometry {
         addSatchel(b, item.color, surfaceDepth, d);
         break;
       case 'mantle':
-        addMantle(b, item.color, d);
+        addMantle(b, item.color, outfit, d);
         break;
-      case 'furCollar':
+      case 'furCollar': {
+        // The head sits a little into it. A beard hangs in front of it, so
+        // under a beard its front stops behind the beard.
+        const back = -(torsoDepth / 2 + 0.09);
+        const front = look.character.hair.beard === undefined
+          ? torsoDepth / 2 + 0.07
+          : Math.min(torsoDepth / 2 + 0.07, beardBack(d) - 0.02);
+        // Bearded, it sits below the chin entirely, so the beard covers its front.
+        const collarTop = look.character.hair.beard === undefined ? torsoHeight + 0.02 : torsoHeight - 0.03;
+        b.tag('fur-collar', NECK_SOCKET);
         b.box({
-          size: [torsoWidth * 0.94, 0.15, torsoDepth + 0.16],
-          at: [0, torsoHeight + 0.015, -0.01],
+          size: [torsoWidth * 0.94, 0.15, front - back],
+          at: [0, collarTop - 0.075, (front + back) / 2],
           color: item.color,
           chamfer: 0.06,
         });
         break;
+      }
       case 'cloak':
-        addCloak(b, item.color, d);
+        addCloak(b, item.color, outfit, d);
         break;
       case 'pauldrons':
+      {
+        // Caps over the arm tops. Where they reach in under the head they sit
+        // lower and flatter, below its chin as it nods.
+        const low = pauldronsUnderHead(d, outfit);
+        b.tag('pauldron', YOKE_SOCKET);
         for (const s of SIDES) {
           b.box({
-            size: [d.armWidth + 0.1, 0.1, d.armDepth + 0.1],
-            at: [s * shoulderX(d), torsoHeight - 0.03, 0],
-            rotation: [0, 0, -s * 0.28],
+            size: [d.armWidth + 0.1, low ? 0.08 : 0.1, d.armDepth + (low ? 0.14 : 0.12)],
+            at: [s * (shoulderX(d, outfit) + 0.01), torsoHeight - (low ? 0.06 : 0.03), 0],
+            rotation: [0, 0, -s * (low ? 0.1 : 0.28)],
             color: item.color,
             chamfer: 0.03,
           });
         }
         break;
+      }
       case 'breastplate':
         addBreastplate(b, item.color, item.trim, item.coverage, surfaceDepth, d);
         break;
@@ -819,6 +1049,7 @@ function addCoat(b: PartBuilder, coat: CoatGear, inner: number, d: BuildDims): v
   const { torsoWidth, torsoDepth, torsoHeight, legLength } = d;
   const shellWidth = torsoWidth + 0.04;
   const shellDepth = torsoDepth + 0.04;
+  b.tag('coat');
   b.box({
     size: [shellWidth, torsoHeight - 0.03, shellDepth],
     at: [0, 0.03 + (torsoHeight - 0.03) / 2, 0],
@@ -844,9 +1075,11 @@ function addCoat(b: PartBuilder, coat: CoatGear, inner: number, d: BuildDims): v
     // A closed bell that flares enough to hold the stride; the boots show below the hem.
     // The hem clears the ground by enough to survive the sprint lean, bob and hip drop.
     const top = 0.03;
-    const length = top + legLength - 0.1;
+    const length = top + legLength - 0.11;
     const bottomWidth = torsoWidth + 0.16;
-    const bottomDepth = torsoDepth + 0.26;
+    const bottomDepth = torsoDepth + 0.34;
+    // A bell the legs stride inside, leaving through its open hem.
+    b.tag('robe', HIP_SOCKET);
     b.box({
       size: [bottomWidth, length, bottomDepth],
       at: [0, top - length / 2, 0],
@@ -861,11 +1094,12 @@ function addCoat(b: PartBuilder, coat: CoatGear, inner: number, d: BuildDims): v
     return;
   }
   // Knee coats: back and side tails only, so the legs stride through the open front.
+  b.tag('coat-tail');
   const length = legLength * 0.55;
   b.box({
     size: [shellWidth, length, 0.04],
     color: coat.color,
-    ...hang([0, 0.03, -shellDepth / 2 + 0.02], length, [0.2, 0, 0]),
+    ...hang([0, 0.03, -shellDepth / 2 + 0.02], length, [0.35, 0, 0]),
   });
   for (const s of SIDES) {
     b.box({
@@ -884,6 +1118,7 @@ function addBelt(
   d: BuildDims,
 ): void {
   const { torsoWidth, torsoDepth } = d;
+  b.tag('belt');
   const y = 0.075;
   if (coat?.length === 'knee') {
     // Worn under an open coat: only the front opening shows it.
@@ -901,12 +1136,15 @@ function addBelt(
 /** A thick cowl under the chin (the chibi head hides any neck) with a knot and two tails. */
 function addScarf(b: PartBuilder, color: number, d: BuildDims): void {
   const { torsoWidth, torsoDepth, torsoHeight } = d;
+  // No wider than the shirt, so the arms swing clear of it.
+  b.tag('scarf', NECK_SOCKET);
   b.box({
-    size: [torsoWidth + 0.04, 0.11, torsoDepth + 0.1],
+    size: [torsoWidth + 0.004, 0.11, torsoDepth + 0.1],
     at: [0, torsoHeight - 0.03, 0.005],
     color,
     chamfer: 0.045,
   });
+  b.tag('scarf');
   b.box({
     size: [0.12, 0.1, 0.06],
     at: [torsoWidth * 0.16, torsoHeight - 0.07, torsoDepth / 2 + 0.055],
@@ -933,6 +1171,7 @@ function addHarness(
   d: BuildDims,
 ): void {
   const { torsoHeight } = d;
+  b.tag('harness');
   const z = surfaceDepth / 2 + 0.011;
   for (const s of SIDES) {
     // Offset in depth so the crossing straps never share a plane.
@@ -946,9 +1185,34 @@ function addHarness(
   b.box({ size: [0.075, 0.075, 0.02], at: [0, torsoHeight * 0.54, z + 0.016], color: buckle });
 }
 
+/**
+ * A tail from the small of the back, above the belt line the thighs swing
+ * below: out and down, then curling up behind, its last block the paler tip.
+ * It rides with the torso, so it leans and turns with the body.
+ */
+function addTail(b: PartBuilder, tail: AvatarTail, d: BuildDims): void {
+  b.tag('tail');
+  // Each segment runs along its frame's +Y; a frame's x turn bends the next.
+  const segments: ReadonlyArray<readonly [number, number, number, number]> = [
+    // length, width, bend from the previous direction, colour
+    [0.12, 0.085, -1.8, tail.fur],
+    [0.12, 0.09, 0.6, tail.fur],
+    [0.11, 0.095, 0.6, tail.fur],
+    [0.1, 0.11, 0.5, tail.tip],
+  ];
+  b.push([0, 0.1, -d.torsoDepth / 2 + 0.03]);
+  for (const [length, width, bend, color] of segments) {
+    b.push(ZERO, [bend, 0, 0]);
+    b.box({ size: [width, length + 0.03, width], at: [0, length / 2, 0], color, chamfer: 0.015 });
+    b.push([0, length, 0]);
+  }
+  for (let i = 0; i < segments.length * 2 + 1; i += 1) b.pop();
+}
+
 /** Strap from the right shoulder to a pouch on the left hip. */
 function addSatchel(b: PartBuilder, color: number, surfaceDepth: number, d: BuildDims): void {
   const { torsoWidth, torsoHeight } = d;
+  b.tag('satchel');
   for (const z of [surfaceDepth / 2 + 0.008, -(surfaceDepth / 2 + 0.008)]) {
     b.box({
       size: [0.045, torsoHeight * 1.14, 0.02],
@@ -957,17 +1221,19 @@ function addSatchel(b: PartBuilder, color: number, surfaceDepth: number, d: Buil
       color,
     });
   }
+  // On the hip, above the thigh's swing.
   b.box({
-    size: [torsoWidth * 0.36, 0.13, 0.08],
-    at: [torsoWidth * 0.24, 0.015, surfaceDepth / 2 + 0.03],
+    size: [torsoWidth * 0.36, 0.13, 0.07],
+    at: [torsoWidth * 0.24, 0.06, surfaceDepth / 2 + 0.03],
     color,
     chamfer: 0.02,
   });
 }
 
 /** Puffed shoulders that swallow the arm tops, plus the hood's drape down the back. */
-function addMantle(b: PartBuilder, color: number, d: BuildDims): void {
+function addMantle(b: PartBuilder, color: number, outfit: AvatarOutfit, d: BuildDims): void {
   const { torsoWidth, torsoDepth, torsoHeight } = d;
+  b.tag('mantle', YOKE_SOCKET);
   b.box({
     size: [torsoWidth + 0.2, 0.15, torsoDepth + 0.1],
     at: [0, torsoHeight - 0.035, 0],
@@ -975,37 +1241,46 @@ function addMantle(b: PartBuilder, color: number, d: BuildDims): void {
     chamfer: 0.06,
     taper: [0.8, 0.88],
   });
+  b.tag('mantle-shoulder', YOKE_SOCKET);
   for (const s of SIDES) {
+    // Round the shoulder joint only, deep enough for the arm's swing.
     b.box({
-      size: [d.armWidth + 0.1, 0.2, d.armDepth + 0.12],
-      at: [s * shoulderX(d), shoulderY(d) - 0.03, 0],
+      size: [d.armWidth + 0.12, 0.105, d.armDepth + 0.18],
+      at: [s * shoulderX(d, outfit), shoulderY(d) - 0.0075, 0],
       color,
       chamfer: 0.05,
     });
   }
+  // The drape down the back stays between the arms, which swing past it.
+  b.tag('mantle');
   b.box({
-    size: [torsoWidth + 0.06, torsoHeight * 0.7, 0.06],
+    size: [torsoWidth - 0.02, torsoHeight * 0.7, 0.06],
     at: [0, torsoHeight * 0.6, -(torsoDepth / 2 + 0.035)],
     color,
   });
 }
 
 /** Tilted back and flared so swinging arms and legs stay in front of it. */
-function addCloak(b: PartBuilder, color: number, d: BuildDims): void {
+function addCloak(b: PartBuilder, color: number, outfit: AvatarOutfit, d: BuildDims): void {
   const { torsoWidth, torsoDepth, torsoHeight, legLength } = d;
+  // The yoke round the neck stays inside the arms' inner faces.
+  b.tag('cloak-yoke', NECK_SOCKET);
   b.box({
-    size: [torsoWidth + 0.1, 0.08, torsoDepth + 0.08],
-    at: [0, torsoHeight - 0.02, 0],
+    size: [torsoWidth + 2 * torsoFlare(outfit), 0.08, torsoDepth + 0.1],
+    // Below the chin, as the head nods.
+    at: [0, torsoHeight - 0.07, 0],
     color,
     chamfer: 0.04,
   });
+  b.tag('cloak');
   const length = torsoHeight + legLength - 0.16;
   const width = torsoWidth + 0.24;
   b.box({
     size: [width, length, 0.05],
     color,
     taper: [(torsoWidth + 0.08) / width, 1],
-    ...hang([0, torsoHeight - 0.03, -(torsoDepth / 2 + 0.05)], length, [0.12, 0, 0]),
+    // Steep enough that a hand or heel swinging back at a sprint stays in front of it.
+    ...hang([0, torsoHeight - 0.03, -(torsoDepth / 2 + 0.07)], length, [0.36, 0, 0]),
   });
 }
 
@@ -1018,6 +1293,7 @@ function addBreastplate(
   d: BuildDims,
 ): void {
   const { torsoWidth, torsoDepth, torsoHeight } = d;
+  b.tag('breastplate');
   if (coverage === 'full') {
     const height = torsoHeight * 0.66;
     const y = torsoHeight - 0.02 - height / 2;
@@ -1058,17 +1334,29 @@ function buildArm(look: AvatarLook, d: BuildDims, side: Side): BufferGeometry {
   const b = new PartBuilder();
   const { outfit, character } = look;
   const { armLength, armWidth, armDepth } = d;
-  const top = armWidth * 0.45;
   const gloved = outfit.gloves !== null;
   const lower = armLength * (gloved ? 0.45 : 0.28);
   const upper = armLength - lower;
+  const sleeve = outfit.sleeves ?? character.skin;
+  b.tag('arm');
   b.box({
-    size: [armWidth, upper + top, armDepth],
-    at: [0, (top - upper) / 2, 0],
-    color: outfit.sleeves ?? character.skin,
+    size: [armWidth, upper, armDepth],
+    at: [0, -upper / 2, 0],
+    color: sleeve,
     chamfer: 0.015,
   });
+  // A shoulder that narrows front to back, so its corners stay under the
+  // head's overhang however far the arm swings.
+  const top = shoulderTop(d, outfit);
+  b.box({
+    size: [armWidth, top + 0.02, armDepth],
+    at: [0, (top - 0.02) / 2, 0],
+    color: sleeve,
+    chamfer: 0.015,
+    taper: [0.9, 0.5],
+  });
   const handScale = gloved ? 1.06 : 0.92;
+  b.tag('hand');
   b.box({
     size: [armWidth * handScale, lower, armDepth * handScale],
     at: [0, -upper - lower / 2, 0],
@@ -1077,6 +1365,7 @@ function buildArm(look: AvatarLook, d: BuildDims, side: Side): BufferGeometry {
   });
   const coat = findGear(outfit, 'coat');
   if (coat) {
+    b.tag('cuff');
     b.box({
       size: [armWidth + 0.03, 0.05, armDepth + 0.03],
       at: [0, -upper + 0.02, 0],
@@ -1099,7 +1388,8 @@ function addShield(
   shield: Extract<AvatarGear, { kind: 'shield' }>,
   d: BuildDims,
 ): void {
-  b.push([0.06, -d.armLength * 0.6, d.torsoDepth / 2 + 0.085], ZERO, d.propScale);
+  b.push([0.08, -d.armLength * 0.68, d.torsoDepth / 2 + 0.085], ZERO, d.propScale);
+  b.tag('shield');
   b.box({ size: [0.36, 0.42, 0.04], at: [0, 0.03, 0], color: shield.rim, chamfer: 0.04 });
   b.box({
     size: [0.24, 0.16, 0.04],
@@ -1124,12 +1414,14 @@ function addShield(
 /** Built in a frame at the fist; tips lean out to -X, away from the body. */
 function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDims): void {
   const scale = d.propScale;
+  b.tag(weapon.kind);
   switch (weapon.kind) {
     case 'sword':
       b.push(grip, [-0.5, 0, -0.7], scale);
-      b.box({ size: [0.045, 0.15, 0.045], at: [0, 0.02, 0], color: weapon.hilt });
-      b.box({ size: [0.065, 0.05, 0.065], at: [0, 0.115, 0], color: weapon.hilt, chamfer: 0.015 });
-      b.box({ size: [0.2, 0.04, 0.065], at: [0, -0.07, 0], color: weapon.hilt });
+      // The grip and pommel stay inside the fist, clear of the hip.
+      b.box({ size: [0.045, 0.1, 0.045], at: [0, -0.005, 0], color: weapon.hilt });
+      b.box({ size: [0.065, 0.05, 0.065], at: [0, 0.05, 0], color: weapon.hilt, chamfer: 0.015 });
+      b.box({ size: [0.12, 0.04, 0.065], at: [0, -0.07, 0], color: weapon.hilt });
       b.box({ size: [0.075, 0.36, 0.022], at: [0, -0.27, 0], color: weapon.blade });
       b.box({
         size: [0.075, 0.08, 0.022],
@@ -1141,7 +1433,7 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
       b.pop();
       break;
     case 'wrench':
-      b.push(grip, [0.3, 0, 0.35], scale * (weapon.size === 'giant' ? 1.55 : 1));
+      b.push(grip, [0.3, 0, 0.5], scale * (weapon.size === 'giant' ? 1.55 : 1));
       b.box({ size: [0.05, 0.4, 0.05], at: [0, 0.13, 0], color: weapon.handle, chamfer: 0.01 });
       b.box({ size: [0.17, 0.08, 0.06], at: [0, 0.36, 0], color: weapon.head });
       for (const x of [-0.055, 0.055]) {
@@ -1150,22 +1442,25 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
       b.pop();
       break;
     case 'crossbow':
-      b.push(grip, ZERO, scale);
-      b.box({ size: [0.06, 0.065, 0.38], at: [0, 0, 0.1], color: weapon.stock, chamfer: 0.012 });
-      b.box({ size: [0.38, 0.04, 0.05], at: [0, 0.015, 0.26], color: weapon.limbs });
+      // Limbs near upright, the top one leaning out, so neither reaches in over
+      // the hip, thigh or shoulder; carried short so a forward swing keeps it
+      // below the chin.
+      b.push(grip, [0, 0, Math.PI / 2 + 0.45], scale);
+      b.box({ size: [0.06, 0.065, 0.38], at: [0, 0, 0.04], color: weapon.stock, chamfer: 0.012 });
+      b.box({ size: [0.32, 0.04, 0.05], at: [0, 0.015, 0.2], color: weapon.limbs });
       for (const s of SIDES) {
         b.box({
           size: [0.09, 0.04, 0.05],
-          at: [s * 0.21, 0.015, 0.235],
+          at: [s * 0.18, 0.015, 0.175],
           rotation: [0, s * 0.785, 0],
           color: weapon.limbs,
         });
       }
-      b.box({ size: [0.36, 0.014, 0.014], at: [0, 0.03, 0.19], color: weapon.string });
+      b.box({ size: [0.3, 0.014, 0.014], at: [0, 0.03, 0.13], color: weapon.string });
       b.pop();
       break;
     case 'mace':
-      b.push(grip, [0.3, 0, 0.3], scale);
+      b.push(grip, [0.45, 0, 0.75], scale);
       b.box({ size: [0.06, 0.44, 0.06], at: [0, 0.14, 0], color: weapon.handle, chamfer: 0.012 });
       b.box({ size: [0.17, 0.17, 0.17], at: [0, 0.42, 0], color: weapon.head, chamfer: 0.05 });
       b.box({ size: [0.25, 0.06, 0.06], at: [0, 0.42, 0], color: weapon.head });
@@ -1174,9 +1469,10 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
       b.pop();
       break;
     case 'staff': {
-      b.push(grip, [0.08, 0, 0.1], scale);
-      b.box({ size: [0.05, 1.02, 0.05], at: [0, 0.19, 0], color: weapon.shaft, chamfer: 0.01 });
-      const ringY = 0.8;
+      // Held low on the shaft, so its foot stays clear of a robe's flare.
+      b.push(grip, [0.08, 0, 0.24], scale);
+      b.box({ size: [0.05, 1.02, 0.05], at: [0, 0.33, 0], color: weapon.shaft, chamfer: 0.01 });
+      const ringY = 0.9;
       const radius = 0.09;
       const bar = 0.035;
       for (const y of [ringY + radius, ringY - radius]) {
@@ -1190,7 +1486,7 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
       break;
     }
     case 'halberd':
-      b.push(grip, [0.08, 0, 0.1], scale);
+      b.push(grip, [0.08, 0, 0.25], scale);
       b.box({ size: [0.055, 1.02, 0.055], at: [0, 0.21, 0], color: weapon.shaft, chamfer: 0.012 });
       b.box({ size: [0.2, 0.22, 0.03], at: [-0.12, 0.58, 0], color: weapon.blade });
       b.box({
@@ -1212,19 +1508,23 @@ function addWeapon(b: PartBuilder, weapon: AvatarWeapon, grip: Vec3, d: BuildDim
   }
 }
 
-// Legs: local origin is the hip pivot; the boot sole is at y = -legLength.
+// Legs: local origin is the swing pivot, LEG_PIVOT_DROP below the hip line; the
+// boot sole is at y = -(legLength - LEG_PIVOT_DROP).
 
 function buildLeg(look: AvatarLook, d: BuildDims): BufferGeometry {
   const b = new PartBuilder();
   const { outfit } = look;
-  const { legLength, legWidth, legDepth, bootHeight } = d;
-  const trouser = legLength - bootHeight + 0.04;
+  const { legWidth, legDepth, bootHeight } = d;
+  const legLength = d.legLength - LEG_PIVOT_DROP;
+  const trouser = legLength - bootHeight + LEG_TOP;
+  b.tag('leg');
   b.box({
     size: [legWidth, trouser, legDepth],
-    at: [0, 0.04 - trouser / 2, 0],
+    at: [0, LEG_TOP - trouser / 2, 0],
     color: outfit.trousers,
     chamfer: 0.015,
   });
+  b.tag('boot');
   b.box({
     size: [legWidth + 0.025, bootHeight, legDepth + 0.06],
     at: [0, -legLength + bootHeight / 2, 0.025],
@@ -1414,6 +1714,7 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   let blinkClock = phases.blink;
   let swingLeft = 1;
   let swingRight = 1;
+  let strideScale = 1;
   let disposed = false;
 
   const applyLook = (): void => {
@@ -1428,12 +1729,14 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     armRight.geometry = next.armRight;
     legLeft.geometry = next.leg;
     legRight.geometry = next.leg;
-    legLeftPivot.position.set(dims.legSpacing, 0, 0);
-    legRightPivot.position.set(-dims.legSpacing, 0, 0);
+    legLeftPivot.position.set(dims.legSpacing, -LEG_PIVOT_DROP, 0);
+    legRightPivot.position.set(-dims.legSpacing, -LEG_PIVOT_DROP, 0);
     headPivot.position.set(0, dims.torsoHeight, 0);
-    armLeftPivot.position.set(shoulderX(dims), shoulderY(dims), 0);
-    armRightPivot.position.set(-shoulderX(dims), shoulderY(dims), 0);
+    armLeftPivot.position.set(shoulderX(dims, look.outfit), shoulderY(dims), 0);
+    armRightPivot.position.set(-shoulderX(dims, look.outfit), shoulderY(dims), 0);
     eyes.position.set(0, EYE_HEIGHT * dims.headHeight, dims.headDepth / 2);
+    // A long robe shortens the stride, so the legs stay inside its bell.
+    strideScale = findGear(look.outfit, 'coat')?.length === 'ankle' ? ROBE_STRIDE : 1;
     const weapon = look.outfit.weapon;
     swingLeft = findGear(look.outfit, 'shield') ? STEADY_ARM_SWING : 1;
     swingRight = weapon === null
@@ -1445,7 +1748,7 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
 
   const applyPose = (): void => {
     const swing = Math.sin(stridePhase);
-    const legAngle = walkWeight * lerp(LEG_SWING_WALK, LEG_SWING_SPRINT, sprintWeight) * swing;
+    const legAngle = walkWeight * lerp(LEG_SWING_WALK, LEG_SWING_SPRINT, sprintWeight) * swing * strideScale;
     const armAngle = walkWeight * lerp(ARM_SWING_WALK, ARM_SWING_SPRINT, sprintWeight) * swing;
     legLeftPivot.rotation.x = legAngle;
     legRightPivot.rotation.x = -legAngle;
@@ -1458,7 +1761,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     armRightPivot.rotation.z = -spread;
     // Ride the hips on the swinging legs so neither the sole nor the toe sinks below y = 0.
     const tilt = Math.abs(legAngle);
-    hips.position.y = dims.legLength * Math.cos(tilt) + footReach(dims) * Math.sin(tilt);
+    const swung = dims.legLength - LEG_PIVOT_DROP;
+    hips.position.y = swung * Math.cos(tilt) + footReach(dims) * Math.sin(tilt) + LEG_PIVOT_DROP;
     // Bob the upper body rather than the hips: highest mid-stride, and the feet stay planted.
     const bob = walkWeight * lerp(BOB_WALK, BOB_SPRINT, sprintWeight) * Math.cos(2 * stridePhase);
     upperBody.position.y = bob + BREATH_LIFT * breath;
@@ -1466,7 +1770,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     upperBody.rotation.x = lean;
     upperBody.rotation.y = -TORSO_TWIST * walkWeight * swing;
     // The head counters the lean and twist so the face keeps looking ahead.
-    headPivot.rotation.x = -lean * 0.6;
+    // Only partly, so its chin never dips into the shirt at a sprint.
+    headPivot.rotation.x = -lean * HEAD_COUNTER_LEAN;
     headPivot.rotation.y = TORSO_TWIST * 0.5 * walkWeight * swing;
     eyes.scale.y = blinkClock < BLINK_SECONDS ? 0.15 : 1;
   };

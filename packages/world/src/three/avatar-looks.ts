@@ -37,6 +37,24 @@ export interface AvatarHair {
   readonly beard?: number;
 }
 
+/** Cat ears standing up through the hair: fur outside, a paler inner ear. */
+export interface AvatarEars {
+  readonly fur: number;
+  readonly inner: number;
+}
+
+/** A short tail from the small of the back, curling up to a paler tip. */
+export interface AvatarTail {
+  readonly fur: number;
+  readonly tip: number;
+}
+
+/** Small marks on the face: blushed cheeks and a little cat mouth. */
+export interface AvatarFace {
+  readonly blush: number;
+  readonly mouth: number;
+}
+
 /** Everything the cosy and fighting states of one person share. */
 export interface AvatarCharacter {
   /** 1..8: the manifest's character number. */
@@ -44,6 +62,9 @@ export interface AvatarCharacter {
   readonly build: AvatarBuild;
   readonly skin: number;
   readonly hair: AvatarHair;
+  readonly ears?: AvatarEars;
+  readonly tail?: AvatarTail;
+  readonly face?: AvatarFace;
 }
 
 export interface AvatarBelt {
@@ -123,11 +144,18 @@ const CHARACTER_1: AvatarCharacter = {
   hair: { style: 'spiky', color: 0xb3540d },
 };
 
+// The cat girl: the workshop mechanic, her orange side ponytail and brass
+// goggles kept, with cat ears up through her hair, a curling tail and a
+// blush. Ears and tail are her hair's orange, their insides and tip paler, so
+// they read as hers rather than as a hat.
 const CHARACTER_2: AvatarCharacter = {
   id: 2,
   build: 'standard',
   skin: 0xf3b865,
   hair: { style: 'ponytail', color: 0xd9500b },
+  ears: { fur: 0xd9500b, inner: 0xf7c4a0 },
+  tail: { fur: 0xd9500b, tip: 0xfbe3cc },
+  face: { blush: 0xf0907a, mouth: 0x8a4030 },
 };
 
 const CHARACTER_3: AvatarCharacter = {
@@ -367,7 +395,7 @@ function deepFreeze<T>(value: T): T {
 export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepFreeze({
   // Auburn spiky-haired adventurer: teal scarf and tunic, leather harness, bare arms, bracers, wrapped boots.
   'avatar-1': look('avatar-1', 'cosy', CHARACTER_1, COSY_1),
-  // Red side-ponytail mechanic: olive work jacket, dark green trousers, brass goggles pushed up.
+  // Orange side-ponytail cat-girl mechanic: cat ears and tail, olive work jacket, dark green trousers, brass goggles pushed up.
   'avatar-2': look('avatar-2', 'cosy', CHARACTER_2, COSY_2),
   // Teal-haired ranger: cream hood and puffy mantle over a forest-green tunic, satchel.
   'avatar-3': look('avatar-3', 'cosy', CHARACTER_3, COSY_3),
@@ -383,7 +411,7 @@ export const AVATAR_LOOKS: Readonly<Record<AvatarSpriteKey, AvatarLook>> = deepF
   'avatar-8': look('avatar-8', 'cosy', CHARACTER_8, COSY_8),
   // Character 1 fighting: adds leather pauldrons and a sword.
   'avatar-9': look('avatar-9', 'fighting', CHARACTER_1, FIGHTING_1),
-  // Character 2 fighting: adds a hand wrench.
+  // Character 2 fighting: the cat girl with a hand wrench.
   'avatar-10': look('avatar-10', 'fighting', CHARACTER_2, FIGHTING_2),
   // Character 3 fighting: adds a crossbow.
   'avatar-11': look('avatar-11', 'fighting', CHARACTER_3, FIGHTING_3),

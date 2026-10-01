@@ -49,7 +49,6 @@ export const AVATAR_WALKER_FILE = new URL('../assets/avatar-walker/walk.png', im
 /** One cell's side in the file's pixels. */
 export const WALKER_CELL_PX = AVATAR_WALKER_CELL * AVATAR_WALKER_DENSITY;
 const SUPERSAMPLE = 4;
-const SAMPLES = WALKER_CELL_PX * SUPERSAMPLE;
 
 // Framing. The camera looks at FRAME_AIM_Y on the figure's axis from the
 // street camera's pitch and distance, and the cell spans FRAME_HEIGHT world
@@ -57,7 +56,6 @@ const SAMPLES = WALKER_CELL_PX * SUPERSAMPLE;
 const FRAME_AIM_Y = 0.64;
 const FRAME_HEIGHT = 1.62;
 const STREET_CAMERA = cameraPositionFor({ x: 0, z: 0 });
-const CAMERA_DISTANCE = Math.hypot(STREET_CAMERA.y - FRAME_AIM_Y, STREET_CAMERA.z);
 /** Transparent pixels kept clear on every side of a cell. */
 const EDGE_MARGIN_PX = 2;
 
@@ -96,7 +94,7 @@ export function renderAvatarWalker(): WalkerStrip {
   const figure = createAvatarFigure(AVATAR_WALKER_SPRITE);
   const eyes = figure.object.getObjectByName('avatar-eyes');
   if (!eyes) throw new Error('avatar walker: the figure has no avatar-eyes mesh');
-  const renderer = createCellRenderer();
+  const renderer = createFigureRenderer();
   const step = AVATAR_WALKER_STRIDE_MS / AVATAR_WALKER_FRAMES;
   const cells: Uint8Array[] = [];
   const capture = (): Uint8Array => {
@@ -127,56 +125,84 @@ export function renderAvatarWalker(): WalkerStrip {
 
 // ---------------------------------------------------------------- one cell
 
-type CellRenderer = (root: Object3D) => Uint8Array;
+/** Renders one figure pose to a square RGBA cell. */
+export type FigureRenderer = (root: Object3D) => Uint8Array;
 
-function createCellRenderer(): CellRenderer {
-  const aim = new Vector3(0, FRAME_AIM_Y, 0);
+/**
+ * Framing for `createFigureRenderer`. The defaults are the walker strip's; the
+ * other values serve review renders (larger cells, close-ups, taller looks).
+ */
+export interface FigureFraming {
+  /** One cell's side in pixels. */
+  readonly cellPx?: number;
+  /** The height on the figure's axis the camera looks at. */
+  readonly aimY?: number;
+  /** World units the cell spans vertically at the aim point. */
+  readonly frameHeight?: number;
+  /** Draw the soft contact shadow under the feet. */
+  readonly contactShadow?: boolean;
+}
+
+/**
+ * The walker's camera, sun and shading over a figure at the origin, seen from
+ * the street camera's pitch and distance. Turn the figure (its root's yaw) to
+ * see it from another side: the sun stays where the game puts it.
+ */
+export function createFigureRenderer(framing: FigureFraming = {}): FigureRenderer {
+  const cellPx = framing.cellPx ?? WALKER_CELL_PX;
+  const aimY = framing.aimY ?? FRAME_AIM_Y;
+  const frameHeight = framing.frameHeight ?? FRAME_HEIGHT;
+  const samples = cellPx * SUPERSAMPLE;
+  const distance = Math.hypot(STREET_CAMERA.y - aimY, STREET_CAMERA.z);
+  const aim = new Vector3(0, aimY, 0);
   const eye = new Vector3(0, Math.sin(CAMERA_PITCH), Math.cos(CAMERA_PITCH))
-    .multiplyScalar(CAMERA_DISTANCE)
+    .multiplyScalar(distance)
     .add(aim);
   const forward = aim.clone().sub(eye).normalize();
   const right = forward.clone().cross(new Vector3(0, 1, 0)).normalize();
   const up = right.clone().cross(forward);
-  const tanHalf = FRAME_HEIGHT / 2 / CAMERA_DISTANCE;
-  const camera: ViewCamera = { eye, forward, right, up, tanHalf };
+  const tanHalf = frameHeight / 2 / distance;
+  const camera: ViewCamera = { eye, forward, right, up, tanHalf, samples };
   const light = createSunLight();
   const shading = createShading();
 
   // One unit ray per sample, shared by every frame.
-  const rays = new Float64Array(SAMPLES * SAMPLES * 3);
-  for (let y = 0; y < SAMPLES; y += 1) {
-    const ndcY = 1 - ((y + 0.5) / SAMPLES) * 2;
-    for (let x = 0; x < SAMPLES; x += 1) {
-      const ndcX = ((x + 0.5) / SAMPLES) * 2 - 1;
+  const rays = new Float64Array(samples * samples * 3);
+  for (let y = 0; y < samples; y += 1) {
+    const ndcY = 1 - ((y + 0.5) / samples) * 2;
+    for (let x = 0; x < samples; x += 1) {
+      const ndcX = ((x + 0.5) / samples) * 2 - 1;
       const dx = forward.x + (right.x * ndcX + up.x * ndcY) * tanHalf;
       const dy = forward.y + (right.y * ndcX + up.y * ndcY) * tanHalf;
       const dz = forward.z + (right.z * ndcX + up.z * ndcY) * tanHalf;
       const length = Math.hypot(dx, dy, dz);
-      const index = (y * SAMPLES + x) * 3;
+      const index = (y * samples + x) * 3;
       rays[index] = dx / length;
       rays[index + 1] = dy / length;
       rays[index + 2] = dz / length;
     }
   }
-  const contact = contactShadow(camera, rays);
+  const contact = framing.contactShadow === false
+    ? new Float64Array(samples * samples)
+    : contactShadow(camera, rays);
 
   return (root) => {
     const triangles = collectTriangles(root);
     const shadow = light.shadowMap(triangles);
     const { hit, depth } = rasterize(triangles, camera);
     const sampleRgb = new Float64Array(3);
-    const out = new Uint8Array(WALKER_CELL_PX * WALKER_CELL_PX * 4);
+    const out = new Uint8Array(cellPx * cellPx * 4);
     const point = new Vector3();
     const view = new Vector3();
-    for (let py = 0; py < WALKER_CELL_PX; py += 1) {
-      for (let px = 0; px < WALKER_CELL_PX; px += 1) {
+    for (let py = 0; py < cellPx; py += 1) {
+      for (let px = 0; px < cellPx; px += 1) {
         let red = 0;
         let green = 0;
         let blue = 0;
         let alpha = 0;
         for (let sy = 0; sy < SUPERSAMPLE; sy += 1) {
           for (let sx = 0; sx < SUPERSAMPLE; sx += 1) {
-            const sample = (py * SUPERSAMPLE + sy) * SAMPLES + px * SUPERSAMPLE + sx;
+            const sample = (py * SUPERSAMPLE + sy) * samples + px * SUPERSAMPLE + sx;
             const triangle = hit[sample]!;
             if (triangle < 0) {
               // Only the contact shadow here: black at its opacity, premultiplied.
@@ -196,7 +222,7 @@ function createCellRenderer(): CellRenderer {
             alpha += 1;
           }
         }
-        const index = (py * WALKER_CELL_PX + px) * 4;
+        const index = (py * cellPx + px) * 4;
         if (alpha <= 0) continue;
         out[index] = toByte(red / alpha);
         out[index + 1] = toByte(green / alpha);
@@ -219,11 +245,13 @@ interface ViewCamera {
   readonly up: Vector3;
   /** tan(fov / 2); the cell is square. */
   readonly tanHalf: number;
+  /** Samples along each side of the cell. */
+  readonly samples: number;
 }
 
 /** The contact shadow's opacity per sample, where its ray meets the ground. */
 function contactShadow(camera: ViewCamera, rays: Float64Array): Float64Array {
-  const opacity = new Float64Array(SAMPLES * SAMPLES);
+  const opacity = new Float64Array(camera.samples * camera.samples);
   for (let sample = 0; sample < opacity.length; sample += 1) {
     const dy = rays[sample * 3 + 1]!;
     if (dy >= 0) continue;
@@ -349,10 +377,10 @@ function hasTextures(material: MeshStandardMaterial): boolean {
  * sample centres. `hit` holds a triangle index or -1, `depth` the view depth.
  */
 function rasterize(triangles: Triangles, camera: ViewCamera): { hit: Int32Array; depth: Float64Array } {
-  const hit = new Int32Array(SAMPLES * SAMPLES).fill(-1);
-  const depth = new Float64Array(SAMPLES * SAMPLES).fill(Number.POSITIVE_INFINITY);
+  const { eye, forward, right, up, tanHalf, samples } = camera;
+  const hit = new Int32Array(samples * samples).fill(-1);
+  const depth = new Float64Array(samples * samples).fill(Number.POSITIVE_INFINITY);
   const screen = new Float64Array(9);
-  const { eye, forward, right, up, tanHalf } = camera;
   const p = triangles.positions;
   for (let t = 0; t < triangles.count; t += 1) {
     for (let v = 0; v < 3; v += 1) {
@@ -362,8 +390,8 @@ function rasterize(triangles: Triangles, camera: ViewCamera): { hit: Int32Array;
       const w = ox * forward.x + oy * forward.y + oz * forward.z;
       const ndcX = (ox * right.x + oy * right.y + oz * right.z) / (w * tanHalf);
       const ndcY = (ox * up.x + oy * up.y + oz * up.z) / (w * tanHalf);
-      screen[v * 3] = ((ndcX + 1) / 2) * SAMPLES;
-      screen[v * 3 + 1] = ((1 - ndcY) / 2) * SAMPLES;
+      screen[v * 3] = ((ndcX + 1) / 2) * samples;
+      screen[v * 3 + 1] = ((1 - ndcY) / 2) * samples;
       screen[v * 3 + 2] = w;
     }
     const x0 = screen[0]!, y0 = screen[1]!, w0 = screen[2]!;
@@ -373,9 +401,9 @@ function rasterize(triangles: Triangles, camera: ViewCamera): { hit: Int32Array;
     const area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
     if (area >= 0) continue;
     const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
-    const maxX = Math.min(SAMPLES - 1, Math.ceil(Math.max(x0, x1, x2)));
+    const maxX = Math.min(samples - 1, Math.ceil(Math.max(x0, x1, x2)));
     const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2)));
-    const maxY = Math.min(SAMPLES - 1, Math.ceil(Math.max(y0, y1, y2)));
+    const maxY = Math.min(samples - 1, Math.ceil(Math.max(y0, y1, y2)));
     for (let y = minY; y <= maxY; y += 1) {
       const sy = y + 0.5;
       for (let x = minX; x <= maxX; x += 1) {
@@ -386,7 +414,7 @@ function rasterize(triangles: Triangles, camera: ViewCamera): { hit: Int32Array;
         if (b0 < 0 || b1 < 0 || b2 < 0) continue;
         // Perspective-correct: 1/w interpolates linearly on screen.
         const z = 1 / (b0 / w0 + b1 / w1 + b2 / w2);
-        const sample = y * SAMPLES + x;
+        const sample = y * samples + x;
         if (z >= depth[sample]!) continue;
         depth[sample] = z;
         hit[sample] = t;

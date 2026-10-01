@@ -5,6 +5,7 @@ import { AVATAR_SPRITE_KEYS } from '../avatar-state.js';
 import {
   AVATAR_FIGURE_HEIGHT,
   avatarFigureHeight,
+  avatarPartBoxes,
   createAvatarFigure,
   disposeAvatarFigureCache,
 } from './avatar-figure.js';
@@ -162,6 +163,44 @@ describe('avatar figure shape', () => {
     }
     for (const found of meshesOf(figure.object)) {
       expect(original).toContain(found);
+    }
+  });
+
+  it('keeps every look within 7 meshes and 1,100 triangles, its boxes recorded for the clipping check', () => {
+    for (const key of AVATAR_SPRITE_KEYS) {
+      const figure = createAvatarFigure(key);
+      const meshes = meshesOf(figure.object);
+      expect(meshes, key).toHaveLength(7);
+      let triangles = 0;
+      for (const found of meshes) {
+        const count = found.geometry.getAttribute('position').count / 3;
+        triangles += count;
+        // The recorded boxes tile the geometry's triangles exactly, in order.
+        const boxes = avatarPartBoxes(found.geometry);
+        let next = 0;
+        for (const box of boxes) {
+          expect(box.first, `${key} ${found.name}`).toBe(next);
+          next += box.count;
+        }
+        expect(next, `${key} ${found.name}`).toBe(count);
+      }
+      expect(triangles, key).toBeLessThanOrEqual(1100);
+      figure.dispose();
+    }
+  });
+
+  it('gives the cat girl (avatar-2 and avatar-10) her ears on the head and her tail on the torso, in both outfits', () => {
+    const tags = (key: AvatarSpriteKey, name: string): string[] =>
+      avatarPartBoxes(mesh(createAvatarFigure(key), name).geometry).map((box) => box.tag);
+    for (const key of ['avatar-2', 'avatar-10'] as const) {
+      // Two ears, each a fur block and an inner ear; they turn and nod with the head.
+      expect(tags(key, 'avatar-head').filter((tag) => tag === 'ears'), key).toHaveLength(4);
+      expect(tags(key, 'avatar-head'), key).toContain('face');
+      expect(tags(key, 'avatar-torso').filter((tag) => tag === 'tail'), key).toHaveLength(4);
+    }
+    for (const key of AVATAR_SPRITE_KEYS.filter((k) => k !== 'avatar-2' && k !== 'avatar-10')) {
+      expect(tags(key, 'avatar-head'), key).not.toContain('ears');
+      expect(tags(key, 'avatar-torso'), key).not.toContain('tail');
     }
   });
 
