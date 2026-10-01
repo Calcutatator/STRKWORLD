@@ -259,6 +259,62 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-01 — `wallet_strk20Balances` is per token; what it lacks is maturity, not a split by token (D-022, D-090)
+
+`wallet_strk20Balances(tokens)` answers `[{ token, balance }, ...]`, one
+entry per requested token, and an empty list asks for every shielded token
+(the D-072 entry check). What it does not say is how much of a token's
+balance is still maturing: a note is spendable 10 blocks after it is created.
+D-022's "aggregate" meant spendable plus maturing, for one token, not a total
+across tokens, and the adapter reports `maturityKnown: false` with zero
+`spendable`, which is why every Max built on `spendable` was off for live
+players. D-089 found the same for the Vault's supply; D-090 lets the Exchange's Max
+fill from the per-token total too (`maxBasis` in the panel kit). How verified: the STRK20 corpus ("Show the shielded balance",
+`// [{ token, balance }, ...]`; "matures 10 blocks after creation") and the
+adapter's parser in `wallet-api/operations.ts`, which refuses any entry with
+other than those two keys. Not verified live: what a wallet does with a Max
+that counts a note still maturing (expected: it refuses the spend before
+submitting).
+
+### 2026-10-01 — The wallet reports a per-token pool balance but no spendable split; Max uses that total, and a maturing note's refusal reads as "settling"; Max at 1.25 health (D-089)
+
+The Vault and Borrow forms gained Aave's and Vesu's touches (D-089). What
+held, and how it was checked:
+
+- `wallet_strk20Balances` takes a token list and answers one
+  `{ token, balance }` per token (`STRK20_BALANCE_ENTRY` in
+  `@starknet-io/types-js` 0.10.4 `wallet-api/components.d.ts`; the adapter's
+  `balances()` in `packages/privacy/src/wallet-api/operations.ts` rejects any
+  other key). So a per-token total is known, but nothing of maturity: the
+  adapter sets `maturityKnown: false` and zero `spendable`. The counters now
+  give Max that total anyway (D-089, amending D-022): a note matures 10
+  blocks (about 20 s) after it lands, and the wallet refuses a spend that
+  counts one with 119 (`insufficient-balance`), so nothing is at risk. The
+  Vault turns that refusal, for a supply its read balance covers, into
+  "Funds you just added are still settling". Every read is on a player's
+  press: the wallet may confirm it first.
+- The shell cannot import the seam's runtime (`architecture.test.ts`), so the
+  borrow preview restates Vesu's formulas in `panels/borrow/borrow-preview.ts`.
+  Keep the seam's rounding (collateral down, debt up, a base unit more debt on
+  a borrow, a base unit less collateral on a withdrawal) or a Max lands a
+  hair over the line; `borrow-preview.test.ts` cross-checks against
+  `borrowHealth` and `assessBorrow`.
+- `BeforeAfter` renders a visually hidden " to " between the figures, so a
+  row's `textContent` reads `1.81 →  to 1.25` (two spaces). Assert on that,
+  not on what the eye sees.
+- Max filling the whole figure is what makes it "everything": the machines
+  turn an amount equal to the whole position (redeem), the debt as read
+  (repay) or a debt-free loan's collateral (withdraw), exact or as Max's
+  tidied floor (`tidyFloor`: cents for stables, six significant figures
+  otherwise), into the seam's `'all'`.
+
+*Verified:* `borrow-preview.test.ts`, `vault-machine.test.ts`,
+`borrow-machine.test.ts`, `VaultPanel.flow.test.tsx`,
+`BorrowPanel.flow.test.tsx`, `kit.test.tsx`, `amount-math.test.ts`, and
+offline renders in the working scratchpad (`renders/lendux-*.png`, not
+committed). **Not verified:** a real wallet's balance prompt; nobody has
+looked at the forms in a browser.
+
 ### 2026-10-01 — Menu Mode missed the Vault's BORROW and the Exchange's DEGEN SWAP; a new counter needs a Menu Mode tab too (D-088)
 
 An audit of every player feature against Menu Mode found two windows only
@@ -285,23 +341,6 @@ Traps:
 - **Tab switches unmount.** Keep one window mounted so one `ConfirmGate`
   is on screen; `ExchangeMenuPanel` keys `ExchangePanel` by floor so the
   degen machine is never the ground floor's.
-
-### 2026-10-01 — `wallet_strk20Balances` is per token; what it lacks is maturity, not a split by token (D-022, D-090)
-
-`wallet_strk20Balances(tokens)` answers `[{ token, balance }, ...]`, one
-entry per requested token, and an empty list asks for every shielded token
-(the D-072 entry check). What it does not say is how much of a token's
-balance is still maturing: a note is spendable 10 blocks after it is created.
-D-022's "aggregate" meant spendable plus maturing, for one token, not a total
-across tokens, and the adapter reports `maturityKnown: false` with zero
-`spendable`, which is why every Max built on `spendable` was off for live
-players. D-090 lets Max fill from the per-token total (`maxBasis` in the
-panel kit). How verified: the STRK20 corpus ("Show the shielded balance",
-`// [{ token, balance }, ...]`; "matures 10 blocks after creation") and the
-adapter's parser in `wallet-api/operations.ts`, which refuses any entry with
-other than those two keys. Not verified live: what a wallet does with a Max
-that counts a note still maturing (expected: it refuses the spend before
-submitting).
 
 ### 2026-10-01 — The degen floor quotes keylessly, but its thin pairs split past the relay's calldata limit, so the quote proxy bounds by the swap's own ceiling (D-067, D-084)
 

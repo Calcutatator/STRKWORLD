@@ -51,9 +51,10 @@ export function feeReserve(
  * The most a player can put in: what is spendable less what must stay behind.
  *
  * `null` means "no honest Max", and the button is disabled: the spendable
- * figure is unknown (no balance read; see `maxBasis` for a wallet that
- * reports only a per-token total), the reserve is unknown, or nothing is left
- * after it.
+ * figure is unknown (no balance read), the reserve is unknown, or nothing is
+ * left after it. A wallet that reports one total per token and no maturity
+ * split passes that total (D-089, `maxBasis`, D-090): the wallet refuses a
+ * spend that counts a note still maturing, so no funds are at risk.
  */
 export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null = 0n): bigint | null {
   if (spendable === null || reserve === null) return null;
@@ -64,7 +65,7 @@ export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null
 /**
  * What a Max may fill from, for one token's pool balance: the spendable
  * figure when the wallet splits it, otherwise the per-token total
- * `wallet_strk20Balances` returns (D-090, amending D-022). That total is the
+ * `wallet_strk20Balances` returns (D-089, D-090, amending D-022). That total is the
  * figure the balance line already shows and a player may type in by hand, so
  * Max fills in nothing a typed amount could not; a note received in the last
  * few blocks may not be spendable yet, and the wallet, which proves, refuses
@@ -73,6 +74,22 @@ export function maxAfterReserve(spendable: bigint | null, reserve: bigint | null
 export function maxBasis(balance: { readonly total: bigint; readonly spendable: bigint; readonly maturityKnown: boolean } | null): bigint | null {
   if (balance === null) return null;
   return balance.maturityKnown ? balance.spendable : balance.total;
+}
+
+/**
+ * `amount` floored to a tidy figure for a Max to fill in: two decimals for a
+ * stablecoin, six significant figures for anything else (never coarser than
+ * whole tokens), and never more places than the token has. Only ever rounds
+ * down, so a tidied Max is always within the exact one; the maths that
+ * produced it stays exact.
+ */
+export function tidyFloor(amount: bigint, decimals: number, options: { readonly stable?: boolean } = {}): bigint {
+  if (amount <= 0n) return 0n;
+  const integerDigits = amount.toString().length - decimals;
+  const wanted = options.stable ? 2 : 6 - integerDigits;
+  const keep = Math.max(0, Math.min(decimals, wanted));
+  const unit = 10n ** BigInt(decimals - keep);
+  return amount - (amount % unit);
 }
 
 /** `amount × numerator / denominator`, truncated towards zero. 50% is `(amount, 1n, 2n)`. */
@@ -92,6 +109,8 @@ export function primaryAction(input: {
   readonly symbol: string | null;
   readonly ready: string;
   readonly busy?: string | null;
+  /** The words for an amount above the balance; "Insufficient {symbol}" by default. */
+  readonly exceeds?: string;
 }): { readonly label: string; readonly disabled: boolean } {
   if (input.busy) return { label: input.busy, disabled: true };
   if (input.symbol === null) return { label: COPY.kit.chooseToken, disabled: true };
@@ -101,7 +120,7 @@ export function primaryAction(input: {
     case 'invalid':
       return { label: COPY.kit.invalidAmount, disabled: true };
     case 'exceeds-balance':
-      return { label: COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
+      return { label: input.exceeds ?? COPY.kit.insufficient.replace('{symbol}', input.symbol), disabled: true };
     case 'below-minimum':
       return { label: COPY.kit.belowMinimum, disabled: true };
     case 'ok':

@@ -23,10 +23,10 @@
  *   ("Pool balance: 12.5 STRK"), Max and 50% (only when `max` is passed),
  *   USD line, hint and its own validation (invalid, exceeds balance, below
  *   minimum). `max` returns `null` for "no honest maximum", which disables
- *   the button; build it with `maxAfterReserve(maxBasis(balance), feeReserve(...))`
+   the button; build it with `maxAfterReserve(maxBasis(balance), feeReserve(...))`
  *   so a Max of the fee token leaves the pool fee behind. `maxBasis` is the
- *   spendable figure, or the per-token total for a wallet that reports only
- *   that (D-090, amending D-022). `readOnly` makes it a figure to read, as a
+ *   spendable figure, or the per-token total for a wallet that reports no
+ *   maturity split (D-089, D-090). `readOnly` makes it a figure to read, as a
  *   swap's Buy side, with `busy` and `stale` for a quote in flight or run out.
  * - `TokenSelect`: a styled native select showing "STRK · 12.5"; native for
  *   keyboard, screen readers and phone pickers.
@@ -51,5 +51,5 @@ export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTon
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {
-  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, type AmountCheck,
+  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor, type AmountCheck,
 } from './amount-math.js';
