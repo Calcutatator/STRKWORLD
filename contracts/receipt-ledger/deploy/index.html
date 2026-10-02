@@ -143,14 +143,31 @@
   const api = { register: (...ws) => { ws.forEach(considerStandard); return () => {}; } };
   window.addEventListener('wallet-standard:register-wallet', (e) => { try { e.detail(api); } catch {} });
   try { window.dispatchEvent(new CustomEvent('wallet-standard:app-ready', { detail: api })); } catch {}
+  // Extensions often define window.starknet_* as non-enumerable, so Object.keys misses them:
+  // check the well-known ids explicitly as well as every own property name.
+  const KNOWN_IDS = ['starknet_argentX', 'starknet_ready', 'starknet_braavos', 'starknet_okxwallet', 'starknet_keplr', 'starknet_bitkeep', 'starknet'];
   function scanInjected() {
-    for (const k of Object.keys(window)) {
-      if (!k.startsWith('starknet')) continue;
-      const w = window[k];
-      if (w && typeof w.request === 'function') addWallet(w.name || k, w.icon, (c) => w.request(c));
+    const names = new Set([...KNOWN_IDS, ...Object.getOwnPropertyNames(window).filter((k) => k.startsWith('starknet'))]);
+    for (const k of names) {
+      let w;
+      try { w = window[k]; } catch { continue; }
+      if (!w || typeof w.request !== 'function') continue;
+      if (/metamask/i.test(k) || /metamask/i.test(w.id || '')) continue;
+      const name = w.name || k;
+      if (k === 'starknet' && [...found.values()].length) continue; // the generic alias duplicates a named wallet
+      addWallet(name, w.icon, (c) => w.request(c));
     }
   }
-  setTimeout(() => { scanInjected(); if (!found.size) $('wallets').textContent = 'No Starknet wallet found. Unlock the extension and reload.'; }, 600);
+  // Extensions inject late: keep looking for a few seconds instead of a single check.
+  let scans = 0;
+  const scanTimer = setInterval(() => {
+    scanInjected();
+    scans += 1;
+    if (found.size || scans >= 20) {
+      clearInterval(scanTimer);
+      if (!found.size) $('wallets').textContent = 'No Starknet wallet found. Unlock the extension and reload.';
+    }
+  }, 300);
 
   async function connect(w) {
     try {
