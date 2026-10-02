@@ -1,5 +1,6 @@
-import { Box3, Color, PlaneGeometry, type Group, type Material, type Mesh, type Object3D } from 'three';
+import { Box3, Color, Matrix4, PlaneGeometry, type BufferGeometry, type Group, type Material, type Mesh, type Object3D } from 'three';
 import {
+  ARENA_PIT_AREA,
   ARENA_PIT_DOOR,
   ARENA_PIT_GATEPOSTS,
   ARENA_PIT_TORCHES,
@@ -22,7 +23,6 @@ import {
   flushBin,
   hash01,
   mixHex,
-  prismX,
   prismZ,
   shade,
   standardMaterial,
@@ -37,17 +37,27 @@ import type { LabelFactory, Occluder, OccluderBounds, TextLabel } from './types.
  * lawn. A bowl sunk 1.2 below the grass with a raked sand floor, its inner
  * wall of dressed stone with a band of blind arched niches and iron rings,
  * a low parapet of weathered blocks with a darker coping, a flight of steps
- * down from the arch, four braziers on the rim, and a round-headed arch on
- * two gateposts over the door with red-and-gold banners and the sign.
+ * down east from the arch, four braziers on the rim, and a round-headed arch
+ * on two gateposts over the door on the pit's west front, with red-and-gold
+ * banners on its west face, the face you walk up to along the branch.
  *
- * Presentation only, under the street's rule: the parapet, posts and
- * braziers stand on solid `pitrim` tiles, the steps and the bowl lie on (and
- * below) the solid `pitbowl` tiles, and over the walkable threshold there is
- * only its flush slab and the arch, whose underside clears head height. The
- * arch is the one tall part, so it fades like the plaza gateway when it
- * hides the player on the path. Four draw calls: the stone and sand (lit),
- * the arch and banners (lit, its own fadeable material), the additive
- * flames, and the sign.
+ * The camera always looks north (D-059), so a west arch is only ever seen
+ * end-on. Two things keep it legible. Its attic and cornice cap the two
+ * gateposts alone, so the silhouette dips to the arch's ring between them and
+ * reads as a gateway rather than a wall. And the pit's name is not on it: the
+ * sign stands on the far (north) rim on two slim posts, square to the camera,
+ * so the pit announces itself over the bowl from the road, as the stadium
+ * nameplate it is.
+ *
+ * Presentation only, under the street's rule: the parapet, posts, braziers
+ * and the nameplate stand on solid `pitrim` tiles, the steps and the bowl lie
+ * on (and below) the solid `pitbowl` tiles, and over the walkable threshold
+ * there is only its flush slab and the arch, whose underside clears head
+ * height. The arch is the one tall part over a walkable tile, so it alone
+ * fades like the plaza gateway when it hides the player on the branch path or
+ * the threshold; the nameplate is always north of everyone, so it never does.
+ * Four draw calls: the stone and sand (lit), the arch and banners (lit, its
+ * own fadeable material), the additive flames, and the sign.
  */
 
 export const ARENA_PIT_SIGN_TEXT = 'GLADIATOR PIT';
@@ -120,15 +130,33 @@ const BANNER_RED = 0xa8261d;
 const WALL_T = 0.14;
 const STEPS = 4;
 const STEP_RUN = 0.42;
-/** The arch's ring: intrados rise over the 2-tile opening and the voussoir depth. */
-const ARCH_RISE = 0.3;
+/** The arch's ring: intrados rise over the 3-tile opening and the voussoir depth. */
+const ARCH_RISE = 0.34;
 const ARCH_RING = 0.32;
-/** The attic over the arch, carrying the sign, and its cornice. */
-const ATTIC_TOP = 2.95;
-const CORNICE_TOP = 3.07;
-const ARCH_Z0 = ARENA_PIT_DOOR.y + 0.18;
-const ARCH_Z1 = ARENA_PIT_DOOR.y + 0.82;
-const SIGN_Y = 2.73;
+/** The attic and cornice over each gatepost; nothing caps the opening but the ring. */
+const ATTIC_TOP = 3.0;
+const CORNICE_TOP = 3.14;
+/**
+ * The arch is drawn in its own frame, as if it stood across an east-west
+ * rim: local x runs along the opening (world z, north to south) and local z
+ * through its thickness, 0.18 to 0.82, its banner face at local +z. The frame
+ * turns that face to the west, towards the branch path.
+ */
+const ARCH_Z0 = 0.18;
+const ARCH_Z1 = 0.82;
+/** World x of the arch's east and west faces. */
+const ARCH_WEST = ARENA_PIT_DOOR.x + 1 - ARCH_Z1;
+const ARCH_EAST = ARENA_PIT_DOOR.x + 1 - ARCH_Z0;
+const ARCH_FRAME = new Matrix4().makeTranslation(ARENA_PIT_DOOR.x + 1, 0, 0).multiply(new Matrix4().makeRotationY(-Math.PI / 2));
+
+/**
+ * The nameplate on the pit's far (north) rim: its board's centre height, the
+ * middle of the rim's long run and the row it stands on. It faces south, so
+ * the fixed camera (D-059) reads it over the bowl from the road.
+ */
+const SIGN_Y = 1.16;
+const SIGN_Z = ARENA_PIT_AREA.y + 0.5;
+const SIGN_X = ARENA_PIT_DOOR.x + 6;
 
 type PitKind = 'pitrim' | 'pitbowl' | 'pitstep';
 
@@ -147,6 +175,7 @@ export function buildArenaPit(map: DistrictMap, labels: LabelFactory, res: Resou
     steps(bin);
     for (const torch of ARENA_PIT_TORCHES) brazier(bin, torch.x + 0.5, torch.y + 0.5);
     arch(bin);
+    signPosts(bin);
 
     const stone = res.material(standardMaterial({ roughness: 0.9 }));
     flushBin(bin, 'stone', stone, res, parts.ground, { name: 'pit:stone', cast: true, receive: true });
@@ -157,12 +186,14 @@ export function buildArenaPit(map: DistrictMap, labels: LabelFactory, res: Resou
 
     const sign = labels.sign(ARENA_PIT_SIGN_TEXT, ARENA_PIT_SIGN);
     parts.textLabels.push(sign);
-    sign.object.position.set(ARENA_PIT_DOOR.x + ARENA_PIT_DOOR.width / 2, SIGN_Y, ARCH_Z1 + 0.012);
+    // The nameplate on the far rim, facing south over the bowl: the camera
+    // always looks north (D-059), so this is the face the street reads.
+    sign.object.position.set(SIGN_X, SIGN_Y, SIGN_Z + 0.06);
     sign.object.userData['area'] = 'arena-pit';
     sign.object.userData['text'] = ARENA_PIT_SIGN_TEXT;
     parts.labels.add(sign.object);
 
-    if (archMesh) parts.occluders.push(archOccluder(archMesh, [archMaterial, ...materialsOf(sign.object)]));
+    if (archMesh) parts.occluders.push(archOccluder(archMesh, [archMaterial]));
 
     const reduced = (): boolean => {
       try {
@@ -202,14 +233,15 @@ function materialsOf(object: Object3D): Material[] {
 
 function archOccluder(mesh: Mesh, materials: readonly Material[]): ArenaPitOccluder {
   const box = new Box3().setFromObject(mesh);
-  const post = (x: number): OccluderBounds =>
-    Object.freeze({ minX: x + 0.15, maxX: x + 1, minZ: ARCH_Z0, maxZ: ARCH_Z1, height: ARENA_PIT_ARCH_SPRING });
-  const [west, east] = ARENA_PIT_GATEPOSTS;
+  const [north, south] = ARENA_PIT_GATEPOSTS;
+  const post = (minZ: number, maxZ: number): OccluderBounds =>
+    Object.freeze({ minX: ARCH_WEST, maxX: ARCH_EAST, minZ, maxZ, height: ARENA_PIT_ARCH_SPRING });
+  // Over the opening: the arch's ring and, on the posts, the attic and cornice.
   const span: OccluderBounds = Object.freeze({
-    minX: box.min.x,
-    maxX: box.max.x,
-    minZ: ARCH_Z0,
-    maxZ: ARCH_Z1,
+    minX: ARCH_WEST,
+    maxX: ARCH_EAST,
+    minZ: box.min.z,
+    maxZ: box.max.z,
     minY: ARENA_PIT_ARCH_SPRING,
     height: box.max.y,
   });
@@ -217,7 +249,11 @@ function archOccluder(mesh: Mesh, materials: readonly Material[]): ArenaPitOcclu
     kind: 'arena-pit',
     object: mesh,
     bounds: Object.freeze({ ...span, minY: 0 }),
-    boxes: Object.freeze([post(west!.x), { ...post(east!.x), minX: east!.x, maxX: east!.x + 0.85 }, span]),
+    boxes: Object.freeze([
+      post(north!.y + 0.15, ARENA_PIT_DOOR.y),
+      post(ARENA_PIT_DOOR.y + ARENA_PIT_DOOR.height, south!.y + 0.85),
+      span,
+    ]),
     setOpacity: createOpacityFader(materials),
   });
 }
@@ -343,24 +379,39 @@ function isHorizontalRun(map: DistrictMap, x: number, y: number): boolean {
   return pitKind(map, x - 1, y) === 'pitrim' || pitKind(map, x + 1, y) === 'pitrim';
 }
 
-/** Four steps down from the threshold into the bowl, between two cheek walls. */
+/** Four steps down east from the threshold into the bowl, between two cheek walls. */
 function steps(bin: GeometryBin): void {
-  const x0 = ARENA_PIT_DOOR.x;
-  const x1 = ARENA_PIT_DOOR.x + ARENA_PIT_DOOR.width;
-  const top = ARENA_PIT_DOOR.y + 1;
+  const z0 = ARENA_PIT_DOOR.y;
+  const z1 = ARENA_PIT_DOOR.y + ARENA_PIT_DOOR.height;
+  const top = ARENA_PIT_DOOR.x + ARENA_PIT_DOOR.width;
   const rise = ARENA_PIT_DEPTH / STEPS;
   for (let i = 0; i < STEPS; i++) {
     // Each step a block from the bowl's floor up to its own tread.
     const y = -rise * (i + 1);
-    const z0 = top + STEP_RUN * i;
-    bin.add('stone', boxGeometry(x0 + 0.12, -ARENA_PIT_DEPTH - 0.01, z0, x1 - 0.12, y, z0 + STEP_RUN), shade(STONE, -0.04 - 0.03 * i));
+    const x0 = top + STEP_RUN * i;
+    bin.add('stone', boxGeometry(x0, -ARENA_PIT_DEPTH - 0.01, z0 + 0.12, x0 + STEP_RUN, y, z1 - 0.12), shade(STONE, -0.04 - 0.03 * i));
     // A worn nosing on each tread.
-    bin.add('stone', flatQuad(x0 + 0.14, z0, x1 - 0.14, z0 + 0.06, y + 0.002), shade(STONE_WARM, 0.04));
+    bin.add('stone', flatQuad(x0, z0 + 0.14, x0 + 0.06, z1 - 0.14, y + 0.002), shade(STONE_WARM, 0.04));
   }
   const foot = top + STEP_RUN * STEPS;
   const cheek: Point2[] = [[top, 0.06], [top, -ARENA_PIT_DEPTH], [foot + 0.08, -ARENA_PIT_DEPTH], [foot + 0.08, -ARENA_PIT_DEPTH + 0.18]];
-  bin.add('stone', prismX(cheek, x0, x0 + 0.12), STONE_DARK);
-  bin.add('stone', prismX(cheek, x1 - 0.12, x1), STONE_DARK);
+  bin.add('stone', prismZ(cheek, z0, z0 + 0.12), STONE_DARK);
+  bin.add('stone', prismZ(cheek, z1 - 0.12, z1), STONE_DARK);
+}
+
+/**
+ * The nameplate's two posts and its backing board, standing on the pit's far
+ * (north) rim: the sign itself is a canvas label hung a hair in front of the
+ * board. All of it is on solid rim tiles, north of anyone on the lawn, so it
+ * never stands between the camera and a player and never fades.
+ */
+function signPosts(bin: GeometryBin): void {
+  const half = ARENA_PIT_SIGN.width / 2;
+  const top = SIGN_Y + ARENA_PIT_SIGN.height / 2;
+  for (const dx of [-half + 0.14, half - 0.14]) {
+    bin.add('stone', boxGeometry(SIGN_X + dx - 0.05, ARENA_PIT_PARAPET - 0.1, SIGN_Z - 0.05, SIGN_X + dx + 0.05, top, SIGN_Z + 0.05), IRON);
+  }
+  bin.add('stone', boxGeometry(SIGN_X - half - 0.06, SIGN_Y - ARENA_PIT_SIGN.height / 2 - 0.06, SIGN_Z - 0.04, SIGN_X + half + 0.06, top + 0.06, SIGN_Z + 0.04), STONE_DARK);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,15 +444,25 @@ function brazier(bin: GeometryBin, x: number, z: number): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Two gateposts on the rim either side of the threshold, a segmental arch of
- * seven voussoirs over the two-tile opening (its underside never lower than
- * `ARENA_PIT_ARCH_SPRING`, above any head), an attic for the sign and a
- * cornice; a red-and-gold banner hangs from each post's street face.
+ * Two gateposts on the west front either side of the threshold, a segmental
+ * arch of seven voussoirs over the three-tile opening (its underside never
+ * lower than `ARENA_PIT_ARCH_SPRING`, above any head), an attic and a cornice
+ * for the sign; a red-and-gold banner hangs from each post's west face, the
+ * face you walk up to along the branch. Drawn in the arch's own frame
+ * (`ARCH_FRAME`, see `ARCH_Z0`), then turned to face west.
  */
-function arch(bin: GeometryBin): void {
-  const ox0 = ARENA_PIT_DOOR.x;
-  const ox1 = ARENA_PIT_DOOR.x + ARENA_PIT_DOOR.width;
-  const [west, east] = ARENA_PIT_GATEPOSTS;
+function arch(target: GeometryBin): void {
+  const bin = {
+    add(key: string, geometry: BufferGeometry, paint: Parameters<GeometryBin['add']>[2]): void {
+      target.add(key, geometry.applyMatrix4(ARCH_FRAME), paint);
+    },
+  };
+  // Local x is world z: the opening runs north to south, the posts north and south of it.
+  const ox0 = ARENA_PIT_DOOR.y;
+  const ox1 = ARENA_PIT_DOOR.y + ARENA_PIT_DOOR.height;
+  const [northPost, southPost] = ARENA_PIT_GATEPOSTS;
+  const west = { x: northPost!.y };
+  const east = { x: southPost!.y };
   const spring = ARENA_PIT_ARCH_SPRING;
   // Posts: flush with the opening, a plinth and a capital.
   // Each post's plinth and capital overhang on its outer side only, never
@@ -429,15 +490,17 @@ function arch(bin: GeometryBin): void {
     const colour = keystone ? shade(STONE_WARM, 0.08) : shade(STONE, i % 2 === 0 ? 0.02 : -0.04);
     bin.add('arch', prismZ(block, ARCH_Z0 - (keystone ? 0.03 : 0), ARCH_Z1 + (keystone ? 0.03 : 0)), colour);
   }
-  // The attic over the posts and the arch, and its cornice.
-  const ringTop = spring + ARCH_RISE + ARCH_RING;
-  bin.add('arch', boxGeometry(west!.x + 0.15, spring, ARCH_Z0, ox0, ATTIC_TOP, ARCH_Z1), shade(STONE, -0.02));
-  bin.add('arch', boxGeometry(ox1, spring, ARCH_Z0, east!.x + 0.85, ATTIC_TOP, ARCH_Z1), shade(STONE, -0.02));
-  bin.add('arch', boxGeometry(ox0, ringTop, ARCH_Z0, ox1, ATTIC_TOP, ARCH_Z1), shade(STONE, -0.02));
-  bin.add('arch', boxGeometry(west!.x + 0.05, ATTIC_TOP, ARCH_Z0 - 0.08, east!.x + 0.95, CORNICE_TOP, ARCH_Z1 + 0.08), COPING);
-  // Banners from the posts' street faces: red, a gold band, a fringe.
-  const face: Face = { normal: 'z+', plane: ARCH_Z1 };
-  for (const [u0, u1] of [[west!.x + 0.28, ox0 - 0.08], [ox1 + 0.08, east!.x + 0.72]] as const) {
+  // An attic and a cornice over each gatepost, and nothing over the opening
+  // but the ring: seen end-on from the fixed camera the silhouette dips here,
+  // so the arch reads as a gateway and not a wall.
+  for (const [u0, u1] of [[west!.x + 0.15, ox0], [ox1, east!.x + 0.85]] as const) {
+    bin.add('arch', boxGeometry(u0, spring, ARCH_Z0, u1, ATTIC_TOP, ARCH_Z1), shade(STONE, -0.02));
+  }
+  for (const [u0, u1] of [[west!.x + 0.05, ox0 + 0.1], [ox1 - 0.1, east!.x + 0.95]] as const) {
+    bin.add('arch', boxGeometry(u0, ATTIC_TOP, ARCH_Z0 - 0.08, u1, CORNICE_TOP, ARCH_Z1 + 0.08), COPING);
+  }
+  /** One red-and-gold banner on a face: a rail, the cloth, two gold bands, a sun and a fringe. */
+  const banner = (face: Face, u0: number, u1: number): void => {
     bin.add('arch', faceBox(face, u0 - 0.03, 1.7, 0, u1 + 0.03, 1.76, 0.05), IRON);
     bin.add('arch', faceBox(face, u0, 0.86, 0.02, u1, 1.7, 0.04), (_x: number, y: number) => shade(BANNER_RED, -0.12 + 0.12 * clamp01((y - 0.86) / 0.84)));
     bin.add('arch', faceBox(face, u0, 1.38, 0.041, u1, 1.46, 0.046), ARENA_EMBER.gold);
@@ -448,5 +511,16 @@ function arch(bin: GeometryBin): void {
       const u = u0 + ((k + 0.5) * (u1 - u0)) / 4;
       bin.add('arch', faceBox(face, u - 0.025, 0.78, 0.02, u + 0.025, 0.86, 0.04), ARENA_EMBER.gold);
     }
+  };
+  // Banners from the posts' west faces, the faces you walk up to along the branch.
+  const west_face: Face = { normal: 'z+', plane: ARCH_Z1 };
+  for (const [u0, u1] of [[west!.x + 0.28, ox0 - 0.08], [ox1 + 0.08, east!.x + 0.72]] as const) {
+    banner(west_face, u0, u1);
+  }
+  // And one on each post's end face, wrapping the corner. The camera always
+  // looks north (D-059), so the south post's end is the face of the gate the
+  // player actually sees: without it the gate is a blank slab on screen.
+  for (const end of [{ normal: 'x+', plane: east!.x + 0.85 }, { normal: 'x-', plane: west!.x + 0.15 }] as const) {
+    banner(end, ARCH_Z0 + 0.1, ARCH_Z1 - 0.1);
   }
 }

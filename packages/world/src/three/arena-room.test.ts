@@ -7,6 +7,7 @@ import {
   ARENA_HEIGHT,
   ARENA_RING_FENCE,
   ARENA_RING_GATE,
+  ARENA_STAIRS,
   ARENA_TUNNEL,
   ARENA_SWING_MS,
   ARENA_WIDTH,
@@ -19,6 +20,7 @@ import { ARENA_ROOM_DEFINITION, createFixedRoom, fixedRoomStationPresentations }
 import { ROOM_ORIGIN } from '../world-layout.js';
 import {
   ARENA_FADE_ROW,
+  ARENA_FADE_WEST,
   ARENA_GATE_LAMP,
   ARENA_SURFACE,
   arenaSurfaceHeightAt,
@@ -209,8 +211,9 @@ describe('the arena in 3D (D-114)', () => {
 
   it('stands feet on sand, stairs and five tiers at the design\'s heights', () => {
     expect(arenaSurfaceHeightAt(20, 16)).toBe(0);
-    expect(arenaSurfaceHeightAt(20, 2)).toBe(0);
-    expect(arenaSurfaceHeightAt(6, 16)).toBe(ARENA_SURFACE.stair);
+    // The west tunnel is sand-level all the way out to the street.
+    expect(arenaSurfaceHeightAt(2, 16)).toBe(0);
+    expect(arenaSurfaceHeightAt(ARENA_STAIRS[0]!.x, 16)).toBe(ARENA_SURFACE.stair);
     expect(ARENA_SURFACE.stair).toBe(0.4);
     const byTier = new Map<number, Set<number>>();
     for (const { x, y } of tiles((x, y) => arenaTileAt(x, y) === 'tier')) {
@@ -243,15 +246,25 @@ describe('the arena in 3D (D-114)', () => {
     room.dispose();
   }, 30_000);
 
-  it('fades the near (south) stands alone as an occluder, so they never hide the player', () => {
+  it('fades the near stands and the west tunnel\'s south side alone as an occluder, so they never hide the player', () => {
     const room = build();
     expect(room.occluders).toHaveLength(1);
     const occluder = room.occluders[0]!;
     // South of the ring's fence: the camera always looks north, so these are the near stands.
     expect(ARENA_FADE_ROW).toBe(ARENA_RING_FENCE.y + ARENA_RING_FENCE.height);
-    expect(occluder.bounds.minZ).toBe(OZ + ARENA_FADE_ROW);
+    // Three boxes: the near stands, the tunnel's south side, and its mouth arch.
+    expect(occluder.boxes).toHaveLength(3);
+    expect(ARENA_FADE_WEST).toEqual({ maxX: ARENA_TUNNEL.x + ARENA_TUNNEL.width, minY: ARENA_TUNNEL.y + ARENA_TUNNEL.height });
+    expect(occluder.bounds.minZ).toBe(OZ + ARENA_TUNNEL.y);
     expect(occluder.bounds.maxZ).toBe(OZ + ARENA_HEIGHT);
     expect(occluder.bounds.height).toBeGreaterThan(ARENA_SURFACE.arcade);
+    // Every box is inside the whole occluder's bounds.
+    for (const box of occluder.boxes!) {
+      expect(box.minX).toBeGreaterThanOrEqual(occluder.bounds.minX);
+      expect(box.maxX).toBeLessThanOrEqual(occluder.bounds.maxX);
+      expect(box.minZ).toBeGreaterThanOrEqual(occluder.bounds.minZ);
+      expect(box.maxZ).toBeLessThanOrEqual(occluder.bounds.maxZ);
+    }
     const south = named(room.group, 'arena:stone-south');
     const own = [south.material].flat() as Material[];
     const others = meshes(room.group)
@@ -264,29 +277,35 @@ describe('the arena in 3D (D-114)', () => {
     expect(others.map((material) => material.opacity)).toEqual(before);
     occluder.setOpacity(1);
     for (const material of own) expect(material.opacity).toBe(1);
-    // Everything in the south mesh lies south of the fade row, the box among
-    // it; the north mesh, the tunnel and its doorway among it, north of it.
-    south.geometry.computeBoundingBox();
-    expect(south.geometry.boundingBox!.min.z).toBeGreaterThanOrEqual(ARENA_FADE_ROW - 0.05);
-    expect(ARENA_BOX.y).toBeGreaterThanOrEqual(ARENA_FADE_ROW);
+    // Everything in the fading mesh is either south of the fade row or in the
+    // west tunnel's own strip; nothing else of the stadium fades.
+    const fading = south.geometry.getAttribute('position');
+    for (let i = 0; i < fading.count; i++) {
+      const x = fading.getX(i);
+      const z = fading.getZ(i);
+      expect(z >= ARENA_FADE_ROW - 0.05 || x <= ARENA_FADE_WEST.maxX + 0.05, `${x},${z}`).toBe(true);
+    }
+    // The emperor's box is back on the north podium, so it is in the far mesh,
+    // which the camera never looks through.
+    expect(ARENA_BOX.y).toBeLessThan(ARENA_FADE_ROW);
     const north = named(room.group, 'arena:stone');
     north.geometry.computeBoundingBox();
     expect(north.geometry.boundingBox!.max.z).toBeLessThanOrEqual(ARENA_FADE_ROW + 0.05);
     room.dispose();
   });
 
-  it('closes the north tunnel with the doorway out, the way the camera looks down it, and keeps it off the exit tiles', () => {
+  it('closes the west tunnel with the doorway out, facing back down it, and keeps it off the exit tiles', () => {
     const room = build();
-    const north = named(room.group, 'arena:stone');
-    const position = north.geometry.getAttribute('position');
-    // Stone stands north of the arena's edge, across the tunnel's mouth to the street.
+    const stone = named(room.group, 'arena:stone');
+    const position = stone.geometry.getAttribute('position');
+    // Stone stands west of the arena's edge, across the tunnel's end to the street.
     let wall = 0;
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i);
       const z = position.getZ(i);
-      if (z < ARENA_TUNNEL.y && x >= ARENA_TUNNEL.x - 1 && x <= ARENA_TUNNEL.x + ARENA_TUNNEL.width + 1) wall += 1;
+      if (x < ARENA_TUNNEL.x && z >= ARENA_TUNNEL.y - 1 && z <= ARENA_TUNNEL.y + ARENA_TUNNEL.height + 1) wall += 1;
       // Nothing of it stands any further out than the wall itself.
-      expect(z).toBeGreaterThan(ARENA_TUNNEL.y - 0.5);
+      expect(x).toBeGreaterThan(ARENA_TUNNEL.x - 0.5);
     }
     expect(wall).toBeGreaterThan(0);
     room.dispose();
@@ -298,15 +317,15 @@ describe('the arena in 3D (D-114)', () => {
     const lamp = named(room.group, 'arena:gate-lamp').material as MeshBasicMaterial;
     expect(gate.count).toBe(2);
     expect(gate.userData['open']).toBe(1);
-    // Open, both leaves swing in, into the ring south of the gate.
+    // Open, both leaves swing in, into the ring east of the gate.
     for (let n = 0; n < 2; n++) {
       const m = new Matrix4();
       const q = new Quaternion();
       gate.getMatrixAt(n, m);
       m.decompose(new Vector3(), q, new Vector3());
-      expect(new Vector3(1, 0, 0).applyQuaternion(q).z).toBeGreaterThan(0.99);
+      expect(new Vector3(1, 0, 0).applyQuaternion(q).x).toBeGreaterThan(0.99);
     }
-    expect(ARENA_RING_GATE.y).toBe(ARENA_RING_FENCE.y);
+    expect(ARENA_RING_GATE.x).toBe(ARENA_RING_FENCE.x);
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.open);
     room.setGate('busy');
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.busy);
@@ -323,7 +342,7 @@ describe('the arena in 3D (D-114)', () => {
       gate.getMatrixAt(n, matrix);
       matrix.decompose(new Vector3(), rotation, new Vector3());
       along.set(1, 0, 0).applyQuaternion(rotation);
-      expect(Math.abs(along.z)).toBeLessThan(1e-6);
+      expect(Math.abs(along.x)).toBeLessThan(1e-6);
     }
     room.setGate('open');
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.open);
@@ -342,15 +361,16 @@ describe('the arena in 3D (D-114)', () => {
     expect(room.dummy.position.x).toBe(ARENA_DUMMY_TILE.x + 0.5);
     expect(room.dummy.position.z).toBe(ARENA_DUMMY_TILE.y + 0.5);
     expect(room.dummy.position.y).toBe(0);
-    // Turned to face the gate (north), the yaw applied before the fx's topple
-    // about local x, so a knockout still falls away from the gate (south).
+    // Facing south, to the camera, as it always stood; the yaw goes first, so
+    // the fx's topple about local z falls east, away from the west gate.
     expect(room.dummy.rotation.y).toBe(ARENA_DUMMY_YAW);
+    expect(ARENA_DUMMY_YAW).toBe(0);
     expect(room.dummy.rotation.order).toBe('YXZ');
-    room.dummy.rotation.x = -Math.PI / 2;
+    room.dummy.rotation.z = -Math.PI / 2;
     room.dummy.updateMatrixWorld(true);
     const head = new Vector3(0, 1, 0).applyQuaternion(room.dummy.quaternion);
-    expect(head.z).toBeGreaterThan(0.99);
-    room.dummy.rotation.x = 0;
+    expect(head.x).toBeGreaterThan(0.99);
+    room.dummy.rotation.z = 0;
     const body = named(room.dummy, 'arena:dummy-body');
     body.geometry.computeBoundingBox();
     const box = body.geometry.boundingBox!;
@@ -461,7 +481,7 @@ describe('the presenter in the arena (D-114)', () => {
 
   it('reads the arena\'s surface heights inside it and flat floors in every other room', () => {
     expect(roomSurfaceHeightAt('arena', OX + 3.5, OZ + 16.5)).toBe(arenaSurfaceHeightAt(3, 16));
-    expect(roomSurfaceHeightAt('arena', OX + 6.5, OZ + 16.5)).toBe(0.4);
+    expect(roomSurfaceHeightAt('arena', OX + ARENA_STAIRS[0]!.x + 0.5, OZ + 16.5)).toBe(0.4);
     expect(roomSurfaceHeightAt('bunker', OX + 3.5, OZ + 16.5)).toBe(0);
     expect(roomSurfaceHeightAt(null, OX + 3.5, OZ + 16.5)).toBe(0);
   });
@@ -472,22 +492,22 @@ describe('the presenter in the arena (D-114)', () => {
     world.presenter.update(16);
     world.presenter.consumeSnap();
     expect(world.avatar.object.position.y).toBe(0);
-    // Up the west stair onto tier 1: the feet ease (no pop), then settle.
-    world.view.setPlayerPosition(roomTile(6, 16), false);
+    // Up the east stair onto tier 1: the feet ease (no pop), then settle.
+    world.view.setPlayerPosition(roomTile(ARENA_STAIRS[0]!.x, 16), false);
     world.presenter.update(16);
     expect(world.avatar.object.position.y).toBeGreaterThan(0);
     expect(world.avatar.object.position.y).toBeLessThan(0.4);
     for (let k = 0; k < 20; k++) world.presenter.update(16);
     expect(world.avatar.object.position.y).toBeCloseTo(0.4, 3);
-    world.view.setPlayerPosition(roomTile(2, 16), true);
+    world.view.setPlayerPosition(roomTile(35, 16), true);
     world.presenter.update(16);
-    expect(world.avatar.object.position.y).toBeCloseTo(arenaSurfaceHeightAt(2, 16));
-    expect(world.presenter.player.elevation).toBeCloseTo(arenaSurfaceHeightAt(2, 16));
+    expect(world.avatar.object.position.y).toBeCloseTo(arenaSurfaceHeightAt(35, 16));
+    expect(world.presenter.player.elevation).toBeCloseTo(arenaSurfaceHeightAt(35, 16));
   });
 
   it('sits the local avatar down after standing still on a tier, and swings on cue', () => {
     const world = setup();
-    world.view.setPlayerPosition(roomTile(2, 16), true);
+    world.view.setPlayerPosition(roomTile(35, 16), true);
     for (let t = 0; t < ARENA_SEAT_IDLE_MS + 100; t += 50) world.presenter.update(50);
     expect(world.avatar.update.mock.calls.at(-1)![1]).toMatchObject({ seated: true });
     world.view.setPlayerMotion({ vx: 100, vy: 0, sprinting: false });

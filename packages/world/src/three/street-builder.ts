@@ -439,8 +439,17 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const [west, east] = runEnds(map, x, y, 1, 0);
   const [north, south] = runEnds(map, x, y, 0, 1);
   if ((west === 'road' && east === 'road') || (north === 'road' && south === 'road')) return 'crossing';
-  if ((west === 'grass' && east === 'grass') || (north === 'grass' && south === 'grass')) return 'path';
+  // A path is a pavement run laid across the lawn. The pit's threshold (D-114)
+  // counts as a lawn end: the branch to its west arch runs from the Studio's
+  // path to the arch, over grass the whole way, so it is a flush path and not
+  // a kerbed sidewalk — and it must not raise the Studio's path it leaves.
+  if ((isLawnEnd(west) && isLawnEnd(east)) || (isLawnEnd(north) && isLawnEnd(south))) return 'path';
   return 'sidewalk';
+}
+
+/** Where a path across the lawn ends: the lawn itself, or the pit's threshold (D-114). */
+function isLawnEnd(kind: TileKind | undefined): boolean {
+  return kind === 'grass' || kind === 'pitstep';
 }
 
 /**

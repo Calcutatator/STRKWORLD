@@ -156,7 +156,7 @@ export interface StreetMovementAdapter {
   initial(position: Position): void;
   streetUpdate(position: Position, input: MovementInput, afterMovement: () => void): void;
   interiorUpdate(afterMovement: () => void): void;
-  /** Back on the street, idle; `facing` turns the published facing (the arena's return faces north). */
+  /** Back on the street, idle; `facing` turns the published facing (the arena's return faces west). */
   exit(position: Position, afterPlacement: () => void, facing?: Facing): void;
 }
 

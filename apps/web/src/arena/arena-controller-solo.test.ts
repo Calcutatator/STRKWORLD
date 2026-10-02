@@ -58,7 +58,7 @@ describe('arena controller: the solo ring runs the lobby’s rules', () => {
     controller.channel.subscribe((ring) => {
       if (ring) seen.push(ring);
     });
-    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 2 }), facing: 'down' });
+    world.emit('area:moved', { position: arenaTileCentre({ x: 2, y: 16 }), facing: 'right' });
     world.emit('building:entered', { building: 'arena' });
     expect(controller.channel.selfId()).toBe(SOLO_ARENA_ID);
     expect(controller.channel.ring()?.phase).toBe('idle');
@@ -67,14 +67,14 @@ describe('arena controller: the solo ring runs the lobby’s rules', () => {
     controller.channel.claim();
     expect(controller.channel.ring()?.phase).toBe('idle');
     time.advance(1_000);
-    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 11 }), facing: 'down' });
+    world.emit('area:moved', { position: arenaTileCentre({ x: 14, y: 16 }), facing: 'right' });
     controller.channel.claim();
     const claimed = controller.channel.ring()!;
     expect(claimed.phase).toBe('countdown');
     expect(claimed.challenger).toMatchObject({ kind: 'player', gameId: SOLO_ARENA_ID, hp: ARENA_MAX_HP });
 
-    // The World leaps in and steps down to the dummy, facing it.
-    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 17 }), facing: 'down' });
+    // The World leaps in and steps east up to the dummy, facing it.
+    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 16 }), facing: 'right' });
     time.advance(ARENA_COUNTDOWN_MS);
     expect(controller.channel.ring()?.phase).toBe('fighting');
     for (let i = 0; i < 10; i += 1) {
@@ -99,11 +99,11 @@ describe('arena controller: the solo ring runs the lobby’s rules', () => {
     const controller = createArenaController({ solo: () => createArenaAuthority(), ...time });
     const world = createEventBus<WorldEvents>();
     controller.listen(world);
-    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 11 }), facing: 'down' });
+    world.emit('area:moved', { position: arenaTileCentre({ x: 14, y: 16 }), facing: 'right' });
     world.emit('building:entered', { building: 'arena' });
     controller.channel.claim();
     // Stays on the ring spawn, four tiles from the dummy.
-    world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 14 }), facing: 'down' });
+    world.emit('area:moved', { position: arenaTileCentre({ x: 17, y: 16 }), facing: 'right' });
     time.advance(ARENA_COUNTDOWN_MS);
     controller.channel.attack();
     const ring = controller.channel.ring()!;

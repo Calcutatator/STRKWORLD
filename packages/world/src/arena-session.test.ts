@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ARENA_DUMMY_TILE,
   ARENA_MAX_HP,
   ARENA_RING_RETURN,
+  ARENA_RING_RETURN_FACING,
   ARENA_RING_SPAWN,
+  ARENA_RING_SPAWN_FACING,
   arenaTileCentre,
   type ArenaPhase,
   type ArenaRingSnapshot,
@@ -25,11 +28,12 @@ import { JUMP_TOTAL_MS } from './jump.js';
 
 const SELF = 'g-self' as GameId;
 const OTHER = 'g-other' as GameId;
-const APPROACH = arenaTileCentre({ x: 20, y: 11 });
+/** On the gate approach: the column of sand against the ring's west gate. */
+const APPROACH = arenaTileCentre({ x: 14, y: 16 });
 const SAND = arenaTileCentre({ x: 10, y: 16 });
 const SPAWN = arenaTileCentre(ARENA_RING_SPAWN);
-/** One tile north of the dummy (the gate side), facing it. */
-const NEXT_TO_DUMMY = arenaTileCentre({ x: 20, y: 17 });
+/** One tile west of the dummy (the gate side), facing it. */
+const NEXT_TO_DUMMY = arenaTileCentre({ x: 20, y: 16 });
 
 interface RingInit {
   phase?: ArenaPhase;
@@ -87,7 +91,7 @@ function fakeChannel(initial: ArenaRingSnapshot | null = ring(), self: GameId | 
 }
 
 function fakeHost(at: { x: number; y: number; facing?: Facing } = APPROACH) {
-  const state = { x: at.x, y: at.y, facing: at.facing ?? ('down' as Facing), reduced: false, suspended: false };
+  const state = { x: at.x, y: at.y, facing: at.facing ?? ('right' as Facing), reduced: false, suspended: false };
   const host = {
     position: () => ({ x: state.x, y: state.y, facing: state.facing }),
     leapTo: vi.fn((tile: { x: number; y: number }, facing: Facing) => {
@@ -176,8 +180,8 @@ describe('arena session: the gate', () => {
   });
 
   it('uses the lobby’s 8 px slack round the approach', () => {
-    const left = 64 + 19 * 32;
-    const top = 64 + 10 * 32;
+    const left = 64 + 13 * 32;
+    const top = 64 + 15 * 32;
     expect(onArenaGateApproach(left - 8, top)).toBe(true);
     expect(onArenaGateApproach(left - 9, top)).toBe(false);
     expect(onArenaGateApproach(left, top - 8)).toBe(true);
@@ -193,7 +197,7 @@ describe('arena session: into the ring and out', () => {
     const { host } = fakeHost(APPROACH);
     const session = createArenaSession(fake.channel, host, { now: time.now });
     fake.push(ring({ phase: 'countdown', round: 1, challenger: SELF }));
-    expect(host.leapTo).toHaveBeenCalledWith(ARENA_RING_SPAWN, 'down');
+    expect(host.leapTo).toHaveBeenCalledWith(ARENA_RING_SPAWN, ARENA_RING_SPAWN_FACING);
     expect(host.setOutfitLocked).toHaveBeenLastCalledWith(true);
     session.update(16);
     expect(host.selectLook).not.toHaveBeenCalled();
@@ -217,7 +221,7 @@ describe('arena session: into the ring and out', () => {
     fake.push(ring({ phase: 'ended', round: 1, challenger: SELF, hp: 0, hits: 10 }));
     expect(host.leapTo).toHaveBeenCalledTimes(1);
     fake.push(ring({ phase: 'idle', round: 1 }));
-    expect(host.leapTo).toHaveBeenLastCalledWith(ARENA_RING_RETURN, 'up');
+    expect(host.leapTo).toHaveBeenLastCalledWith(ARENA_RING_RETURN, ARENA_RING_RETURN_FACING);
     expect(host.setOutfitLocked).toHaveBeenLastCalledWith(false);
     session.update(16);
     expect(host.selectLook).not.toHaveBeenCalledWith('restore');
@@ -257,7 +261,7 @@ describe('arena session: into the ring and out', () => {
     const session = createArenaSession(fake.channel, host);
     fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
     fake.push(null);
-    expect(host.leapTo).toHaveBeenLastCalledWith(ARENA_RING_RETURN, 'up');
+    expect(host.leapTo).toHaveBeenLastCalledWith(ARENA_RING_RETURN, ARENA_RING_RETURN_FACING);
     expect(session.isRingTileWalkable(20, 18)).toBe(false);
   });
 
@@ -265,7 +269,7 @@ describe('arena session: into the ring and out', () => {
     const fake = fakeChannel(ring({ phase: 'fighting', round: 9, challenger: SELF, swings: 5 }));
     const { host } = fakeHost(SPAWN);
     createArenaSession(fake.channel, host);
-    expect(host.leapTo).toHaveBeenCalledWith(ARENA_RING_SPAWN, 'down');
+    expect(host.leapTo).toHaveBeenCalledWith(ARENA_RING_SPAWN, ARENA_RING_SPAWN_FACING);
     // The counter seen on joining is a baseline, not five swings.
     expect(host.playLocalSwing).not.toHaveBeenCalled();
   });
@@ -274,15 +278,15 @@ describe('arena session: into the ring and out', () => {
     const fake = fakeChannel(ring());
     const { host } = fakeHost(APPROACH);
     const session = createArenaSession(fake.channel, host);
-    expect(session.isRingTileWalkable(20, 14)).toBe(false);
+    expect(session.isRingTileWalkable(17, 16)).toBe(false);
     fake.push(ring({ phase: 'fighting', round: 1, challenger: OTHER }));
-    expect(session.isRingTileWalkable(20, 14)).toBe(false);
+    expect(session.isRingTileWalkable(17, 16)).toBe(false);
     fake.push(ring({ phase: 'fighting', round: 2, challenger: SELF }));
-    expect(session.isRingTileWalkable(20, 14)).toBe(true);
-    expect(session.isRingTileWalkable(16, 19)).toBe(true);
-    expect(session.isRingTileWalkable(20, 18)).toBe(false); // the dummy
-    expect(session.isRingTileWalkable(15, 19)).toBe(false); // the fence
-    expect(session.isRingTileWalkable(20, 12)).toBe(false); // the gate
+    expect(session.isRingTileWalkable(17, 16)).toBe(true);
+    expect(session.isRingTileWalkable(24, 19)).toBe(true);
+    expect(session.isRingTileWalkable(21, 16)).toBe(false); // the dummy
+    expect(session.isRingTileWalkable(25, 19)).toBe(false); // the fence
+    expect(session.isRingTileWalkable(15, 16)).toBe(false); // the gate
   });
 });
 
@@ -363,21 +367,21 @@ describe('arena session: attacks', () => {
     const { session, state, host } = inFight();
     state.x = NEXT_TO_DUMMY.x;
     state.y = NEXT_TO_DUMMY.y;
-    state.facing = 'down';
+    state.facing = 'right';
     session.update(16);
     expect(lastPrompt(host)).toBe(ARENA_STRIKE_PROMPT);
-    state.facing = 'up';
+    state.facing = 'left';
     session.update(16);
     expect(lastPrompt(host)).toBeNull();
   });
 
   it('the reach rule mirrors the lobby: 32 and 45 px hit, 53 px misses, point-blank always', () => {
-    const dummy = arenaTileCentre({ x: 20, y: 18 });
-    expect(dummyWithinReach(dummy.x, dummy.y - 32, 'down')).toBe(true);
-    expect(dummyWithinReach(dummy.x + 32, dummy.y - 32, 'down')).toBe(true);
-    expect(dummyWithinReach(dummy.x, dummy.y - 53, 'down')).toBe(false);
-    expect(dummyWithinReach(dummy.x, dummy.y - 32, 'up')).toBe(false);
-    expect(dummyWithinReach(dummy.x, dummy.y - 10, 'up')).toBe(true);
+    const dummy = arenaTileCentre(ARENA_DUMMY_TILE);
+    expect(dummyWithinReach(dummy.x - 32, dummy.y, 'right')).toBe(true);
+    expect(dummyWithinReach(dummy.x - 32, dummy.y + 32, 'right')).toBe(true);
+    expect(dummyWithinReach(dummy.x - 53, dummy.y, 'right')).toBe(false);
+    expect(dummyWithinReach(dummy.x - 32, dummy.y, 'left')).toBe(false);
+    expect(dummyWithinReach(dummy.x - 10, dummy.y, 'left')).toBe(true);
   });
 });
 
@@ -484,7 +488,7 @@ describe('arena session: the press-E system (D-117)', () => {
     expect(targets).toHaveLength(1);
     expect(targets[0]).toMatchObject({ id: 'arena:gate', label: ARENA_CLAIM_LABEL, rect: ARENA_GATE_RECT });
     // The footprint is the three gate tiles, World pixels with the room origin.
-    expect(ARENA_GATE_RECT).toEqual({ x: 64 + 19 * 32, y: 64 + 12 * 32, width: 96, height: 32 });
+    expect(ARENA_GATE_RECT).toEqual({ x: 64 + 15 * 32, y: 64 + 15 * 32, width: 32, height: 96 });
     targets[0]!.activate();
     expect(fake.channel.claim).toHaveBeenCalledTimes(1);
   });
@@ -562,7 +566,7 @@ describe('arena session on the real press-E system (D-117)', () => {
     );
     interactions.register({ targets: () => session.gateTargets!() });
     interactions.addAction({ id: 'arena', priority: 10, run: () => session.onAttack!() });
-    const player = () => ({ position: { x: state.x, y: state.y }, heading: { x: 0, y: 1 } });
+    const player = () => ({ position: { x: state.x, y: state.y }, heading: { x: 1, y: 0 } });
     interactions.update(player());
     expect(prompts.at(-1)).toBe(ARENA_CLAIM_LABEL);
     expect(interactions.interact()).toBe(true);
