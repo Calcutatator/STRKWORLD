@@ -13947,6 +13947,43 @@ transaction was used.
 
 ---
 
+### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
+
+The D-123 shimmer is tuned as a single global level, and the amendment that
+made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
+dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
+that tuning badly. It is tall, near-black, lit by the sun, and standing alone
+on pale paving with nothing behind it, so the same additive energy lands on a
+big unbroken silhouette with maximum contrast against its surroundings — it
+reads as a lit beacon rather than as a hint, and the colour-matching rules make
+it worse, because a near-black station takes the pale warm fallback tint
+(`SHIMMER_TINT_WARM_HUE`) at lightness 0.72, which is the largest lift of any
+station in the game. The lead saw it as "the shimmer on the plaza pillar"
+specifically, 80% too strong, while the rest of the world was only 30% too
+strong.
+
+What this means for the next cue: a per-object strength knob is not a
+special case to be avoided, it is a requirement of any additive cue applied
+across both interiors and daylight. Keep the knob *relative* to the global
+level (a multiplier, not an absolute), so a later global change carries the
+exceptions with it, and bake it where the per-vertex data already is — the
+shell buffer's `aSweep` attribute had a free third component, so
+`SHIMMER_STATION_SCALES` costs no mesh, no material, no uniform and no
+per-frame work. The ember edge glow is a separate effect and must not read the
+multiplier: widening the gap between "usable" and "the one E would use" is the
+point.
+
+*Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
+70%, the monument at 0.2 and every other station at 1, the multiplier baked
+per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
+renders from the same harness and the same camera —
+`scratchpad/renders/shimmer-tune-plaza.png` and `shimmer-tune-bank.png`, with
+the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
+tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
+used.
+
+---
+
 ## 6. Findings log
 
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
