@@ -871,7 +871,7 @@ describe('fixed room definitions', () => {
       })),
     });
     const activated = (): string[] => h.events.filter((event) => event.event === 'station:activated').map((event) => (event.payload as { station: string }).station);
-    const centre = (station: typeof first) => ({ x: station.x, y: station.y + 1 });
+    const centre = (station: { readonly x: number; readonly y: number }) => ({ x: station.x, y: station.y + 1 });
     h.controller.update(centre(first));
     expect(activated()).toEqual([first.station]);
     // Stepping straight into the next counter's halo highlights it, but a locked one never opens.
