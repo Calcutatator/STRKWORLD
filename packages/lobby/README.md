@@ -297,6 +297,24 @@ the rules do not have is no ball at all.
   first, so the room judges the kick from where the player stands now. The
   room applies its own rules (reach 1.3 tiles, live play) and its 250 ms
   floor, refused kicks included, and answers only through the ball.
+- **`arena()` / `onArena(listener)`** (D-114) is the arena ring: phase,
+  round, the challenger and opponent slots (`empty | player | dummy`, hp,
+  swing and hit counters, and the presence id only for a player), seconds
+  left and the result. Validated through `normalizeArenaRing`, frozen, and
+  null unless live in the arena: the room adds the ring entry only to arena
+  members' views, so no other area ever decodes who is fighting.
+- **`arenaClaim()`, `arenaAttack()`, `arenaLeave()`** (D-114) send
+  `arena:claim`, `arena:attack` and `arena:leave` with no payload, only while
+  live in the arena. Claim and leave share a 1000 ms client floor and attacks
+  have a 450 ms one; an early call is dropped. A claim or an attack lets a
+  waiting position go first, so the room judges it from where the player
+  stands and faces now. The room claims only from the gate approach while the
+  ring is idle (first claim wins, others find it busy), moves the fighter into
+  the ring and back out itself, validates every swing from its own held
+  position and facing (52 px, ±75°, a 400 ms floor refused swings included,
+  a flat 10 damage against a 100 HP dummy) and answers only through the ring.
+  While a session is the challenger, a same-area `area` refresh (a look
+  change) updates the sprite only and keeps the held position.
 - **The room steps the ball** on a fixed 40 ms tick, in four substeps, only
   while someone on the street is on the pitch or within 15 tiles of its gate;
   otherwise the ball comes to rest and the step timer stops. The entry is
@@ -426,13 +444,18 @@ is small. It names tiles and colours and nothing else. `football` (D-078) is
 one entry, shared the same way: `tick: uint32`, the ball's `x`, `y`, `vx`,
 `vy` as `int32` in 64ths of a pixel (and of a pixel a second), `west`, `east`
 and `phase` as `uint8`. Whole numbers throughout, written only by the room
-from its own simulation.
+from its own simulation. `arena` (D-114) is a view-filtered map with one
+entry, `ring`: `phase`, `secondsLeft`, `reason` and `winner` as `uint8`,
+`round` as `uint16`, and two slots of `kind`, `hp`, `swings` and `hits` as
+`uint8` plus `gameId`, the presence id arena peers already hold (empty unless
+the slot is a player). It reaches only sessions live in the arena.
 
-The client-to-server vocabulary is seven verbs — `move`, `suspend`, `resume`,
-`area` (`{ area, x, y, facing, sprite }`, D-087: go live in `street`, `roof`
-or `studio`), `sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer
-sandbox tile), and `football:kick`, whose payload is never read — and a join
-payload. There is
+The client-to-server vocabulary is ten verbs — `move`, `suspend`, `resume`,
+`area` (`{ area, x, y, facing, sprite }`, D-087: go live in `street`, `roof`,
+`studio`, `bunker` or `arena`), `sandbox:pick` and `sandbox:place` (each
+`{ x, y }`, an integer sandbox tile), and `football:kick`, `jump`,
+`arena:claim`, `arena:attack` and `arena:leave`, whose payloads are never
+read — and a join payload. There is
 no message through which a client could tell the room anything else, because
 there is no field for it. The server sends five messages: `resync`
 (`{ x, y }`, D-106: the recipient's own held street position after a refused

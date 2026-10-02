@@ -159,20 +159,26 @@ export function isWithinInterest(
  *
  * The cap is what actually bounds traffic — a radius alone does nothing when
  * a crowd forms on one corner.
+ *
+ * D-114: candidates in `pinned` come first, whatever their distance (the
+ * arena ring's fighter, whom every arena observer must see), nearest first
+ * among themselves, and still count against the cap.
  */
 export function selectVisible<T extends Located>(
   observer: Located,
   candidates: Iterable<T>,
   radius: number,
   cap: number,
+  pinned?: ReadonlySet<T>,
 ): T[] {
-  const near: Array<{ item: T; distance: number }> = [];
+  const near: Array<{ item: T; distance: number; pinned: boolean }> = [];
   for (const item of candidates) {
     const distance = distanceBetween(observer.position, item.position);
-    if (distance <= radius) near.push({ item, distance });
+    const isPinned = pinned !== undefined && pinned.has(item);
+    if (isPinned || distance <= radius) near.push({ item, distance, pinned: isPinned });
   }
-  near.sort((a, b) => a.distance - b.distance);
-  return near.slice(0, cap).map((entry) => entry.item);
+  near.sort((a, b) => (a.pinned === b.pinned ? a.distance - b.distance : a.pinned ? -1 : 1));
+  return near.slice(0, Math.max(0, cap)).map((entry) => entry.item);
 }
 
 /**
