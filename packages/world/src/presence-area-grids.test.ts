@@ -135,7 +135,7 @@ describe('shared presence-area grids match the World (D-087)', () => {
       }
     }
     // The emperor's box is the reserved station: solid in both.
-    const box = ARENA_ROOM_DEFINITION.stations[0];
+    const box = ARENA_ROOM_DEFINITION.stations[0]!;
     expect(walkable(ARENA_PRESENCE_GRID, box.x, box.y)).toBe(false);
   });
 

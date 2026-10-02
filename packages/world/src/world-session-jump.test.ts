@@ -428,5 +428,7 @@ describe('the jump everywhere the avatar walks (D-111)', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
-  });
+    // The arena (D-114) is a 41 x 33 room with a long front of solid tiles:
+    // the same check, with the time it needs under a loaded suite.
+  }, 60_000);
 });

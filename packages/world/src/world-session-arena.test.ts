@@ -3,8 +3,11 @@ import {
   ARENA_DUMMY_TILE,
   ARENA_EXIT,
   ARENA_RING_RETURN,
+  ARENA_HEIGHT,
   ARENA_RING_SPAWN,
+  ARENA_RING_WALKABLE,
   ARENA_SPAWN,
+  ARENA_WIDTH,
   arenaTileCentre,
   type ShellEvents,
   type WorldEvents,
@@ -282,6 +285,22 @@ describe('the arena in the session (D-114)', () => {
     world.place(west.x, west.y);
     world.walk({ left: true }, 800);
     expect(world.position().x).toBeGreaterThanOrEqual(ROOM_ORIGIN.x + 16 * FIXED_ROOM_TILE_SIZE);
+  });
+
+  it('opens exactly the lobby\'s challenger rects (ARENA_RING_WALKABLE), and only when the session says so', () => {
+    const world = setup();
+    const open = (x: number, y: number): boolean =>
+      (world.session as unknown as { ringTileOpen(x: number, y: number): boolean }).ringTileOpen(x, y);
+    const inRects = (x: number, y: number): boolean =>
+      ARENA_RING_WALKABLE.some((r) => x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height);
+    for (const walkable of [false, true]) {
+      ring.walkable = walkable;
+      for (let y = -1; y <= ARENA_HEIGHT; y++) {
+        for (let x = -1; x <= ARENA_WIDTH; x++) {
+          expect(open(x, y), `${x},${y} (${walkable})`).toBe(walkable && inRects(x, y));
+        }
+      }
+    }
   });
 
   it('leaps to the ring\'s spawn and back to its return tile when the session says so, publishing each', () => {

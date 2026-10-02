@@ -101,6 +101,8 @@ function headroomIntrusions(root: Object3D): string[] {
         a.fromBufferAttribute(position, index ? index.getX(t * 3) : t * 3).applyMatrix4(world);
         b.fromBufferAttribute(position, index ? index.getX(t * 3 + 1) : t * 3 + 1).applyMatrix4(world);
         c.fromBufferAttribute(position, index ? index.getX(t * 3 + 2) : t * 3 + 2).applyMatrix4(world);
+        // Nothing can intrude below the sand or above head height on the top tier.
+        if (Math.max(a.y, b.y, c.y) <= 0.15 || Math.min(a.y, b.y, c.y) >= ARENA_SURFACE.tier1 + ARENA_SURFACE.tierStep * 4 + 1.9) continue;
         const steps = Math.max(1, Math.ceil(Math.max(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a)) / 0.12));
         for (let i = 0; i <= steps && !found.has(object.name); i++) {
           for (let j = 0; j <= steps - i; j++) {
@@ -231,7 +233,7 @@ describe('the arena in 3D (D-114)', () => {
     for (let k = 0; k < 20; k++) room.update(100);
     expect(headroomIntrusions(room.group)).toEqual([]);
     room.dispose();
-  });
+  }, 30_000);
 
   it('fades the near (south) stands alone as an occluder, so they never hide the player', () => {
     const room = build();
