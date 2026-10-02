@@ -97,11 +97,11 @@ describe('station snapshot admission', () => {
   it('accepts only the known station and keeps the Shell label', () => {
     expect(
       normalizeBankStationSnapshot([
-        { station: BANK_SHIELDING_STATION, label: 'SHIELD / UNSHIELD', status: 'available' },
+        { station: BANK_SHIELDING_STATION, label: 'SHIELD', status: 'available' },
       ]),
     ).toEqual({
       station: BANK_SHIELDING_STATION,
-      label: 'SHIELD / UNSHIELD',
+      label: 'SHIELD',
       status: 'available',
     });
   });
@@ -137,7 +137,7 @@ describe('Bank room controller', () => {
   it('starts every visit locked until a matching Shell snapshot arrives', () => {
     const h = setup();
     h.controller.enter();
-    h.controller.update({ x: 8, y: 4 });
+    h.controller.update({ x: 2, y: 4 });
     expect(h.events).toEqual([]);
     expect(h.controller.state.station.status).toBe('locked');
   });
@@ -150,19 +150,19 @@ describe('Bank room controller', () => {
     h.controller.enter();
     h.shell.emit('world:stations', {
       building: 'bank',
-      stations: [{ station: BANK_SHIELDING_STATION, label: 'SHIELD / UNSHIELD', status: 'available' }],
+      stations: [{ station: BANK_SHIELDING_STATION, label: 'SHIELD', status: 'available' }],
     });
 
-    h.controller.update({ x: 8, y: 4 });
-    h.controller.update({ x: 9, y: 4 });
+    h.controller.update({ x: 2, y: 4 });
+    h.controller.update({ x: 3, y: 4 });
     expect(order).toEqual(['suspend', 'emit']);
     expect(h.events).toHaveLength(1);
     expect(h.controller.state.highlightedStation).toBe(BANK_SHIELDING_STATION);
 
-    h.controller.update({ x: 9, y: 5 });
+    h.controller.update({ x: 3, y: 5 });
     expect(h.events).toHaveLength(1);
-    h.controller.update({ x: 9, y: 6 });
-    h.controller.update({ x: 9, y: 4 });
+    h.controller.update({ x: 3, y: 6 });
+    h.controller.update({ x: 3, y: 4 });
     expect(h.events).toHaveLength(2);
   });
 
@@ -171,9 +171,9 @@ describe('Bank room controller', () => {
     h.controller.enter();
     h.shell.emit('world:stations', {
       building: 'bank',
-      stations: [{ station: BANK_SHIELDING_STATION, label: 'SHIELD / UNSHIELD', status: 'available' }],
+      stations: [{ station: BANK_SHIELDING_STATION, label: 'SHIELD', status: 'available' }],
     });
-    h.controller.update({ x: 9, y: 4 });
+    h.controller.update({ x: 3, y: 4 });
     expect(h.controller.state.controlOwner).toBe('world');
     expect(h.input.calls.at(-1)).toBe('resume');
 

@@ -46,7 +46,13 @@ describe('Vesu\'s palette', () => {
     expect(BUILDING_THEMES.vault).toMatchObject({ wall: VESU.white, wallAlt: VESU.fill, glow: VESU.blue, openPortal: VESU.blue });
     expect(BUILDING_THEMES.vault!.brand).toMatchObject({ text: 'vesu', style: { lowercase: true, foreground: '#0a0a0a' } });
     expect(ROOM_THEMES.vault).toMatchObject({ floorA: VESU.white, floorB: VESU.page, trim: VESU.blue, label: VESU_LABEL });
-    expect(ROOM_THEMES.vault!.stations).toEqual({ 'vault:lending': VESU_STATION_THEME, 'vault:borrow': VESU_BORROW_STATION_THEME });
+    // D-099: lending's two counters wear the supply card, borrowing's two the loan card.
+    expect(ROOM_THEMES.vault!.stations).toEqual({
+      'vault:supply': VESU_STATION_THEME,
+      'vault:redeem': VESU_STATION_THEME,
+      'vault:borrow': VESU_BORROW_STATION_THEME,
+      'vault:repay': VESU_BORROW_STATION_THEME,
+    });
     expect(ROOM_THEMES.vault!.stations!['vault:borrow']).toBe(VESU_BORROW_STATION_THEME);
     // Borrowing (D-083) is lending's twin, so the two read as one brand: only its props differ.
     const { props: borrowProps, ...borrowDress } = VESU_BORROW_STATION_THEME;

@@ -15,7 +15,7 @@ import {
   EXCHANGE_ROOF_LEVEL,
   FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_TILE_SIZE,
-  VAULT_LENDING_STATION,
+  VAULT_SUPPLY_STATION,
   VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
@@ -1627,25 +1627,25 @@ describe('WorldSession orchestration', () => {
     const world = createWorld();
     world.start();
     enterBuilding(world, 'bank');
-    // The Bank's Endur staking counter rides along, locked: the Shell has not
-    // switched it on (D-063).
-    const staking = { ...FIXED_ROOM_DEFINITIONS.bank.stations[1], status: 'locked', highlighted: false };
+    // The Bank's other three counters ride along, locked: the Shell has not
+    // switched them on (D-063, D-099).
+    const others = FIXED_ROOM_DEFINITIONS.bank.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false }));
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, status: 'locked', highlighted: false }, staking],
+      [{ ...BANK_STATION, status: 'locked', highlighted: false }, ...others],
     ]);
 
     makeBankStationAvailable(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false }, staking],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false }, ...others],
     ]);
 
     place(world.session, interiorTileCentre(BANK_APPROACH));
     tick(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true }, staking],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true }, ...others],
     ]);
     expect(world.bus.payloads('station:activated')).toEqual([
       { building: 'bank', station: BANK_STATION.station },
@@ -2396,9 +2396,7 @@ describe('WorldSession: shared presence areas (D-087)', () => {
 // ---------------------------------------------------------------------------
 
 const VAULT_STATION = VAULT_ROOM_DEFINITION.stations[0];
-/** The Vault's borrowing counter (D-083), east of lending. */
-const VAULT_BORROW = VAULT_ROOM_DEFINITION.stations[1];
-/** The tile directly south of the Vault's lending counter: its approach. */
+/** The tile directly south of the Vault's SUPPLY counter: its approach. */
 const VAULT_APPROACH = { x: VAULT_STATION.x, y: VAULT_STATION.y + VAULT_STATION.height };
 
 /** From the spawn east along the road to the Vault door's column, then north into it. */
@@ -2446,7 +2444,7 @@ describe('WorldSession: the Vault (D-077)', () => {
     expect(world.view.last('setPlayerPosition')).toEqual([interiorTileCentre(VAULT_ROOM_DEFINITION.spawn), true]);
   });
 
-  it('activates the lending counter the Shell makes available, and leaves by the exit onto the street', () => {
+  it('activates the SUPPLY counter the Shell makes available, and leaves by the exit onto the street', () => {
     const world = createWorld({ vaultOpen: true });
     const session = world.start();
     place(session, streetTileCentre(doorTile('vault')));
@@ -2455,26 +2453,23 @@ describe('WorldSession: the Vault (D-077)', () => {
     // Every visit begins locked, until the Shell's snapshot says otherwise.
     expect(world.view.last('renderRoom')).toEqual([
       'vault',
-      [
-        { ...VAULT_STATION, status: 'locked', highlighted: false },
-        { ...VAULT_BORROW, status: 'locked', highlighted: false },
-      ],
+      VAULT_ROOM_DEFINITION.stations.map((station) => ({ ...station, status: 'locked', highlighted: false })),
     ]);
 
     world.bus.shellEmit('world:stations', {
       building: 'vault',
-      stations: [{ station: VAULT_LENDING_STATION, label: 'SUPPLY / REDEEM', status: 'available' }],
+      stations: [{ station: VAULT_SUPPLY_STATION, label: 'SUPPLY', status: 'available' }],
     });
     expect(world.bus.payloads('station:activated')).toEqual([]);
     place(session, interiorTileCentre(VAULT_APPROACH));
     tick(world);
-    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'vault', station: VAULT_LENDING_STATION }]);
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'vault', station: VAULT_SUPPLY_STATION }]);
     expect(world.view.last('renderRoom')).toEqual([
       'vault',
       [
-        { ...VAULT_STATION, status: 'available', highlighted: true },
-        // The borrowing counter is untouched by lending's snapshot: still locked.
-        { ...VAULT_BORROW, status: 'locked', highlighted: false },
+        { ...VAULT_STATION, label: 'SUPPLY', status: 'available', highlighted: true },
+        // The other three counters are untouched by SUPPLY's snapshot: still locked.
+        ...VAULT_ROOM_DEFINITION.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false })),
       ],
     ]);
 
