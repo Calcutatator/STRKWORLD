@@ -19,6 +19,7 @@ import {
   VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
+  isFixedRoomSolidAt,
   type FixedRoomController,
   type FixedRoomLevelId,
   type FixedRoomLevelMap,
@@ -2036,6 +2037,43 @@ const keysFor = ([dx, dy]: readonly [number, number]): Partial<MovementInput> =>
   right: dx > 0,
   up: dy < 0,
   down: dy > 0,
+});
+
+describe('WorldSession: counters built into their rooms', () => {
+  it.each(['post-office', 'bridge', 'exchange'] as const)('never lets a player into the %s counter\'s furniture', (building) => {
+    const world = createWorld();
+    const session = world.start();
+    const map = createFixedRoom(FIXED_ROOM_DEFINITIONS[building]);
+    const station = map.stations[0]!;
+    // Every free tile along the counter's front row, walking north, north-west and north-east into it.
+    const half = AVATAR_BODY_SIZE / 2 - 0.5;
+    let checked = 0;
+    for (let x = 1; x < map.width - 1; x++) {
+      if (isFixedRoomSolidAt(map, x, station.y + 1)) continue;
+      for (const direction of [[0, -1], [-1, -1], [1, -1]] as const) {
+        if (session.area !== building) enterBuilding(world, building);
+        // A diagonal can carry the player onto the Exchange's lift; ride back down.
+        if (session.level !== 'ground') climbTo(world, 'ground');
+        place(session, interiorTileCentre({ x, y: station.y + 1 }));
+        tick(world);
+        world.keyboard.hold(keysFor(direction));
+        for (let i = 0; i < 45 && session.area === building; i++) {
+          tick(world);
+          if (session.level !== 'ground') break;
+          for (const [dx, dy] of [[-half, -half], [half, -half], [-half, half], [half, half]] as const) {
+            const tile = {
+              x: Math.floor((session.player.x + dx - ROOM_ORIGIN.x) / FIXED_ROOM_TILE_SIZE),
+              y: Math.floor((session.player.y + dy - ROOM_ORIGIN.y) / FIXED_ROOM_TILE_SIZE),
+            };
+            expect(isFixedRoomSolidAt(map, tile.x, tile.y), `${building} ${x} ${direction} -> ${tile.x},${tile.y}`).toBe(false);
+          }
+          checked += 1;
+        }
+        world.keyboard.release();
+      }
+    }
+    expect(checked).toBeGreaterThan(300);
+  });
 });
 
 describe('WorldSession: the Exchange tower', () => {

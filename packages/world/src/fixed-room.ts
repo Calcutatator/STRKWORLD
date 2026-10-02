@@ -8,13 +8,29 @@ import { STREET_ORIGIN_X, type BuildingId, type EventBus, type ShellEvents, type
 
 export const FIXED_ROOM_TILE_SIZE = 32;
 
-export type FixedRoomTile = 'floor' | 'wall' | 'exit' | 'station' | 'lift';
+/**
+ * `fixture` is furniture built into a room around a counter (a desk's wings,
+ * the boards or shelving behind it, a gateway's pylons): solid like a wall,
+ * drawn by the room builder, never a station or its approach.
+ */
+export type FixedRoomTile = 'floor' | 'wall' | 'exit' | 'station' | 'lift' | 'fixture';
 
 export interface FixedRoomRect {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+}
+
+/**
+ * Free-standing furniture the room builder draws on a fixture. A fixture
+ * without one belongs to a counter: its desk's wings or what stands behind it.
+ */
+export type FixedRoomProp = 'trading-pod' | 'high-table' | 'pillar-box' | 'writing-desk' | 'bench';
+
+/** Solid furniture on the floor (`fixture` tiles). */
+export interface FixedRoomFixture extends FixedRoomRect {
+  readonly prop?: FixedRoomProp;
 }
 
 export interface FixedRoomStationDefinition extends FixedRoomRect {
@@ -55,6 +71,13 @@ export interface FixedRoomFloorDefinition {
   readonly stations: readonly FixedRoomStationDefinition[];
   /** Pads to the building's other floors. */
   readonly lifts?: readonly FixedRoomLiftDefinition[];
+  /**
+   * Solid furniture: what a counter is built into (its desk's wings and what
+   * stands behind it) and free-standing props. Strictly inside the walls, clear of every station, lift,
+   * arrival, the exit and the spawn, and never cutting a counter, lift or the
+   * exit off from the spawn.
+   */
+  readonly fixtures?: readonly FixedRoomFixture[];
 }
 
 /** A building's ground floor: the room its street door opens onto. */
@@ -95,6 +118,8 @@ export interface FixedRoomLevelMap {
   readonly exit: FixedRoomRect | null;
   readonly stations: readonly FixedRoomStationDefinition[];
   readonly lifts: readonly FixedRoomLiftDefinition[];
+  /** Solid furniture tiles' rectangles (`fixture` tiles). */
+  readonly fixtures: readonly FixedRoomFixture[];
   readonly rooftop: FixedRoomRooftop | null;
 }
 
@@ -139,7 +164,9 @@ export type FixedRoomDefinitionErrorCode =
   | 'overlapping-stations'
   | 'overlapping-approaches'
   | 'invalid-lift'
-  | 'invalid-level';
+  | 'invalid-level'
+  | 'invalid-fixture'
+  | 'unreachable';
 
 /** Stable fail-closed error surface for authored room data. */
 export class FixedRoomDefinitionError extends Error {
@@ -273,6 +300,8 @@ function freezeFloor<T extends FixedRoomFloorDefinition>(definition: T): void {
     Object.freeze(lift);
   }
   if (definition.lifts) Object.freeze(definition.lifts);
+  for (const fixture of definition.fixtures ?? []) Object.freeze(fixture);
+  if (definition.fixtures) Object.freeze(definition.fixtures);
 }
 
 function freezeAuthoredRoom<const T extends FixedRoomDefinition>(definition: T): T {
@@ -344,6 +373,16 @@ export const POST_OFFICE_ROOM_DEFINITION = freezeAuthoredRoom({
       height: 1,
     },
   ],
+  // The long wooden counter the window is set into, the stamp machine at its
+  // east end, and the sorting room behind it, where nobody walks.
+  fixtures: [
+    { x: 1, y: 1, width: 8, height: 2 },
+    { x: 1, y: 3, width: 2, height: 1 },
+    { x: 5, y: 3, width: 4, height: 1 },
+    // A pillar box against the north wall, and a writing desk for forms.
+    { x: 13, y: 1, width: 1, height: 1, prop: 'pillar-box' },
+    { x: 12, y: 6, width: 3, height: 1, prop: 'writing-desk' },
+  ],
 } as const satisfies FixedRoomDefinition);
 
 export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
@@ -365,6 +404,16 @@ export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
   // The tower's lift, up to the Degen floor: in the north-west corner, clear
   // of everything the room already had.
   lifts: [{ to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 2, y: 2 } }],
+  // The trading desk's wings either side of the counter, and the wall of
+  // boards behind it with the traders' row in front of that.
+  fixtures: [
+    { x: 11, y: 1, width: 6, height: 2 },
+    { x: 11, y: 3, width: 2, height: 1 },
+    { x: 15, y: 3, width: 2, height: 1 },
+    // Two traders' pods on the floor.
+    { x: 3, y: 5, width: 3, height: 1, prop: 'trading-pod' },
+    { x: 3, y: 7, width: 3, height: 1, prop: 'trading-pod' },
+  ],
 } as const satisfies FixedRoomDefinition);
 
 /** The degen swap counter (avnu's degen-mode tokens); the Shell supplies its label and state. */
@@ -394,6 +443,16 @@ export const EXCHANGE_DEGEN_LEVEL = freezeAuthoredLevel({
   lifts: [
     { to: 'ground', x: 1, y: 10, width: 2, height: 1, arrival: { x: 2, y: 9 } },
     { to: 'roof', x: 15, y: 1, width: 2, height: 1, arrival: { x: 15, y: 2 } },
+  ],
+  // The back room set into the poster wall, and the bar's ends either side
+  // of the counter across its mouth.
+  fixtures: [
+    { x: 7, y: 1, width: 4, height: 2 },
+    { x: 7, y: 3, width: 1, height: 1 },
+    { x: 10, y: 3, width: 1, height: 1 },
+    // Two neon high tables on the floor.
+    { x: 4, y: 6, width: 1, height: 1, prop: 'high-table' },
+    { x: 13, y: 6, width: 1, height: 1, prop: 'high-table' },
   ],
 } as const satisfies FixedRoomLevelDefinition);
 
@@ -433,6 +492,16 @@ export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
       width: 2,
       height: 1,
     },
+  ],
+  // The gateway the terminal stands in: its two pylons, and the portal
+  // behind the desk.
+  fixtures: [
+    { x: 6, y: 1, width: 6, height: 2 },
+    { x: 6, y: 3, width: 2, height: 1 },
+    { x: 10, y: 3, width: 2, height: 1 },
+    // Two rows of departure-lounge seats.
+    { x: 3, y: 6, width: 3, height: 1, prop: 'bench' },
+    { x: 12, y: 6, width: 3, height: 1, prop: 'bench' },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -525,6 +594,7 @@ function buildFloorMap(
   rooftop: FixedRoomRooftop | null,
 ): FixedRoomLevelMap {
   const lifts = definition.lifts ?? [];
+  const fixtures = definition.fixtures ?? [];
   const tiles: FixedRoomTile[][] = Array.from({ length: definition.height }, (_, y) =>
     Array.from({ length: definition.width }, (_, x) => {
       if (lifts.some((lift) => isInside(lift, x, y))) return 'lift';
@@ -532,6 +602,7 @@ function buildFloorMap(
         x === 0 || x === definition.width - 1 || y === 0 || y === definition.height - 1;
       if (border) return exit && isInside(exit, x, y) ? 'exit' : 'wall';
       if (definition.stations.some((station) => isInside(station, x, y))) return 'station';
+      if (fixtures.some((fixture) => isInside(fixture, x, y))) return 'fixture';
       return 'floor';
     }),
   );
@@ -548,6 +619,7 @@ function buildFloorMap(
     exit: exit ? Object.freeze({ ...exit }) : null,
     stations: Object.freeze(stations),
     lifts: Object.freeze(lifts.map((lift) => Object.freeze({ ...lift, arrival: Object.freeze({ ...lift.arrival }) }))),
+    fixtures: Object.freeze(fixtures.map((fixture) => Object.freeze({ ...fixture }))),
     rooftop: rooftop ? Object.freeze({ ...rooftop }) : null,
   });
 }
@@ -688,6 +760,73 @@ function validateFloor(definition: FixedRoomFloorDefinition, exit: FixedRoomRect
     !lifts.some((lift) => isInside(lift, spawn.x, spawn.y)) &&
     !(exit !== null && isInside(exit, spawn.x, spawn.y));
   if (!validSpawn) rejectDefinition('invalid-spawn');
+
+  const fixtures = definition.fixtures ?? [];
+  if (!Array.isArray(fixtures)) rejectDefinition('invalid-fixture');
+  for (const [index, fixture] of fixtures.entries()) {
+    if (
+      !validRect(fixture) ||
+      !rectStrictlyInside(fixture, width, height) ||
+      definition.stations.some((station) => rectanglesOverlap(fixture, station)) ||
+      lifts.some((lift) => rectanglesOverlap(fixture, lift) || isInside(fixture, lift.arrival.x, lift.arrival.y)) ||
+      fixtures.slice(index + 1).some((other) => rectanglesOverlap(fixture, other)) ||
+      isInside(fixture, spawn.x, spawn.y) ||
+      (fixture.prop !== undefined && !FIXED_ROOM_PROPS.includes(fixture.prop))
+    ) {
+      rejectDefinition('invalid-fixture');
+    }
+  }
+  if (!everythingReachable(definition, exit)) rejectDefinition('unreachable');
+}
+
+/**
+ * Walking from the spawn over free floor, can the player step up to every
+ * counter (one free tile of its approach), onto every lift pad and onto the
+ * exit? Furniture must never wall any of them off.
+ */
+const FIXED_ROOM_PROPS: readonly FixedRoomProp[] = ['trading-pod', 'high-table', 'pillar-box', 'writing-desk', 'bench'];
+
+function everythingReachable(definition: FixedRoomFloorDefinition, exit: FixedRoomRect | null): boolean {
+  const { width, height, spawn } = definition;
+  const seen = new Set<number>([spawn.y * width + spawn.x]);
+  const queue: [number, number][] = [[spawn.x, spawn.y]];
+  const steps: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  while (queue.length > 0) {
+    const [x, y] = queue.pop()!;
+    for (const [dx, dy] of steps) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const key = ny * width + nx;
+      if (seen.has(key)) continue;
+      // A pad or the exit is reached by stepping onto it, never walked through.
+      if (
+        (definition.lifts ?? []).some((lift) => isInside(lift, nx, ny)) ||
+        (exit !== null && isInside(exit, nx, ny))
+      ) {
+        seen.add(key);
+        continue;
+      }
+      if (!walkableOn(definition, nx, ny)) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  const reached = (x: number, y: number): boolean => seen.has(y * width + x);
+  const reachedIn = (rect: FixedRoomRect, skip: FixedRoomRect | null): boolean => {
+    for (let y = rect.y; y < rect.y + rect.height; y++) {
+      for (let x = rect.x; x < rect.x + rect.width; x++) {
+        if (skip && isInside(skip, x, y)) continue;
+        if (reached(x, y)) return true;
+      }
+    }
+    return false;
+  };
+  return (
+    definition.stations.every((station) => reachedIn(expandRect(station), station)) &&
+    (definition.lifts ?? []).every((lift) => reachedIn(lift, null)) &&
+    (exit === null || reachedIn(exit, null))
+  );
 }
 
 /**
@@ -752,7 +891,10 @@ function walkableOn(floor: FixedRoomFloorDefinition, x: number, y: number): bool
     // The border is wall, except where a pad stands in it.
     return (floor.lifts ?? []).some((lift) => isInside(lift, x, y));
   }
-  return !floor.stations.some((station) => isInside(station, x, y));
+  return (
+    !floor.stations.some((station) => isInside(station, x, y)) &&
+    !(floor.fixtures ?? []).some((fixture) => isInside(fixture, x, y))
+  );
 }
 
 /** The straight directions a player can step onto `lift` from a free tile beside it. */
@@ -794,7 +936,7 @@ export function fixedRoomTileAt(room: FixedRoomLevelMap, x: number, y: number): 
 
 export function isFixedRoomSolidAt(room: FixedRoomLevelMap, x: number, y: number): boolean {
   const tile = fixedRoomTileAt(room, x, y);
-  return tile === null || tile === 'wall' || tile === 'station';
+  return tile === null || tile === 'wall' || tile === 'station' || tile === 'fixture';
 }
 
 export function isFixedRoomExit(room: FixedRoomLevelMap, x: number, y: number): boolean {

@@ -1545,6 +1545,94 @@ export const DEGEN_ROOM_THEME: RoomTheme = Object.freeze({
   stationLooks: DEGEN_STATION_LOOKS,
 });
 
+/**
+ * The built-in counters' lit headers (room-builder.ts): the Shell's label is
+ * painted on the architecture, a sign over the window, never a floating pill.
+ * Each board takes its building's own type and colours.
+ */
+/** avnu's trading desk: the label on a navy pill in the desk's gantry, as avnu's buttons are pills. */
+export const AVNU_COUNTER_HEADER: SignStyleOptions = Object.freeze({
+  width: 1.86,
+  height: 0.36,
+  background: css(AVNU.navy),
+  foreground: css(AVNU.white),
+  accent: css(AVNU.blue),
+  cornerRadius: 0.5,
+  borderWidth: 0.07,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleTracking: 0.06,
+  uppercase: true,
+});
+
+/** The Degen floor's back-room bar: the label as a neon tube sign on its lintel. */
+export const DEGEN_COUNTER_HEADER: SignStyleOptions = Object.freeze({
+  width: 2.5,
+  height: 0.36,
+  background: css(DEGEN.ink),
+  foreground: css(DEGEN.pink),
+  accent: css(DEGEN.cyan),
+  cornerRadius: 0.3,
+  borderWidth: 0.06,
+  hairline: false,
+  titleFont: 'display',
+  titleWeight: 900,
+  titleTracking: 0.12,
+  uppercase: true,
+});
+
+/** The Post Office's service window: the label on an enamel ticket, navy on cream, airmail red round it. */
+export const POST_OFFICE_WINDOW_SIGN: SignStyleOptions = Object.freeze({
+  width: 1.7,
+  height: 0.28,
+  background: '#fbf4e4',
+  foreground: '#1f3b70',
+  accent: '#c8513c',
+  cornerRadius: 0.18,
+  borderWidth: 0.08,
+  hairline: true,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleTracking: 0.1,
+  uppercase: true,
+});
+
+/** The word over the Post Office's counter. */
+export const POST_OFFICE_SEND_TEXT = 'SEND';
+
+/** "SEND" on the counter's fascia: cream capitals on the trim's blue, edged in airmail red. */
+export const POST_OFFICE_SEND_SIGN: SignStyleOptions = Object.freeze({
+  width: 1.5,
+  height: 0.32,
+  background: '#2f5fa3',
+  foreground: '#fff7e6',
+  accent: '#c8513c',
+  cornerRadius: 0.1,
+  borderWidth: 0.08,
+  hairline: false,
+  titleFont: 'display',
+  titleWeight: 900,
+  titleTracking: 0.3,
+  uppercase: true,
+});
+
+/** The Bridge's gateway: the label heads its departure board, NEAR's mono in green on black. */
+export const NEAR_DEPARTURE_HEADER: SignStyleOptions = Object.freeze({
+  width: 1.9,
+  height: 0.27,
+  background: css(NEAR.black),
+  foreground: css(NEAR.green),
+  accent: css(NEAR.hairline),
+  cornerRadius: 0.06,
+  borderWidth: 0.04,
+  hairline: false,
+  titleFont: 'mono',
+  titleWeight: 600,
+  titleTracking: 0.24,
+  uppercase: true,
+});
+
 /** Floors reached by lift, by building and floor. */
 export const ROOM_LEVEL_THEMES: Readonly<Partial<Record<BuildingId, Readonly<Partial<Record<FixedRoomLevelId, RoomTheme>>>>>> =
   Object.freeze({ exchange: Object.freeze({ degen: DEGEN_ROOM_THEME }) });
