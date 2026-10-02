@@ -5911,3 +5911,40 @@ The windows do not come from STRKWORLD retrying. The click handlers call `sessio
 - C (combat client): _placeholder — `arena-session.test.ts`, `arena-fx.test.ts`, `avatar-figure` attack pose, `arena-controller.test.ts`, `ArenaHud.test.tsx`, real-lobby integration._
 
 Not verified: a real browser (nothing is reachable until A and B land).
+
+---
+
+## D-115 — The way in is a title screen: the live overworld floats behind the wordmark, and each step stacks below it as a simple menu
+
+**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in**
+
+**Context.** The connect flow and the entry gate (D-055, D-072, D-073) were dark `.room` cards on a blank page in rounded system type. D-113 approved a brand built from the game itself, with Cube World's title and menu screens as the reference, and left the web UI's type to a separate change.
+
+**Decision.**
+
+- **One title screen for every step before the city.** `connect/TitleScreen.tsx` frames the production root's boot line, the wallet entry card, the capability rooms, the entry gate's cards and the "Starting the city" line. Each step keeps its own markup, copy, test ids and behaviour; only the frame changes. The in-city connect room (`ConnectRoom`) is not on it.
+- **The backdrop is the real overworld, live.** `@strkworld/world/title` draws `buildStreet()` on the game's own map (the plaza, every building, the pitch, the props and the country), under the game's sky dome (now `three/sky.ts`, shared with the engine), sun and hemisphere light, with the game's Horizon fog pushed out for a high view. The camera drifts slowly along the street and back. It runs no session and reads no input. One ref-counted backdrop serves every title screen, and the next step takes its canvas over, so the drift never restarts.
+- **It is cheap and leaves nothing behind.**
+  - The pixel ratio is capped at 1.5 and frames at 30 a second.
+  - The shadow map is drawn once.
+  - The loop stops while the tab is hidden.
+  - With `prefers-reduced-motion`, it holds one still frame and follows the setting live.
+  - The scene builds after the menu has painted. The palette gradient underneath is the first frame, and the only frame without WebGL; there, the shell never loads the scene module at all.
+  - The last release tears down everything after a 250 ms grace: renderer, render lists, the forced context loss, the street, the sky, the clouds, the canvas and the listeners. So nothing is left once the city's engine starts.
+  - The scene loads lazily, so `three` stays out of the entry chunk.
+- **The front.**
+  - The wordmark (`brand/Wordmark.tsx`, the one swappable title) sits big at the top. It uses web copies of the approved master at 1200 and 2400 px.
+  - Below it, the menu reads ▶ CONNECT WALLET, then the wallet choices as Silkscreen caps on Ember blocks with a dark outline and a hard drop, then "Look again". The wallet entry card's heading is now "Connect wallet" while wallets are listed.
+  - Menu copy is VT323 with a hard pixel outline, so it reads over the city without a panel. Steps with forms or longer copy (the gate's cards, the capability rooms) sit in a dark brand window.
+  - Amounts take Jersey 15, because VT323's digits blur at small sizes.
+  - At phone width it keeps a 16 px gutter and doesn't scroll sideways, and the wordmark scales with the screen.
+- **Brand tokens live in one module.**
+  - `apps/web/src/brand/brand.css` declares the palette and the three faces as `--brand-*` tokens and styles nothing itself. It self-hosts Jersey 15, VT323 and Silkscreen (latin WOFF2, about 50 kB, OFL licence beside them), bundled same-origin, so a `font-src 'self'` policy would hold.
+  - `brand/tokens.ts` carries the same values for code, and a test keeps the two files in step.
+  - The title screen wears the brand by pointing the theme's `--ui-*` tokens at the `--brand-*` ones. The game-wide theme can adopt them the same way.
+
+**Consequences.**
+- Everything that was true of the way in still is: the connect flow, the capability check, D-072's gate and its deposit, the `VITE_ENTRY_GATE_BYPASS` switch, D-108's unsupported-wallet hiding and D-073's Ready and Xverse links. The frozen D-024 disclosures are untouched.
+- The page now shows two WebGL contexts for at most the grace period while the city starts.
+- The title screen loads the brand faces; the rest of the game UI still uses system stacks until the game-wide theme change.
+- Not verified here: frame times on low-end phones, and the look in Safari and Firefox. The renders were made in Chromium.

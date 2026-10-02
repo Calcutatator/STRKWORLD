@@ -17,7 +17,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
-    "./host": "./src/host.ts"
+    "./host": "./src/host.ts",
+    "./title": "./src/title.ts"
   },
   "devDependencies": {
     "@types/three": "0.186.0",
