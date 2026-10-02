@@ -40,28 +40,56 @@ import {
   type FixedRoomState,
 } from './fixed-room.js';
 
-/**
- * D-103's teller line: the counters stand west to east along the north wall,
- * each approach names only its own counter, no two approaches overlap, the
- * row in front of them is open floor end to end, and nothing stands between
- * the exit and the counters.
- */
-function expectTellerLine(room: ReturnType<typeof createFixedRoom>, order: readonly string[]): void {
-  expect(room.stations.map((station) => station.station)).toEqual(order);
-  for (const station of room.stations) {
+/** The tiles a player can stand on to open `station`: its halo, less what is solid. */
+function walkableApproach(room: ReturnType<typeof createFixedRoom>, station: { readonly station: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number }): { x: number; y: number }[] {
+  const found: { x: number; y: number }[] = [];
+  for (let y = station.y - 1; y <= station.y + station.height; y++) {
     for (let x = station.x - 1; x <= station.x + station.width; x++) {
-      for (let y = station.y - 1; y <= station.y + station.height; y++) {
-        if (x >= station.x && x < station.x + station.width && y === station.y) continue;
-        expect(fixedRoomStationAtApproach(room, x, y)?.station).toBe(station.station);
+      if (isFixedRoomSolidAt(room, x, y) || isFixedRoomExit(room, x, y)) continue;
+      if (fixedRoomStationAtApproach(room, x, y)?.station === station.station) found.push({ x, y });
+    }
+  }
+  return found;
+}
+
+/** Every floor tile a player can walk to from the spawn. */
+function reachableFromSpawn(room: ReturnType<typeof createFixedRoom>): Set<string> {
+  const reached = new Set<string>([`${room.spawn.x},${room.spawn.y}`]);
+  const queue = [room.spawn];
+  while (queue.length > 0) {
+    const { x, y } = queue.pop()!;
+    for (const next of [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }]) {
+      if (reached.has(`${next.x},${next.y}`) || isFixedRoomSolidAt(room, next.x, next.y) || isFixedRoomExit(room, next.x, next.y)) continue;
+      reached.add(`${next.x},${next.y}`);
+      queue.push(next);
+    }
+  }
+  return reached;
+}
+
+/**
+ * D-104's built-in counters: set into fixtures, each opens only from the
+ * hall, from a strip of walkable approach the spawn can reach; no two
+ * approaches overlap (`validateFloor`), and the walk from the door is clear.
+ */
+function expectBuiltIn(room: ReturnType<typeof createFixedRoom>, order: readonly string[]): void {
+  expect(room.stations.map((station) => station.station)).toEqual(order);
+  const reached = reachableFromSpawn(room);
+  for (const station of room.stations) {
+    const approach = walkableApproach(room, station);
+    expect(approach.length, station.station).toBeGreaterThan(0);
+    for (const tile of approach) expect(reached.has(`${tile.x},${tile.y}`), `${station.station} ${tile.x},${tile.y}`).toBe(true);
+    // Nothing reaches behind a counter: every other tile of its halo is solid.
+    for (let y = station.y - 1; y <= station.y + station.height; y++) {
+      for (let x = station.x - 1; x <= station.x + station.width; x++) {
+        if (approach.some((tile) => tile.x === x && tile.y === y)) continue;
+        expect(isFixedRoomSolidAt(room, x, y) && !reached.has(`${x},${y}`)).toBe(true);
       }
     }
   }
-  for (let x = 1; x < room.width - 1; x++) {
-    expect(isFixedRoomSolidAt(room, x, 5)).toBe(false);
-    expect(isFixedRoomApproach(room, x, 5)).toBe(false);
-  }
-  for (let y = 5; y < room.exit.y; y++) {
-    for (let x = room.exit.x; x < room.exit.x + room.exit.width; x++) expect(isFixedRoomSolidAt(room, x, y)).toBe(false);
+  // The doorstep and the walk north from it to the counters are open floor.
+  for (let y = 4; y < room.exit.y; y++) {
+    for (let x = room.exit.x; x < room.exit.x + room.exit.width; x++) expect(reached.has(`${x},${y}`)).toBe(true);
   }
 }
 
@@ -675,20 +703,35 @@ describe('fixed room definitions', () => {
     expect(room.stations).toHaveLength(definition === BANK_ROOM_DEFINITION || definition === VAULT_ROOM_DEFINITION ? 4 : 1);
     for (const station of room.stations) {
       expect(isFixedRoomSolidAt(room, station.x, station.y)).toBe(true);
-      expect(isFixedRoomApproach(room, station.x, station.y + 1)).toBe(true);
-      expect(isFixedRoomSolidAt(room, station.x, station.y + 1)).toBe(false);
+      // Free-standing counters open from the tile in front; built-in ones (D-104) from their strip of hall.
+      const approach = walkableApproach(room, station);
+      expect(approach.length).toBeGreaterThan(0);
+      for (const tile of approach) expect(isFixedRoomApproach(room, tile.x, tile.y)).toBe(true);
     }
   });
 
-  it('lines the Bank\'s four counters along the north wall, one action each (D-103)', () => {
+  it('sets the Bank\'s four counters into its hall: two teller windows and Endur\'s booth, one action each (D-103, D-104)', () => {
     expect(BANK_ROOM_DEFINITION.stations).toEqual([
-      { station: 'bank:shielding', label: 'SHIELD', x: 2, y: 3, width: 2, height: 1 },
-      { station: 'bank:unshielding', label: 'UNSHIELD', x: 6, y: 3, width: 2, height: 1 },
-      { station: 'bank:staking', label: 'STAKE', x: 10, y: 3, width: 2, height: 1 },
-      { station: 'bank:unstaking', label: 'UNSTAKE', x: 14, y: 3, width: 2, height: 1 },
+      { station: 'bank:shielding', label: 'SHIELD', x: 5, y: 3, width: 2, height: 1 },
+      { station: 'bank:unshielding', label: 'UNSHIELD', x: 11, y: 3, width: 2, height: 1 },
+      { station: 'bank:staking', label: 'STAKE', x: 16, y: 5, width: 1, height: 1 },
+      { station: 'bank:unstaking', label: 'UNSTAKE', x: 16, y: 8, width: 1, height: 1 },
     ]);
     const room = createFixedRoom(BANK_ROOM_DEFINITION);
-    expectTellerLine(room, ['bank:shielding', 'bank:unshielding', 'bank:staking', 'bank:unstaking']);
+    expectBuiltIn(room, ['bank:shielding', 'bank:unshielding', 'bank:staking', 'bank:unstaking']);
+    // The teller wall runs the width of the hall along row 3, the back office solid behind it.
+    for (let x = 1; x < room.width - 1; x++) {
+      for (let y = 1; y <= 3; y++) expect(isFixedRoomSolidAt(room, x, y)).toBe(true);
+    }
+    // The teller windows open from the hall in front of them; Endur's from the hall west of its booth.
+    expect(walkableApproach(room, room.stations[0]!)).toEqual([4, 5, 6, 7].map((x) => ({ x, y: 4 })));
+    expect(walkableApproach(room, room.stations[2]!)).toEqual([4, 5, 6].map((y) => ({ x: 15, y })));
+    expect(walkableApproach(room, room.stations[3]!)).toEqual([7, 8, 9].map((y) => ({ x: 15, y })));
+    // The bay between the windows, where the runner from the door ends, opens neither.
+    for (const x of [8, 9]) {
+      expect(isFixedRoomSolidAt(room, x, 4)).toBe(false);
+      expect(isFixedRoomApproach(room, x, 4)).toBe(false);
+    }
     // Until the Shell says otherwise every counter is locked.
     expect(normalizeFixedRoomStations(BANK_ROOM_DEFINITION, undefined)).toEqual([
       { station: 'bank:shielding', label: 'SHIELD', status: 'locked' },
@@ -762,10 +805,18 @@ describe('fixed room definitions', () => {
       spawn: { x: 9, y: 9 },
       exit: { x: 8, y: 11, width: 2, height: 1 },
       stations: [
-        { station: 'vault:supply', label: 'SUPPLY', x: 2, y: 3, width: 2, height: 1 },
-        { station: 'vault:redeem', label: 'REDEEM', x: 6, y: 3, width: 2, height: 1 },
-        { station: 'vault:borrow', label: 'BORROW', x: 10, y: 3, width: 2, height: 1 },
-        { station: 'vault:repay', label: 'REPAY', x: 14, y: 3, width: 2, height: 1 },
+        { station: 'vault:supply', label: 'SUPPLY', x: 3, y: 3, width: 2, height: 1 },
+        { station: 'vault:redeem', label: 'REDEEM', x: 7, y: 3, width: 2, height: 1 },
+        { station: 'vault:borrow', label: 'BORROW', x: 11, y: 3, width: 2, height: 1 },
+        { station: 'vault:repay', label: 'REPAY', x: 15, y: 3, width: 2, height: 1 },
+      ],
+      // D-104: the staff floor, the front desk round SUPPLY and REDEEM, and the vault door between the loan booths.
+      fixtures: [
+        { x: 1, y: 1, width: 16, height: 2 },
+        { x: 1, y: 3, width: 2, height: 1 },
+        { x: 5, y: 3, width: 2, height: 1 },
+        { x: 9, y: 3, width: 2, height: 1 },
+        { x: 13, y: 3, width: 2, height: 1 },
       ],
     });
     expect([VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION]).toEqual([
@@ -776,7 +827,11 @@ describe('fixed room definitions', () => {
     ]);
     const room = createFixedRoom(VAULT_ROOM_DEFINITION);
     expect(room).toMatchObject({ building: 'vault', level: 'ground', lifts: [], rooftop: null });
-    expectTellerLine(room, [VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION]);
+    expectBuiltIn(room, [VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION]);
+    // Each opens from the hall tiles in front of it, which tile row 4 from x 2 to the east wall.
+    expect(room.stations.flatMap((station) => walkableApproach(room, station).map((tile) => tile.x))).toEqual(
+      Array.from({ length: 15 }, (_, i) => i + 2),
+    );
     // Locked until the Shell says otherwise, like every counter.
     expect(normalizeFixedRoomStations(VAULT_ROOM_DEFINITION, undefined)).toEqual([
       { station: VAULT_SUPPLY_STATION, label: 'SUPPLY', status: 'locked' },
@@ -822,7 +877,9 @@ describe('fixed room definitions', () => {
     expect(Reflect.set(VAULT_ROOM_DEFINITION.exit, 'y', 10)).toBe(false);
     expect(VAULT_ROOM_DEFINITION.stations[0].label).toBe('SUPPLY');
     expect(Reflect.set(VAULT_ROOM_DEFINITION.stations[3], 'x', 13)).toBe(false);
-    expect(VAULT_ROOM_DEFINITION.stations[3].x).toBe(14);
+    expect(VAULT_ROOM_DEFINITION.stations[3].x).toBe(15);
+    expect(Object.isFrozen(VAULT_ROOM_DEFINITION.fixtures)).toBe(true);
+    expect(Reflect.set(VAULT_ROOM_DEFINITION.fixtures[0], 'width', 1)).toBe(false);
   });
 
   it('adds the Vault\'s room, last, only when the Shell opens it, failing closed', () => {
@@ -879,7 +936,12 @@ describe('fixed room definitions', () => {
       })),
     });
     const activated = (): string[] => h.events.filter((event) => event.event === 'station:activated').map((event) => (event.payload as { station: string }).station);
-    const centre = (station: { readonly x: number; readonly y: number }) => ({ x: station.x, y: station.y + 1 });
+    // Where a player stands to open each: the middle of its walkable approach (D-104).
+    const room = createFixedRoom(definition);
+    const centre = (station: (typeof definition.stations)[number]) => {
+      const approach = walkableApproach(room, station);
+      return approach[Math.floor(approach.length / 2)]!;
+    };
     h.controller.update(centre(first));
     expect(activated()).toEqual([first.station]);
     // Stepping straight into the next counter's halo highlights it, but a locked one never opens.
@@ -890,7 +952,7 @@ describe('fixed room definitions', () => {
     h.controller.update(centre(fourth));
     expect(activated()).toEqual([first.station, third.station, fourth.station]);
     // Walking back into an area reopens its counter once the player stepped off every halo.
-    h.controller.update({ x: fourth.x, y: 6 });
+    h.controller.update(definition.spawn);
     h.controller.update(centre(fourth));
     expect(activated()).toEqual([first.station, third.station, fourth.station, fourth.station]);
   });
@@ -946,7 +1008,25 @@ describe('fixed room definitions', () => {
       'overlapping-approaches',
     ],
   ] as const)('rejects invalid or ambiguous stations', (stations, code) => {
-    expectDefinitionError({ ...BANK_ROOM_DEFINITION, stations } as FixedRoomDefinition, code);
+    expectDefinitionError({ ...BANK_ROOM_DEFINITION, fixtures: [], stations } as FixedRoomDefinition, code);
+  });
+
+  it.each([
+    ['a fixture over a counter', { fixtures: [{ x: 5, y: 3, width: 1, height: 1 }] }, 'invalid-fixture'],
+    ['a fixture in the wall', { fixtures: [{ x: 0, y: 5, width: 1, height: 1 }] }, 'invalid-fixture'],
+    ['an empty fixture', { fixtures: [{ x: 3, y: 6, width: 0, height: 1 }] }, 'invalid-fixture'],
+    ['a fixture on the spawn', { fixtures: [{ x: 9, y: 9, width: 1, height: 1 }] }, 'invalid-spawn'],
+    ['a fixture walling a teller window off', { fixtures: [...BANK_ROOM_DEFINITION.fixtures, { x: 4, y: 4, width: 4, height: 1 }] }, 'unreachable-station'],
+    ['a fixture walling the door off', { fixtures: [...BANK_ROOM_DEFINITION.fixtures, { x: 7, y: 10, width: 4, height: 1 }, { x: 7, y: 9, width: 1, height: 1 }, { x: 10, y: 9, width: 1, height: 1 }, { x: 8, y: 8, width: 2, height: 1 }] }, 'unreachable-station'],
+  ] as const)('rejects %s (D-104)', (_name, change, code) => {
+    expectDefinitionError({ ...BANK_ROOM_DEFINITION, ...change } as FixedRoomDefinition, code);
+  });
+
+  it('rejects a fixture on a lift pad or its arrival (D-104)', () => {
+    const level = (fixtures: FixedRoomLevelDefinition['fixtures']): FixedRoomLevelDefinition => ({ ...EXCHANGE_DEGEN_LEVEL, fixtures });
+    expect(() => createFixedRoomLevel(level([{ x: 1, y: 10, width: 1, height: 1 }]))).toThrow('invalid-fixture');
+    expect(() => createFixedRoomLevel(level([{ x: 15, y: 2, width: 1, height: 1 }]))).toThrow('invalid-lift');
+    expect(createFixedRoomLevel(level([{ x: 5, y: 6, width: 2, height: 1 }])).tiles[6]![5]).toBe('fixture');
   });
 
   it('rejects an exit that overlaps a station', () => {
@@ -971,6 +1051,7 @@ describe('fixed room definitions', () => {
   it('retains one independent presentation for every configured station', () => {
     const definition: FixedRoomDefinition = {
       ...BANK_ROOM_DEFINITION,
+      fixtures: [],
       stations: [
         { station: 'bank:first', label: 'FIRST', x: 3, y: 3, width: 1, height: 1 },
         { station: 'bank:second', label: 'SECOND', x: 10, y: 3, width: 1, height: 1 },
@@ -1110,7 +1191,7 @@ describe('fixed room fixtures (counters built into their rooms)', () => {
     if (room.exit) expect(reached.has(`${room.exit.x},${room.exit.y}`)).toBe(true);
   });
 
-  it('copies and freezes the fixtures into the map, and the Bank and Vault have none', () => {
+  it('copies and freezes the fixtures into the map, props and all', () => {
     const room = createFixedRoom(POST_OFFICE_ROOM_DEFINITION);
     expect(room.fixtures).toEqual(POST_OFFICE_ROOM_DEFINITION.fixtures);
     expect(room.fixtures[0]).not.toBe(POST_OFFICE_ROOM_DEFINITION.fixtures[0]);
@@ -1118,63 +1199,18 @@ describe('fixed room fixtures (counters built into their rooms)', () => {
     expect(Object.isFrozen(room.fixtures[0])).toBe(true);
     expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.fixtures)).toBe(true);
     expect(room.fixtures.filter((fixture) => fixture.prop).map((fixture) => fixture.prop)).toEqual(['pillar-box', 'writing-desk']);
-    expect(createFixedRoom(BANK_ROOM_DEFINITION).fixtures).toEqual([]);
-    expect(createFixedRoom(VAULT_ROOM_DEFINITION).fixtures).toEqual([]);
   });
 
-  it.each([
-    ['on the wall', { x: 0, y: 4, width: 2, height: 1 }],
-    ['over a counter', { x: 7, y: 3, width: 2, height: 1 }],
-    ['on the spawn', { x: 9, y: 9, width: 1, height: 1 }],
-    ['over the exit', { x: 8, y: 10, width: 2, height: 2 }],
-    ['of no size', { x: 4, y: 6, width: 0, height: 1 }],
-    ['with an unknown prop', { x: 4, y: 6, width: 1, height: 1, prop: 'fountain' }],
-  ])('rejects a fixture %s', (_name, fixture) => {
-    expectDefinitionError({ ...BANK_ROOM_DEFINITION, fixtures: [fixture] } as FixedRoomDefinition, 'invalid-fixture');
-  });
-
-  it('rejects fixtures that overlap each other, a lift or a lift\'s arrival', () => {
-    const extra = (fixture: object) => ({
-      ...EXCHANGE_ROOM_DEFINITION,
-      fixtures: [...EXCHANGE_ROOM_DEFINITION.fixtures, fixture],
-    }) as FixedRoomDefinition;
-    expectDefinitionError(extra({ x: 4, y: 5, width: 1, height: 1 }), 'invalid-fixture');
-    expectDefinitionError(extra({ x: 2, y: 1, width: 1, height: 1 }), 'invalid-fixture');
-    expectDefinitionError(extra({ x: 2, y: 2, width: 1, height: 1 }), 'invalid-fixture');
-  });
-
-  it('rejects furniture that walls off a counter, a lift or the exit', () => {
+  it('rejects a prop the room builder does not know, and furniture across a counter\'s front (D-104\'s codes)', () => {
+    expectDefinitionError(
+      { ...POST_OFFICE_ROOM_DEFINITION, fixtures: [{ x: 4, y: 6, width: 1, height: 1, prop: 'fountain' }] } as unknown as FixedRoomDefinition,
+      'invalid-fixture',
+    );
     // A desk across the counter's front row: its approach is all furniture.
     expectDefinitionError(
       { ...POST_OFFICE_ROOM_DEFINITION, fixtures: [...POST_OFFICE_ROOM_DEFINITION.fixtures, { x: 2, y: 4, width: 4, height: 1 }] },
-      'unreachable',
+      'unreachable-station',
     );
-    // A wall of furniture across the room between the spawn and the counter.
-    expectDefinitionError({ ...BANK_ROOM_DEFINITION, fixtures: [{ x: 1, y: 6, width: 16, height: 1 }] }, 'unreachable');
-    // The exit fenced in.
-    expectDefinitionError(
-      {
-        ...BANK_ROOM_DEFINITION,
-        spawn: { x: 9, y: 5 },
-        fixtures: [
-          { x: 7, y: 10, width: 1, height: 1 },
-          { x: 7, y: 9, width: 4, height: 1 },
-          { x: 10, y: 10, width: 1, height: 1 },
-        ],
-      },
-      'unreachable',
-    );
-    // The roof lift's pad walled in on the Degen floor, its arrival with it.
-    const walled = {
-      ...EXCHANGE_DEGEN_LEVEL,
-      fixtures: [
-        ...EXCHANGE_DEGEN_LEVEL.fixtures,
-        { x: 14, y: 1, width: 1, height: 2 },
-        { x: 16, y: 2, width: 1, height: 1 },
-        { x: 14, y: 3, width: 3, height: 1 },
-      ],
-    };
-    expect(() => createFixedRoomLevel(walled)).toThrow(expect.objectContaining({ code: 'unreachable' }));
   });
 });
 

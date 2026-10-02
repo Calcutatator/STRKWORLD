@@ -9,7 +9,10 @@ import {
   VESU,
   VESU_LABEL,
   VESU_MARK,
+  VESU_BOOTH_STATION_THEME,
   VESU_BORROW_STATION_THEME,
+  VESU_DESK_STATION_THEME,
+  VESU_HEADER_SIGN,
   VESU_STATION_THEME,
   addVesuMark,
   vesuMarkColour,
@@ -46,14 +49,22 @@ describe('Vesu\'s palette', () => {
     expect(BUILDING_THEMES.vault).toMatchObject({ wall: VESU.white, wallAlt: VESU.fill, glow: VESU.blue, openPortal: VESU.blue });
     expect(BUILDING_THEMES.vault!.brand).toMatchObject({ text: 'vesu', style: { lowercase: true, foreground: '#0a0a0a' } });
     expect(ROOM_THEMES.vault).toMatchObject({ floorA: VESU.white, floorB: VESU.page, trim: VESU.blue, label: VESU_LABEL });
-    // D-103: lending's two counters wear the supply card, borrowing's two the loan card.
+    // D-103: lending's two counters wear the supply card, borrowing's two the
+    // loan card; D-104 builds lending's into the front desk and borrowing's
+    // into the vault wall, each under a lit sign in Vesu's blue.
     expect(ROOM_THEMES.vault!.stations).toEqual({
-      'vault:supply': VESU_STATION_THEME,
-      'vault:redeem': VESU_STATION_THEME,
-      'vault:borrow': VESU_BORROW_STATION_THEME,
-      'vault:repay': VESU_BORROW_STATION_THEME,
+      'vault:supply': VESU_DESK_STATION_THEME,
+      'vault:redeem': VESU_DESK_STATION_THEME,
+      'vault:borrow': VESU_BOOTH_STATION_THEME,
+      'vault:repay': VESU_BOOTH_STATION_THEME,
     });
-    expect(ROOM_THEMES.vault!.stations!['vault:borrow']).toBe(VESU_BORROW_STATION_THEME);
+    expect(ROOM_THEMES.vault!.stations!['vault:borrow']).toBe(VESU_BOOTH_STATION_THEME);
+    const { props: boothProps, fit: boothFit, ...boothDress } = VESU_BOOTH_STATION_THEME;
+    const { props: deskProps, fit: deskFit, ...deskDress } = VESU_DESK_STATION_THEME;
+    expect([boothProps, deskProps, boothFit, deskFit]).toEqual(['vesu-borrow', 'vesu', 'vesu-booth', 'vesu-desk']);
+    expect(boothDress).toEqual(deskDress);
+    expect(VESU_DESK_STATION_THEME.sign).toBe(VESU_HEADER_SIGN);
+    expect(VESU_HEADER_SIGN).toMatchObject({ background: '#2c41f6', foreground: '#ffffff', titleFont: 'sans' });
     // Borrowing (D-083) is lending's twin, so the two read as one brand: only its props differ.
     const { props: borrowProps, ...borrowDress } = VESU_BORROW_STATION_THEME;
     const { props: lendingProps, ...lendingDress } = VESU_STATION_THEME;

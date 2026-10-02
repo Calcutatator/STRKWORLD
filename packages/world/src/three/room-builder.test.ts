@@ -41,11 +41,15 @@ import {
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
 import {
+  BANK_HALL,
   DEFAULT_ROOM_THEME,
   AVNU,
   AVNU_COUNTER_HEADER,
   DEGEN,
   DEGEN_COUNTER_HEADER,
+  ENDUR_BOOTH_SIGN,
+  TELLER_SIGN,
+  VESU_HEADER_SIGN,
   DEGEN_STATION_LOOKS,
   DEGEN_TOKENS,
   ENDUR,
@@ -59,7 +63,9 @@ import {
   STRK20,
   STRK20_STATION_LOOKS,
   VESU,
+  VESU_BOOTH_STATION_THEME,
   VESU_BORROW_STATION_THEME,
+  VESU_DESK_STATION_THEME,
   VESU_MARK,
   VESU_STATION_LOOKS,
   VESU_STATION_THEME,
@@ -135,6 +141,32 @@ function floatingLabelsIn(root: Object3D): Object3D[] {
   return found;
 }
 
+/**
+ * The label carrying a station's Shell text: a floating pill over a
+ * free-standing counter, a sign set into the architecture over a built-in
+ * one (D-104).
+ */
+function stationLabel(root: Object3D): Object3D {
+  let found: Object3D | undefined;
+  root.traverse((object) => {
+    if (!found && object.userData['kind'] && object.userData['station'] !== undefined) found = object;
+  });
+  if (!found) throw new Error('no station label');
+  return found;
+}
+
+/** The tiles a player can stand on to open a station: its halo, less what is solid. */
+function walkableApproach(map: FixedRoomLevelMap, station: FixedRoomLevelMap['stations'][number]): { x: number; y: number }[] {
+  const found: { x: number; y: number }[] = [];
+  for (let y = station.y - 1; y <= station.y + station.height; y++) {
+    for (let x = station.x - 1; x <= station.x + station.width; x++) {
+      const inside = x >= station.x && x < station.x + station.width && y >= station.y && y < station.y + station.height;
+      if (!inside && !isFixedRoomSolidAt(map, x, y)) found.push({ x, y });
+    }
+  }
+  return found;
+}
+
 function floatingLabel(root: Object3D): Object3D {
   let found: Object3D | undefined;
   root.traverse((object) => {
@@ -142,27 +174,6 @@ function floatingLabel(root: Object3D): Object3D {
   });
   if (!found) throw new Error('no floating label');
   return found;
-}
-
-/** A station's label: the Shell's text, a floating pill or, on a built-in counter, its own sign. */
-function counterLabel(root: Object3D): Object3D {
-  let found: Object3D | undefined;
-  root.traverse((object) => {
-    if (!found && object.userData['kind'] && object.userData['station'] !== undefined) found = object;
-  });
-  if (!found) throw new Error('no counter label');
-  return found;
-}
-
-/** The ring round a station that a player can stand on: its approach, less any furniture. */
-function standingApproach(map: FixedRoomLevelMap, station: FixedRoomLevelMap['stations'][number]): { x: number; y: number }[] {
-  const tiles: { x: number; y: number }[] = [];
-  for (let y = station.y - 1; y < station.y + station.height + 1; y++) {
-    for (let x = station.x - 1; x < station.x + station.width + 1; x++) {
-      if (!isFixedRoomSolidAt(map, x, y)) tiles.push({ x, y });
-    }
-  }
-  return tiles;
 }
 
 /**
@@ -268,33 +279,44 @@ describe('buildFixedRoom', () => {
       const group = stationGroup(room, station.station);
       expect(group.userData['status']).toBe('locked');
       expect(group.userData['highlighted']).toBe(false);
-      const label = counterLabel(group);
+      const label = stationLabel(group);
       expect(label.userData['text']).toBe(station.label);
       const position = label.getWorldPosition(new Vector3());
-      expect(position.x).toBeCloseTo(OX + station.x + station.width / 2);
-      if (BUILT_IN_COUNTER_STATIONS.includes(station.station)) {
-        // Built in: a sign on the counter's own architecture, over the window and never past its front.
+      const ours = BUILT_IN_COUNTER_STATIONS.includes(station.station);
+      const builtIn = ours || stationTheme(roomTheme(map.building, map.level), station.station).fit !== undefined;
+      if (ours) {
+        // D-105: a sign on the counter's own architecture, over the window and never past its front.
         expect(label.userData['kind']).toBe('sign');
+        expect(position.x).toBeCloseTo(OX + station.x + station.width / 2);
         expect(position.y).toBeGreaterThan(1.6);
         expect(position.z).toBeGreaterThan(OZ + station.y);
         expect(position.z).toBeLessThanOrEqual(OZ + station.y + station.height + 0.05);
         expect(floatingLabelsIn(group)).toEqual([]);
+      } else if (builtIn) {
+        // D-104: a sign in the architecture, over the counter or its halo; never a floating pill.
+        expect(label.userData['kind']).toBe('sign');
+        expect(position.x).toBeGreaterThanOrEqual(OX + station.x - 1);
+        expect(position.x).toBeLessThanOrEqual(OX + station.x + station.width + 1);
+        expect(position.z).toBeGreaterThanOrEqual(OZ + station.y - 1);
+        expect(position.z).toBeLessThanOrEqual(OZ + station.y + station.height + 1);
       } else {
         expect(label.userData['kind']).toBe('floating');
+        expect(position.x).toBeCloseTo(OX + station.x + station.width / 2);
         expect(position.z).toBeCloseTo(OZ + station.y + station.height / 2);
-        expect(position.y).toBeGreaterThan(1.2);
       }
-      // The halo lies on the approach tiles a player can stand on, and only there.
-      const tiles = standingApproach(map, station);
+      expect(position.y).toBeGreaterThan(1.2);
+      // The halo covers the tiles a player can stand on to open the counter:
+      // its whole ring when it stands free, the floor in front when built in.
+      const approach = walkableApproach(map, station);
       const halo = haloOf(room, station.station).box;
-      expect(halo.min.x).toBeCloseTo(OX + Math.min(...tiles.map((tile) => tile.x)), 1);
-      expect(halo.max.x).toBeCloseTo(OX + Math.max(...tiles.map((tile) => tile.x)) + 1, 1);
-      expect(halo.min.z).toBeCloseTo(OZ + Math.min(...tiles.map((tile) => tile.y)), 1);
-      expect(halo.max.z).toBeCloseTo(OZ + Math.max(...tiles.map((tile) => tile.y)) + 1, 1);
+      expect(halo.min.x).toBeCloseTo(OX + Math.min(...approach.map((tile) => tile.x)), 1);
+      expect(halo.max.x).toBeCloseTo(OX + Math.max(...approach.map((tile) => tile.x)) + 1, 1);
+      expect(halo.min.z).toBeCloseTo(OZ + Math.min(...approach.map((tile) => tile.y)), 1);
+      expect(halo.max.z).toBeCloseTo(OZ + Math.max(...approach.map((tile) => tile.y)) + 1, 1);
       expect(halo.max.y).toBeLessThan(0.05);
       for (const vertex of haloVertices(room, station.station)) {
         // Every vertex on an edge or inside a standing tile, never over furniture.
-        const inside = tiles.some((tile) => vertex.x >= OX + tile.x - 1e-6 && vertex.x <= OX + tile.x + 1 + 1e-6 && vertex.z >= OZ + tile.y - 1e-6 && vertex.z <= OZ + tile.y + 1 + 1e-6);
+        const inside = approach.some((tile) => vertex.x >= OX + tile.x - 1e-6 && vertex.x <= OX + tile.x + 1 + 1e-6 && vertex.z >= OZ + tile.y - 1e-6 && vertex.z <= OZ + tile.y + 1 + 1e-6);
         expect(inside).toBe(true);
       }
     }
@@ -306,7 +328,7 @@ describe('buildFixedRoom', () => {
     const group = stationGroup(room, 'bank:shielding');
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
     const halo = { get opacity() { return haloOf(room, 'bank:shielding').opacity; } };
-    const label = floatingLabel(group);
+    const label = stationLabel(group);
     const locked = { colour: accent.color.getHex(), halo: halo.opacity };
     expect(accent.emissiveIntensity).toBe(0);
 
@@ -432,7 +454,7 @@ describe('buildFixedRoom', () => {
     const { map, room } = build('bridge');
     const group = stationGroup(room, 'bridge:deposit');
     // The station label heads the gateway's departure board, NEAR's uppercase mono in green on black.
-    expect(counterLabel(group).userData['options']).toEqual(NEAR_DEPARTURE_HEADER);
+    expect(stationLabel(group).userData['options']).toEqual(NEAR_DEPARTURE_HEADER);
     expect(NEAR_DEPARTURE_HEADER).toMatchObject({ titleFont: 'mono', uppercase: true, foreground: '#00ec97', background: '#000000' });
     // Locked until the Shell says otherwise, then green; the highlight's halo in the tint.
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
@@ -463,27 +485,85 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it('dresses the Bank\'s staking and unstaking counters in Endur while the room and its shielding counters keep STRK20', () => {
+  it('builds the Bank as a banking hall: teller windows in a walnut and brass teller wall, gilded signs, a clock over STRK20 (D-104)', () => {
+    const { map, room } = build('bank');
+    room.group.updateMatrixWorld(true);
+    const shielding = stationGroup(room, 'bank:shielding');
+    const unshielding = stationGroup(room, 'bank:unshielding');
+    // Each window is set into the teller wall: marble on walnut, brass round
+    // the glass, the teller's terminal behind it and its lamp on the marble.
+    for (const station of ['bank:shielding', 'bank:unshielding']) {
+      const desk = coloursOf(counterPart(room, map, station));
+      for (const hex of [BANK_HALL.marble, BANK_HALL.brass, BANK_HALL.woodLight, BANK_HALL.woodDark]) expect(desk).toContain(new Color(hex).getHex());
+      expect(coloursOf(counterPart(room, map, station, ':counter-screens'))).toContain(new Color(STRK20.orange).getHex());
+    }
+    // The wall runs on between and beside the windows, over the fixtures in row 3.
+    const run = verticesIn(meshNamed(room.group, ':counters'), OX + 0.5, OZ + 3, OX + 5.05, OZ + 4.05).filter((vertex) => vertex.y > 2.3);
+    expect(run.length).toBeGreaterThan(0);
+    // One glass mesh for every window in the room.
+    const glass = meshNamed(room.group, ':glass');
+    expect((glass.material as MeshBasicMaterial).transparent).toBe(true);
+    expect(verticesIn(glass, OX + 5, OZ + 3, OX + 7, OZ + 4).length).toBeGreaterThan(0);
+    expect(verticesIn(glass, OX + 11, OZ + 3, OX + 13, OZ + 4).length).toBeGreaterThan(0);
+    // No beacon and no floating pill: the status light (lamp shade and the
+    // header's underline) and a gilded sign in the header over the window.
+    for (const group of [shielding, unshielding]) {
+      const meshes: string[] = [];
+      group.traverse((object) => object instanceof Mesh && meshes.push(object.name));
+      expect(meshes).toEqual([`${group.name}:status`]);
+      const sign = stationLabel(group);
+      expect(sign.userData['kind']).toBe('sign');
+      expect(sign.userData['options']).toEqual(TELLER_SIGN);
+      expect(sign.userData['options']).toMatchObject({ background: '#0d0d0d', uppercase: true });
+      const at = sign.getWorldPosition(new Vector3());
+      expect(at.y).toBeGreaterThan(1.95);
+      expect(at.z).toBeCloseTo(OZ + 4, 1);
+      const status = meshNamed(group, ':status');
+      status.geometry.computeBoundingBox();
+      expect(status.geometry.boundingBox!.max.y).toBeGreaterThan(1.4);
+    }
+    // The central bay on the hall's axis: STRK20 on its header, a clock in its
+    // pediment edged in orange light, over the runner from the door.
+    const words: Object3D[] = [];
+    room.group.traverse((object) => object.userData['kind'] && words.push(object));
+    const brand = words.find((object) => object.userData['area'] === 'bank-brand')!;
+    expect(brand.userData['text']).toBe('STRK20');
+    expect(brand.getWorldPosition(new Vector3()).x).toBeCloseTo(OX + map.width / 2);
+    expect(coloursOf(counterPart(room, map, 'bank:shielding'))).not.toContain(new Color(STRK20.cream).getHex());
+    const clock = verticesIn(meshNamed(room.group, ':counter-screens'), OX + 8.6, OZ + 3.5, OX + 9.4, OZ + 4.1).filter((vertex) => vertex.y > 2.5);
+    expect(clock.length).toBeGreaterThan(20);
+    const runner = verticesIn(meshNamed(room.group, ':floor-glow'), OX + 8, OZ + 3.9, OX + 10, OZ + 4.2);
+    expect(runner.length).toBeGreaterThan(0);
+    // Every word in the room: the four counters' signs, STRK20 and Endur.
+    expect(words.map((object) => object.userData['text']).sort()).toEqual(['Endur', 'SHIELD', 'STAKE', 'STRK20', 'UNSHIELD', 'UNSTAKE']);
+    expect(words.filter((object) => object.userData['kind'] === 'floating')).toEqual([]);
+    room.dispose();
+  });
+
+  it('builds the Bank\'s staking and unstaking into Endur\'s booth on the east wall while the room and its shielding windows keep STRK20 (D-063, D-103, D-104)', () => {
     const { map, room } = build('bank');
     const staking = stationGroup(room, 'bank:staking');
     const shielding = stationGroup(room, 'bank:shielding');
-    // Its own counter, on its own tiles east of shielding and unshielding (D-103).
     room.group.updateMatrixWorld(true);
+    // Its own window, on its own tile against the east wall, opened from the hall west of it.
     const counter = new Box3().setFromObject(counterPart(room, map, 'bank:staking'));
-    expect(counter.min.x).toBeGreaterThanOrEqual(OX + 10);
-    expect(counter.max.x).toBeLessThanOrEqual(OX + 12);
-    expect(counter.min.z).toBeGreaterThanOrEqual(OZ + 3);
-    expect(counter.max.z).toBeLessThanOrEqual(OZ + 4);
-    // A light Endur kiosk (white top and card, mint field, green pill and
-    // droplet, dark-green trim and wave), none of which reaches shielding.
+    expect(counter.min.x).toBeGreaterThanOrEqual(OX + 15.9);
+    const light = new Box3().setFromObject(meshNamed(staking, ':status'));
+    expect(light.min.z).toBeGreaterThanOrEqual(OZ + 5);
+    expect(light.max.z).toBeLessThanOrEqual(OZ + 6);
+    expect(light.min.x).toBeGreaterThan(OX + 15.9);
+    // Endur's light look (white top and card, mint field, green band and
+    // pill, dark-green trim), none of which reaches the teller windows.
+    const parts = (station: string): number[] => [
+      ...coloursOf(counterPart(room, map, station)),
+      ...coloursOf(counterPart(room, map, station, ':counter-screens')),
+    ];
     const endur = [ENDUR.card, ENDUR.band, ENDUR.green, ENDUR.greenDeep, ENDUR.dark].map((hex) => new Color(hex).getHex());
     for (const station of ['bank:staking', 'bank:unstaking']) {
-      const colours = coloursOf(counterPart(room, map, station));
-      for (const hex of endur) expect(colours).toContain(hex);
+      for (const hex of endur) expect(parts(station)).toContain(hex);
     }
     for (const station of ['bank:shielding', 'bank:unshielding']) {
-      const colours = coloursOf(counterPart(room, map, station));
-      for (const hex of endur) expect(colours).not.toContain(hex);
+      for (const hex of endur) expect(parts(station)).not.toContain(hex);
     }
     expect(counter.max.y).toBeGreaterThan(1.25);
 
@@ -524,37 +604,40 @@ describe('buildFixedRoom', () => {
     expect(locked.opacity).toBeLessThan(available.opacity);
     expect(available.opacity).toBeLessThan(highlighted.opacity);
     expect(accent(shielding).emissive.getHex()).toBe(new Color(STRK20.orange).getHex());
-    // The label plate renders the Shell's label, as an Endur pill badge, and
-    // the status panel below it names Endur on a plate in Endur's look.
-    expect(floatingLabel(staking).userData['text']).toBe('STAKE STRK');
-    const endurPlate = staking.children.find((child) => child.userData['brand'] === 'bank:staking');
-    expect(endurPlate?.userData['text']).toBe('Endur');
-    expect(endurPlate?.userData['options']).toMatchObject({ foreground: '#0d1a17', background: '#ffffff', accent: '#2db882' });
-    expect(endurPlate!.position.y).toBeGreaterThan(0.3);
-    expect(endurPlate!.position.y).toBeLessThan(0.72);
-    expect(endurPlate!.position.z).toBeGreaterThan(meshNamed(staking, ':status').geometry.boundingBox!.max.z);
-    expect(shielding.children.some((child) => child.userData['brand'])).toBe(false);
-    expect(floatingLabel(staking).userData['options']).toMatchObject({ foreground: '#0d1a17', font: 'sans', cornerRadius: 0.5 });
-    expect(floatingLabel(shielding).userData['options']).toMatchObject({ font: 'mono', uppercase: true });
-
+    // The Shell's label on a green blade hung from the booth, facing the
+    // camera over the hall; Endur's name once, on the booth's south end.
+    const blade = stationLabel(staking);
+    expect(blade.userData['text']).toBe('STAKE STRK');
+    expect(blade.userData['kind']).toBe('sign');
+    expect(blade.userData['options']).toEqual(ENDUR_BOOTH_SIGN);
+    expect(blade.userData['options']).toMatchObject({ foreground: '#0d1a17', background: '#2db882', titleFont: 'sans' });
+    const at = blade.getWorldPosition(new Vector3());
+    expect(at.x).toBeLessThan(OX + 16);
+    expect(at.y - ENDUR_BOOTH_SIGN.height / 2).toBeGreaterThan(1.9);
+    expect(blade.rotation.y).toBe(0);
     const unstaking = stationGroup(room, 'bank:unstaking');
-    expect(unstaking.children.find((child) => child.userData['brand'] === 'bank:unstaking')?.userData['text']).toBe('Endur');
-    expect(floatingLabel(unstaking).userData['options']).toEqual(floatingLabel(staking).userData['options']);
-    expect(stationGroup(room, 'bank:unshielding').children.some((child) => child.userData['brand'])).toBe(false);
+    expect(stationLabel(unstaking).userData['options']).toEqual(stationLabel(staking).userData['options']);
+    const names: Object3D[] = [];
+    room.group.traverse((object) => object.userData['brand'] !== undefined && object.userData['kind'] && names.push(object));
+    expect(names.map((object) => object.userData['text'])).toEqual(['Endur']);
+    expect(names[0]!.userData['options']).toMatchObject({ foreground: '#0d1a17', background: '#ffffff', accent: '#2db882' });
+    expect(names[0]!.getWorldPosition(new Vector3()).z).toBeCloseTo(OZ + 10, 1);
+    for (const station of map.stations) expect(stationGroup(room, station.station).children.some((child) => child.userData['brand'])).toBe(false);
 
-    // D-103: the counter's own group holds only what its state changes, the
-    // status panel and the beacon (two meshes) with its label and plate; its
-    // desk and halo are in the room's shared meshes. All dispose with the room.
+    // D-103: the counter's own group holds only what its state changes, its
+    // status light (D-104: one mesh, no beacon) and its label; its window
+    // and halo are in the room's shared meshes. All dispose with the room.
     const meshes: Mesh[] = [];
     staking.traverse((object) => object instanceof Mesh && meshes.push(object));
-    expect(meshes.map((mesh) => mesh.name)).toEqual(['station:bank:staking:status', 'station:bank:staking:beacon']);
-    for (const suffix of [':counters', ':counter-screens', ':halos']) meshes.push(meshNamed(room.group, suffix));
+    expect(meshes.map((mesh) => mesh.name)).toEqual(['station:bank:staking:status']);
+    for (const suffix of [':counters', ':counter-screens', ':halos', ':glass']) meshes.push(meshNamed(room.group, suffix));
     const spies = [...new Set(meshes.flatMap((mesh) => [mesh.geometry, mesh.material as Material]))].map((value) =>
       vi.spyOn(value, 'dispose'),
     );
     room.dispose();
     for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
-    expect(endurPlate!.userData['disposed']).toBe(true);
+    expect(names[0]!.userData['disposed']).toBe(true);
+    expect(blade.userData['disposed']).toBe(true);
   });
 
   it('dresses the opened Vault in Vesu (D-077): its light pages, its blue, its V and its wordmark', () => {
@@ -574,28 +657,27 @@ describe('buildFixedRoom', () => {
       stationLooks: VESU_STATION_LOOKS,
     });
     // Its counters wear Vesu's own look, as the Bank's staking counter wears
-    // Endur's: lending's two, and borrowing's two as their twins (D-083, D-103).
-    expect(stationTheme(theme, VAULT_SUPPLY_STATION)).toBe(VESU_STATION_THEME);
-    expect(stationTheme(theme, VAULT_REDEEM_STATION)).toBe(VESU_STATION_THEME);
-    expect(stationTheme(theme, VAULT_BORROW_STATION)).toBe(VESU_BORROW_STATION_THEME);
-    expect(stationTheme(theme, VAULT_REPAY_STATION)).toBe(VESU_BORROW_STATION_THEME);
+    // Endur's: lending's two at the front desk, and borrowing's two, their
+    // twins, as loan booths in the vault wall (D-083, D-103, D-104).
+    expect(stationTheme(theme, VAULT_SUPPLY_STATION)).toBe(VESU_DESK_STATION_THEME);
+    expect(stationTheme(theme, VAULT_REDEEM_STATION)).toBe(VESU_DESK_STATION_THEME);
+    expect(stationTheme(theme, VAULT_BORROW_STATION)).toBe(VESU_BOOTH_STATION_THEME);
+    expect(stationTheme(theme, VAULT_REPAY_STATION)).toBe(VESU_BOOTH_STATION_THEME);
+    expect(VESU_DESK_STATION_THEME).toMatchObject({ props: 'vesu', fit: 'vesu-desk', looks: VESU_STATION_LOOKS, kioskTop: VESU_STATION_THEME.kioskTop });
+    expect(VESU_BOOTH_STATION_THEME).toMatchObject({ props: VESU_BORROW_STATION_THEME.props, fit: 'vesu-booth', looks: VESU_STATION_LOOKS });
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
     expect(room.building).toBe('vault');
     expect(room.group.name).toBe('room:vault');
-    // Its SUPPLY counter, locked until the Shell opens it, under a label in
-    // the style of Vesu's secondary button.
+    // Its SUPPLY counter, locked until the Shell opens it, its label lit in
+    // the desk's header beam: white capitals on Vesu's primary blue (D-104).
     const counter = stationGroup(room, VAULT_SUPPLY_STATION);
     expect(counter.userData['status']).toBe('locked');
-    const label = floatingLabel(counter);
+    const label = stationLabel(counter);
     expect(label.userData['text']).toBe('SUPPLY');
-    expect(label.userData['options']).toMatchObject({
-      font: 'sans',
-      cornerRadius: 0.22,
-      foreground: '#2030b6',
-      background: 'rgba(224,229,255,0.96)',
-      border: '#2c41f6',
-    });
+    expect(label.userData['kind']).toBe('sign');
+    expect(label.userData['options']).toEqual(VESU_HEADER_SIGN);
+    expect(label.userData['options']).toMatchObject({ titleFont: 'sans', foreground: '#ffffff', background: '#2c41f6', titleStretch: 1.3 });
     // A light room: every walkable floor tile is Vesu's white, page grey or periwinkle.
     room.group.updateMatrixWorld(true);
     const floor = meshNamed(room.group, ':floor');
@@ -645,8 +727,8 @@ describe('buildFixedRoom', () => {
     north.setOpacity(0.5);
     expect(glow.opacity).toBeCloseTo(0.5);
     north.setOpacity(1);
-    // The counter: a white desk under an ink top, the supply card and the V on
-    // it, and Vesu's name on its status panel, as Endur's is on its own.
+    // The counter: a place at the white desk edged in ink, the supply card on
+    // its screen and the V beside it.
     const desk = coloursOf(counterPart(room, map, VAULT_SUPPLY_STATION));
     for (const hex of [VESU_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
     // Its body is white, shaded towards the floor.
@@ -654,43 +736,45 @@ describe('buildFixedRoom', () => {
     const card = coloursOf(counterPart(room, map, VAULT_SUPPLY_STATION, ':counter-screens'));
     for (const hex of [VESU.white, VESU.page, VESU.blueSoft, VESU.blue]) expect(card).toContain(new Color(hex).getHex());
     for (const [, hex] of VESU_MARK.light.bar) expect(card).toContain(new Color(hex).getHex());
-    const plate = counter.children.find((child) => child.userData['brand'] === VAULT_SUPPLY_STATION)!;
-    expect(plate.userData['text']).toBe('vesu');
-    expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
-    expect(plate.position.z).toBeGreaterThan(meshNamed(counter, ':status').geometry.boundingBox!.max.z);
-    // Words: the Shell's label, and Vesu's name, on the plate and over each
-    // bank of lockers. No figure, rate or symbol anywhere.
+    // No brand plate on any counter: the room names Vesu in its architecture.
+    for (const station of map.stations) expect(stationGroup(room, station.station).children.some((child) => child.userData['brand'])).toBe(false);
+    // Words: the Shell's labels on the counters' signs, and Vesu's name, over
+    // each bank of lockers and in the middle of the desk's header beam. No
+    // floating pill, and no figure, rate or symbol anywhere.
     const labels: Object3D[] = [];
     room.group.traverse((object) => {
       if (object.userData['kind']) labels.push(object);
     });
-    expect(labels.filter((object) => object.userData['kind'] === 'floating').map((object) => object.userData['text'])).toEqual([
+    expect(labels.filter((object) => object.userData['kind'] === 'floating')).toEqual([]);
+    expect(labels.filter((object) => object.userData['station'] !== undefined).map((object) => object.userData['text'])).toEqual([
       'SUPPLY',
       'REDEEM',
       'BORROW',
       'REPAY',
     ]);
-    // Two wordmarks over the lockers, and one plate per counter.
-    expect(labels.filter((object) => object.userData['kind'] !== 'floating').map((object) => object.userData['text'])).toEqual(
-      Array(6).fill('vesu'),
-    );
     const wordmarks = labels.filter((object) => object.userData['area'] === 'vesu-wordmark');
-    expect(wordmarks).toHaveLength(2);
+    expect(wordmarks.map((object) => object.userData['text'])).toEqual(Array(3).fill('vesu'));
+    expect(labels).toHaveLength(7);
     for (const wordmark of wordmarks) expect(wordmark.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', borderWidth: 0 });
     // Blue leads. Orange and green, the Bank's and the Bridge's and Endur's,
-    // appear only in Vesu's V: the avatar behind the middle of the counters,
-    // the marks on the two supply-card desks and the floor's inlay.
-    const anchor = map.width / 2;
+    // appear only in Vesu's V: the avatar on the wall behind the front desk,
+    // the marks beside the desk's two screens, the hub of the vault door and
+    // the floor's inlay.
+    const booth = map.stations.find((station) => station.station === VAULT_BORROW_STATION)!;
+    const anchor = (0.55 + booth.x) / 2;
     const exit = map.exit!;
     const deskMark = (station: string) => {
       const rect = map.stations.find((candidate) => candidate.station === station)!;
       const cx = rect.x + rect.width / 2;
-      return { x0: cx + 0.4, x1: cx + 0.95, y0: 0.99, y1: 1.4, z0: 3.3, z1: 3.8 };
+      return { x0: cx + 0.4, x1: cx + 0.95, y0: 0.99, y1: 1.45, z0: 3.3, z1: 3.8 };
     };
+    const door = map.fixtures.find((fixture) => fixture.x > booth.x)!;
+    const doorX = door.x + door.width / 2;
     const marks = [
       { x0: anchor - 1, x1: anchor + 1, y0: 0.3, y1: 2, z0: 0.5, z1: 0.8 },
       deskMark(VAULT_SUPPLY_STATION),
       deskMark(VAULT_REDEEM_STATION),
+      { x0: doorX - 0.4, x1: doorX + 0.4, y0: 0.6, y1: 1.3, z0: 3.8, z1: 4 },
       { x0: exit.x + exit.width / 2 - 0.7, x1: exit.x + exit.width / 2 + 0.7, y0: -0.01, y1: 0.02, z0: exit.y - 2.6, z1: exit.y - 1.2 },
     ];
     const outside: string[] = [];
@@ -723,24 +807,29 @@ describe('buildFixedRoom', () => {
     const borrow = stationGroup(room, VAULT_BORROW_STATION);
     const repay = stationGroup(room, VAULT_REPAY_STATION);
     expect(borrow.userData['status']).toBe('locked');
-    // West to east: SUPPLY, REDEEM, BORROW, REPAY, each desk over its own tiles.
+    // West to east: SUPPLY, REDEEM, BORROW, REPAY, each lit over its own tiles.
     room.group.updateMatrixWorld(true);
-    const centre = (station: string): Vector3 => new Box3().setFromObject(counterPart(room, map, station)).getCenter(new Vector3());
-    expect([VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION].map((station) => Math.round(centre(station).x - OX))).toEqual([3, 7, 11, 15]);
-    expect(floatingLabel(repay).userData['text']).toBe('REPAY');
-    expect(floatingLabel(repay).userData['options']).toEqual(floatingLabel(borrow).userData['options']);
+    const centre = (station: string): Vector3 => new Box3().setFromObject(meshNamed(stationGroup(room, station), ':status')).getCenter(new Vector3());
+    expect([VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION].map((station) => Math.round(centre(station).x - OX))).toEqual([4, 8, 12, 16]);
+    expect(stationLabel(repay).userData['text']).toBe('REPAY');
+    expect(stationLabel(repay).userData['options']).toEqual(stationLabel(borrow).userData['options']);
     expect(coloursOf(counterPart(room, map, VAULT_REPAY_STATION, ':counter-screens')).sort()).toEqual(
       coloursOf(counterPart(room, map, VAULT_BORROW_STATION, ':counter-screens')).sort(),
     );
-    // The same label and plate as lending, so the two read as one brand.
-    const label = floatingLabel(borrow);
+    // The same lit sign as lending, so the two read as one brand, set into
+    // the lintel over the booth (D-104).
+    const label = stationLabel(borrow);
     expect(label.userData['text']).toBe('BORROW');
-    expect(label.userData['options']).toEqual(floatingLabel(lending).userData['options']);
-    const plate = borrow.children.find((child) => child.userData['brand'] === VAULT_BORROW_STATION)!;
-    expect(plate.userData['text']).toBe('vesu');
-    expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
-    expect(plate.position.z).toBeGreaterThan(meshNamed(borrow, ':status').geometry.boundingBox!.max.z);
-    // The same desk: white under an ink top.
+    expect(label.userData['options']).toEqual(stationLabel(lending).userData['options']);
+    expect(label.getWorldPosition(new Vector3()).y).toBeGreaterThan(2.14);
+    expect(label.getWorldPosition(new Vector3()).z).toBeCloseTo(OZ + 4, 1);
+    // A booth in the vault wall: a niche under its lintel, glass between the
+    // counter and the loan officer's screen on the back wall.
+    const glass = meshNamed(room.group, ':glass');
+    expect(verticesIn(glass, OX + 11, OZ + 3, OX + 13, OZ + 4).length).toBeGreaterThan(0);
+    const screenAt = new Box3().setFromObject(counterPart(room, map, VAULT_BORROW_STATION, ':counter-screens'));
+    expect(screenAt.min.z).toBeLessThan(OZ + 3.2);
+    // The same counter: white edged in ink.
     const desk = coloursOf(counterPart(room, map, VAULT_BORROW_STATION));
     for (const hex of [VESU_BORROW_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
     // The loan card: two token fields (a night and a blue disc), the health
@@ -756,11 +845,14 @@ describe('buildFixedRoom', () => {
     const position = screen.geometry.getAttribute('position');
     const paint = screen.geometry.getAttribute('color');
     const colour = new Color();
+    let cardTop = 0;
+    for (let i = 0; i < position.count; i++) if (position.getY(i) < 2.1) cardTop = Math.max(cardTop, position.getY(i));
     const segmentX = [VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night].map((hex) => {
       const xs: number[] = [];
       for (let i = 0; i < position.count; i++) {
         if (colour.setRGB(paint.getX(i), paint.getY(i), paint.getZ(i)).getHex() !== new Color(hex).getHex()) continue;
-        if (position.getY(i) > 1.5) xs.push(position.getX(i));
+        // Along the card's top, under the vault wall's lit top (D-104).
+        if (position.getY(i) > cardTop - 0.18 && position.getY(i) < 2.1) xs.push(position.getX(i));
       }
       expect(xs.length).toBeGreaterThan(0);
       return Math.min(...xs);
@@ -914,14 +1006,14 @@ describe('counters built into their rooms', () => {
       room.group.updateMatrixWorld(true);
       const station = map.stations[0]!;
       const group = stationGroup(room, station.station);
-      expect(counterLabel(group).userData['options']).toEqual(expected[station.station]);
+      expect(stationLabel(group).userData['options']).toEqual(expected[station.station]);
       const others = signsIn(group).filter((sign) => sign.userData['station'] === undefined);
       if (map.building === 'post-office') {
         expect(others.map((sign) => sign.userData['text'])).toEqual([POST_OFFICE_SEND_TEXT]);
         expect(others[0]!.userData['options']).toEqual(POST_OFFICE_SEND_SIGN);
         // SEND sits on the fascia right over the window's ticket.
         const send = others[0]!.getWorldPosition(new Vector3());
-        const ticket = counterLabel(group).getWorldPosition(new Vector3());
+        const ticket = stationLabel(group).getWorldPosition(new Vector3());
         expect(send.x).toBeCloseTo(ticket.x);
         expect(send.y).toBeGreaterThan(ticket.y);
       } else {
@@ -993,14 +1085,14 @@ describe('the Exchange tower floors', () => {
     expect(stations.map((child) => child.userData['station'])).toEqual([EXCHANGE_DEGEN_STATION]);
     const counter = stationGroup(room, EXCHANGE_DEGEN_STATION);
     expect(counter.userData['status']).toBe('locked');
-    expect(counterLabel(counter).userData['text']).toBe('DEGEN SWAP');
-    expect(counterLabel(counter).userData['options']).toEqual(DEGEN_COUNTER_HEADER);
+    expect(stationLabel(counter).userData['text']).toBe('DEGEN SWAP');
+    expect(stationLabel(counter).userData['options']).toEqual(DEGEN_COUNTER_HEADER);
     const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
     expect(accent.color.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.locked.color).getHex());
     // Available and stepped up to: hot pink with a lime halo, and the Shell's label.
     room.setStations(fixedRoomStationPresentations(degenMap, roomState(degenMap, 'available', EXCHANGE_DEGEN_STATION, 'DEGEN')));
     expect(counter.userData['status']).toBe('available');
-    expect(counterLabel(counter).userData['text']).toBe('DEGEN');
+    expect(stationLabel(counter).userData['text']).toBe('DEGEN');
     expect(accent.emissive.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.highlighted.emissive).getHex());
     // No exit: the south wall is one unbroken ledge, the lifts are the way out.
     expect(degenMap.exit).toBeNull();
