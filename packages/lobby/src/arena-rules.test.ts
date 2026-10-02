@@ -32,7 +32,7 @@ import {
   type ArenaStance,
 } from './arena-rules';
 
-const APPROACH = arenaTileCentre({ x: 20, y: 22 });
+const APPROACH = arenaTileCentre({ x: 20, y: 10 });
 const DUMMY = arenaTileCentre(ARENA_DUMMY_TILE);
 const A = 'a' as GameId;
 const B = 'b' as GameId;
@@ -47,13 +47,13 @@ function claimant(key: string, gameId: GameId, at = APPROACH, area: PresenceArea
   return { key, gameId, area, x: at.x, y: at.y };
 }
 
-/** A ring claimed by 'a' at `now`, fighting from `now + countdown`, 'a' facing the dummy one tile below it. */
+/** A ring claimed by 'a' at `now`, fighting from `now + countdown`, 'a' one tile north of the dummy, facing it. */
 function fighting(now = 1000): { ring: ArenaAuthority; stances: Map<string, ArenaStance>; locate: (key: string) => ArenaStance | null; start: number } {
   const ring = createArenaAuthority();
   const { stances, locate } = table();
   expect(ring.claim(claimant('a', A), now)).toBe('applied');
   ring.advance(now);
-  stances.set('a', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' });
+  stances.set('a', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' });
   const start = now + ARENA_COUNTDOWN_MS;
   ring.advance(start);
   expect(ring.phase).toBe('fighting');
@@ -68,7 +68,7 @@ describe('the ring through a whole fight (D-114)', () => {
     expect(ring.active).toBe(false);
     expect(ring.claim(claimant('a', A), 1000)).toBe('applied');
     // The claim moves the fighter into the ring, facing the dummy.
-    expect(ring.advance(1000)).toEqual([{ kind: 'place', key: 'a', tile: ARENA_RING_SPAWN, facing: 'up' }]);
+    expect(ring.advance(1000)).toEqual([{ kind: 'place', key: 'a', tile: ARENA_RING_SPAWN, facing: 'down' }]);
     const counting = ring.snapshot(1000);
     expect(counting).toMatchObject({ phase: 'countdown', round: 1, secondsLeft: 3, outcome: null });
     expect(counting.challenger).toEqual({ kind: 'player', gameId: A, hp: ARENA_MAX_HP, swings: 0, hits: 0 });
@@ -82,7 +82,7 @@ describe('the ring through a whole fight (D-114)', () => {
     expect(ring.phase).toBe('fighting');
     expect(ring.snapshot(1000 + ARENA_COUNTDOWN_MS).secondsLeft).toBe(90);
 
-    stances.set('a', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' });
+    stances.set('a', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' });
     let now = 1000 + ARENA_COUNTDOWN_MS;
     for (let hit = 1; hit <= 10; hit += 1) {
       now += ARENA_ATTACK_MIN_INTERVAL_MS;
@@ -101,7 +101,7 @@ describe('the ring through a whole fight (D-114)', () => {
     expect(ring.advance(now + ARENA_RESULT_MS - 1)).toEqual([]);
     expect(ring.phase).toBe('ended');
     expect(ring.advance(now + ARENA_RESULT_MS)).toEqual([
-      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'down' },
+      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'up' },
     ]);
     const idle = ring.snapshot(now + ARENA_RESULT_MS);
     expect(idle.phase).toBe('idle');
@@ -122,7 +122,7 @@ describe('the ring through a whole fight (D-114)', () => {
     ring.advance(start + ARENA_FIGHT_MS);
     expect(ring.snapshot(start + ARENA_FIGHT_MS).outcome).toEqual({ reason: 'timeout', winner: null });
     expect(ring.advance(start + ARENA_FIGHT_MS + ARENA_RESULT_MS)).toEqual([
-      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'down' },
+      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'up' },
     ]);
     expect(ring.phase).toBe('idle');
   });
@@ -133,7 +133,7 @@ describe('the ring through a whole fight (D-114)', () => {
     ring.advance(0);
     // Long past the countdown, the fight and the result in one call.
     expect(ring.advance(ARENA_COUNTDOWN_MS + ARENA_FIGHT_MS + ARENA_RESULT_MS + 5)).toEqual([
-      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'down' },
+      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'up' },
     ]);
     expect(ring.phase).toBe('idle');
   });
@@ -146,7 +146,7 @@ describe('the ring through a whole fight (D-114)', () => {
     expect(ring.advance(at + ARENA_ABORT_RESULT_MS - 1)).toEqual([]);
     // A leave intent comes from a fighter still standing in the ring: they go back to the gate.
     expect(ring.advance(at + ARENA_ABORT_RESULT_MS)).toEqual([
-      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'down' },
+      { kind: 'place', key: 'a', tile: ARENA_RING_RETURN, facing: 'up' },
     ]);
     expect(ring.phase).toBe('idle');
   });
@@ -177,7 +177,7 @@ describe('the ring through a whole fight (D-114)', () => {
 
   it('a fighter who leaves the arena during the result is not returned', () => {
     const { ring, stances, locate, start } = fighting();
-    stances.set('a', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' });
+    stances.set('a', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' });
     let now = start;
     for (let n = 0; n < 10; n += 1) ring.attack('a', (now += ARENA_ATTACK_MIN_INTERVAL_MS), locate);
     expect(ring.phase).toBe('ended');
@@ -198,8 +198,8 @@ describe('the ring through a whole fight (D-114)', () => {
 describe('claims (D-114)', () => {
   it('two claims in one turn: exactly one challenger, and the second is busy', () => {
     const ring = createArenaAuthority();
-    const left = arenaTileCentre({ x: 19, y: 21 });
-    const right = arenaTileCentre({ x: 21, y: 21 });
+    const left = arenaTileCentre({ x: 19, y: 11 });
+    const right = arenaTileCentre({ x: 21, y: 11 });
     // The room handles one message at a time; both arrive at the same instant.
     expect(ring.claim(claimant('a', A, left), 1000)).toBe('applied');
     expect(ring.claim(claimant('b', B, right), 1000)).toBe('busy');
@@ -214,7 +214,7 @@ describe('claims (D-114)', () => {
     // Countdown was checked by the race above; fighting:
     expect(ring.claim(claimant('b', B), start)).toBe('busy');
     expect(ring.claim(claimant('a', A), start + 1)).toBe('busy');
-    stances.set('a', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' });
+    stances.set('a', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' });
     let now = start;
     for (let n = 0; n < 10; n += 1) ring.attack('a', (now += ARENA_ATTACK_MIN_INTERVAL_MS), locate);
     expect(ring.phase).toBe('ended');
@@ -226,7 +226,7 @@ describe('claims (D-114)', () => {
 
   it('is rejected off the approach (beyond its slack) or from outside the arena', () => {
     const ring = createArenaAuthority();
-    const sand = arenaTileCentre({ x: 20, y: 24 });
+    const sand = arenaTileCentre({ x: 20, y: 8 });
     expect(ring.claim(claimant('a', A, sand), 0)).toBe('rejected');
     expect(ring.claim(claimant('b', B, APPROACH, 'street'), 0)).toBe('rejected');
     expect(ring.claim(claimant('c', 'c' as GameId, APPROACH, null), 0)).toBe('rejected');
@@ -242,7 +242,7 @@ describe('claims (D-114)', () => {
 
   it('holds claims and leaves to one shared 900 ms floor per session', () => {
     const ring = createArenaAuthority();
-    const sand = arenaTileCentre({ x: 20, y: 24 });
+    const sand = arenaTileCentre({ x: 20, y: 8 });
     expect(ring.claim(claimant('a', A, sand), 0)).toBe('rejected');
     // A refused claim still spent the floor.
     expect(ring.claim(claimant('a', A), ARENA_INTENT_MIN_INTERVAL_MS - 1)).toBe('throttled');
@@ -279,7 +279,7 @@ describe('attacks (D-114)', () => {
     const ring = createArenaAuthority();
     const { stances, locate } = table();
     ring.claim(claimant('a', A), 0);
-    stances.set('a', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' });
+    stances.set('a', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' });
     expect(ring.attack('a', 100, locate)).toBe('rejected');
     expect(ring.snapshot(100).opponent).toMatchObject({ hp: ARENA_MAX_HP, hits: 0 });
     expect(ring.snapshot(100).challenger.swings).toBe(0);
@@ -293,17 +293,17 @@ describe('attacks (D-114)', () => {
   });
 
   it.each([
-    ['orthogonal, 32 px', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'up' as Facing }, true],
-    ['diagonal, 45 px', { x: DUMMY.x + 32, y: DUMMY.y + 32, facing: 'up' as Facing }, true],
-    ['52 px, the reach', { x: DUMMY.x, y: DUMMY.y + 52, facing: 'up' as Facing }, true],
-    ['53 px', { x: DUMMY.x, y: DUMMY.y + 53, facing: 'up' as Facing }, false],
-    ['facing away', { x: DUMMY.x, y: DUMMY.y + 32, facing: 'down' as Facing }, false],
-    ['side-on, beside it', { x: DUMMY.x + 32, y: DUMMY.y, facing: 'up' as Facing }, false],
-    ['diagonal, facing across it (cos 0.71)', { x: DUMMY.x + 32, y: DUMMY.y + 32, facing: 'left' as Facing }, true],
-    ['diagonal, facing past it (cos −0.71)', { x: DUMMY.x + 32, y: DUMMY.y + 32, facing: 'right' as Facing }, false],
-    ['at 75° (cos 0.26), inside the arc', { x: DUMMY.x + 40 * Math.sin((75 * Math.PI) / 180), y: DUMMY.y + 40 * Math.cos((75 * Math.PI) / 180), facing: 'up' as Facing }, true],
-    ['at 76° (cos 0.24), outside it', { x: DUMMY.x + 40 * Math.sin((76 * Math.PI) / 180), y: DUMMY.y + 40 * Math.cos((76 * Math.PI) / 180), facing: 'up' as Facing }, false],
-    ['point-blank, facing away', { x: DUMMY.x, y: DUMMY.y + 20, facing: 'down' as Facing }, true],
+    ['orthogonal, 32 px', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'down' as Facing }, true],
+    ['diagonal, 45 px', { x: DUMMY.x + 32, y: DUMMY.y - 32, facing: 'down' as Facing }, true],
+    ['52 px, the reach', { x: DUMMY.x, y: DUMMY.y - 52, facing: 'down' as Facing }, true],
+    ['53 px', { x: DUMMY.x, y: DUMMY.y - 53, facing: 'down' as Facing }, false],
+    ['facing away', { x: DUMMY.x, y: DUMMY.y - 32, facing: 'up' as Facing }, false],
+    ['side-on, beside it', { x: DUMMY.x + 32, y: DUMMY.y, facing: 'down' as Facing }, false],
+    ['diagonal, facing across it (cos 0.71)', { x: DUMMY.x + 32, y: DUMMY.y - 32, facing: 'left' as Facing }, true],
+    ['diagonal, facing past it (cos −0.71)', { x: DUMMY.x + 32, y: DUMMY.y - 32, facing: 'right' as Facing }, false],
+    ['at 75° (cos 0.26), inside the arc', { x: DUMMY.x + 40 * Math.sin((75 * Math.PI) / 180), y: DUMMY.y - 40 * Math.cos((75 * Math.PI) / 180), facing: 'down' as Facing }, true],
+    ['at 76° (cos 0.24), outside it', { x: DUMMY.x + 40 * Math.sin((76 * Math.PI) / 180), y: DUMMY.y - 40 * Math.cos((76 * Math.PI) / 180), facing: 'down' as Facing }, false],
+    ['point-blank, facing away', { x: DUMMY.x, y: DUMMY.y - 20, facing: 'up' as Facing }, true],
   ])('%s: hit %s', (_label, stance, expected) => {
     expect(isArenaHit(stance, DUMMY)).toBe(expected);
     const { ring, stances, locate, start } = fighting();
@@ -338,8 +338,8 @@ describe('attacks (D-114)', () => {
     const proto = { damage: 1000, hp: 0 };
     const stance = Object.create(proto, {
       x: { value: DUMMY.x, enumerable: true },
-      y: { value: DUMMY.y + 32, enumerable: true },
-      facing: { value: 'up', enumerable: true },
+      y: { value: DUMMY.y - 32, enumerable: true },
+      facing: { value: 'down', enumerable: true },
       damage: { get: () => 9999, enumerable: true },
     }) as ArenaStance;
     stances.set('a', stance);

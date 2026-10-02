@@ -44,7 +44,7 @@ async function joined(start = { x: 100, y: 100 }): Promise<LobbyClient> {
 /** A client live in the arena at `tile`, once it has been sent the ring. */
 async function inArena(tile: { x: number; y: number }): Promise<LobbyClient> {
   const client = await joined();
-  client.enterArea('arena', { ...at(tile.x, tile.y), facing: 'up' }, 'avatar-3');
+  client.enterArea('arena', { ...at(tile.x, tile.y), facing: 'down' }, 'avatar-3');
   await waitFor(() => client.arena(), (ring) => ring !== null, 'the ring');
   return client;
 }
@@ -102,8 +102,8 @@ afterAll(async () => {
 
 describe('a fight over the wire (D-114)', () => {
   it('claim, ten attacks and the result arrive by state, and a spectator sees the same fight', async () => {
-    const fighter = await inArena({ x: 20, y: 22 });
-    const spectator = await inArena({ x: 13, y: 18 });
+    const fighter = await inArena({ x: 20, y: 10 });
+    const spectator = await inArena({ x: 13, y: 14 });
     const seen: ArenaRingSnapshot[] = [];
     spectator.onArena((ring) => {
       if (ring !== null) seen.push(ring);
@@ -115,15 +115,15 @@ describe('a fight over the wire (D-114)', () => {
     expect(counting?.challenger).toMatchObject({ kind: 'player', gameId: fighter.gameId, hp: ARENA_MAX_HP });
     expect(counting?.opponent).toMatchObject({ kind: 'dummy', gameId: null, hp: ARENA_MAX_HP });
     // The room moved the fighter into the ring itself.
-    expect(await heldAt(fighter)).toEqual({ ...at(20, 18), facing: 'up' });
+    expect(await heldAt(fighter)).toEqual({ ...at(20, 14), facing: 'down' });
     // The spectator sees the fighter: pinned into its view, and the same ring.
-    await waitFor(() => spectator.peers().find((peer) => peer.gameId === fighter.gameId), (peer) => peer?.y === at(20, 18).y, 'the fighter in the ring');
+    await waitFor(() => spectator.peers().find((peer) => peer.gameId === fighter.gameId), (peer) => peer?.y === at(20, 14).y, 'the fighter in the ring');
     await waitFor(() => spectator.arena(), (ring) => ring?.challenger.gameId === fighter.gameId, 'the spectator’s ring');
 
     // Step up to the dummy while the countdown runs (the World's job in the game).
-    fighter.updatePosition(at(20, 15).x, at(20, 15).y, 'up');
+    fighter.updatePosition(at(20, 17).x, at(20, 17).y, 'down');
     await waitFor(() => fighter.arena(), (ring) => ring?.phase === 'fighting', 'the fight');
-    expect((await heldAt(fighter)).y).toBe(at(20, 15).y);
+    expect((await heldAt(fighter)).y).toBe(at(20, 17).y);
 
     for (let swing = 1; swing <= 10; swing += 1) {
       expect(fighter.arenaAttack(), `swing ${swing}`).toBe(true);
@@ -147,22 +147,22 @@ describe('a fight over the wire (D-114)', () => {
 
     // The close returns the fighter to the gate and opens the ring.
     await waitFor(() => fighter.arena(), (ring) => ring?.phase === 'idle', 'the ring idle again', 8000);
-    expect(await heldAt(fighter)).toEqual({ ...at(20, 22), facing: 'down' });
+    expect(await heldAt(fighter)).toEqual({ ...at(20, 10), facing: 'up' });
   }, FIGHT_TIMEOUT_MS);
 
   it('a second client’s claim while busy changes nothing, and the fighter disconnecting opens the ring', async () => {
-    const fighter = await inArena({ x: 20, y: 22 });
-    const rival = await inArena({ x: 21, y: 21 });
+    const fighter = await inArena({ x: 20, y: 10 });
+    const rival = await inArena({ x: 21, y: 11 });
     expect(fighter.arenaClaim()).toBe(true);
     const busy = await waitFor(() => rival.arena(), (ring) => ring?.phase === 'countdown', 'the countdown');
     expect(rival.arenaClaim()).toBe(true);
     // Let the room handle it: the fighter steps, and the rival sees the step.
-    fighter.updatePosition(at(20, 17).x, at(20, 17).y, 'up');
-    await waitFor(() => rival.peers().find((peer) => peer.gameId === fighter.gameId), (peer) => peer?.y === at(20, 17).y, 'the step');
+    fighter.updatePosition(at(20, 15).x, at(20, 15).y, 'down');
+    await waitFor(() => rival.peers().find((peer) => peer.gameId === fighter.gameId), (peer) => peer?.y === at(20, 15).y, 'the step');
     const after = rival.arena();
     expect(after?.round).toBe(busy?.round);
     expect(after?.challenger.gameId).toBe(fighter.gameId);
-    expect((await heldAt(rival)).y).toBe(at(21, 21).y);
+    expect((await heldAt(rival)).y).toBe(at(21, 11).y);
 
     await fighter.disconnect();
     const ended = await waitFor(() => rival.arena(), (ring) => ring?.phase === 'ended', 'the walk-out');
@@ -175,8 +175,8 @@ describe('a fight over the wire (D-114)', () => {
   }, FIGHT_TIMEOUT_MS);
 
   it('two claims sent in the same turn: exactly one challenger', async () => {
-    const left = await inArena({ x: 19, y: 21 });
-    const right = await inArena({ x: 21, y: 21 });
+    const left = await inArena({ x: 19, y: 11 });
+    const right = await inArena({ x: 21, y: 11 });
     expect(left.arenaClaim()).toBe(true);
     expect(right.arenaClaim()).toBe(true);
     const ring = await waitFor(() => left.arena(), (value) => value?.phase === 'countdown', 'the countdown');
@@ -185,21 +185,21 @@ describe('a fight over the wire (D-114)', () => {
     const winner = ring?.challenger.gameId === left.gameId ? left : right;
     const loser = winner === left ? right : left;
     expect(ring?.round).toBe(1);
-    expect((await heldAt(winner)).y).toBe(at(20, 18).y);
+    expect((await heldAt(winner)).y).toBe(at(20, 14).y);
     // The other stays on the approach (both stood on its first row).
-    expect((await heldAt(loser)).y).toBe(at(20, 21).y);
+    expect((await heldAt(loser)).y).toBe(at(20, 11).y);
     await waitFor(() => right.arena(), (value) => value?.challenger.gameId === winner.gameId, 'the same ring for both');
   }, WIRE_TIMEOUT_MS);
 
   it('a look change racing the claim keeps the room’s position, and the fight goes on', async () => {
-    const fighter = await inArena({ x: 20, y: 22 });
+    const fighter = await inArena({ x: 20, y: 10 });
     expect(fighter.arenaClaim()).toBe(true);
     // Sent before the client has heard of the claim: the approach position, a new look.
-    fighter.enterArea('arena', { ...at(20, 22), facing: 'up' }, 'avatar-11');
+    fighter.enterArea('arena', { ...at(20, 10), facing: 'down' }, 'avatar-11');
     await waitFor(() => fighter.arena(), (ring) => ring?.phase === 'countdown', 'the countdown');
     const room = await roomOf(fighter);
     await waitFor(() => room.state.peers.get(fighter.gameId as string)?.sprite, (sprite) => sprite === 'avatar-11', 'the new look');
-    expect(await heldAt(fighter)).toEqual({ ...at(20, 18), facing: 'up' });
+    expect(await heldAt(fighter)).toEqual({ ...at(20, 14), facing: 'down' });
     expect(fighter.area).toBe('arena');
     expect(fighter.arena()?.challenger.gameId).toBe(fighter.gameId);
   }, WIRE_TIMEOUT_MS);
@@ -207,7 +207,7 @@ describe('a fight over the wire (D-114)', () => {
 
 describe('only arena members are sent the ring (D-114)', () => {
   it('a street client never decodes it; it joins a view on entry and leaves it on exit', async () => {
-    const fighter = await inArena({ x: 20, y: 22 });
+    const fighter = await inArena({ x: 20, y: 10 });
     // A raw SDK client, so the test reads exactly what was decoded.
     const sdk = new ColyseusClient(server.endpoint);
     const raw = await sdk.joinOrCreate<LobbyState>(server.roomName, { x: 120, y: 100 });
@@ -218,9 +218,9 @@ describe('only arena members are sent the ring (D-114)', () => {
       await waitFor(() => fighter.arena(), (ring) => ring?.phase === 'countdown', 'the countdown');
       // The fighter steps; the room patches the ring and the step together,
       // and the street client decodes those patches with no ring entry.
-      fighter.updatePosition(at(20, 17).x, at(20, 17).y, 'up');
+      fighter.updatePosition(at(20, 15).x, at(20, 15).y, 'down');
       const room = await roomOf(fighter);
-      await waitFor(() => room.state.peers.get(fighter.gameId as string)?.position.y, (y) => y === at(20, 17).y, 'the step');
+      await waitFor(() => room.state.peers.get(fighter.gameId as string)?.position.y, (y) => y === at(20, 15).y, 'the step');
       for (let patch = 0; patch < 5; patch += 1) {
         await sleep(60);
         expect(rings()?.size ?? 0, `patch ${patch}`).toBe(0);
@@ -228,7 +228,7 @@ describe('only arena members are sent the ring (D-114)', () => {
       expect([...(raw.state.peers?.keys() ?? [])]).not.toContain(fighter.gameId);
 
       // Into the arena: the ring arrives, mid-fight, with the fighter.
-      raw.send(MESSAGE.area, { area: 'arena', ...at(12, 16), facing: 'up', sprite: 'avatar-4' });
+      raw.send(MESSAGE.area, { area: 'arena', ...at(12, 16), facing: 'down', sprite: 'avatar-4' });
       await waitFor(() => rings()?.size ?? 0, (size) => size === 1, 'the ring on entry');
       await waitFor(() => [...(raw.state.peers?.keys() ?? [])], (keys) => keys.includes(fighter.gameId as string), 'the fighter on entry');
       // And out again: the view drops it.
@@ -259,7 +259,7 @@ describe('only arena members are sent the ring (D-114)', () => {
 describe('the message ceiling (D-114)', () => {
   it('an attack flood past 40 messages a second disconnects', async () => {
     const sdk = new ColyseusClient(server.endpoint);
-    const raw = await sdk.joinOrCreate(server.roomName, at(20, 22));
+    const raw = await sdk.joinOrCreate(server.roomName, at(20, 10));
     raw.onMessage('*', () => undefined);
     let closed: number | null = null;
     raw.onLeave((code) => {

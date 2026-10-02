@@ -11,6 +11,7 @@ import type {
 } from '@strkworld/shared';
 import {
   ARENA_BUILDING,
+  ARENA_SPAWN_FACING,
   SANDBOX_STEP_HEIGHT,
   arenaTileAt,
   arenaTileCentre,
@@ -48,7 +49,7 @@ import {
 } from './avatar-outfit.js';
 import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
-import { createDoorTrigger, type DoorTrigger } from './door-trigger.js';
+import { createDoorTrigger, DOOR_REENTRY_HOLD_MS, type DoorTrigger } from './door-trigger.js';
 import {
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
@@ -613,6 +614,7 @@ class Session implements WorldSession {
       return;
     }
     if (this.arenaShown) this.clearArena();
+    this.doors?.advance(delta);
     const input = this.moveStreetPlayer(delta, cameraYaw);
     this.movement.streetUpdate({ x: this.position.x, y: this.position.y }, input, () => {
       if (this.cleanedUp) return;
@@ -1037,7 +1039,8 @@ class Session implements WorldSession {
               this.activeRoom === entered.building && controller.state.inRoom &&
               this.isSharedFloor(entered.building, 'ground')
             ) {
-              this.areaFacing = this.movement.facing;
+              // D-114: the arena's spawn has its own facing (south, into it).
+              this.areaFacing = entered.building === ARENA_BUILDING ? ARENA_SPAWN_FACING : this.movement.facing;
               this.publishAreaPosition();
               if (this.cleanedUp || this.activeRoom !== entered.building) return;
             }
@@ -1062,10 +1065,11 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).enter();
     this.lastTile = { x: -1, y: -1 };
     this.renderRoom();
-    // D-114: through the pit's arch you drop into the arena's tunnel with a
-    // leap; under reduced motion it is a plain handoff.
+    // D-114: through the pit's arch you drop into the arena's north tunnel
+    // with a leap, still facing south into the arena; under reduced motion it
+    // is a plain handoff.
     if (definition.building === ARENA_BUILDING) {
-      this.view.setPlayerFacing?.('up');
+      this.view.setPlayerFacing?.(ARENA_SPAWN_FACING);
       if (!this.prefersReducedMotion()) this.view.playerJump?.();
     }
   }
@@ -1200,10 +1204,15 @@ class Session implements WorldSession {
           }
           : streetPosition,
       ),
-      resetDoors: () => this.doors?.reset(),
+      // A room exit holds the doors briefly (door-trigger.ts), so a key held
+      // through the handoff cannot walk the player straight back in.
+      resetDoors: () => this.doors?.reset({ holdMs: DOOR_REENTRY_HOLD_MS }),
+      // D-114: off the arena, the street hears the player facing north, away
+      // from the arch, as the view shows them.
       resumeStreet: () => this.movement.exit(
         { x: this.position.x, y: this.position.y },
         () => this.reportTile(),
+        definition.building === ARENA_BUILDING ? ARENA_PIT_RETURN_FACING : undefined,
       ),
     });
   }

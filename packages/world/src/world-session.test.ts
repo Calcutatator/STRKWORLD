@@ -48,6 +48,7 @@ import {
   type WorldSessionConfig,
   type WorldSessionView,
 } from './world-session.js';
+import { DOOR_REENTRY_HOLD_MS } from './door-trigger.js';
 
 /**
  * The World session, driven headlessly (D-059).
@@ -578,7 +579,13 @@ function tickHolding(
   }
 }
 
+/** A room exit holds the doors briefly (door-trigger.ts): let the hold run out, standing still. */
+function waitOutDoorHold(world: World): void {
+  for (let t = 0; t < DOOR_REENTRY_HOLD_MS; t += MAX_SESSION_FRAME_MS) tick(world, MAX_SESSION_FRAME_MS);
+}
+
 function enterBuilding(world: World, building: RoomBuilding): void {
+  if (world.session.area === 'street') waitOutDoorHold(world);
   place(world.session, streetTileCentre(doorTile(building)));
   tick(world);
   expect(world.session.area).toBe(building);

@@ -3,8 +3,10 @@ import {
   ARENA_DUMMY_TILE,
   ARENA_EXIT,
   ARENA_RING_RETURN,
+  ARENA_RING_RETURN_FACING,
   ARENA_HEIGHT,
   ARENA_RING_SPAWN,
+  ARENA_RING_SPAWN_FACING,
   ARENA_RING_WALKABLE,
   ARENA_SPAWN,
   ARENA_WIDTH,
@@ -13,6 +15,7 @@ import {
   type WorldEvents,
 } from '@strkworld/shared';
 import type { ArenaChannel, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
+import { DOOR_REENTRY_HOLD_MS } from './door-trigger.js';
 import { ARENA_PIT_DOOR, ARENA_PIT_RETURN } from './map/arena-pit.js';
 import { TILE_SIZE } from './map/street.js';
 import { FIXED_ROOM_TILE_SIZE } from './fixed-room.js';
@@ -216,19 +219,20 @@ describe('the arena in the session (D-114)', () => {
     // The street is hidden; the remote layer stays on, for the arena's own players.
     expect(world.last('setStreetVisible')).toEqual([false]);
     expect(world.last('setRemoteVisible')).toEqual([true]);
-    // In the tunnel at the spawn, facing the sand.
+    // In the north tunnel at the spawn, facing south, into the arena,
+    // whichever way the player stepped onto the arch.
     const spawn = world.roomTile(ARENA_SPAWN.x, ARENA_SPAWN.y);
     expect(world.position()).toEqual(spawn);
     const entry = world.emitted.slice(before).filter((e) => e.event !== 'player:moved');
     expect(entry.map((e) => e.event)).toEqual(['area:moved', 'building:entered']);
-    expect(entry[0]!.payload).toEqual({ position: spawn, facing: 'up' });
+    expect(entry[0]!.payload).toEqual({ position: spawn, facing: 'down' });
     // The drop through the arch is a leap, facing in.
-    expect(world.last('setPlayerFacing')).toEqual(['up']);
+    expect(world.last('setPlayerFacing')).toEqual(['down']);
     expect(world.count('playerJump')).toBe(1);
     // Every move inside is published.
     const from = world.emitted.length;
-    world.inRoom(20, 26);
-    world.inRoom(12, 18);
+    world.inRoom(20, 6);
+    world.inRoom(12, 14);
     expect(new Set(world.emitted.slice(from).map((e) => e.event))).toEqual(new Set(['area:moved']));
   });
 
@@ -253,7 +257,7 @@ describe('the arena in the session (D-114)', () => {
     const world = setup();
     world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
     ring.frame = { phase: 'idle', gate: 'open', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false };
-    world.inRoom(20, 28);
+    world.inRoom(20, 4);
     expect(world.last('syncArena')).toEqual([ring.frame]);
     const from = world.emitted.length;
     world.inRoom(ARENA_EXIT.x + 1, ARENA_EXIT.y);
@@ -274,6 +278,80 @@ describe('the arena in the session (D-114)', () => {
     expect(world.session.area).toBe('street');
   });
 
+  it('enters walking south from the road and leaves walking north the same way, with no bounce back in', () => {
+    const world = setup();
+    /** Hold keys frame by frame until `done`, at most `limit` ms; then let go. */
+    const holdUntil = (keys: Partial<MovementInput>, done: () => boolean, limit = 3_000): void => {
+      world.keyboard.hold(keys);
+      for (let t = 0; t < limit && !done(); t += 16) world.session.update(16);
+      world.keyboard.hold({});
+    };
+    const tileOf = (p: { x: number; y: number }) => ({
+      x: Math.floor((p.x - ROOM_ORIGIN.x) / FIXED_ROOM_TILE_SIZE),
+      y: Math.floor((p.y - ROOM_ORIGIN.y) / FIXED_ROOM_TILE_SIZE),
+    });
+    const streetMoves = () => world.events('player:moved') as Array<{ facing: string }>;
+    world.onStreet(ARENA_PIT_RETURN.x, ARENA_PIT_RETURN.y);
+
+    // South off the road's path onto the arch: in.
+    holdUntil({ down: true }, () => world.session.area === 'arena');
+    expect(world.session.area).toBe('arena');
+    expect(world.events('building:entered')).toEqual([{ building: 'arena' }]);
+    // At the north tunnel's spawn, facing south, into the arena.
+    expect(world.position()).toEqual(world.roomTile(ARENA_SPAWN.x, ARENA_SPAWN.y));
+    expect(tileOf(world.position()).y).toBeLessThan(5);
+    expect(world.last('setPlayerFacing')).toEqual(['down']);
+    expect(world.events('area:moved').at(-1)).toMatchObject({ facing: 'down' });
+    // Still holding south walks on into the arena, never back out.
+    holdUntil({ down: true }, () => false, 600);
+    expect(world.session.area).toBe('arena');
+    expect(tileOf(world.position()).y).toBeGreaterThan(ARENA_SPAWN.y);
+
+    // North, back up the tunnel the way they came: out.
+    holdUntil({ up: true }, () => world.session.area === 'street');
+    expect(world.session.area).toBe('street');
+    expect(world.events('building:exited')).toEqual([{ building: 'arena' }]);
+    // On the path just outside the arch, facing north, towards the road.
+    expect(world.position()).toEqual({
+      x: ARENA_PIT_RETURN.x * TILE_SIZE + TILE_SIZE / 2,
+      y: ARENA_PIT_RETURN.y * TILE_SIZE + TILE_SIZE / 2,
+    });
+    expect(world.last('setPlayerFacing')).toEqual(['up']);
+    expect(streetMoves().at(-1)).toMatchObject({ facing: 'up' });
+
+    // Standing there, or holding north on towards the road, never goes back in.
+    for (let t = 0; t < 2_000; t += 16) world.session.update(16);
+    holdUntil({ up: true }, () => false, 400);
+    for (let t = 0; t < 1_000; t += 16) world.session.update(16);
+    expect(world.session.area).toBe('street');
+    expect(world.events('building:entered')).toHaveLength(1);
+
+    // Walking back south re-enters, as intended.
+    holdUntil({ down: true }, () => world.session.area === 'arena');
+    expect(world.session.area).toBe('arena');
+    expect(world.events('building:entered')).toHaveLength(2);
+    expect(world.last('setPlayerFacing')).toEqual(['down']);
+  });
+
+  it('holds the arch shut just after an exit: a key carried through the handoff cannot bounce the player back in', () => {
+    const world = setup();
+    world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
+    expect(world.session.area).toBe('arena');
+    world.inRoom(ARENA_EXIT.x + 1, ARENA_EXIT.y);
+    expect(world.session.area).toBe('street');
+    // Straight back onto the arch inside the hold: swallowed.
+    world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
+    expect(world.session.area).toBe('street');
+    // Standing on it past the hold still does nothing until they step off.
+    for (let t = 0; t < DOOR_REENTRY_HOLD_MS + 200; t += 16) world.session.update(16);
+    expect(world.session.area).toBe('street');
+    expect(world.events('building:entered')).toHaveLength(1);
+    world.onStreet(ARENA_PIT_RETURN.x, ARENA_PIT_RETURN.y);
+    world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
+    expect(world.session.area).toBe('arena');
+    expect(world.events('building:entered')).toHaveLength(2);
+  });
+
   it('keeps the ring solid unless the arena session opens it, and the dummy solid always', () => {
     const world = setup();
     world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
@@ -291,11 +369,11 @@ describe('the arena in the session (D-114)', () => {
     world.walk({ right: true }, 200);
     expect(world.position().x).toBeGreaterThan(inside.x + 20);
     // But never into the dummy, whatever the session says.
-    const below = world.roomTile(ARENA_DUMMY_TILE.x, ARENA_DUMMY_TILE.y + 2);
-    world.place(below.x, below.y);
-    world.walk({ up: true }, 800);
-    const dummyBottom = ROOM_ORIGIN.y + (ARENA_DUMMY_TILE.y + 1) * FIXED_ROOM_TILE_SIZE;
-    expect(world.position().y).toBeGreaterThanOrEqual(dummyBottom);
+    const above = world.roomTile(ARENA_DUMMY_TILE.x, ARENA_DUMMY_TILE.y - 2);
+    world.place(above.x, above.y);
+    world.walk({ down: true }, 800);
+    const dummyTop = ROOM_ORIGIN.y + ARENA_DUMMY_TILE.y * FIXED_ROOM_TILE_SIZE;
+    expect(world.position().y).toBeLessThanOrEqual(dummyTop);
     // And the fence holds the fighter in.
     const west = world.roomTile(16, 16);
     world.place(west.x, west.y);
@@ -325,26 +403,28 @@ describe('the arena in the session (D-114)', () => {
     expect(host).not.toBeNull();
     // Outside the arena a leap does nothing.
     const street = world.position();
-    host.leapTo(ARENA_RING_SPAWN, 'up');
+    host.leapTo(ARENA_RING_SPAWN, ARENA_RING_SPAWN_FACING);
     expect(world.position()).toEqual(street);
     world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
-    world.inRoom(20, 22);
+    world.inRoom(20, 10);
     const jumps = world.count('playerJump');
     const from = world.emitted.length;
-    host.leapTo(ARENA_RING_SPAWN, 'up');
+    // In through the north gate, facing south at the dummy.
+    host.leapTo(ARENA_RING_SPAWN, ARENA_RING_SPAWN_FACING);
     expect(world.position()).toEqual(arenaTileCentre(ARENA_RING_SPAWN));
     expect(world.emitted.slice(from).at(-1)).toEqual({
       event: 'area:moved',
-      payload: { position: arenaTileCentre(ARENA_RING_SPAWN), facing: 'up' },
+      payload: { position: arenaTileCentre(ARENA_RING_SPAWN), facing: 'down' },
     });
     expect(world.count('playerJump')).toBe(jumps + 1);
-    expect(world.last('setPlayerFacing')).toEqual(['up']);
-    expect(host.position()).toEqual({ ...arenaTileCentre(ARENA_RING_SPAWN), facing: 'up' });
-    host.leapTo(ARENA_RING_RETURN, 'down');
+    expect(world.last('setPlayerFacing')).toEqual(['down']);
+    expect(host.position()).toEqual({ ...arenaTileCentre(ARENA_RING_SPAWN), facing: 'down' });
+    // Out onto the approach, facing north, towards the tunnel.
+    host.leapTo(ARENA_RING_RETURN, ARENA_RING_RETURN_FACING);
     expect(world.position()).toEqual(arenaTileCentre(ARENA_RING_RETURN));
     expect(world.emitted.at(-1)).toEqual({
       event: 'area:moved',
-      payload: { position: arenaTileCentre(ARENA_RING_RETURN), facing: 'down' },
+      payload: { position: arenaTileCentre(ARENA_RING_RETURN), facing: 'up' },
     });
     // The room's tile grid and the shared arena geometry are one frame.
     expect(arenaTileCentre(ARENA_RING_RETURN)).toEqual(world.roomTile(ARENA_RING_RETURN.x, ARENA_RING_RETURN.y));
@@ -379,8 +459,8 @@ describe('the arena in the session (D-114)', () => {
     expect(world.count('playerSwing')).toBe(1);
     // D-117: E is interact, so a station in reach (the emperor's box) takes
     // the press first; the ring's claim and strikes are an action behind it.
-    world.inRoom(20, 9);
-    world.walk({ up: true }, 120);
+    world.inRoom(20, 23);
+    world.walk({ down: true }, 120);
     expect(world.session.interactionPrompt).toMatchObject({ id: 'arena:box' });
     const before = ring.interacts;
     world.keyboard.press('keydown-E');
@@ -399,12 +479,12 @@ describe('the arena in the session (D-114)', () => {
       gateObject?(): unknown;
     };
     world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
-    world.inRoom(20, 22);
+    world.inRoom(20, 10);
     // C's gate target: CLAIM, on the gate's footprint (World pixels).
     let claimed = 0;
-    const gate = world.roomTile(20, 20);
+    const gate = world.roomTile(20, 12);
     ring.gate = [{ id: 'arena:gate', label: 'CLAIM', rect: { x: gate.x - 48, y: gate.y - 16, width: 96, height: 32 }, activate: () => void (claimed += 1) }];
-    world.walk({ up: true }, 60);
+    world.walk({ down: true }, 60);
     expect(world.session.interactionPrompt).toMatchObject({ id: 'arena:gate', label: 'CLAIM' });
     world.keyboard.press('keydown-E');
     expect([claimed, ring.attacks, ring.interacts]).toEqual([1, 0, 0]);

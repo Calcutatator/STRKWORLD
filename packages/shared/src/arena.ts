@@ -14,29 +14,42 @@ export const ARENA_HEIGHT = 33;
 
 export interface ArenaTile { readonly x: number; readonly y: number }
 
-export const ARENA_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 30 });
-export const ARENA_EXIT: TileRect = Object.freeze({ x: 19, y: 32, width: 3, height: 1 });
-export const ARENA_TUNNEL: TileRect = Object.freeze({ x: 19, y: 24, width: 3, height: 9 });
+/*
+ * The layout runs north to south (D-114, amended 2026-10-02): the pit's arch
+ * is on the street side of the pit, so the player arrives walking south.
+ * The tunnel, its spawn and its exit are on the north side too, so they
+ * arrive facing into the arena and leave by walking north, back the way they
+ * came. The emperor's box faces them from the south podium, and the ring's
+ * gate is on the ring's north side, facing the tunnel. The oval, the fence,
+ * the stairs and the tiers are symmetric north to south, so only these tiles
+ * moved.
+ */
+export const ARENA_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 2 });
+export const ARENA_SPAWN_FACING: Facing = 'down';
+export const ARENA_EXIT: TileRect = Object.freeze({ x: 19, y: 0, width: 3, height: 1 });
+export const ARENA_TUNNEL: TileRect = Object.freeze({ x: 19, y: 0, width: 3, height: 9 });
 export const ARENA_STAIRS: readonly TileRect[] = Object.freeze([
   Object.freeze({ x: 6, y: 15, width: 1, height: 3 }),
   Object.freeze({ x: 34, y: 15, width: 1, height: 3 }),
 ]);
-export const ARENA_BOX: ArenaTile = Object.freeze({ x: 20, y: 7 });
+export const ARENA_BOX: ArenaTile = Object.freeze({ x: 20, y: 25 });
 export const ARENA_RING_FENCE: TileRect = Object.freeze({ x: 15, y: 12, width: 11, height: 9 });
 export const ARENA_RING_INTERIOR: TileRect = Object.freeze({ x: 16, y: 13, width: 9, height: 7 });
-export const ARENA_RING_GATE: TileRect = Object.freeze({ x: 19, y: 20, width: 3, height: 1 });
-export const ARENA_GATE_APPROACH: TileRect = Object.freeze({ x: 19, y: 21, width: 3, height: 2 });
-export const ARENA_DUMMY_TILE: ArenaTile = Object.freeze({ x: 20, y: 14 });
-export const ARENA_RING_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 18 });
-export const ARENA_RING_SPAWN_FACING: Facing = 'up';
-export const ARENA_RING_RETURN: ArenaTile = Object.freeze({ x: 20, y: 22 });
-export const ARENA_RING_RETURN_FACING: Facing = 'down';
+export const ARENA_RING_GATE: TileRect = Object.freeze({ x: 19, y: 12, width: 3, height: 1 });
+export const ARENA_GATE_APPROACH: TileRect = Object.freeze({ x: 19, y: 10, width: 3, height: 2 });
+export const ARENA_DUMMY_TILE: ArenaTile = Object.freeze({ x: 20, y: 18 });
+/** The dummy's painted front faces the gate (north): its model, built facing +Z (south), turns by this yaw. */
+export const ARENA_DUMMY_YAW = Math.PI;
+export const ARENA_RING_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 14 });
+export const ARENA_RING_SPAWN_FACING: Facing = 'down';
+export const ARENA_RING_RETURN: ArenaTile = Object.freeze({ x: 20, y: 10 });
+export const ARENA_RING_RETURN_FACING: Facing = 'up';
 /** The ring interior minus the dummy: walkable for the challenger only. */
 export const ARENA_RING_WALKABLE: readonly TileRect[] = Object.freeze([
-  Object.freeze({ x: 16, y: 13, width: 9, height: 1 }),
-  Object.freeze({ x: 16, y: 14, width: 4, height: 1 }),
-  Object.freeze({ x: 21, y: 14, width: 4, height: 1 }),
-  Object.freeze({ x: 16, y: 15, width: 9, height: 5 }),
+  Object.freeze({ x: 16, y: 13, width: 9, height: 5 }),
+  Object.freeze({ x: 16, y: 18, width: 4, height: 1 }),
+  Object.freeze({ x: 21, y: 18, width: 4, height: 1 }),
+  Object.freeze({ x: 16, y: 19, width: 9, height: 1 }),
 ]);
 
 export type ArenaTileKind =
@@ -59,7 +72,8 @@ function ovalDistance(x: number, y: number): number {
 export function arenaTileAt(x: number, y: number): ArenaTileKind {
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= ARENA_WIDTH || y >= ARENA_HEIGHT) return 'void';
   if (inRect(ARENA_TUNNEL, x, y)) return 'tunnel';
-  if ((x === ARENA_TUNNEL.x - 1 || x === ARENA_TUNNEL.x + ARENA_TUNNEL.width) && y >= ARENA_TUNNEL.y + 1) return 'tunnel-wall';
+  // Walls either side of the tunnel, all but its row on the sand (the mouth).
+  if ((x === ARENA_TUNNEL.x - 1 || x === ARENA_TUNNEL.x + ARENA_TUNNEL.width) && y <= ARENA_TUNNEL.y + ARENA_TUNNEL.height - 2) return 'tunnel-wall';
   if (x === ARENA_BOX.x && y === ARENA_BOX.y) return 'box';
   if (x === ARENA_DUMMY_TILE.x && y === ARENA_DUMMY_TILE.y) return 'dummy';
   if (inRect(ARENA_RING_GATE, x, y)) return 'gate';
