@@ -11,6 +11,7 @@ import {
   type LeaderboardHistogram,
   type Placement,
 } from '../leaderboard.js';
+import { noticeLeaderboard, type LeaderboardSkipReason } from '../leaderboard-notice.js';
 import { PrivacyError, type Address } from '../types.js';
 import { shadowAccountAddress } from '../vault.js';
 import { mapShadowWalletError } from './errors.js';
@@ -120,11 +121,15 @@ export class LeaderboardReceipts {
   /**
    * The receipt for the next shield, unshield or send, or null when there
    * cannot be one (fail open: the action goes out unchanged).
+   *
+   * Every exit reports itself on D-069's debug channel as a reason code, so a
+   * probe deploy that attaches nothing says which step declined. The code is
+   * all that is written: no commitment, no nonce, no address.
    */
   async receiptFor(signal?: AbortSignal): Promise<PreparedReceipt | null> {
     try {
-      if (!this.reads) return null;
-      if (!(await this.supported(signal))) return null;
+      if (!this.reads) return skipReceipt('no-reads');
+      if (!(await this.supported(signal))) return skipReceipt('unsupported-route');
       throwIfAborted(signal);
       const partial = await this.partialCommitment();
       throwIfAborted(signal);
@@ -135,12 +140,17 @@ export class LeaderboardReceipts {
       const known = this.nonces.read(key);
       const next = known ?? (await this.scan(partial, signal)).next;
       const nonce = next > this.floor ? next : this.floor;
-      if (nonce >= BigInt(MAX_LEADERBOARD_RECEIPTS)) return null;
-      return Object.freeze({
+      if (nonce >= BigInt(MAX_LEADERBOARD_RECEIPTS)) return skipReceipt('no-nonce');
+      const prepared = Object.freeze({
         action: receiptInvokeAction({ ledger: this.ledger, partialCommitment: partial, nonce }),
         nonce,
       });
+      noticeLeaderboard({ event: 'receipt', attached: true });
+      return prepared;
     } catch {
+      // A cancelled prepare is the player closing the counter, not a fault:
+      // it is the one exit that reports nothing.
+      if (signal?.aborted !== true) skipReceipt('scan-failed');
       return null;
     }
   }
@@ -325,6 +335,12 @@ export class LeaderboardReceipts {
     });
     return request;
   }
+}
+
+/** Report a declined receipt by code, and answer null: the action goes out unchanged. */
+function skipReceipt(reason: LeaderboardSkipReason): null {
+  noticeLeaderboard({ event: 'receipt', attached: false, reason });
+  return null;
 }
 
 function smallCount(value: unknown): number {

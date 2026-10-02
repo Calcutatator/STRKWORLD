@@ -151,7 +151,7 @@ export class EndurUnstake {
       player: this.walletAddress,
       shares,
       leftover: read.xstrk,
-    }), this.ledger, this.identity);
+    }), this.ledger, this.identity, 'unstake');
     return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
   }
 
@@ -181,7 +181,7 @@ export class EndurUnstake {
       shadowAccount: identity.address,
       player: this.walletAddress,
       requestIds,
-    }), this.ledger, this.identity);
+    }), this.ledger, this.identity, 'unstake');
     return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
   }
 

@@ -327,7 +327,7 @@ export class ShadowVault {
   }
 
   private async prepared(action: VaultAction, built: STRK20_ACTION[], config: PoolConfig): Promise<PreparedVaultBatch> {
-    const { actions, extra } = await withPlacementTick(built, this.ledger, this.identity);
+    const { actions, extra } = await withPlacementTick(built, this.ledger, this.identity, 'vault');
     return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
   }
 
