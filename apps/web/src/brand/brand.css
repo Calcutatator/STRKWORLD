@@ -1,0 +1,72 @@
+/* ==========================================================================
+ * STRKWORLD brand tokens (D-113). The source of truth is docs/brand/README.md;
+ * `tokens.ts` carries the same values for code, and a test keeps them in step.
+ *
+ * The three faces are Google Fonts under the SIL OFL, self-hosted from
+ * ./fonts (latin subset, WOFF2; licence in ./fonts/OFL.txt). Vite bundles
+ * them as same-origin assets, so no font is fetched from a third party and a
+ * `font-src 'self'` policy would hold.
+ *
+ * Every token is `--brand-*` and nothing here styles an element, so loading
+ * this file changes no screen by itself. The title screen uses the tokens
+ * today; the game-wide theme adopts them by pointing its `--ui-*` tokens at
+ * these (for example `--ui-font: var(--brand-font-body)`).
+ * ======================================================================= */
+
+@font-face {
+  font-family: "Jersey 15";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/jersey-15-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/vt323-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/silkscreen-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/silkscreen-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  /* Palette */
+  --brand-ember: #f56a16;
+  --brand-sun-gold: #ffc12e;
+  --brand-outline: #24120a;
+  --brand-horizon: #f2dcc0;
+  --brand-sky: #6f9edb;
+  --brand-grass: #86ad55;
+  --brand-cream: #fff6e6;
+  --brand-window-light: #fff7ea;
+  --brand-window-dark: #261810;
+  --brand-window-rim: #6e3e1e;
+
+  /* Type. Each face falls back to a plain monospace, never a rounded UI face. */
+  --brand-font-headline: "Jersey 15", "VT323", ui-monospace, monospace;
+  --brand-font-body: "VT323", ui-monospace, monospace;
+  --brand-font-menu: "Silkscreen", "VT323", ui-monospace, monospace;
+  /* VT323's digits blur at small sizes; numbers and balances take Jersey 15. */
+  --brand-font-numeric: "Jersey 15", ui-monospace, monospace;
+  --brand-body-size: 1.375rem;
+  --brand-body-leading: 1.2;
+
+  /* The sky over the street: the backdrop's fallback, and its first frame. */
+  --brand-sky-gradient: linear-gradient(180deg, #6f9edb 0%, #a9c0d9 34%, #f2dcc0 62%, #e9b77f 100%);
+}

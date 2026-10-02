@@ -16,6 +16,7 @@ import { createConnectFlow, type ConnectFlow, type ConnectState } from '../conne
 import { DiscoveryRescan } from '../connect/DiscoveryRescan.js';
 import { EntryGate } from '../connect/EntryGate.js';
 import { GetAWallet } from '../connect/GetAWallet.js';
+import { TitleScreen } from '../connect/TitleScreen.js';
 import { selectedWalletName, unsupportedRoomCopy } from '../connect/unsupported-copy.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
@@ -152,7 +153,11 @@ function ProductionApp({
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
 
   if (!isConnectedWallet(wallet.snapshot)) {
-    return <WalletEntryGate snapshot={wallet.snapshot} connect={wallet.connect} refreshDiscovery={wallet.refreshDiscovery} />;
+    return (
+      <TitleScreen>
+        <WalletEntryGate snapshot={wallet.snapshot} connect={wallet.connect} refreshDiscovery={wallet.refreshDiscovery} />
+      </TitleScreen>
+    );
   }
 
   return (
@@ -279,11 +284,13 @@ function WalletCapabilityGate({
   }
 
   return (
-    <WalletCapabilityGateView
-      state={state}
-      walletName={selectedWalletName(snapshot)}
-      onRetry={() => void connect.recheck()}
-    />
+    <TitleScreen>
+      <WalletCapabilityGateView
+        state={state}
+        walletName={selectedWalletName(snapshot)}
+        onRetry={() => void connect.recheck()}
+      />
+    </TitleScreen>
   );
 }
 
@@ -334,7 +341,11 @@ function ConnectedProductionApp({
   }, [createPresence]);
 
   if (!activePresence) {
-    return <div className="shell-boot" role="status">Starting the city…</div>;
+    return (
+      <TitleScreen>
+        <div className="shell-boot" role="status">Starting the city…</div>
+      </TitleScreen>
+    );
   }
 
   return (
@@ -425,7 +436,8 @@ function WalletEntryGate({
       : snapshot.wallets.length === 0
         ? COPY.connect.none
         : COPY.connect.body;
-  const title = snapshot.wallets.length === 0 ? COPY.connect.title : COPY.connect.choose;
+  // The title screen's menu (D-115): "Connect wallet", then the choices.
+  const title = snapshot.wallets.length === 0 ? COPY.connect.title : COPY.connect.action;
 
   return (
     <section className="room room-connect" data-testid="wallet-entry-gate">

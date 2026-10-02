@@ -24,6 +24,7 @@ import {
 } from './entry-gate.js';
 import { createEntryPassMemory, type EntryPassMemory } from './entry-pass.js';
 import { NotRegisteredNotice } from './NotRegisteredNotice.js';
+import { TitleScreen } from './TitleScreen.js';
 
 type Of<N extends EntryGateState['name']> = Extract<EntryGateState, { name: N }>;
 
@@ -87,7 +88,13 @@ export function EntryGate({
   }, [gate]);
   const state = useStore(gate.store);
   if (state.name === 'passed') return <>{children}</>;
-  return <EntryGateView gate={gate} state={state} />;
+  // The gate's cards sit on the title screen's menu (D-115); once it passes,
+  // the title screen and its backdrop go and the city takes the page.
+  return (
+    <TitleScreen>
+      <EntryGateView gate={gate} state={state} />
+    </TitleScreen>
+  );
 }
 
 /**
