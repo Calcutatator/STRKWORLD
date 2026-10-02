@@ -27,6 +27,7 @@ import {
   repayAllBuffer,
 } from '../borrow.js';
 import { shadowAccountAddress } from '../vault.js';
+import { shadowCommitment } from '../leaderboard.js';
 
 /**
  * The Borrow counter on the Wallet API adapter (D-083): its own commitment
@@ -453,5 +454,33 @@ describe('the four flows through the wallet (D-083)', () => {
     f.state.fee = POOL_FEE + 1n;
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toBeInstanceOf(PrivacyError);
     expect(f.invoked).toEqual([]);
+  });
+});
+
+describe('leaderboard phase 1: the borrow shadow ticks the ledger (DeFi mode)', () => {
+  const LEDGER = '0x1ed6e7';
+  const open = { kind: 'borrow', collateral: STRK, debt: USDC, collateralAmount: 10_000n * E18, borrowAmount: 100n * USDC_ONE } as const;
+
+  it('appends ledger.tick(C_borrow) after the loan\'s own calls, for the same one pool fee, flagged for the review', async () => {
+    const off = fixture();
+    const plain = await off.operations.prepareBorrow(open);
+    await plain.confirm({ feeCeiling: POOL_FEE });
+    const f = fixture({ policy: { ...borrowPolicy(), leaderboard: { ledger: LEDGER } } });
+    const batch = await f.operations.prepareBorrow(open);
+    expect(batch.countsTowardPlacement).toBe(true);
+    expect(batch.totalCost).toBe(POOL_FEE);
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    const invokeOf = (actions: STRK20_ACTION[]) => actions.find((action) => action.type === 'shadow_account_invoke') as Extract<STRK20_ACTION, { type: 'shadow_account_invoke' }>;
+    const before = invokeOf(off.invoked[0]!);
+    expect(f.invoked[0]!.map((action) => action.type)).toEqual(off.invoked[0]!.map((action) => action.type));
+    expect(invokeOf(f.invoked[0]!).calls).toEqual([
+      ...before.calls,
+      { contractAddress: LEDGER, entrypoint: 'tick', calldata: [shadowCommitment(BORROW_PARTIAL, '0x0')] },
+    ]);
+    // Off, no flag and no tick.
+    expect(Object.keys(plain)).not.toContain('countsTowardPlacement');
+    expect(before.calls.some((call) => call.entrypoint === 'tick')).toBe(false);
+    // The borrow counter's own commitment only; the season's is never asked here.
+    expect(f.commitments).not.toContain('strkworld-lb-s1');
   });
 });

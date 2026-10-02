@@ -135,6 +135,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   // Read once: the street and its rooms are built once, below, and cannot
   // change, so a rebind keeps the value the engine was created with.
   const vaultOpen = options.config.vaultOpen === true;
+  // Leaderboard phase 1: the placement stand, read once the same way.
+  const placementStand = options.config.placementStand === true;
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
@@ -205,6 +207,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         // The creation value, never `config.vaultOpen`: the presenter drew
         // the street and rooms from it, and a session must walk the same map.
         vaultOpen,
+        placementStand,
       });
       keyboard = nextKeyboard;
     } catch (error) {
@@ -331,6 +334,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       images: createImageTextureLoader(doc),
       reducedMotion: () => prefersReducedMotion(win),
       vaultOpen,
+      placementStand,
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());

@@ -11,14 +11,19 @@ import {
   type Object3D,
 } from 'three';
 import {
+  PLACEMENT_APRON,
+  PLACEMENT_STAND,
   PLAZA_AREA,
   PLAZA_FIXTURES,
   PLAZA_MONUMENT_STATION,
+  PLAZA_PLACEMENT_STATION,
   PLAZA_SHELLS_STATION,
   PLAZA_SIGN_TEXT,
-  PLAZA_STATIONS,
+  hasPlacementStand,
+  plazaStations,
   type PlazaFacing,
   type PlazaFixture,
+  type PlazaRect,
 } from '../map/plaza.js';
 import type { DistrictMap } from '../map/street.js';
 import type { StationId } from '@strkworld/shared';
@@ -27,6 +32,7 @@ import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 import {
   GeometryBin,
   PALETTE,
+  PLACEMENT_THEME,
   PLAZA_THEME,
   ResourceBag,
   boxGeometry,
@@ -116,6 +122,8 @@ const DECOR = 'plaza-decor';
 const MONUMENT = 'plaza-monument';
 const GATEWAY = 'plaza-gateway';
 const GLOW = 'plaza-glow';
+/** The placement stand's own bin, so it is one mesh a future cue can find (`userData.station`). */
+const STAND = 'plaza-stand';
 
 /** The face text for one figure: the figure as the plate's title, its caption below. */
 export function plazaFaceText(figure: string | null, caption: string): string {
@@ -130,15 +138,19 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   if (!hasPlaza(map)) return null;
   const floor = parts.floorHeight;
   const fixtures = PLAZA_FIXTURES.filter((piece) => standsOnPlinth(map, piece));
+  // Leaderboard phase 1: the placement stand, only where the map painted it.
+  const stand = hasPlacementStand(map.tiles);
+  const stations = plazaStations({ placementStand: stand });
   const bin = new GeometryBin();
-  // D-123: the monument and the table are the plaza's stations; their pieces
+  // D-123: the monument, the table and the placement stand are the plaza's stations; their pieces
   // are copied into one affordance mesh as they are built.
   const shells = createAffordanceShells();
   let affordances: AffordanceSet | null = null;
   let monumentMesh: Mesh | null = null;
   let gatewayMesh: Mesh | null = null;
   try {
-    pave(map, floor, bin);
+    pave(map, floor, bin, stand ? [PLAZA_AREA, PLACEMENT_APRON] : [PLAZA_AREA]);
+    if (stand) placementStand(PLACEMENT_STAND, floor, shells.record(PLAZA_PLACEMENT_STATION, bin));
     for (const piece of fixtures) {
       switch (piece.kind) {
         case 'monument':
@@ -177,6 +189,12 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
     monumentMesh = flushBin(bin, MONUMENT, monumentMaterial, res, parts.ground, { name: 'plaza:monument', cast: true, receive: true });
     gatewayMesh = flushBin(bin, GATEWAY, gatewayMaterial, res, parts.ground, { name: 'plaza:gateway', cast: true, receive: true });
     flushBin(bin, GLOW, glowMaterial, res, parts.ground, { name: 'plaza:glow' });
+    const standMesh = flushBin(bin, STAND, res.material(standardMaterial({ roughness: 0.78 })), res, parts.ground, {
+      name: 'plaza:placement-stand',
+      cast: true,
+      receive: true,
+    });
+    if (standMesh) standMesh.userData['station'] = PLAZA_PLACEMENT_STATION;
     parts.animators.push((elapsed) => {
       // The lanterns and the monument's light breathe, gently and together.
       glowMaterial.color.setScalar(0.9 + 0.1 * Math.sin((elapsed / 1000) * 1.6));
@@ -246,6 +264,14 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
     card.object.userData['plaza'] = 'card';
   }
 
+  // The placement stand's board: a title and "? ? ?", never a placement.
+  // A placement is shown only in the Shell's panel, on the player's device.
+  if (stand) {
+    const { cx, cz } = centreOf(PLACEMENT_STAND);
+    const board = addLabel(labels.sign(PLACEMENT_BOARD_TEXT, PLACEMENT_THEME.board), cx, floor + STAND_BOARD_Y, cz + 0.12);
+    board.object.userData['plaza'] = 'placement-board';
+  }
+
   if (monumentMesh && monumentPiece) {
     parts.occluders.push(monumentOccluder(monumentMesh, monumentPiece));
   }
@@ -304,12 +330,12 @@ function standsOnPlinth(map: DistrictMap, piece: PlazaFixture): boolean {
   return true;
 }
 
-function centreOf(piece: PlazaFixture): { cx: number; cz: number } {
+function centreOf(piece: PlazaRect): { cx: number; cz: number } {
   return { cx: piece.x + piece.width / 2, cz: piece.y + piece.height / 2 };
 }
 
 function stationLabel(station: StationId): string {
-  return PLAZA_STATIONS.find((candidate) => candidate.station === station)?.label ?? '';
+  return plazaStations().find((candidate) => candidate.station === station)?.label ?? '';
 }
 
 function materialsOf(root: Object3D): Material[] {
@@ -335,8 +361,13 @@ function isPlazaTile(map: DistrictMap, x: number, y: number): boolean {
  * of setts round the monument, and an edge kerb wherever the plaza meets
  * grass or the map's edge. The pavement side is flush: you walk straight in.
  */
-function pave(map: DistrictMap, floor: number, bin: GeometryBin): void {
-  const { x: x0, y: y0, width, height } = PLAZA_AREA;
+function pave(map: DistrictMap, floor: number, bin: GeometryBin, areas: readonly PlazaRect[]): void {
+  for (const area of areas) paveArea(map, floor, bin, area);
+  ringSetts(floor, bin);
+}
+
+function paveArea(map: DistrictMap, floor: number, bin: GeometryBin, area: PlazaRect): void {
+  const { x: x0, y: y0, width, height } = area;
   for (let y = y0; y < y0 + height; y++) {
     for (let x = x0; x < x0 + width; x++) {
       if (!isPlazaTile(map, x, y)) continue;
@@ -368,7 +399,10 @@ function pave(map: DistrictMap, floor: number, bin: GeometryBin): void {
       }
     }
   }
-  // Setts in a ring round the monument, just proud of the slabs.
+}
+
+/** Setts in a ring round the monument, just proud of the slabs. */
+function ringSetts(floor: number, bin: GeometryBin): void {
   const monumentPiece = PLAZA_FIXTURES.find((piece) => piece.kind === 'monument');
   if (monumentPiece) {
     const { cx, cz } = centreOf(monumentPiece);
@@ -387,6 +421,57 @@ function pave(map: DistrictMap, floor: number, bin: GeometryBin): void {
       const colour = i % 2 === 0 ? PLAZA_THEME.ring : shade(PLAZA_THEME.ring, 0.05);
       bin.add(GROUND, flatPolygon(quad, floor + 0.007), colour);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The placement stand (leaderboard phase 1)
+// ---------------------------------------------------------------------------
+
+/** The board over the stand: a title and a row of hidden digits. Never a placement. */
+export const PLACEMENT_BOARD_TEXT = 'PLACEMENT\nPRIVATE  ? ? ?';
+/** The board's centre height above the floor. */
+const STAND_BOARD_Y = 2.32;
+/** The trophy's top, which the prompt floats above. */
+const STAND_TOP = 3.32;
+
+/**
+ * A scoreboard kiosk in the brand's colours (D-113): a dark counter with an
+ * ember lip and a lit sun-gold screen, two outline-dark posts carrying the
+ * board, a row of bulbs along the board's top edge, and a voxel trophy on top.
+ * Built on the stand's two plinth tiles only.
+ */
+function placementStand(rect: PlazaRect, floor: number, bin: GeometryBin): void {
+  const x0 = rect.x;
+  const z0 = rect.y;
+  const x1 = rect.x + rect.width;
+  const { cx } = centreOf(rect);
+  const t = PLACEMENT_THEME;
+  // Footing and counter.
+  bin.add(STAND, boxGeometry(x0 + 0.06, floor, z0 + 0.12, x1 - 0.06, floor + 0.12, z0 + 0.9), t.outline);
+  bin.add(STAND, boxGeometry(x0 + 0.22, floor + 0.12, z0 + 0.34, x1 - 0.22, floor + 0.92, z0 + 0.86), t.window);
+  bin.add(STAND, boxGeometry(x0 + 0.18, floor + 0.92, z0 + 0.3, x1 - 0.18, floor + 1.0, z0 + 0.9), t.ember);
+  bin.add(STAND, boxGeometry(x0 + 0.22, floor + 0.12, z0 + 0.84, x1 - 0.22, floor + 0.2, z0 + 0.88), t.emberDeep);
+  // The counter's lit screen, facing the camera.
+  bin.add(GLOW, boxGeometry(cx - 0.32, floor + 0.5, z0 + 0.86, cx + 0.32, floor + 0.8, z0 + 0.875), t.gold);
+  // Posts and the board's frame.
+  for (const px of [x0 + 0.2, x1 - 0.32]) {
+    bin.add(STAND, boxGeometry(px, floor + 1.0, z0 + 0.48, px + 0.12, floor + 2.9, z0 + 0.6), t.outline);
+  }
+  bin.add(STAND, boxGeometry(x0 + 0.08, floor + 1.78, z0 + 0.42, x1 - 0.08, floor + 2.86, z0 + 0.6), t.outline);
+  bin.add(STAND, boxGeometry(x0 + 0.1, floor + 2.86, z0 + 0.44, x1 - 0.1, floor + 2.92, z0 + 0.58), t.rim);
+  // Bulbs along the top edge, like a scoreboard's.
+  for (let i = 0; i < 7; i++) {
+    const bx = x0 + 0.3 + (i * (rect.width - 0.6)) / 6;
+    bin.add(GLOW, boxGeometry(bx - 0.04, floor + 2.92, z0 + 0.47, bx + 0.04, floor + 3.0, z0 + 0.55), t.bulb);
+  }
+  // A voxel trophy: base, stem, cup and two handles.
+  const tz = z0 + 0.51;
+  bin.add(STAND, boxGeometry(cx - 0.13, floor + 2.92, tz - 0.08, cx + 0.13, floor + 2.99, tz + 0.08), t.emberDeep);
+  bin.add(STAND, boxGeometry(cx - 0.04, floor + 2.99, tz - 0.04, cx + 0.04, floor + 3.08, tz + 0.04), t.gold);
+  bin.add(STAND, boxGeometry(cx - 0.14, floor + 3.08, tz - 0.1, cx + 0.14, floor + STAND_TOP, tz + 0.1), t.gold);
+  for (const side of [-1, 1]) {
+    bin.add(STAND, boxGeometry(cx + side * 0.14 - (side > 0 ? 0 : 0.07), floor + 3.14, tz - 0.03, cx + side * 0.14 + (side > 0 ? 0.07 : 0), floor + 3.26, tz + 0.03), t.gold);
   }
 }
 

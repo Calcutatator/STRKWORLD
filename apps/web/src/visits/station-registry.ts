@@ -6,7 +6,7 @@ import type { BankMode } from '../panels/bank/bank-machine.js';
 import type { VaultMode } from '../panels/vault/vault-machine.js';
 import type { BorrowMode } from '../panels/borrow/borrow-machine.js';
 import { COPY } from '../copy.js';
-import { detectRoutePolicy } from '../production/config.js';
+import { detectPlacementStand, detectRoutePolicy } from '../production/config.js';
 
 /**
  * A Bank-machine counter: one control each (D-103), so `modes` holds exactly
@@ -61,7 +61,8 @@ type BorrowStationDefinition = {
  */
 type PlazaStationDefinition = {
   station: StationId; building: 'plaza'; label: string; routes: readonly [];
-  view: 'plaza-monument' | 'plaza-shells';
+  /** `plaza-placement` is leaderboard phase 1's stand, open only behind its switch. */
+  view: 'plaza-monument' | 'plaza-shells' | 'plaza-placement';
 };
 
 /**
@@ -236,6 +237,16 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     routes: [],
     view: 'plaza-shells',
   },
+  // Leaderboard phase 1: the placement stand east of the plaza, with E. It
+  // moves no money; its window asks the wallet for the season commitment, and
+  // it opens only while the leaderboard switch is on.
+  {
+    station: 'plaza:placement',
+    building: 'plaza',
+    label: 'CHECK PLACEMENT',
+    routes: [],
+    view: 'plaza-placement',
+  },
 ] as const).map((definition) => freezeStationDefinition(definition));
 
 /**
@@ -276,6 +287,7 @@ export function resolveStation(
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
   capabilities: StationCapabilities = {},
   policy: WalletRoutePolicy | null = detectRoutePolicy(),
+  placementStand: boolean = detectPlacementStand(),
 ): StationResolution {
   const definition = stationDefinition(building, station);
   if (!definition) {
@@ -286,6 +298,10 @@ export function resolveStation(
     };
   }
 
+  // Leaderboard phase 1: the stand's window exists only behind its switch.
+  if (definition.view === 'plaza-placement' && !placementStand) {
+    return { status: 'locked', definition, door: { open: false, reason: 'not-enabled', message: COPY.locked.comingSoon } };
+  }
   // The plaza's windows move no money and take no route (D-076): once the id
   // resolves, they open.
   if (definition.building === 'plaza') return { status: 'available', definition };

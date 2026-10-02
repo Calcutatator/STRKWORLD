@@ -8,6 +8,8 @@ import {
   type RecipientStatus,
   type TxResult,
 } from '../types.js';
+import { LEADERBOARD_SEASON, placementFrom, type LeaderboardHistogram } from '../leaderboard.js';
+import type { PlacementCheck } from '../wallet-api/leaderboard-operations.js';
 import type {
   BatchWarning,
   BorrowAction,
@@ -335,7 +337,9 @@ export interface Fault {
     /** D-091: xSTRK's exchange-rate read. */
     | 'endurRate'
     /** D-094: the public balance read a shield draws on. */
-    | 'publicBalance';
+    | 'publicBalance'
+    /** Leaderboard phase 1: the private placement check. */
+    | 'checkPlacement';
   message?: string;
   sticky?: boolean;
 }
@@ -345,6 +349,28 @@ interface MaturingNote {
   amount: bigint;
   matureAtBlock: number;
 }
+
+/**
+ * The demo season's histogram: 310 players, the demo player's 15 receipts
+ * ranking 37th. Invented, and labelled demo wherever it shows.
+ */
+const DEMO_PLACEMENT_HISTOGRAM: LeaderboardHistogram = Object.freeze({
+  season: LEADERBOARD_SEASON,
+  total: 310,
+  buckets: Object.freeze([
+    { count: 1, players: 113 },
+    { count: 2, players: 64 },
+    { count: 3, players: 33 },
+    { count: 5, players: 30 },
+    { count: 8, players: 13 },
+    { count: 12, players: 12 },
+    { count: 15, players: 9 },
+    { count: 19, players: 22 },
+    { count: 27, players: 9 },
+    { count: 41, players: 4 },
+    { count: 66, players: 1 },
+  ].map((bucket) => Object.freeze(bucket))),
+});
 
 export class FakePrivacyOperations implements PrivacyOperations {
   private spendable = new Map<Address, bigint>();
@@ -1202,6 +1228,24 @@ export class FakePrivacyOperations implements PrivacyOperations {
   async endurRate(signal?: AbortSignal): Promise<EndurRate> {
     await this.tick('endurRate', signal);
     return Object.freeze({ strkPerXstrk: demoUnstakeAssets(10n ** 18n), origin: 'demo' as const });
+  }
+
+  /**
+   * Leaderboard phase 1: a DEMO placement, the same every time, so the stand's
+   * panel can be seen without a wallet. Nothing here is anybody's count.
+   */
+  async checkPlacement(signal?: AbortSignal): Promise<PlacementCheck> {
+    await this.tick('checkPlacement', signal);
+    return Object.freeze({
+      season: LEADERBOARD_SEASON,
+      receipts: 15,
+      defi: 3,
+      verified: 15,
+      histogram: DEMO_PLACEMENT_HISTOGRAM,
+      ranked: 15,
+      placement: placementFrom(DEMO_PLACEMENT_HISTOGRAM, 15, true),
+      rankDefi: false,
+    });
   }
 
   async endurUnstakePosition(options?: VaultCallOptions): Promise<EndurUnstakePosition> {

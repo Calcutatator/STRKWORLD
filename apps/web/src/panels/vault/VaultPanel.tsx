@@ -560,6 +560,7 @@ function CommitBlock({
       <ConfirmGate
         disclosures={summary.disclosures}
         busy={flow.name === 'submitting'}
+        countsTowardPlacement={summary.countsTowardPlacement === true}
         onConfirm={onConfirm}
         onCancel={onCancel}
       />

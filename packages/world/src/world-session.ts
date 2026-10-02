@@ -75,7 +75,7 @@ import {
   type InteractionTarget,
 } from './interaction.js';
 import { isEditableTarget } from './dom-keyboard.js';
-import { PLAZA_STATIONS } from './map/plaza.js';
+import { plazaStations } from './map/plaza.js';
 import {
   createPlazaController,
   type PlazaController,
@@ -278,6 +278,11 @@ export interface WorldSessionOptions {
    * door opens onto its room. Absent or false, it is D-007's locked facade.
    */
   readonly vaultOpen?: boolean;
+  /**
+   * Leaderboard phase 1: the placement stand east of the plaza, used with E
+   * like the plaza's other stations. Absent or false, it does not exist.
+   */
+  readonly placementStand?: boolean;
 }
 
 export interface WorldFrame {
@@ -451,6 +456,7 @@ class Session implements WorldSession {
   private ballShown = false;
   /** D-077: the Shell opened the Vault, so its door and room exist. */
   private readonly vaultOpen: boolean;
+  private readonly placementStand: boolean;
   /** D-097: one jump at a time, then a short cooldown. */
   private readonly jumpState: JumpState = createJumpState();
   private jumpKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
@@ -489,8 +495,9 @@ class Session implements WorldSession {
     this.arenaChannel = options.arena;
     this.reducedMotion = options.reducedMotion;
     this.vaultOpen = options.vaultOpen === true;
+    this.placementStand = options.placementStand === true;
     try {
-      this.map = createStreetMap({ vaultOpen: this.vaultOpen });
+      this.map = createStreetMap({ vaultOpen: this.vaultOpen, placementStand: this.placementStand });
       this.bounds = this.streetBounds();
       this.viewOwned = true;
       this.movement = createStreetMovementAdapter({
@@ -774,7 +781,8 @@ class Session implements WorldSession {
         const plaza = this.plaza;
         if (!plaza || this.area !== 'street') return [];
         const id = plaza.state.highlightedStation;
-        const station = PLAZA_STATIONS.find((candidate) => candidate.station === id);
+        // The monument and the table, and the placement stand when the Shell stands it.
+        const station = plazaStations({ placementStand: this.placementStand }).find((candidate) => candidate.station === id);
         if (!station) return [];
         return [{
           id: station.station,
@@ -1452,6 +1460,7 @@ class Session implements WorldSession {
       in: config.in,
       input: this.inputGate,
       onStats: (stats) => this.view.setPlazaStats?.(stats),
+      stations: plazaStations({ placementStand: this.placementStand }),
     });
   }
 

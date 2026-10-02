@@ -95,6 +95,11 @@ export interface DepositReview {
    * and the review keeps D-072's plain note.
    */
   readonly poolFee: bigint | null;
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 /** Why a deposit did not land: the seam's failure, or a receipt that says it reverted. */
@@ -565,6 +570,7 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
           disclosures,
           feeCeiling: reviewed.feeCeiling,
           poolFee: reviewed.poolFee,
+          ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
         },
       });
     },

@@ -1486,6 +1486,7 @@ class AggregateOnlyOperations implements PrivacyOperations {
   endurRate: PrivacyOperations['endurRate'] = (signal) => this.inner.endurRate(signal);
   // D-094: the public balance, passed through untouched.
   publicBalance: PrivacyOperations['publicBalance'] = (token, signal) => this.inner.publicBalance(token, signal);
+  checkPlacement: PrivacyOperations['checkPlacement'] = (signal) => this.inner.checkPlacement(signal);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);

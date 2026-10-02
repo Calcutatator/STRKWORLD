@@ -38,9 +38,13 @@ import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
 import { ShadowBorrow } from './borrow-operations.js';
 import { EndurUnstake } from './endur-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
+import { withReceipt } from '../leaderboard.js';
+import { LeaderboardReceipts, type PlacementCheck, type PreparedReceipt } from './leaderboard-operations.js';
+import type { ReceiptNonceStore } from './receipt-nonce-store.js';
 import type {
   BorrowReadClient,
   EndurReadClient,
+  LeaderboardReadClient,
   PoolNativeRoute,
   PoolReadClient,
   PublicBalanceReader,
@@ -97,6 +101,14 @@ export interface WalletApiPrivacyOperationsOptions {
   borrow?: BorrowReadClient;
   /** Endur unstaking's backend reads (D-085). Absent, every unstaking call fails closed. */
   endur?: EndurReadClient;
+  /**
+   * The private placement's backend reads (leaderboard phase 1). Used only
+   * while the policy names a ledger; absent then, receipts fail open (none is
+   * added) and a placement check fails closed.
+   */
+  leaderboard?: LeaderboardReadClient;
+  /** Where the device remembers the next receipt nonce; guarded `localStorage` by default. A test passes its own. */
+  receiptNonces?: ReceiptNonceStore;
   /** How the Vault waits between receipt reads; a test passes its own. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The Vault's receipt-read schedule, in ms (`VAULT_RECEIPT_WAITS_MS` by default). */
@@ -115,6 +127,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly endur: EndurUnstake;
   private readonly swap: ShadowSwap;
   private readonly publicBalances: PublicBalanceReader | null;
+  /** The private placement's receipts, or null when the leaderboard is off: then nothing about it runs. */
+  private readonly leaderboard: LeaderboardReceipts | null;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
@@ -135,6 +149,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       poolConfig: (signal) => this.poolConfig(signal),
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+      ...(this.policy.leaderboard ? { ledger: this.policy.leaderboard.ledger } : {}),
     });
     // D-083: the Borrow counter, on its own shadow account, with the same
     // capability answer and receipt schedule as the Vault.
@@ -149,6 +164,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
       now: this.now,
+      ...(this.policy.leaderboard ? { ledger: this.policy.leaderboard.ledger } : {}),
     });
     // D-085: Endur unstaking, on its own shadow account too, the same way.
     this.endur = new EndurUnstake({
@@ -161,6 +177,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       poolConfig: (signal) => this.poolConfig(signal),
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+      ...(this.policy.leaderboard ? { ledger: this.policy.leaderboard.ledger } : {}),
     });
     this.swap = new ShadowSwap({
       wallet: this.wallet,
@@ -172,7 +189,35 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
       poolConfig: (signal) => this.poolConfig(signal),
       now: () => this.readNow(),
+      ...(this.policy.leaderboard ? { ledger: this.policy.leaderboard.ledger } : {}),
     });
+    // Leaderboard phase 1: receipts and the placement check, only with a ledger.
+    const ledger = this.policy.leaderboard?.ledger;
+    if (ledger) {
+      const receipts = new LeaderboardReceipts({
+        wallet: this.wallet,
+        ...(options.leaderboard ? { reads: options.leaderboard } : {}),
+        ledger,
+        ...(options.receiptNonces ? { nonces: options.receiptNonces } : {}),
+        supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+        features: [this.vault, this.borrow, this.endur, this.swap].map((feature) => ({
+          commitment: () => feature.ledgerCommitment(),
+          partial: () => feature.ledgerPartial(),
+        })),
+      });
+      this.leaderboard = receipts;
+    } else {
+      this.leaderboard = null;
+    }
+  }
+
+  /**
+   * Leaderboard phase 1: the private placement. See `PrivacyOperations`.
+   * Refused while the policy names no ledger: nothing about it runs then.
+   */
+  async checkPlacement(signal?: AbortSignal): Promise<PlacementCheck> {
+    if (!this.leaderboard) throw new PrivacyError('unknown', 'The private placement is switched off.');
+    return this.leaderboard.check(signal);
   }
 
   /** D-083: Vesu's Prime pool for the admitted borrow tokens, read through the backend. See `PrivacyOperations`. */
@@ -426,7 +471,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
     const config = await this.poolConfig(signal);
     const warnings = freezeWarnings(await this.warningsFor(reviewed, config, signal));
-    if (hasShield) return this.prepareShield(reviewed, config, warnings);
+    if (hasShield) return this.prepareShield(reviewed, config, warnings, await this.receiptFor(signal));
     if (kinds.has('swap')) {
       if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
         throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
@@ -443,7 +488,24 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
 
     const route = reviewed[0]!.kind as PoolNativeRoute;
-    return this.prepareWalletSubmitted(reviewed, route, config, warnings, () => toActions(reviewed));
+    // Leaderboard phase 1: an unshield or a send carries a receipt when it can.
+    const receipt = await this.receiptFor(signal);
+    return this.prepareWalletSubmitted(
+      reviewed,
+      route,
+      config,
+      warnings,
+      receipt ? () => withReceipt(toActions(reviewed), receipt.action) : () => toActions(reviewed),
+      receipt,
+    );
+  }
+
+  /** The receipt for a shield, unshield or send, or null: off, unsupported, refused or unreadable (fail open). */
+  private async receiptFor(signal?: AbortSignal): Promise<PreparedReceipt | null> {
+    if (!this.leaderboard) return null;
+    const receipt = await this.leaderboard.receiptFor(signal);
+    throwIfAborted(signal);
+    return receipt;
   }
 
   private readNow(): number {
@@ -473,9 +535,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     intents: readonly Intent[],
     config: PoolConfig,
     warnings: readonly BatchWarning[],
+    receipt: PreparedReceipt | null,
   ): PreparedBatch {
     const wallet = this.wallet;
     const pool = this.pool;
+    const leaderboard = this.leaderboard;
     let discarded = false;
     let confirmationAttempted = false;
     return {
@@ -487,6 +551,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       totalCost: config.feeAmount,
       warnings,
       promptCount: 1,
+      ...(receipt ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
@@ -502,11 +567,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           // D-094: the fee goes on top of the shield, at the fee read at prepare.
           // The ceiling above holds the live fee to it, so the note is never
           // less than the amount reviewed.
-          const result = await wallet.strk20InvokeTransaction(toActions(intents, config));
+          const actions = toActions(intents, config);
+          const result = await wallet.strk20InvokeTransaction(receipt ? withReceipt(actions, receipt.action) : actions);
           // Once the wallet returns a transaction hash the public deposit may
           // already be on-chain. Do not turn that success into a retryable
           // cancellation merely because the caller aborted while it settled.
           const transactionHash = readWalletTransactionHash(result);
+          if (receipt) leaderboard?.committed(receipt.nonce);
           emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return Object.freeze({ transactionHash });
@@ -534,6 +601,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     config: PoolConfig,
     warnings: readonly BatchWarning[],
     buildActions: () => STRK20_ACTION[],
+    receipt: PreparedReceipt | null = null,
   ): PreparedBatch {
     const owner = this;
     const reviewed = freezeActions(buildActions());
@@ -547,6 +615,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       totalCost: config.feeAmount,
       warnings,
       promptCount: 1,
+      ...(receipt ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
@@ -569,6 +638,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         }
         // The wallet has submitted: nothing below may turn that into a
         // failure, and an abort or a discard now cannot unsend it.
+        if (receipt) owner.leaderboard?.committed(receipt.nonce);
         emitProgress(onProgress, { stage: 'submitting', message: 'Your wallet submitted it' });
         emitProgress(onProgress, { stage: 'done', message: 'Done' });
         return Object.freeze({ transactionHash });
@@ -873,7 +943,18 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       ...(borrowTokens ? { borrow: Object.freeze([...borrowTokens]) } : {}),
     }),
     ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
+    ...(policy.leaderboard ? { leaderboard: ownLeaderboard(policy.leaderboard) } : {}),
   });
+}
+
+/** Leaderboard phase 1: the ledger must be a contract address, or the policy is refused. */
+function ownLeaderboard(value: unknown): { readonly ledger: Address } {
+  const descriptor = value && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, 'ledger') : undefined;
+  const ledger = descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  if (typeof ledger !== 'string' || !isFelt(ledger) || BigInt(ledger) === 0n || BigInt(ledger) >= 1n << 251n) {
+    throw new PrivacyError('unknown', 'The leaderboard ledger address is invalid.');
+  }
+  return Object.freeze({ ledger: toFelt(BigInt(ledger)) });
 }
 
 function toFelt(value: bigint): string {

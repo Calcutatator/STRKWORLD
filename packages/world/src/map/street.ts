@@ -197,6 +197,11 @@ export interface StreetMapOptions {
    * Absent or false, it is D-007's locked facade.
    */
   readonly vaultOpen?: boolean;
+  /**
+   * Leaderboard phase 1: the placement stand east of the plaza, behind the
+   * Shell's switch. Absent or false, the lawn is as it always was.
+   */
+  readonly placementStand?: boolean;
 }
 
 /**
@@ -308,7 +313,7 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
 
   // The Privacy Plaza (D-076): a paved square below the south pavement at the
   // street's west end, clear of the Studio path and the spawn (see plaza.ts).
-  paintPlaza(tiles);
+  paintPlaza(tiles, { placementStand: options?.placementStand === true });
 
   // The hidden stair (D-107): two tiles of stair and a vending machine in the
   // alley mouth between the west lot (the Bridge, D-110) and the Exchange,

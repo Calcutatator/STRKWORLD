@@ -253,6 +253,11 @@ export interface VaultSummary {
   readonly feeCeiling: bigint;
   /** The prepared route's pre-commit line, if it has one. */
   readonly disclosures: readonly string[];
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 export type VaultFlow =
@@ -790,6 +795,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
               totalCost: batch.totalCost,
               feeCeiling: batch.totalCost + feeTolerance,
               disclosures: disclosure ? [disclosure] : [],
+              ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
             },
           },
         });

@@ -1,6 +1,7 @@
 import { AVNU_SWAP_MAX_CALLDATA } from './avnu-swap-quotes.js';
 import { BORROW_MARKET_PATH, BORROW_POSITION_PATH } from './borrow.js';
 import { DEBUG_LOGS_PATH, DebugLogSink } from './debug-logs.js';
+import type { LeaderboardService } from './leaderboard.js';
 import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
 import { ENDUR_XSTRK_ASSET } from './endur.js';
 import {
@@ -120,6 +121,11 @@ export interface BackendApiOptions {
    * `config.debugLogsEnabled` is true; by default it writes to stdout.
    */
   debugLogs?: DebugLogSink;
+  /**
+   * Leaderboard phase 1's blind tally. Reachable only while
+   * `config.leaderboard` is set; otherwise its paths are unknown.
+   */
+  leaderboard?: LeaderboardService;
 }
 
 export class BackendApi {
@@ -146,6 +152,7 @@ export class BackendApi {
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
   private readonly debugLogs: DebugLogSink;
+  private readonly leaderboard?: LeaderboardService;
 
   constructor(options: BackendApiOptions) {
     validateBackendConfig(options.config);
@@ -185,6 +192,7 @@ export class BackendApi {
       this.config.submissionQueue.maxQueued,
     );
     this.debugLogs = options.debugLogs ?? new DebugLogSink({ now });
+    this.leaderboard = options.config.leaderboard ? options.leaderboard : undefined;
   }
 
   async handle(request: ApiRequest): Promise<ApiResponse> {
@@ -202,6 +210,19 @@ export class BackendApi {
       if (deadline.signal.aborted) throw abortReason(deadline.signal);
       if (this.config.globalEnabled && request.method === 'POST' && request.path === '/v1/private/submissions') {
         preflightSubmission(request.body, this.config);
+      }
+      // Leaderboard phase 1: its own rate windows (every route per client, and
+      // check-ins besides), never a slot in the private routes' shared one.
+      // It obeys the global kill switch like everything else.
+      if (this.leaderboard?.owns(request.path)) {
+        if (!this.config.globalEnabled) {
+          this.metrics.failure();
+          return { status: 503, body: { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' } };
+        }
+        const response = await abortable(this.leaderboard.handle(request, deadline.signal), deadline.signal);
+        if (response.status === 429) this.metrics.limited();
+        else this.metrics.success();
+        return response;
       }
       // D-076: the plaza's pool stats come from memory and cost the chain
       // nothing, so they take their own rate window, never a slot in the one
@@ -988,6 +1009,13 @@ function validateBackendConfig(config: BackendConfig): void {
   if (config.degen !== undefined) validateDegenConfig(config.degen);
   if (config.debugLogsEnabled !== undefined && typeof config.debugLogsEnabled !== 'boolean') {
     throw new Error('Backend debug-log switch must be a boolean.');
+  }
+  if (
+    config.leaderboard !== undefined
+    && (!isFelt(config.leaderboard.ledger) || BigInt(config.leaderboard.ledger) === 0n
+      || (config.leaderboard.storePath !== null && typeof config.leaderboard.storePath !== 'string'))
+  ) {
+    throw new Error('Backend leaderboard configuration is invalid.');
   }
 }
 

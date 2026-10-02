@@ -675,7 +675,7 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
 const UNUSED_VAULT: Pick<
   PrivacyOperations,
   'vaultPositions' | 'prepareVaultSupply' | 'prepareVaultRedeem' | 'vaultRates' | 'borrowMarket' | 'borrowPositions' | 'prepareBorrow'
-  | 'endurUnstakePosition' | 'prepareEndurUnstake' | 'prepareEndurClaim' | 'endurRate' | 'publicBalance'
+  | 'endurUnstakePosition' | 'prepareEndurUnstake' | 'prepareEndurClaim' | 'endurRate' | 'publicBalance' | 'checkPlacement'
 > = {
   vaultPositions: async () => { throw new Error('unused'); },
   prepareVaultSupply: async () => { throw new Error('unused'); },
@@ -692,4 +692,6 @@ const UNUSED_VAULT: Pick<
   endurRate: async () => { throw new Error('unused'); },
   // D-094: nor the public balance a shield draws on.
   publicBalance: async () => { throw new Error('unused'); },
+  // Leaderboard phase 1: nor the placement check.
+  checkPlacement: async () => { throw new Error('unused'); },
 };

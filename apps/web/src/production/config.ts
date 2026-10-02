@@ -140,6 +140,7 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   const borrow = environment.VITE_STRK20_BORROW_ENABLED === 'true';
   const unstake = parseUnstakeRoute(environment);
   const swap = parseSwapRoute(environment);
+  const leaderboard = parseLeaderboard(environment);
   const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault' | 'borrow' | 'unstake'> = [];
   const shieldTokens: string[] = [];
   const unshieldTokens: string[] = [];
@@ -233,7 +234,40 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
           }),
         }
       : {}),
+    // Leaderboard phase 1: present only with the switch on and a valid ledger.
+    // Absent, no flow carries a receipt or a tick.
+    ...(leaderboard ? { leaderboard } : {}),
   });
+}
+
+/**
+ * Leaderboard phase 1, the private placement: `VITE_STRK20_LEADERBOARD_ENABLED`
+ * exactly `true` and `VITE_STRK20_LEADERBOARD_LEDGER` a contract address (the
+ * `ReceiptLedger`). Anything else is off, never an error: a placement is not a
+ * reason to keep the city shut.
+ */
+export function parseLeaderboard(environment: WalletEnvironment): { readonly ledger: string } | null {
+  if (environment.VITE_STRK20_LEADERBOARD_ENABLED !== 'true') return null;
+  const ledger = environment.VITE_STRK20_LEADERBOARD_LEDGER;
+  if (typeof ledger !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(ledger)) return null;
+  const value = BigInt(ledger);
+  if (value <= 0n || value >= 1n << 251n) return null;
+  return Object.freeze({ ledger: `0x${value.toString(16)}` });
+}
+
+/**
+ * Whether this build stands the placement stand by the plaza. Production
+ * needs the whole leaderboard (switch and ledger), the same answer the route
+ * policy gives; a demo build needs only the switch, and shows the fake's
+ * clearly-labelled demo placement.
+ */
+export function placementStandFrom(environment: WalletEnvironment | undefined): boolean {
+  if (!environment || environment.VITE_STRK20_LEADERBOARD_ENABLED !== 'true') return false;
+  return usesProductionWallet(environment) ? parseLeaderboard(environment) !== null : true;
+}
+
+export function detectPlacementStand(): boolean {
+  return placementStandFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
 }
 
 /**

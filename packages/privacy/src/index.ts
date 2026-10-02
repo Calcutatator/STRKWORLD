@@ -128,6 +128,19 @@ export {
   SWAP_QUOTE_TTL_MS,
   SWAP_SHADOW_NONCE,
 } from './swap.js';
+// Leaderboard phase 1: the private placement's season, receipts and the
+// on-device placement maths.
+export {
+  LEADERBOARD_DAPP_NAME,
+  LEADERBOARD_SEASON,
+  LEDGER_COUNT_OF_ENTRYPOINT,
+  LEDGER_TICK_ENTRYPOINT,
+  ownHistogram,
+  placementFrom,
+  type LeaderboardBucket,
+  type LeaderboardHistogram,
+  type Placement,
+} from './leaderboard.js';
 // D-084: the swap's independent price check against Pragma's oracle.
 export { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_MAX_SLIPPAGE_BPS, SWAP_PRICE_BOUND_BPS, USD_DECIMALS, type PriceFeed } from './swap-prices.js';
 
@@ -175,6 +188,9 @@ export {
   type SupportedVersionsReader,
   type EndurReadClient,
   type EndurUnstakeRead,
+  type LeaderboardReadClient,
+  type LeaderboardShadowRow,
+  type PlacementCheck,
   type SwapQuoteAnswer,
   type SwapQuoteClient,
   type VaultPositionRow,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import { WalletApiPrivacyOperations, type Intent, type PoolReadClient, type WalletRoutePolicy, type WalletStrk20Account } from '../index.js';
 import { SWAP_QUOTE_TTL_MS } from '../swap.js';
+import { shadowCommitment } from '../leaderboard.js';
 import { SWAP_TEST_PARTIAL, SWAP_TEST_SHADOW, swapTestPrices, swapTestQuotes, swapTestReads } from '../testing/swap-quotes.js';
 import { SWAP_FLOOR_MOVED_MESSAGE, SWAP_UNCHECKED_PRICE_MESSAGE } from './swap-operations.js';
 import type { SwapPriceReader } from './types.js';
@@ -331,5 +332,29 @@ describe('the independent price check (D-084)', () => {
     advance(SWAP_QUOTE_TTL_MS);
     await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toThrow(/below the oracle price/);
     expect(invoked).toEqual([]);
+  });
+});
+
+describe('leaderboard phase 1: the swap stand-in ticks the ledger (DeFi mode)', () => {
+  const LEDGER = '0x1ed6e7';
+
+  it('appends ledger.tick(C_swap) after the swap\'s own calls, also on a re-quote, flagged for the review', async () => {
+    const off = seam();
+    const plain = await off.ops.prepare([SWAP]);
+    await plain.confirm({ feeCeiling: POOL_FEE });
+    const on = seam({ policy: { ...policy(), leaderboard: { ledger: LEDGER } }, buyAmounts: [431_000n, 432_000n] });
+    const batch = await on.ops.prepare([SWAP]);
+    expect(batch.countsTowardPlacement).toBe(true);
+    expect(batch.totalCost).toBe(POOL_FEE);
+    // A stale quote is asked for again before the wallet: the rebuilt actions carry the tick too.
+    on.advance(SWAP_QUOTE_TTL_MS + 1);
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    const invokeOf = (actions: STRK20_ACTION[]) => actions.find((action) => action.type === 'shadow_account_invoke') as Extract<STRK20_ACTION, { type: 'shadow_account_invoke' }>;
+    const tick = { contractAddress: LEDGER, entrypoint: 'tick', calldata: [shadowCommitment(SWAP_TEST_PARTIAL, '0x0')] };
+    expect(invokeOf(on.invoked[0]!).calls.at(-1)).toEqual(tick);
+    expect(invokeOf(on.invoked[0]!).calls).toHaveLength(invokeOf(off.invoked[0]!).calls.length + 1);
+    expect(Object.keys(plain)).not.toContain('countsTowardPlacement');
+    expect(invokeOf(off.invoked[0]!).calls.some((call) => call.entrypoint === 'tick')).toBe(false);
+    expect(on.commitments).toEqual(['strkworld-swap']);
   });
 });

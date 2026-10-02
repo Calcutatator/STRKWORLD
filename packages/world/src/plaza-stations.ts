@@ -1,5 +1,5 @@
 import type { EventBus, ShellEvents, StationId, WorldEvents } from '@strkworld/shared';
-import { isPlazaNearby, plazaStationAtApproach } from './map/plaza.js';
+import { PLAZA_STATIONS, isPlazaNearby, plazaStationAtApproach, type PlazaStation } from './map/plaza.js';
 
 /**
  * The Privacy Plaza's stations on the street (D-076), renderer-free.
@@ -75,6 +75,8 @@ export interface PlazaControllerOptions {
   readonly onHighlight?: (station: StationId | null) => void;
   /** New figures from the Shell, already checked. */
   readonly onStats?: (stats: PlazaStatsPresentation) => void;
+  /** The stations E can use (`plazaStations`); the monument and the table by default. */
+  readonly stations?: readonly PlazaStation[];
 }
 
 export function createPlazaController(options: PlazaControllerOptions): PlazaController {
@@ -138,7 +140,7 @@ export function createPlazaController(options: PlazaControllerOptions): PlazaCon
 
     update(tile): void {
       if (destroyed) return;
-      const next = plazaStationAtApproach(tile.x, tile.y)?.station ?? null;
+      const next = plazaStationAtApproach(tile.x, tile.y, options.stations ?? PLAZA_STATIONS)?.station ?? null;
       if (next !== highlighted) {
         highlighted = next;
         options.onHighlight?.(next);

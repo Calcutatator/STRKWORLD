@@ -930,6 +930,7 @@ function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onCon
       <ConfirmGate
         disclosures={summary.disclosures}
         busy={flow.name === 'submitting'}
+        countsTowardPlacement={summary.countsTowardPlacement === true}
         onConfirm={onConfirm}
         onCancel={onCancel}
       />

@@ -535,6 +535,41 @@ export const PLAZA_THEME = Object.freeze({
 });
 
 /**
+ * Leaderboard phase 1's placement stand, in the STRKWORLD brand (D-113,
+ * docs/brand/README.md): a dark window board with an ember rim, the
+ * wordmark's gold-to-ember title, sun-gold bulbs and a voxel trophy.
+ */
+export const PLACEMENT_THEME = Object.freeze({
+  outline: 0x24120a,
+  window: 0x261810,
+  rim: 0x6e3e1e,
+  ember: 0xf56a16,
+  emberDeep: 0xb8400c,
+  gold: 0xffc12e,
+  bulb: 0xffd23a,
+  /** The board: the brand's dark window, scoreboard type. */
+  board: Object.freeze({
+    width: 1.72,
+    height: 0.96,
+    background: '#261810',
+    foreground: '#fff6e6',
+    accent: '#f56a16',
+    gradient: Object.freeze(['#ffd23a', '#e8501a']),
+    cornerRadius: 0.04,
+    borderWidth: 0.06,
+    hairline: false,
+    titleFont: 'pixel',
+    titleWeight: 400,
+    titleTracking: 0.02,
+    subtitleFont: 'pixel',
+    subtitleWeight: 400,
+    subtitleTracking: 0.12,
+    subtitleColor: '#ffc12e',
+    uppercase: true,
+  } satisfies SignStyleOptions),
+});
+
+/**
  * The football pitch (D-078): a mown field in the street's lawn greens, warm
  * paving round it, a concrete stand and bleachers seated in the two sides'
  * colours, white goals and green-painted steel, lit by warm floodlights. The

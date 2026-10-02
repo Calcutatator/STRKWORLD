@@ -4,6 +4,7 @@ import { PrivacyError, type Address, type OperationProgress, type ProgressCallba
 import { MAINNET_CHAIN_ID, SWAP_DAPP_NAME, SWAP_SHADOW_NONCE, ownSwapQuote, swapActions, type SwapQuote } from '../swap.js';
 import { SWAP_MAX_SLIPPAGE_BPS, checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
 import { mapShadowWalletError, mapWalletError } from './errors.js';
+import { withLedgerTick } from '../leaderboard.js';
 import { ShadowAccountResolver } from './shadow-account.js';
 import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
@@ -44,6 +45,8 @@ export interface ShadowSwapOptions {
   readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   /** The operations' own checked clock. */
   readonly now: () => number;
+  /** Leaderboard phase 1: the ledger each swap ticks. Absent, nothing is appended. */
+  readonly ledger?: Address;
 }
 
 type SwapIntent = Extract<Intent, { kind: 'swap' }>;
@@ -68,9 +71,11 @@ export class ShadowSwap {
   private readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   private readonly now: () => number;
   private readonly identity: ShadowAccountResolver;
+  private readonly ledger?: Address;
 
   constructor(options: ShadowSwapOptions) {
     this.wallet = options.wallet;
+    this.ledger = options.ledger;
     this.walletAddress = options.walletAddress;
     this.quotes = options.quotes;
     this.prices = options.prices;
@@ -124,7 +129,10 @@ export class ShadowSwap {
     }
     // Frozen: published on the batch, and the floor a re-quote must meet.
     const canonicalIntent: SwapIntent = Object.freeze({ ...intent, minAmountOut: quote.minAmountOut });
-    const reviewed = freezeActions(this.actions(quote, identity.address));
+    // Leaderboard phase 1 (DeFi mode): the stand-in's commitment, from the
+    // partial `resolve` already asked for. Null with the leaderboard off.
+    const tick = this.ledger ? await this.identity.fullCommitment() : null;
+    const reviewed = freezeActions(this.actions(quote, identity.address, tick));
     const owner = this;
     let discarded = false;
     let attempted = false;
@@ -135,6 +143,7 @@ export class ShadowSwap {
       totalCost: config.feeAmount,
       warnings,
       promptCount: 1,
+      ...(tick ? { countsTowardPlacement: true as const } : {}),
       swapReview: Object.freeze({
         expectedAmountOut: quote.buyAmount,
         minimumAmountOut: quote.minAmountOut,
@@ -169,7 +178,7 @@ export class ShadowSwap {
             if (fresh.quote.minAmountOut < canonicalIntent.minAmountOut) {
               throw new PrivacyError('unknown', SWAP_FLOOR_MOVED_MESSAGE);
             }
-            actions = freezeActions(owner.actions(fresh.quote, identity.address));
+            actions = freezeActions(owner.actions(fresh.quote, identity.address, tick));
           }
           if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
           throwIfAborted(confirmSignal);
@@ -242,8 +251,19 @@ export class ShadowSwap {
     return Object.freeze({ quote, check });
   }
 
-  private actions(quote: SwapQuote, shadowAccount: Address): STRK20_ACTION[] {
-    return swapActions({ quote, shadowAccount, player: this.walletAddress });
+  private actions(quote: SwapQuote, shadowAccount: Address, tick: string | null): STRK20_ACTION[] {
+    const built = swapActions({ quote, shadowAccount, player: this.walletAddress });
+    return tick && this.ledger ? withLedgerTick(built, this.ledger, tick) : built;
+  }
+
+  /** Leaderboard phase 1: the swap stand-in's commitment, whose ledger ticks count toward the placement. */
+  ledgerCommitment(): Promise<string> {
+    return this.identity.fullCommitment();
+  }
+
+  /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
+  ledgerPartial(): Promise<string> {
+    return this.identity.partial();
   }
 }
 

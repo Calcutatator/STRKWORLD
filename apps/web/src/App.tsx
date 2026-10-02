@@ -19,6 +19,7 @@ import { SeamEntryGate } from './connect/EntryGate.js';
 import { PlazaProvider } from './plaza/PlazaProvider.js';
 import type { PoolStatsSource } from './plaza/pool-stats.js';
 import { vaultDoorOpen } from './panels/routes.js';
+import { detectPlacementStand } from './production/config.js';
 
 /**
  * The composition root, as a component.
@@ -96,6 +97,7 @@ export function App({
         football={presence.football}
         arena={presence.arena}
         vaultOpen={VAULT_DOOR_OPEN}
+        placementStand={PLACEMENT_STAND}
       />
       <HudLayer shell={shellIn} onSignOut={onSignOut} />
       {presence.arena ? <ArenaHud arena={presence.arena} /> : null}
@@ -133,6 +135,12 @@ export function App({
  * change while a bundle runs, and the World builds its street once (D-077).
  */
 const VAULT_DOOR_OPEN = vaultDoorOpen();
+
+/**
+ * Leaderboard phase 1: whether the placement stand stands by the plaza. Read
+ * once, like the Vault's door: the World builds its street once.
+ */
+const PLACEMENT_STAND = detectPlacementStand();
 
 function Boot() {
   return (

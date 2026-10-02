@@ -2,6 +2,7 @@ export { createSupportedVersionsReader, createWalletDiscovery } from './discover
 export { BackendPrivacyClient } from './backend-client.js';
 export { RpcPublicBalanceReader } from './public-balance.js';
 export { mapWalletError } from './errors.js';
+export type { PlacementCheck } from './leaderboard-operations.js';
 export {
   REQUIRED_WALLET_API_VERSION,
   WalletApiPrivacyOperations,
@@ -39,6 +40,8 @@ export type {
   SupportedVersionsReader,
   EndurReadClient,
   EndurUnstakeRead,
+  LeaderboardReadClient,
+  LeaderboardShadowRow,
   SwapQuoteAnswer,
   SwapQuoteClient,
   VaultPositionRow,

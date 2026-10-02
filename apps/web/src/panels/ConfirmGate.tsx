@@ -16,6 +16,7 @@ export function ConfirmGate({
   onConfirm,
   onCancel,
   children,
+  countsTowardPlacement = false,
 }: {
   /** The register's pre-commit lines for the routes in the batch, if any. */
   disclosures: readonly string[];
@@ -25,10 +26,18 @@ export function ConfirmGate({
   onCancel: () => void;
   /** Immutable review figures belong at the same commit point as the button. */
   children?: ReactNode;
+  /**
+   * Leaderboard phase 1: this transaction carries a private placement
+   * receipt. One quiet line, only when it does; absent, nothing changes.
+   */
+  countsTowardPlacement?: boolean;
 }) {
   return (
     <div className="confirm-gate">
       {children}
+      {countsTowardPlacement ? (
+        <p className="placement-hint" data-testid="placement-hint">{COPY.plaza.placement.reviewHint}</p>
+      ) : null}
       {disclosures.length > 0 ? (
         <ul className="commit-disclosures" data-testid="commit-disclosures">
           {disclosures.map((disclosure) => (

@@ -2,6 +2,7 @@ import { PrivacyError, type PrivacyErrorKind, type TxResult } from '../types.js'
 import type { PoolConfig } from '../operations.js';
 import { MAX_VAULT_MARKETS } from '../vault.js';
 import { BORROW_PAIRS, BORROW_TOKENS } from '../borrow.js';
+import { LEADERBOARD_SHADOW_PAGE, MAX_LEADERBOARD_RECEIPTS } from '../leaderboard.js';
 import type {
   BorrowAssetRow,
   BorrowMarketRead,
@@ -10,6 +11,8 @@ import type {
   BorrowReadClient,
   EndurReadClient,
   EndurUnstakeRead,
+  LeaderboardReadClient,
+  LeaderboardShadowRow,
   PoolReadClient,
   PrivateSubmissionGateway,
   RelayFeeQuote,
@@ -33,7 +36,7 @@ const MAX_ENDUR_ROWS = 64;
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient, EndurReadClient, SwapQuoteClient {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient, BorrowReadClient, EndurReadClient, SwapQuoteClient, LeaderboardReadClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -487,21 +490,116 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     });
   }
 
+  /**
+   * Leaderboard phase 1: one page of the anonymizer's shadow accounts for the
+   * season partial commitment, every nonce in the page in order. The
+   * commitment goes to STRKWORLD's backend only (D-014); the caller
+   * cross-checks every address.
+   */
+  async leaderboardShadows(partialCommitment: string, page: number, signal?: AbortSignal): Promise<readonly LeaderboardShadowRow[]> {
+    if (
+      typeof partialCommitment !== 'string' || !isNonzeroFelt(partialCommitment)
+      || !Number.isSafeInteger(page) || page < 0 || page >= MAX_LEADERBOARD_RECEIPTS / LEADERBOARD_SHADOW_PAGE
+    ) {
+      throw new PrivacyError('unknown', 'The placement read request is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/lb-shadows', { v: 1, partialCommitment, page }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    const rows = asArray(ownField(value, 'rows'));
+    if (Reflect.ownKeys(value).length !== 1 || rows.length !== LEADERBOARD_SHADOW_PAGE) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze(rows.map((item): LeaderboardShadowRow => {
+      const row = asRecord(item);
+      const nonce = asInteger(ownField(row, 'nonce'));
+      const address = asNonzeroAddress(ownField(row, 'address'));
+      const deployed = ownField(row, 'deployed');
+      if (nonce < 0 || typeof deployed !== 'boolean' || Reflect.ownKeys(row).length !== 3) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+      }
+      return Object.freeze({ nonce: BigInt(nonce), address, deployed });
+    }));
+  }
+
+  /** Leaderboard phase 1: the ledger's `count_of` for each commitment, in order. */
+  async leaderboardCounts(commitments: readonly string[], signal?: AbortSignal): Promise<readonly bigint[]> {
+    if (
+      !Array.isArray(commitments) || commitments.length === 0 || commitments.length > LEADERBOARD_SHADOW_PAGE
+      || !commitments.every((commitment) => typeof commitment === 'string' && isNonzeroFelt(commitment))
+    ) {
+      throw new PrivacyError('unknown', 'The placement read request is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/lb-counts', { v: 1, commitments: [...commitments] }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    const counts = asArray(ownField(value, 'counts'));
+    if (Reflect.ownKeys(value).length !== 1 || counts.length !== commitments.length) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze(counts.map(asDecimalBigInt));
+  }
+
+  /**
+   * Leaderboard phase 1, the blind tally: the season partial commitment and
+   * nothing else (no address, no signature). The backend recounts on-chain,
+   * keeps a hash and the count, and answers the count.
+   */
+  async leaderboardCheckIn(
+    season: string,
+    partialCommitment: string,
+    signal?: AbortSignal,
+    featurePartials?: readonly string[],
+  ): Promise<{ readonly count: bigint }> {
+    if (
+      typeof season !== 'string' || !/^[a-z0-9]{1,8}$/.test(season)
+      || typeof partialCommitment !== 'string' || !isNonzeroFelt(partialCommitment)
+      || (featurePartials !== undefined && (
+        !Array.isArray(featurePartials) || featurePartials.length > 4
+        || !featurePartials.every((partial) => typeof partial === 'string' && isNonzeroFelt(partial))
+      ))
+    ) {
+      throw new PrivacyError('unknown', 'The placement check-in request is invalid.');
+    }
+    const raw = await this.post('/v1/leaderboard/check-in', {
+      v: 1,
+      season,
+      partialCommitment,
+      ...(featurePartials !== undefined ? { featurePartials: [...featurePartials] } : {}),
+    }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 1) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({ count: asDecimalBigInt(ownField(value, 'count')) });
+  }
+
+  /** Leaderboard phase 1: the season's anonymous histogram, as sent; the caller reads it strictly. */
+  async leaderboardHistogram(signal?: AbortSignal): Promise<unknown> {
+    const raw = await this.post('/v1/leaderboard/histogram', null, signal, 'unreachable', 'GET');
+    throwIfAborted(signal);
+    return raw;
+  }
+
   private async post(
     path: string,
     body: unknown,
     signal?: AbortSignal,
     transportFailureKind: PrivacyErrorKind = 'unreachable',
+    method: 'POST' | 'GET' = 'POST',
   ): Promise<unknown> {
     throwIfAborted(signal);
     let pendingResponse: Promise<Response>;
     try {
-      pendingResponse = this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal,
-      });
+      pendingResponse = this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, method === 'GET'
+        ? { method: 'GET', signal }
+        : {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+            signal,
+          });
     } catch (error) {
       throw new PrivacyError('unreachable', 'The private service could not be reached.', error);
     }

@@ -261,10 +261,13 @@ export {
   PLAZA_SHELLS_STATION,
   PLAZA_SIGN_TEXT,
   PLAZA_STATIONS,
+  PLAZA_PLACEMENT_STATION,
+  PLACEMENT_STAND,
   isPlazaNearby,
   plazaStationAtApproach,
+  plazaStations,
 } from './map/plaza.js';
-export type { PlazaFacing, PlazaFixture, PlazaFixtureKind, PlazaRect, PlazaStation } from './map/plaza.js';
+export type { PlazaFacing, PlazaFixture, PlazaFixtureKind, PlazaOptions, PlazaRect, PlazaStation } from './map/plaza.js';
 export {
   EMPTY_PLAZA_STATS,
   createPlazaController,

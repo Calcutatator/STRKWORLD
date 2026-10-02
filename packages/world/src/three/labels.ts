@@ -30,7 +30,7 @@ export const LABEL_FONT_FAMILY =
  * is for uppercase captions, `sans` is a plain geometric sans (avnu), and
  * `rounded` is the cosy default.
  */
-export type LabelFont = 'rounded' | 'sans' | 'display' | 'mono';
+export type LabelFont = 'rounded' | 'sans' | 'display' | 'mono' | 'pixel';
 
 export const LABEL_FONTS: Readonly<Record<LabelFont, { readonly family: string; readonly weight: number }>> =
   Object.freeze({
@@ -38,6 +38,11 @@ export const LABEL_FONTS: Readonly<Record<LabelFont, { readonly family: string; 
     sans: { family: '"Inter", "Helvetica Neue", Arial, system-ui, sans-serif', weight: 700 },
     display: { family: '"Inter Tight", "Helvetica Neue", "Arial Black", Arial, system-ui, sans-serif', weight: 900 },
     mono: { family: 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace', weight: 600 },
+    /**
+     * The STRKWORLD brand's scoreboard face (D-113): Jersey 15 when the Shell
+     * has loaded it, then VT323, then a plain monospace, never a rounded face.
+     */
+    pixel: { family: '"Jersey 15", "VT323", ui-monospace, "SF Mono", Menlo, monospace', weight: 400 },
   });
 
 /**

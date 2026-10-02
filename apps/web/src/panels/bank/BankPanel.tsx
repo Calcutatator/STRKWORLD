@@ -614,6 +614,7 @@ function CommitBlock({
       <ConfirmGate
         disclosures={summary.disclosures}
         busy={busy}
+        countsTowardPlacement={summary.countsTowardPlacement === true}
         onConfirm={onConfirm}
         onCancel={onCancel}
       />
