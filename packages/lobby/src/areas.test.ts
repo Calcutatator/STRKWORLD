@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BUNKER_PRESENCE_GRID, ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
+import {
+  ARENA_PRESENCE_GRID,
+  ARENA_RING_WALKABLE,
+  BUNKER_PRESENCE_GRID,
+  ROOF_PRESENCE_GRID,
+  STUDIO_PRESENCE_GRID,
+} from '@strkworld/shared';
 import {
   AREA_STEP_SLACK_PX,
   isAreaStepAllowed,
@@ -32,8 +38,11 @@ describe('normalizePresenceArea (D-087)', () => {
     }
   });
 
-  it('D-114: refuses the arena until its ring authority lands (stream B lifts this)', () => {
-    expect(normalizePresenceArea('arena')).toBeNull();
+  it('D-114: accepts the arena now that its ring authority has landed', () => {
+    expect(normalizePresenceArea('arena')).toBe('arena');
+    for (const hostile of ['ARENA', 'arena ', 'pit', 'ring']) {
+      expect(normalizePresenceArea(hostile)).toBeNull();
+    }
   });
 });
 
@@ -142,5 +151,37 @@ describe('isAreaStepAllowed (D-087)', () => {
     expect(isAreaWalkable('studio', to.x, to.y)).toBe(true);
     expect(isAreaWalkable('studio', (from.x + to.x) / 2, (from.y + to.y) / 2)).toBe(false);
     expect(isAreaStepAllowed('studio', from, to)).toBe(true);
+  });
+});
+
+describe('extra walkable rects (D-114)', () => {
+  const arena = (tileX: number, tileY: number): { x: number; y: number } => ({
+    x: ARENA_PRESENCE_GRID.originX + tileX * 32 + 16,
+    y: ARENA_PRESENCE_GRID.originY + tileY * 32 + 16,
+  });
+
+  it('adds the ring interior to the arena grid only for a caller that passes it', () => {
+    const ring = arena(20, 18);
+    expect(isAreaWalkable('arena', ring.x, ring.y)).toBe(false);
+    expect(isAreaWalkable('arena', ring.x, ring.y, ARENA_RING_WALKABLE)).toBe(true);
+    // The dummy is never walkable, extra rects or not.
+    const dummy = arena(20, 14);
+    expect(isAreaWalkable('arena', dummy.x, dummy.y, ARENA_RING_WALKABLE)).toBe(false);
+    // The sand outside the fence stays walkable either way.
+    const sand = arena(20, 22);
+    expect(isAreaWalkable('arena', sand.x, sand.y)).toBe(true);
+    expect(isAreaWalkable('arena', sand.x, sand.y, ARENA_RING_WALKABLE)).toBe(true);
+  });
+
+  it('path-checks a step against the extra rects too: in the ring, not out through the gate', () => {
+    // Inside the ring, a step between interior tiles is fine with the rects.
+    expect(isAreaStepAllowed('arena', arena(20, 18), arena(20, 19), ARENA_RING_WALKABLE)).toBe(true);
+    expect(isAreaStepAllowed('arena', arena(20, 18), arena(20, 19))).toBe(false);
+    // Out through the gate row: the gate is solid for everyone.
+    expect(isAreaStepAllowed('arena', arena(20, 19), arena(20, 21), ARENA_RING_WALKABLE)).toBe(false);
+    // In from the approach, likewise.
+    expect(isAreaStepAllowed('arena', arena(20, 21), arena(20, 19), ARENA_RING_WALKABLE)).toBe(false);
+    // Through the dummy.
+    expect(isAreaStepAllowed('arena', arena(20, 13), arena(20, 15), ARENA_RING_WALKABLE)).toBe(false);
   });
 });

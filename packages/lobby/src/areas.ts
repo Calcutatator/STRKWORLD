@@ -7,7 +7,7 @@
  *
  * The street keeps its existing rule: any finite coordinate, rounded and
  * clamped to the world (see `normalizeCoordinate`). The shared rooms (the
- * roof, the Studio and, since D-112, the bunker) are small, closed grids, so the server holds them to their walkable tiles: a
+ * roof, the Studio, since D-112 the bunker and since D-114 the arena) are closed grids, so the server holds them to their walkable tiles: a
  * placement must land on one, and a move must land on one without crossing a
  * solid tile on the way. A position the rules refuse is refused whole, never
  * repaired — a position that is almost right is still somewhere the player is
@@ -23,6 +23,7 @@ import {
   type Position,
   type PresenceArea,
   type PresenceAreaGrid,
+  type TileRect,
 } from '@strkworld/shared';
 
 /** A shared room: every area but the street. */
@@ -35,14 +36,6 @@ export const SHARED_AREA_GRIDS: Readonly<Record<SharedPresenceArea, PresenceArea
   bunker: BUNKER_PRESENCE_GRID,
   arena: ARENA_PRESENCE_GRID,
 });
-
-/**
- * D-114: the arena is a presence area in the shared contract, but the lobby
- * does not accept it until its ring authority lands (stream B): an `area`
- * request naming it is refused like any unknown area, so the session is
- * suspended, exactly as a private interior is. Stream B deletes this set.
- */
-const NOT_YET_ACCEPTED_AREAS: ReadonlySet<PresenceArea> = new Set<PresenceArea>(['arena']);
 
 /**
  * How far a move may travel without its path being checked, in World pixels:
@@ -61,8 +54,7 @@ const PATH_SAMPLE_PX = 4;
 /** Accept a requested area, or reject it outright. A missing one is the street. */
 export function normalizePresenceArea(raw: unknown): PresenceArea | null {
   if (raw === undefined) return 'street';
-  if (!PRESENCE_AREAS.includes(raw as PresenceArea)) return null;
-  return NOT_YET_ACCEPTED_AREAS.has(raw as PresenceArea) ? null : (raw as PresenceArea);
+  return PRESENCE_AREAS.includes(raw as PresenceArea) ? (raw as PresenceArea) : null;
 }
 
 /**
@@ -81,13 +73,26 @@ export function isOverAreaGrid(area: SharedPresenceArea, x: number, y: number): 
   return tileX >= 0 && tileY >= 0 && tileX < grid.width && tileY < grid.height;
 }
 
-/** Whether a World pixel position stands on one of a shared room's walkable tiles. */
-export function isAreaWalkable(area: SharedPresenceArea, x: number, y: number): boolean {
+/**
+ * Whether a World pixel position stands on one of a shared room's walkable
+ * tiles, or (D-114) on one of `extra`, tile rects in the same grid: the arena
+ * ring's interior, walkable for its challenger only.
+ */
+export function isAreaWalkable(
+  area: SharedPresenceArea,
+  x: number,
+  y: number,
+  extra?: readonly TileRect[],
+): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   const grid = SHARED_AREA_GRIDS[area];
   const tileX = Math.floor((x - grid.originX) / grid.tileSize);
   const tileY = Math.floor((y - grid.originY) / grid.tileSize);
-  for (const rect of grid.walkable) {
+  return inAnyRect(grid.walkable, tileX, tileY) || (extra !== undefined && inAnyRect(extra, tileX, tileY));
+}
+
+function inAnyRect(rects: readonly TileRect[], tileX: number, tileY: number): boolean {
+  for (const rect of rects) {
     if (
       tileX >= rect.x &&
       tileY >= rect.y &&
@@ -104,10 +109,16 @@ export function isAreaWalkable(area: SharedPresenceArea, x: number, y: number): 
  * Whether a move from `from` to `to` is allowed in a shared room: `to` is
  * walkable, and either the step is within `AREA_STEP_SLACK_PX` or every
  * sample along the straight line between them is walkable too, so no move
- * jumps a wall.
+ * jumps a wall. `extra` (D-114) adds walkable tile rects, as for
+ * `isAreaWalkable`.
  */
-export function isAreaStepAllowed(area: SharedPresenceArea, from: Position, to: Position): boolean {
-  if (!isAreaWalkable(area, to.x, to.y)) return false;
+export function isAreaStepAllowed(
+  area: SharedPresenceArea,
+  from: Position,
+  to: Position,
+  extra?: readonly TileRect[],
+): boolean {
+  if (!isAreaWalkable(area, to.x, to.y, extra)) return false;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const distance = Math.hypot(dx, dy);
@@ -115,7 +126,7 @@ export function isAreaStepAllowed(area: SharedPresenceArea, from: Position, to: 
   const samples = Math.ceil(distance / PATH_SAMPLE_PX);
   for (let index = 1; index < samples; index += 1) {
     const t = index / samples;
-    if (!isAreaWalkable(area, from.x + dx * t, from.y + dy * t)) return false;
+    if (!isAreaWalkable(area, from.x + dx * t, from.y + dy * t, extra)) return false;
   }
   return true;
 }

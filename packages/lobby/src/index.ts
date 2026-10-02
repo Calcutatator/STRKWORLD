@@ -9,8 +9,9 @@
  * travel in. See README.md.
  *
  * The pure sandbox rules the Shell runs for solo play live at
- * `@strkworld/lobby/sandbox`, and the football's at `@strkworld/lobby/football`,
- * with no Colyseus import at all.
+ * `@strkworld/lobby/sandbox`, the football's at `@strkworld/lobby/football`
+ * and the arena ring's (D-114) at `@strkworld/lobby/arena`, with no Colyseus
+ * import at all.
  *
  * ## This entry is browser-safe
  *
@@ -81,6 +82,9 @@ export {
 } from './areas';
 
 export {
+  ARENA_RING_KEY,
+  ArenaRingEntry,
+  ArenaSlotEntry,
   FootballEntry,
   LobbyState,
   PositionSchema,
