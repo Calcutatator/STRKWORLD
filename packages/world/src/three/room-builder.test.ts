@@ -88,8 +88,13 @@ import {
 import { DEGEN_CAT_CUTOUT } from './degen-cat.js';
 import type { ImageTextureLoader, LabelFactory, RoomView } from './types.js';
 
-/** Every ground floor a World can build, the opened Vault's included (D-077). */
-const DEFINITIONS = fixedRoomDefinitionsFor({ vaultOpen: true });
+/**
+ * Every ground floor a World can build, the opened Vault's included (D-077).
+ * The arena (D-114) is not a walled room on a flat floor: `buildFixedRoom`
+ * hands it to its own builder, whose layout, heights, headroom and budget
+ * arena-room.test.ts pins instead.
+ */
+const DEFINITIONS = fixedRoomDefinitionsFor({ vaultOpen: true }).filter((definition) => definition.building !== 'arena');
 /** Every interior floor: the ground floors and the Exchange tower's Degen floor. */
 const FLOORS: readonly FixedRoomLevelMap[] = [...DEFINITIONS.map(createFixedRoom), createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL)];
 const OX = ROOM_ORIGIN.x / 32;

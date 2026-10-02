@@ -51,7 +51,7 @@ describe('the unstaking counter (D-085)', () => {
     const review = h.state().flow;
     expect(review).toMatchObject({
       name: 'review',
-      summary: { action: { kind: 'request', shares: 4n * ONE, leftover: 0n }, routeId: 'bank.unstake', disclosures: [UNSTAKE_DISCLOSURE], requiresDisclosure: true },
+      summary: { action: { kind: 'request', shares: 4n * ONE, leftover: 0n }, routeId: 'bank.unstake', disclosures: [UNSTAKE_DISCLOSURE] },
     });
     await h.panel.confirm();
     expect(h.state().flow).toMatchObject({ name: 'submitted', outcome: 'succeeded', kind: 'request' });

@@ -176,7 +176,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   };
 
   const startSession = (config: WorldConfig): void => {
-    const nextKeyboard = createDomKeyboard({ window: win, document: doc });
+    // D-114: a primary press on the canvas strikes in the arena.
+    const nextKeyboard = createDomKeyboard({ window: win, document: doc, canvas: renderer.domElement });
     let view: ReturnType<Presenter['bindSession']> | undefined;
     try {
       view = presenter.bindSession(config.remotePeers);
@@ -198,6 +199,9 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
         football: config.football,
+        // The gladiator pit's ring (D-114), and reduced motion for its leaps.
+        ...(config.arena ? { arena: config.arena } : {}),
+        reducedMotion: () => prefersReducedMotion(win),
         // The creation value, never `config.vaultOpen`: the presenter drew
         // the street and rooms from it, and a session must walk the same map.
         vaultOpen,

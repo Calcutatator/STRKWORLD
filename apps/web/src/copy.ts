@@ -3,16 +3,15 @@ import type { PrivacyErrorKind } from '@strkworld/privacy';
 /**
  * Every player-facing string the shell owns, in one place.
  *
- * Two rules, both enforced by `copy.test.ts` rather than by remembering:
+ * One rule, enforced by `copy.test.ts` rather than by remembering:
+ * **"your wallet", never "your extension".** v1 ships against wallets that
+ * happen to be browser extensions, but the whole forward-compatibility design
+ * (SPEC §5) exists so a web wallet or an embedded wallet can appear with no
+ * rewrite. Copy naming the delivery mechanism ages badly the day that happens.
  *
- * 1. **"your wallet", never "your extension".** v1 ships against wallets that
- *    happen to be browser extensions, but the whole forward-compatibility
- *    design (SPEC §5) exists so a web wallet or an embedded wallet can appear
- *    with no rewrite. Copy naming the delivery mechanism ages badly the day
- *    that happens.
- * 2. **No privacy disclosure lives here.** Those are canonical approved copy in
- *    `packages/shared/src/privacy-grades.ts` (D-024) and are imported verbatim.
- *    A paraphrase in this file would be a privacy claim nobody reviewed.
+ * All of it is product copy and changes freely (D-118). The per-route lines
+ * shown before a commit live beside their grade in
+ * `packages/shared/src/privacy-grades.ts`, and are product copy too.
  */
 function freezeCopy<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -43,7 +42,6 @@ export const COPY = freezeCopy({
 
   connect: {
     title: 'Connect your wallet',
-    body: 'STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it, and your wallet sends each finished transaction to the network itself.',
     action: 'Connect wallet',
     connecting: 'Waiting for your wallet…',
     retry: 'Try again',
@@ -996,7 +994,7 @@ export const COPY = freezeCopy({
     comingSoon:
       'This building is shut. It opens once its private route is built, reviewed and approved.',
     unapprovedRoute:
-      'This door stays locked. The route behind it gives up more privacy than the default, and no approved disclosure exists for it yet.',
+      'This door stays locked. The route behind it gives up more privacy than the default, and it has not been approved yet.',
     unknownRoute:
       'This door stays locked. STRKWORLD has no approved private route for it, and there is no public shortcut on offer.',
     /** Approved by the privacy register, but this build's wallet policy has not switched it on (D-054/D-056). */
@@ -1072,8 +1070,6 @@ export const COPY = freezeCopy({
     emptyBatch: 'There is nothing queued to confirm.',
     notAnIntent: 'STRKWORLD only sends the actions its own controls produce.',
     poolNotLoaded: 'Still reading the pool settings.',
-    disclosureMissing:
-      'This cannot be confirmed: the approved wording for what it makes public is missing, and STRKWORLD will not ask you to agree to something it cannot describe.',
     feeMoved:
       'The pool fee moved above the total you were shown, so nothing was signed. Prepare it again to see the new figure.',
     bridgePlanMoved:

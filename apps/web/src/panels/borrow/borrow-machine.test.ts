@@ -142,7 +142,6 @@ describe('the Borrow counter (D-083)', () => {
     expect(review.summary.action).toEqual({ kind: 'borrow', collateral: STRK, debt: USDC, collateralAmount: 10_000n * E18, borrowAmount: 100n * USDC_ONE });
     expect(review.summary.after).toMatchObject({ status: 'priced', band: 'safe' });
     expect(review.summary.disclosures).toEqual([DISCLOSURE]);
-    expect(review.summary.requiresDisclosure).toBe(true);
     expect(review.summary.feeCeiling).toBe(POOL_FEE);
     await panel.confirm();
     const done = panel.store.getState();

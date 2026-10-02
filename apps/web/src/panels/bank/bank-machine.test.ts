@@ -278,17 +278,18 @@ describe('bank panel — entering the room', () => {
     expect(balances).toHaveBeenCalledTimes(1);
   });
 
-  it('carries the canonical disclosure for the selected route, per mode', async () => {
+  it("carries the register's line for the selected route, per mode", async () => {
     const panel = await openPanel(fake());
+    const line = (route: string) => PRIVACY_REGISTER.find((entry) => entry.route === route)!.disclosure;
 
     expect(panel.store.getState().routeId).toBe('bank.shield');
-    expect(panel.store.getState().disclosure).toContain('Shielding is public.');
+    expect(panel.store.getState().disclosure).toBe(line('bank.shield'));
 
     panel.setMode('unshield');
-    expect(panel.store.getState().disclosure).toContain('Unshielding is public.');
+    expect(panel.store.getState().disclosure).toBe(line('bank.unshield'));
 
     panel.setMode('transfer');
-    // The transfer shows no disclosure: the register records D-065's waiver.
+    // The transfer carries no line (D-065).
     expect(panel.store.getState().routeId).toBe('post-office.transfer');
     expect(panel.store.getState().disclosure).toBeNull();
     expect(panel.store.getState().door.open).toBe(true);

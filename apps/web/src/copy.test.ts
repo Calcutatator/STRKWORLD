@@ -8,8 +8,8 @@ describe('shell copy', () => {
     expect(Object.isFrozen(COPY)).toBe(true);
     expect(Object.isFrozen(COPY.connect)).toBe(true);
     expect(Object.isFrozen(COPY.errors)).toBe(true);
-    expect(Reflect.set(COPY.connect, 'body', 'rewritten')).toBe(false);
-    expect(COPY.connect.body).toContain('your wallet');
+    expect(Reflect.set(COPY.connect, 'title', 'rewritten')).toBe(false);
+    expect(COPY.connect.title).toBe('Connect your wallet');
   });
   it('says "your wallet", never "your extension"', () => {
     // v1 happens to ship against browser wallets. The forward-compatibility
@@ -18,18 +18,6 @@ describe('shell copy', () => {
     // day it does.
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('extension');
-    }
-  });
-
-  it('holds no local copy of an approved privacy disclosure (D-024)', () => {
-    const lines = allCopyStrings();
-    for (const entry of PRIVACY_REGISTER) {
-      if (!entry.disclosure) continue;
-      for (const line of lines) {
-        expect(line, `${entry.route} disclosure restated in shell copy`).not.toContain(
-          entry.disclosure,
-        );
-      }
     }
   });
 
@@ -167,10 +155,9 @@ describe('shell copy', () => {
       }
     });
 
-    it('adds no disclosure text, since the lead waived it', () => {
+    it('adds no pre-commit line, since the lead chose none (D-064)', () => {
       const stake = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.stake');
       expect(stake?.disclosure).toBeNull();
-      expect(stake?.disclosureWaivedBy).toBe('D-064');
       for (const line of stakeCopy) {
         expect(line, line).not.toMatch(/on-chain|observer|reveals?|visible|public|linkable/i);
       }
@@ -206,7 +193,7 @@ describe('shell copy', () => {
       expect(COPY.unstake.reviewClaimTail).toMatch(/returns to your pool balance/);
     });
 
-    it('claims no amount privacy, and leaves the disclosure to the register', () => {
+    it('claims no amount privacy', () => {
       const claim = /hidden|private|anonymous|confidential|invisible|untraceable|nobody can see/i;
       expect(unstakeCopy.length).toBeGreaterThan(20);
       for (const line of unstakeCopy) {
@@ -216,9 +203,6 @@ describe('shell copy', () => {
       expect(routes).toHaveLength(2);
       for (const route of routes) {
         expect(route.grade).toBe('anonymous');
-        expect(route.disclosure).toMatch(/stand-in address, not your wallet/);
-        expect(route.disclosure).toMatch(/Claimed STRK returns to your pool balance/);
-        expect(route.disclosureWaivedBy ?? null).toBeNull();
       }
     });
   });
@@ -257,7 +241,7 @@ describe('shell copy', () => {
 
     it('adds no disclosure text, since the lead declined one', () => {
       const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer');
-      expect(transfer).toMatchObject({ grade: 'anonymous', disclosure: null, disclosureWaivedBy: 'D-065' });
+      expect(transfer).toMatchObject({ grade: 'anonymous', disclosure: null });
       for (const line of transferCopy) {
         expect(line, line).not.toMatch(/on-chain|observer|reveals?|visible|public|linkable/i);
       }
