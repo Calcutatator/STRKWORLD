@@ -5,6 +5,7 @@ import {
   Matrix4,
   MeshBasicMaterial,
   Object3D,
+  PlaneGeometry,
   Quaternion,
   Vector3,
   type BufferGeometry,
@@ -417,39 +418,59 @@ function sideFace(x: number, y: number, dx: number, dy: number): { face: Face; u
 // The floor
 // ---------------------------------------------------------------------------
 
+/** A flat strip from x0 to x1 on row z, `per` segments a tile, facing up at height y. */
+function strip(x0: number, x1: number, z: number, y: number, per: number): BufferGeometry {
+  return new PlaneGeometry(x1 - x0, 1, Math.max(1, Math.round((x1 - x0) * per)), per)
+    .rotateX(-Math.PI / 2)
+    .translate((x0 + x1) / 2, y, z + 0.5);
+}
+
+/** Row runs of tiles a test accepts, as [x0, x1) pairs. */
+function rowRuns(y: number, test: (kind: ArenaTileKind) => boolean): Array<[number, number]> {
+  const runs: Array<[number, number]> = [];
+  let start = -1;
+  for (let x = 0; x <= ARENA_WIDTH; x++) {
+    const hit = x < ARENA_WIDTH && test(arenaTileAt(x, y));
+    if (hit && start < 0) start = x;
+    if (!hit && start >= 0) {
+      runs.push([start, x]);
+      start = -1;
+    }
+  }
+  return runs;
+}
+
+const SAND_KINDS: ReadonlySet<ArenaTileKind> = new Set<ArenaTileKind>(['sand', 'ring', 'fence', 'gate', 'dummy']);
+
+/**
+ * The floor in row strips (a few dozen bin parts, not thousands): earth under
+ * the void, packed earth in the tunnel, and the sand raked in rings round the
+ * oval, brighter inside the ring and darker in a band round its fence. The
+ * paint is per vertex, so the rings shade softly across each strip.
+ */
 function sandFloor(bin: GeometryBin): void {
   const fence = ARENA_RING_FENCE;
-  forEachTile((x, y, kind) => {
-    if (kind === 'void') {
-      bin.add('sand', flatQuad(x, y, x + 1, y + 1, 0), shade(EARTH, (hash01(x, y, 5) - 0.5) * 0.06));
-      return;
+  const sand = (x: number, _y: number, z: number): Color => {
+    const { d } = ovalOutward(x, z);
+    const raked = Math.sin(d * Math.PI * 1.9) > 0.6 ? -0.04 : 0.008;
+    const inRing = x > fence.x + 1 && x < fence.x + fence.width - 1 && z > fence.y + 1 && z < fence.y + fence.height - 1;
+    const band = x > fence.x - 1 && x < fence.x + fence.width + 1 && z > fence.y - 1 && z < fence.y + fence.height + 1;
+    const base = inRing ? mixHex(SAND, 0xe8d1a2, 0.4) : band ? SAND_DARK : SAND;
+    return shade(base, raked + (hash01(Math.round(x * 4), Math.round(z * 4), 9) - 0.5) * 0.025);
+  };
+  for (let y = 0; y < ARENA_HEIGHT; y++) {
+    for (const [x0, x1] of rowRuns(y, (kind) => kind === 'void')) {
+      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(EARTH, (hash01(Math.round(x), Math.round(z), 5) - 0.5) * 0.06));
     }
-    if (kind === 'tunnel') {
-      bin.add('sand', flatQuad(x, y, x + 1, y + 1, 0), shade(TUNNEL, (hash01(x, y, 7) - 0.5) * 0.05));
-      if (x === ARENA_TUNNEL.x + 1) bin.add('sand', flatQuad(x + 0.2, y, x + 0.8, y + 1, 0.004), shade(SAND_DARK, -0.05));
-      return;
-    }
-    if (kind !== 'sand' && kind !== 'ring' && kind !== 'fence' && kind !== 'gate' && kind !== 'dummy') return;
-    // Raked in rings round the oval, with a darker band round the ring.
-    const sub = 2;
-    for (let sy = 0; sy < sub; sy++) {
-      for (let sx = 0; sx < sub; sx++) {
-        const px = x + (sx + 0.5) / sub;
-        const pz = y + (sy + 0.5) / sub;
-        const { d } = ovalOutward(px, pz);
-        const raked = Math.sin(d * Math.PI * 1.9) > 0.6 ? -0.04 : 0.008;
-        const ringBand =
-          px > fence.x - 1 && px < fence.x + fence.width + 1 && pz > fence.y - 1 && pz < fence.y + fence.height + 1;
-        const insideRing = kind === 'ring' || kind === 'dummy';
-        const base = insideRing ? mixHex(SAND, 0xe8d1a2, 0.4) : ringBand ? SAND_DARK : SAND;
-        bin.add(
-          'sand',
-          flatQuad(x + sx / sub, y + sy / sub, x + (sx + 1) / sub, y + (sy + 1) / sub, 0),
-          shade(base, raked + (hash01(px * 5, pz * 5, 9) - 0.5) * 0.025),
-        );
+    for (const [x0, x1] of rowRuns(y, (kind) => kind === 'tunnel')) {
+      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(TUNNEL, (hash01(Math.round(x), Math.round(z), 7) - 0.5) * 0.05));
+      // A worn track down the tunnel's middle.
+      if (x0 <= ARENA_TUNNEL.x + 1 && x1 > ARENA_TUNNEL.x + 1) {
+        bin.add('sand', flatQuad(ARENA_TUNNEL.x + 1.2, y, ARENA_TUNNEL.x + 1.8, y + 1, 0.004), shade(SAND_DARK, -0.05));
       }
     }
-  });
+    for (const [x0, x1] of rowRuns(y, (kind) => SAND_KINDS.has(kind))) bin.add('sand', strip(x0, x1, y, 0, 2), sand);
+  }
 }
 
 // ---------------------------------------------------------------------------

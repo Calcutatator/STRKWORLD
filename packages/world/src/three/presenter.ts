@@ -251,7 +251,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const images = options.images ?? null;
   // D-107: the hidden room's flickering tube holds steady for reduced motion.
   const roomOptions = options.reducedMotion ? { reducedMotion: options.reducedMotion } : {};
+  // D-114: the arena is a big room most sessions never enter, so it is built
+  // the first time it is shown, not with the street.
+  const lazyRooms = new Map<string, () => RoomView>();
   for (const definition of fixedRoomDefinitionsFor({ vaultOpen })) {
+    if (definition.building === 'arena') {
+      lazyRooms.set(roomKey(definition.building), () =>
+        buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images, roomOptions),
+      );
+      continue;
+    }
     addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images, roomOptions));
     for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
       if (level.rooftop) continue;
@@ -263,8 +272,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
   }
 
   // D-114: the arena's combat feedback (C's arena-fx.ts), mounted in the
-  // arena's room so it shows and hides with it.
-  const arenaRoom = (rooms.get('arena') as ArenaRoomView | undefined) ?? null;
+  // arena's room once that is built, so it shows and hides with it.
+  let arenaRoom: ArenaRoomView | null = null;
   const arenaFx: ArenaFx = createArenaFx({
     reducedMotion: () => {
       try {
@@ -274,11 +283,32 @@ export function createPresenter(options: PresenterOptions): Presenter {
       }
     },
   });
-  if (arenaRoom?.fxMount) arenaRoom.fxMount.add(arenaFx.group);
   disposers.push(() => {
     arenaFx.group.removeFromParent();
     arenaFx.dispose();
   });
+
+  /** The last stations each building was drawn with, for a room built later. */
+  const lastStations = new Map<BuildingId, readonly FixedRoomStationPresentation[]>();
+  let arenaGate: 'open' | 'busy' = 'open';
+  /** A room's view, building a lazy one (the arena) on first use. */
+  const ensureRoom = (key: string): RoomView | undefined => {
+    const existing = rooms.get(key);
+    if (existing) return existing;
+    const build = lazyRooms.get(key);
+    if (!build) return undefined;
+    lazyRooms.delete(key);
+    const room = build();
+    addRoom(key, room);
+    const stations = lastStations.get(room.building);
+    if (stations) room.setStations(stations);
+    if (key === 'arena') {
+      arenaRoom = room as ArenaRoomView;
+      arenaRoom.fxMount?.add(arenaFx.group);
+      arenaRoom.setGate?.(arenaGate);
+    }
+    return room;
+  };
 
   const studio: StudioView = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, options.figures, options.labels);
   studio.sync({ visible: false, highlightedFigure: null });
@@ -403,6 +433,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     arenaFrame = null;
     idleOnTier = 0;
     if (arenaPrompt) arenaPrompt.object.visible = false;
+    arenaGate = 'open';
     arenaRoom?.setGate('open');
     arenaFx.sync(null, null);
   };
@@ -516,11 +547,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
         showRoom(building, level) {
           if (!live()) return;
           visibleRoom = building === null ? null : roomKey(building, level);
+          if (visibleRoom !== null) ensureRoom(visibleRoom);
           for (const [key, room] of rooms) room.group.visible = key === visibleRoom;
         },
         renderRoom(building, stations: readonly FixedRoomStationPresentation[]) {
           if (!live()) return;
           // Every floor of the building: each view draws only its own stations.
+          lastStations.set(building, stations);
           for (const room of rooms.values()) if (room.building === building) room.setStations(stations);
         },
         showRooftop(building) {
@@ -617,7 +650,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
         syncArena(frame) {
           if (!live()) return;
           arenaFrame = frame;
-          arenaRoom?.setGate(frame?.gate === 'busy' ? 'busy' : 'open');
+          arenaGate = frame?.gate === 'busy' ? 'busy' : 'open';
+          arenaRoom?.setGate(arenaGate);
           arenaFx.sync(frame, remoteSwings());
         },
         setArenaPrompt(text) {

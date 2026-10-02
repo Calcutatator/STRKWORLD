@@ -1,4 +1,4 @@
-import { Box3, Color, type Group, type Material, type Mesh, type Object3D } from 'three';
+import { Box3, Color, PlaneGeometry, type Group, type Material, type Mesh, type Object3D } from 'three';
 import {
   ARENA_PIT_DOOR,
   ARENA_PIT_GATEPOSTS,
@@ -237,24 +237,24 @@ function bowl(map: DistrictMap, bin: GeometryBin): void {
   const cz = tiles.reduce((sum, [, y]) => sum + y + 0.5, 0) / tiles.length;
   const isBowl = (x: number, y: number): boolean => pitKind(map, x, y) === 'pitbowl';
 
+  // Raked sand in concentric rings, darker where it meets the wall: one
+  // strip per row of the bowl, painted per vertex.
+  const sand = (px: number, _py: number, pz: number): Color => {
+    const d = Math.hypot((px - cx) / 1.6, pz - cz);
+    const raked = Math.sin(d * Math.PI * 2.6) > 0.55 ? -0.035 : 0.01;
+    const edge = edgeDistance(isBowl, Math.min(px, Math.ceil(px) - 1e-3), Math.min(pz, Math.ceil(pz) - 1e-3));
+    const base = edge < 0.35 ? mixHex(SAND_DARK, SAND, edge / 0.35) : SAND;
+    return shade(base, raked + (hash01(Math.round(px * 4), Math.round(pz * 4), 3) - 0.5) * 0.02);
+  };
+  const rows = new Map<number, number[]>();
+  for (const [x, y] of tiles) rows.set(y, [...(rows.get(y) ?? []), x]);
+  for (const [y, xs] of rows) {
+    const x0 = Math.min(...xs);
+    const x1 = Math.max(...xs) + 1;
+    const geometry = new PlaneGeometry(x1 - x0, 1, (x1 - x0) * 4, 4).rotateX(-Math.PI / 2).translate((x0 + x1) / 2, floor, y + 0.5);
+    bin.add('stone', geometry, sand);
+  }
   for (const [x, y] of tiles) {
-    // Raked sand in concentric rings, darker where it meets the wall.
-    const sub = 4;
-    for (let sy = 0; sy < sub; sy++) {
-      for (let sx = 0; sx < sub; sx++) {
-        const px = x + (sx + 0.5) / sub;
-        const pz = y + (sy + 0.5) / sub;
-        const d = Math.hypot((px - cx) / 1.6, pz - cz);
-        const raked = Math.sin(d * Math.PI * 2.6) > 0.55 ? -0.035 : 0.01;
-        const edge = edgeDistance(isBowl, px, pz);
-        const base = edge < 0.35 ? mixHex(SAND_DARK, SAND, edge / 0.35) : SAND;
-        bin.add(
-          'stone',
-          flatQuad(x + sx / sub, y + sy / sub, x + (sx + 1) / sub, y + (sy + 1) / sub, floor),
-          shade(base, raked + (hash01(px * 7, pz * 7, 3) - 0.5) * 0.02),
-        );
-      }
-    }
     // The inner wall on every side the bowl ends, standing in the tile behind.
     const sides: [number, number, Face, number][] = [
       [0, -1, { normal: 'z+', plane: y }, x],

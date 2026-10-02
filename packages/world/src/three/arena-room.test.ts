@@ -390,6 +390,26 @@ describe('the presenter in the arena (D-114)', () => {
   };
   const roomTile = (x: number, y: number) => ({ x: ROOM_ORIGIN.x + x * 32 + 16, y: ROOM_ORIGIN.y + y * 32 + 16 });
 
+  it('builds the arena the first time it is shown, with the combat fx mounted and the ring\'s gate state applied', () => {
+    const parent = new Group();
+    const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: fakeFigures().factory });
+    const view = presenter.bindSession();
+    expect(parent.getObjectByName('room:arena')).toBeUndefined();
+    view.syncArena({ phase: 'countdown', gate: 'busy', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false });
+    view.setStreetVisible(false);
+    view.showRoom('arena');
+    const room = parent.getObjectByName('room:arena')!;
+    expect(room.visible).toBe(true);
+    expect(room.getObjectByName('arena-fx')?.parent?.name).toBe('arena:fx-mount');
+    const lamp = (room.getObjectByName('arena:gate-lamp') as Mesh).material as MeshBasicMaterial;
+    expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.busy);
+    view.showRoom(null);
+    expect(room.visible).toBe(false);
+    view.showRoom('arena');
+    expect(parent.getObjectByName('strkworld')!.children.filter((child) => child.name === 'room:arena')).toHaveLength(1);
+    presenter.dispose();
+  });
+
   it('reads the arena\'s surface heights inside it and flat floors in every other room', () => {
     expect(roomSurfaceHeightAt('arena', OX + 3.5, OZ + 16.5)).toBe(arenaSurfaceHeightAt(3, 16));
     expect(roomSurfaceHeightAt('arena', OX + 6.5, OZ + 16.5)).toBe(0.4);
