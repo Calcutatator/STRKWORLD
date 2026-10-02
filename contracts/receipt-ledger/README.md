@@ -7,8 +7,8 @@ the DeFi flows that run through shadow accounts. Players count their own
 receipts privately, at the stand near the plaza. The contract never learns, and
 never publishes, which account a receipt belongs to.
 
-Mainnet, once deployed: `0x1517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8`
-(class `0x2ae831b0a7419a934c5631b65b78b7beabb08dc0607e0ab08f9c237a2612173`).
+Mainnet, once deployed: `0x2ff2a244894a28c72d8ac838038bcaa7a1dab84a68ff073ca4c854cbe8f7346`
+(class `0x74839e69fc00592d88c19283a5b8880fd34770e52d736bc1569a06b3a104199`).
 The address is fixed in advance: see [How the address is fixed](#how-the-address-is-fixed).
 
 ## What it does
@@ -117,7 +117,7 @@ deploy costs far less. The wallet shows the exact fee before you approve.
    `python3 -m http.server 8787 -d contracts/receipt-ledger/deploy`
 2. Open `http://localhost:8787` in the browser where Ready is installed.
    Check the page shows **Starknet mainnet** and contract address
-   `0x1517eeed…541766f8`.
+   `0x2ff2a244…8f7346`.
 3. Click **Connect Ready** (it may show as Argent X) and approve. The wallet
    must be on mainnet.
 4. Click **Declare with wallet** and approve the DECLARE transaction. Wait
@@ -158,13 +158,15 @@ any account can declare it, and you can still deploy from Ready.
     --url https://api.cartridge.gg/x/starknet/mainnet
   ```
 
-  It should print class hash
-  `0x2ae831b0a7419a934c5631b65b78b7beabb08dc0607e0ab08f9c237a2612173`. Then
-  go back to step 5 on the page. To deploy from sncast instead:
+  sncast serialises the ABI string its own way, and the class hash covers that
+  string, so it may print a different class hash from the page's
+  `0x74839e69fc00592d88c19283a5b8880fd34770e52d736bc1569a06b3a104199`. If it does,
+  the page's step 5 will not find it: deploy with sncast below, using the class
+  hash sncast printed, and note the address it prints instead of the one above. To deploy from sncast instead:
 
   ```bash
   sncast --account <your-account-name> deploy \
-    --class-hash 0x2ae831b0a7419a934c5631b65b78b7beabb08dc0607e0ab08f9c237a2612173 \
+    --class-hash 0x74839e69fc00592d88c19283a5b8880fd34770e52d736bc1569a06b3a104199 \
     --salt 0x7374726b776f726c642d6c622d6c65646765722d7631 \
     --constructor-calldata \
       0x04f33230dc57855c6e7eabe66dfa0fde82c5458fd0e54827cdb7cb4c474888a7 \

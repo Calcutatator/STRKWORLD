@@ -32,7 +32,17 @@ const POOL = '0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a
 const UDC = '0x02ceed65a4bd731034c01113685c831b01c15d7d432f71afb1cf1634b53a2125';
 const SALT = shortString.encodeShortString('strkworld-lb-ledger-v1');
 
-const classHash = hash.computeContractClassHash(sierra);
+// The class exactly as the page sends it to the wallet: the ABI as one JSON string, no debug info.
+const contractClass = {
+  sierra_program: sierra.sierra_program,
+  contract_class_version: sierra.contract_class_version,
+  entry_points_by_type: sierra.entry_points_by_type,
+  abi: JSON.stringify(sierra.abi),
+};
+// Hash that same object. The network hashes the ABI string it receives, so hashing
+// Scarb's parsed ABI array instead gives a different class hash than the one the wallet
+// declares (Ready showed 0x0748…4199 while the page expected 0x2ae8…2173).
+const classHash = hash.computeContractClassHash(contractClass);
 const compiledClassHash = hash.computeCompiledClassHashBlake(casm);
 const constructorCalldata = [ANONYMIZER, POOL];
 const address = hash.calculateContractAddressFromHash(SALT, classHash, constructorCalldata, 0);
@@ -52,13 +62,8 @@ const artifact = {
     anonymizer: hash.getSelectorFromName('anonymizer'),
     pool: hash.getSelectorFromName('pool'),
   },
-  // The shape `wallet_addDeclareTransaction` takes: the ABI as a string, no debug info.
-  contractClass: {
-    sierra_program: sierra.sierra_program,
-    contract_class_version: sierra.contract_class_version,
-    entry_points_by_type: sierra.entry_points_by_type,
-    abi: JSON.stringify(sierra.abi),
-  },
+  // The shape `wallet_addDeclareTransaction` takes, and the object the class hash covers.
+  contractClass,
 };
 
 const out = join(here, 'ledger-artifact.js');
