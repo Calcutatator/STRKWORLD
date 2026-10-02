@@ -32,6 +32,15 @@ import {
 const STRK = ENDUR_XSTRK_ASSET;
 const XSTRK = ENDUR_XSTRK;
 const ANONYMIZER = ENDUR_DEPOSIT_ANONYMIZER;
+/**
+ * What the wallet is sent: the same felts in the Wallet API's one spelling
+ * (`0x`, no leading zeros). The pinned constants are padded; an `invoke`
+ * reaches the wallet as built, and Ready refuses a padded felt as 114.
+ */
+const canonical = (felt: string): string => `0x${BigInt(felt).toString(16)}`;
+const WIRE_STRK = canonical(STRK);
+const WIRE_XSTRK = canonical(XSTRK);
+const WIRE_ANONYMIZER = canonical(ANONYMIZER);
 const TAKER = '0xabc';
 const FEE_RECIPIENT = '0x789';
 const HASH = '0x5eed';
@@ -55,7 +64,7 @@ function stakePolicy(overrides: Partial<WalletRoutePolicy> = {}): WalletRoutePol
   };
 }
 
-function fixture(policy: WalletRoutePolicy = stakePolicy()) {
+function fixture(policy: WalletRoutePolicy = stakePolicy(), address: string = TAKER) {
   const invoked: STRK20_ACTION[][] = [];
   const prepared: STRK20_ACTION[][] = [];
   const simulated: (boolean | undefined)[] = [];
@@ -64,7 +73,7 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
     proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
   };
   const wallet: WalletStrk20Account = {
-    address: TAKER,
+    address,
     async strk20Balances(tokens) {
       return tokens.map((token) => ({ token, balance: '0x64' }));
     },
@@ -112,14 +121,14 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
 /** The three-action request for `amountIn`, independently written out: no relay-fee leg (D-082). */
 function expectedStakeActions(amountIn: bigint, low: string, high: string): STRK20_ACTION[] {
   return [
-    { type: 'withdraw', token: STRK, amount: `0x${amountIn.toString(16)}`, recipient: ANONYMIZER },
-    { type: 'transfer', token: XSTRK, amount: 'OPEN', recipient: TAKER },
-    { type: 'invoke', contract: ANONYMIZER, calldata: [STRK, XSTRK, low, high, OPEN_NOTE] },
+    { type: 'withdraw', token: WIRE_STRK, amount: `0x${amountIn.toString(16)}`, recipient: WIRE_ANONYMIZER },
+    { type: 'transfer', token: WIRE_XSTRK, amount: 'OPEN', recipient: TAKER },
+    { type: 'invoke', contract: WIRE_ANONYMIZER, calldata: [WIRE_STRK, WIRE_XSTRK, low, high, OPEN_NOTE] },
   ];
 }
 
-async function provedActions(intent: Intent, policy?: WalletRoutePolicy) {
-  const harness = fixture(policy);
+async function provedActions(intent: Intent, policy?: WalletRoutePolicy, address?: string) {
+  const harness = fixture(policy, address);
   const batch = await harness.ops.prepare([intent]);
   await batch.confirm({ feeCeiling: POOL_FEE });
   expect(harness.invoked).toHaveLength(1);
@@ -161,10 +170,12 @@ describe('stake intent validation', () => {
     await expect(ops.prepare([unpadded])).resolves.toMatchObject({ intents: [unpadded] });
   });
 
-  it('preserves the exact u256 maximum amount boundary', async () => {
+  it('admits up to the u128 a pool balance can hold, and no further', async () => {
     const { ops } = fixture();
-    await expect(ops.prepare([{ ...STAKE, amountIn: MAX_UINT256 }]))
-      .resolves.toMatchObject({ intents: [{ amountIn: MAX_UINT256 }] });
+    const largest = (1n << 128n) - 1n;
+    await expect(ops.prepare([{ ...STAKE, amountIn: largest }]))
+      .resolves.toMatchObject({ intents: [{ amountIn: largest }] });
+    await expect(ops.prepare([{ ...STAKE, amountIn: largest + 1n }])).rejects.toMatchObject({ kind: 'unknown' });
   });
 
   const nonEnumerableAmount = Object.defineProperty(
@@ -329,23 +340,39 @@ describe('stake prepare request construction', () => {
     // The pool calls privacy_invoke through its fixed invoke selector; the
     // action cannot name another entry point.
     expect(Reflect.ownKeys(invoke)).toEqual(['type', 'contract', 'calldata']);
-    expect(invoke.type === 'invoke' && invoke.contract).toBe(ANONYMIZER);
+    expect(invoke.type === 'invoke' && invoke.contract).toBe(WIRE_ANONYMIZER);
     // The staked STRK reaches the anonymizer before it is invoked.
-    expect(actions[0]).toEqual({ type: 'withdraw', token: STRK, amount: '0x4563918244f40000', recipient: ANONYMIZER });
+    expect(actions[0]).toEqual({ type: 'withdraw', token: WIRE_STRK, amount: '0x4563918244f40000', recipient: WIRE_ANONYMIZER });
   });
 
   it.each([
     ['one base unit', 1n, '0x1', '0x0'],
+    ['10 STRK', 10n * 10n ** 18n, '0x8ac7230489e80000', '0x0'],
     ['the largest u128', (1n << 128n) - 1n, `0x${'f'.repeat(32)}`, '0x0'],
-    ['exactly 2^128', 1n << 128n, '0x0', '0x1'],
-    ['2^128 + 7', (1n << 128n) + 7n, '0x7', '0x1'],
-    ['the largest u256', MAX_UINT256, `0x${'f'.repeat(32)}`, `0x${'f'.repeat(32)}`],
   ])('serializes privacy_invoke(in_token, out_token, assets, note_id) with %s as (low, high)', async (_label, amountIn, low, high) => {
     const { actions } = await provedActions({ ...STAKE, amountIn } as Intent);
 
     expect(actions).toEqual(expectedStakeActions(amountIn, low, high));
     const invoke = actions[2]!;
-    expect(invoke.type === 'invoke' && invoke.calldata).toEqual([STRK, XSTRK, low, high, OPEN_NOTE]);
+    expect(invoke.type === 'invoke' && invoke.calldata).toEqual([WIRE_STRK, WIRE_XSTRK, low, high, OPEN_NOTE]);
+  });
+
+  it.each([
+    ['exactly 2^128', 1n << 128n],
+    ['the largest u256', MAX_UINT256],
+  ])('refuses %s before the wallet: a pool balance is a u128 and the withdraw amount one FELT', async (_label, amountIn) => {
+    const { ops, invoked } = fixture();
+
+    await expect(ops.prepare([{ ...STAKE, amountIn } as Intent]))
+      .rejects.toMatchObject({ kind: 'unknown', message: 'A stake amount must fit in a pool balance (u128).' });
+    expect(invoked).toEqual([]);
+  });
+
+  it('sends every address unpadded, however the wallet spells its own (Wallet API FELT, 114 otherwise)', async () => {
+    const padded = `0x${'abc'.padStart(64, '0')}`;
+    const { actions } = await provedActions(STAKE, undefined, padded);
+
+    expect(actions).toEqual(expectedStakeActions(5n * 10n ** 18n, '0x4563918244f40000', '0x0'));
   });
 
   it('takes note_id from the same wallet-resolved placeholder the swap uses, for the one xSTRK note owned by the account', async () => {
@@ -353,7 +380,7 @@ describe('stake prepare request construction', () => {
     const openNotes = actions.filter((action) => action.type === 'transfer' && action.amount === 'OPEN');
     const invoke = actions[2]!;
 
-    expect(openNotes).toEqual([{ type: 'transfer', token: XSTRK, amount: 'OPEN', recipient: TAKER }]);
+    expect(openNotes).toEqual([{ type: 'transfer', token: WIRE_XSTRK, amount: 'OPEN', recipient: TAKER }]);
     expect(invoke.type === 'invoke' && invoke.calldata.at(-1)).toBe(OPEN_NOTE);
   });
 

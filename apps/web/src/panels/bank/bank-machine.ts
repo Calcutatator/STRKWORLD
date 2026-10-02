@@ -509,8 +509,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return gasByShape.get(shapeKey([...intents.map((intent) => intent.kind), mode])) ?? null;
   }
 
-  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
-    const failure = toFailure(error);
+  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number, operation?: Intent['kind']): void {
+    const failure: ShellFailure = operation ? { ...toFailure(error), operation } : toFailure(error);
     // D-034 is the exception to the ordinary stale-write rule. A private
     // submit response can be lost after the player closes the window; the
     // provider-level notice must still learn about that ambiguity. The notice
@@ -915,7 +915,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
         });
       } catch (error) {
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, confirmed.value[0]?.kind);
       }
     },
 
@@ -964,7 +964,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
       } catch (error) {
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, batch.intents[0]?.kind);
         if (current(id)) trace('failed');
         return;
       }
@@ -1065,7 +1065,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           trace('fee-moved');
           return;
         }
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, batch.intents[0]?.kind);
         if (current(id)) trace('failed');
       }
     },

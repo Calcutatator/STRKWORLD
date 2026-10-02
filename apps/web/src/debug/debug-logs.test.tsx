@@ -747,6 +747,22 @@ describe('what it captures', () => {
     });
   });
 
+  it('names the route a wallet refused, so a stake\'s 114 does not read as a bare kind=unknown', async () => {
+    const { entries, tick } = harness();
+    const refused = toFailure(mapWalletError({ code: 114, message: 'An error occurred (INVALID_REQUEST_PAYLOAD)' }));
+    debugFailure('privacy.operation', { ...refused, operation: 'stake' });
+    // Only a route name from the fixed list is written; anything else is dropped.
+    debugFailure('privacy.operation', { ...refused, operation: '0xabc' });
+    await tick();
+    const tail =
+      'kind=unknown code=114 INVALID_REQUEST_PAYLOAD message="The privacy operation failed." ' +
+      'cause="An error occurred (INVALID_REQUEST_PAYLOAD)"';
+    expect(entries().filter((entry) => entry.event === 'privacy.operation').map((entry) => entry.detail)).toEqual([
+      `op=stake ${tail}`,
+      tail,
+    ]);
+  });
+
   it('names a transfer recipient\'s 118 apart from the account\'s own, keeping the wallet code (D-074)', async () => {
     const { entries, tick } = harness();
     // As the adapter throws it: the recipient's kind over the wallet's own answer.
