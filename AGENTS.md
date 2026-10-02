@@ -13730,6 +13730,36 @@ the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
 
+### 2026-10-02 — Reading a tile coordinate back out of a game screenshot
+
+An annotated screenshot of the fixed camera is enough to recover exact tile
+coordinates, because the rig (`three/camera-rig.ts`) has no free parameters:
+yaw is always north, pitch 28°, distance 11, FOV 50° vertical, and it aims
+`CAMERA_AIM_HEIGHT = 4` above the player's feet. So the camera sits at
+`(tx, 4 + 11·sin28, tz + 11·cos28)` and the only unknowns are the player's
+`(tx, tz)`. Two consequences make the solve easy: a ground line of constant
+z projects to a **horizontal** screen line (no roll, no yaw), so screen y
+alone gives z; and the player's feet land at a fixed screen y (865/1090 at
+the sketch's aspect), which confirms the whole model in one look before any
+fitting. Then one vertical ground edge at a known x — the plaza's east
+paving edge at world x 40 — gives `tx` to a hundredth of a tile, and it must
+give the *same* `tx` at every row, which is the check that the fit is real
+rather than fitted. Beware two traps: the screenshot must be the whole
+canvas (any crop or chrome shifts the principal point and the solve goes
+quietly wrong), and near-building rows read 1 tile off because facade shadow
+hides the pavement/road seam — calibrate on the open rows.
+
+*Verified:* solving the lead's placement sketch
+(`scratchpad/research/stand-location-sketch.webp`, 2000×1090) gave
+`tx = 42.73` from eight separate rows of the plaza's east edge, agreeing to
+0.03 of a tile, and predicted the Studio path's two columns (x 52-54) to
+within 4 px at its centre. The drawn path line then came out at world
+x 40.00 — the plaza's east edge to the pixel. Re-rendered the same frame
+offline from the same rig and overlaid it on the sketch: every landmark
+lines up.
+
+---
+
 ### 2026-10-02 — A modal over a panel must stop keystrokes at the window in the capture phase
 
 The consent pop-up on the placement stand (D-122, amended) is a dialog inside

@@ -11,7 +11,7 @@ import {
   type Object3D,
 } from 'three';
 import {
-  PLACEMENT_APRON,
+  PLACEMENT_PATH,
   PLACEMENT_STAND,
   PLAZA_AREA,
   PLAZA_FIXTURES,
@@ -149,7 +149,7 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   let monumentMesh: Mesh | null = null;
   let gatewayMesh: Mesh | null = null;
   try {
-    pave(map, floor, bin, stand ? [PLAZA_AREA, PLACEMENT_APRON] : [PLAZA_AREA]);
+    pave(map, floor, bin, stand ? [PLAZA_AREA, PLACEMENT_PATH, PLACEMENT_STAND] : [PLAZA_AREA]);
     if (stand) placementStand(PLACEMENT_STAND, floor, shells.record(PLAZA_PLACEMENT_STATION, bin));
     for (const piece of fixtures) {
       switch (piece.kind) {
@@ -268,7 +268,7 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   // A placement is shown only in the Shell's panel, on the player's device.
   if (stand) {
     const { cx, cz } = centreOf(PLACEMENT_STAND);
-    const board = addLabel(labels.sign(PLACEMENT_BOARD_TEXT, PLACEMENT_THEME.board), cx, floor + STAND_BOARD_Y, cz + 0.12);
+    const board = addLabel(labels.sign(PLACEMENT_BOARD_TEXT, PLACEMENT_THEME.board), cx, floor + STAND_BOARD_Y, cz + STAND_BOARD_Z);
     board.object.userData['plaza'] = 'placement-board';
   }
 
@@ -362,17 +362,22 @@ function isPlazaTile(map: DistrictMap, x: number, y: number): boolean {
  * grass or the map's edge. The pavement side is flush: you walk straight in.
  */
 function pave(map: DistrictMap, floor: number, bin: GeometryBin, areas: readonly PlazaRect[]): void {
-  for (const area of areas) paveArea(map, floor, bin, area);
+  for (const area of areas) paveArea(map, floor, bin, area, area === PLAZA_AREA);
   ringSetts(floor, bin);
 }
 
-function paveArea(map: DistrictMap, floor: number, bin: GeometryBin, area: PlazaRect): void {
+/**
+ * `framed` darkens the outermost ring of slabs, which reads as a border round
+ * the square itself. A strip only a tile wide (the placement path) would be
+ * all border, so it takes the square's field tones instead and matches it.
+ */
+function paveArea(map: DistrictMap, floor: number, bin: GeometryBin, area: PlazaRect, framed: boolean): void {
   const { x: x0, y: y0, width, height } = area;
   for (let y = y0; y < y0 + height; y++) {
     for (let x = x0; x < x0 + width; x++) {
       if (!isPlazaTile(map, x, y)) continue;
       bin.add(GROUND, flatQuad(x, y, x + 1, y + 1, floor), PLAZA_THEME.grout);
-      const edge = x === x0 || y === y0 || x === x0 + width - 1 || y === y0 + height - 1;
+      const edge = framed && (x === x0 || y === y0 || x === x0 + width - 1 || y === y0 + height - 1);
       const seed = hash01(x, y, 701);
       const tone = edge ? PLAZA_THEME.border : seed < 0.5 ? PLAZA_THEME.slab : PLAZA_THEME.slabAlt;
       // Two slabs per tile, laid in alternating directions: a basket weave.
@@ -431,47 +436,51 @@ function ringSetts(floor: number, bin: GeometryBin): void {
 /** The board over the stand: a title and a row of hidden digits. Never a placement. */
 export const PLACEMENT_BOARD_TEXT = 'PLACEMENT\nPRIVATE  ? ? ?';
 /** The board's centre height above the floor. */
-const STAND_BOARD_Y = 2.32;
+const STAND_BOARD_Y = 1.68;
+/** How far south of the pedestal's centre the board hangs, clear of its frame. */
+const STAND_BOARD_Z = 0.13;
 /** The trophy's top, which the prompt floats above. */
-const STAND_TOP = 3.32;
+const STAND_TOP = 2.29;
 
 /**
- * A scoreboard kiosk in the brand's colours (D-113): a dark counter with an
- * ember lip and a lit sun-gold screen, two outline-dark posts carrying the
- * board, a row of bulbs along the board's top edge, and a voxel trophy on top.
- * Built on the stand's two plinth tiles only.
+ * A small pedestal (D-122, amended 2026-10-02): two steps in the plaza's own
+ * sandstone, a brand-dark plinth with an ember lip and a lit
+ * sun-gold screen, and a short post carrying a board no wider than the tile,
+ * with two pairs of bulbs and a thumb-sized voxel trophy along its top. Built
+ * on the stand's one plinth tile, and nothing hangs past it: a player can
+ * stand on any tile of its ring.
  */
 function placementStand(rect: PlazaRect, floor: number, bin: GeometryBin): void {
-  const x0 = rect.x;
-  const z0 = rect.y;
-  const x1 = rect.x + rect.width;
-  const { cx } = centreOf(rect);
+  const { cx, cz } = centreOf(rect);
   const t = PLACEMENT_THEME;
-  // Footing and counter.
-  bin.add(STAND, boxGeometry(x0 + 0.06, floor, z0 + 0.12, x1 - 0.06, floor + 0.12, z0 + 0.9), t.outline);
-  bin.add(STAND, boxGeometry(x0 + 0.22, floor + 0.12, z0 + 0.34, x1 - 0.22, floor + 0.92, z0 + 0.86), t.window);
-  bin.add(STAND, boxGeometry(x0 + 0.18, floor + 0.92, z0 + 0.3, x1 - 0.18, floor + 1.0, z0 + 0.9), t.ember);
-  bin.add(STAND, boxGeometry(x0 + 0.22, floor + 0.12, z0 + 0.84, x1 - 0.22, floor + 0.2, z0 + 0.88), t.emberDeep);
-  // The counter's lit screen, facing the camera.
-  bin.add(GLOW, boxGeometry(cx - 0.32, floor + 0.5, z0 + 0.86, cx + 0.32, floor + 0.8, z0 + 0.875), t.gold);
-  // Posts and the board's frame.
-  for (const px of [x0 + 0.2, x1 - 0.32]) {
-    bin.add(STAND, boxGeometry(px, floor + 1.0, z0 + 0.48, px + 0.12, floor + 2.9, z0 + 0.6), t.outline);
+  const slab = (half: number, y0: number, y1: number, colour: Paint): void => {
+    bin.add(STAND, boxGeometry(cx - half, floor + y0, cz - half, cx + half, floor + y1, cz + half), colour);
+  };
+  // Two sandstone steps, the planters' and tree tubs' stone, so it reads as plaza furniture.
+  slab(0.4, 0, 0.13, PLAZA_THEME.stone);
+  slab(0.32, 0.13, 0.23, PLAZA_THEME.stoneDark);
+  // The brand-dark plinth, its ember lip and its cap.
+  bin.add(STAND, boxGeometry(cx - 0.25, floor + 0.23, cz - 0.21, cx + 0.25, floor + 0.94, cz + 0.21), t.outline);
+  bin.add(STAND, boxGeometry(cx - 0.275, floor + 0.94, cz - 0.235, cx + 0.275, floor + 1.0, cz + 0.235), t.ember);
+  bin.add(STAND, boxGeometry(cx - 0.255, floor + 1.0, cz - 0.215, cx + 0.255, floor + 1.04, cz + 0.215), t.rim);
+  bin.add(STAND, boxGeometry(cx - 0.21, floor + 0.3, cz + 0.195, cx + 0.21, floor + 0.86, cz + 0.215), t.window);
+  // The plinth's lit screen, facing the camera: a reader's slot, not a display.
+  bin.add(GLOW, boxGeometry(cx - 0.17, floor + 0.52, cz + 0.212, cx + 0.17, floor + 0.68, cz + 0.226), t.gold);
+  // The post and the board's frame, both inside the tile.
+  bin.add(STAND, boxGeometry(cx - 0.05, floor + 1.04, cz - 0.03, cx + 0.05, floor + 1.4, cz + 0.07), t.outline);
+  bin.add(STAND, boxGeometry(cx - 0.49, floor + 1.36, cz, cx + 0.49, floor + 2.0, cz + 0.12), t.outline);
+  bin.add(STAND, boxGeometry(cx - 0.5, floor + 2.0, cz - 0.01, cx + 0.5, floor + 2.05, cz + 0.13), t.rim);
+  // Two pairs of bulbs along the top edge, like a scoreboard's.
+  for (const dx of [-0.38, -0.2, 0.2, 0.38]) {
+    bin.add(GLOW, boxGeometry(cx + dx - 0.035, floor + 2.05, cz + 0.025, cx + dx + 0.035, floor + 2.11, cz + 0.095), t.bulb);
   }
-  bin.add(STAND, boxGeometry(x0 + 0.08, floor + 1.78, z0 + 0.42, x1 - 0.08, floor + 2.86, z0 + 0.6), t.outline);
-  bin.add(STAND, boxGeometry(x0 + 0.1, floor + 2.86, z0 + 0.44, x1 - 0.1, floor + 2.92, z0 + 0.58), t.rim);
-  // Bulbs along the top edge, like a scoreboard's.
-  for (let i = 0; i < 7; i++) {
-    const bx = x0 + 0.3 + (i * (rect.width - 0.6)) / 6;
-    bin.add(GLOW, boxGeometry(bx - 0.04, floor + 2.92, z0 + 0.47, bx + 0.04, floor + 3.0, z0 + 0.55), t.bulb);
-  }
-  // A voxel trophy: base, stem, cup and two handles.
-  const tz = z0 + 0.51;
-  bin.add(STAND, boxGeometry(cx - 0.13, floor + 2.92, tz - 0.08, cx + 0.13, floor + 2.99, tz + 0.08), t.emberDeep);
-  bin.add(STAND, boxGeometry(cx - 0.04, floor + 2.99, tz - 0.04, cx + 0.04, floor + 3.08, tz + 0.04), t.gold);
-  bin.add(STAND, boxGeometry(cx - 0.14, floor + 3.08, tz - 0.1, cx + 0.14, floor + STAND_TOP, tz + 0.1), t.gold);
+  // A voxel trophy between them: base, stem, cup and two handles.
+  const tz = cz + 0.06;
+  bin.add(STAND, boxGeometry(cx - 0.09, floor + 2.05, tz - 0.06, cx + 0.09, floor + 2.1, tz + 0.06), t.emberDeep);
+  bin.add(STAND, boxGeometry(cx - 0.03, floor + 2.1, tz - 0.03, cx + 0.03, floor + 2.16, tz + 0.03), t.gold);
+  bin.add(STAND, boxGeometry(cx - 0.1, floor + 2.16, tz - 0.07, cx + 0.1, floor + STAND_TOP, tz + 0.07), t.gold);
   for (const side of [-1, 1]) {
-    bin.add(STAND, boxGeometry(cx + side * 0.14 - (side > 0 ? 0 : 0.07), floor + 3.14, tz - 0.03, cx + side * 0.14 + (side > 0 ? 0.07 : 0), floor + 3.26, tz + 0.03), t.gold);
+    bin.add(STAND, boxGeometry(cx + side * 0.1 - (side > 0 ? 0 : 0.05), floor + 2.19, tz - 0.022, cx + side * 0.1 + (side > 0 ? 0.05 : 0), floor + 2.26, tz + 0.022), t.gold);
   }
 }
 
