@@ -6045,6 +6045,21 @@ The lead's decisions:
 
 **Consequences.** The HUD, the Post Office, the Plaza and every other game-theme surface read in the brand faces, and every amount there is in VT323. The title screen and partner windows look exactly as before. No bytes are added to the bundle; the faces D-115 ships are now used in more places. `font-size-adjust` with `cap-height` needs Chrome 127, Safari 17 or Firefox 118; an older browser draws the faces unadjusted, about 0.77× of the intended size, but still lays out. Tests: `styles.test.ts` ("the game theme's type (D-119)") pins the role tokens, the VT323 amounts, the single weight, the adjustment on `body` and `.panel`, every partner's reset and unbranded faces, the field face inside a label, and the title screen's opt-out. The stylesheet still declares no `@font-face` (the Vault test). `brand.test.ts` covers the faces' files and licence. Screenshots at 1280×800, 768×1024 and 390×844 are in the working scratchpad, not committed. They cover the title screen, deposit review, city HUD and guide, the Post Office with amounts filled and its error callout, and the Bank before and after. Not verified: Safari or Firefox, or a deployed build.
 
+
+---
+
+## D-121 — Money amounts are VT323 everywhere, the title screen included
+
+**2026-10-02 · Accepted (the lead: legibility of amounts is a correctness issue in a money app) · amends D-115 (the title screen's numeric face) · settles the disagreement D-119 (PR #200) recorded**
+
+**Context.** D-115 set `--brand-font-numeric` to Jersey 15 and the title screen's deposit review showed amounts in it. D-119 measured the numeral glyphs at the sizes windows use: in Jersey 15, 8/B and 6/8 merge and 1/l are near-identical. VT323 keeps 1/l/I, 5/S, 8/B and 6/b distinct and is monospaced, so columns align. D-119 therefore kept amounts in VT323 in the game UI and recorded that this disagreed with D-115.
+
+**Decision.**
+- `--brand-font-numeric` is `"VT323", ui-monospace, monospace`. Every consumer follows it: the title screen's `--ui-number-font`, and its amount field, review costs and batch list.
+- VT323 reads smaller than Jersey 15, so the title screen's amounts go from 1.3rem to 1.6rem (line-height 1.1), with `font-variant-numeric: tabular-nums` so the review's figures line up. Jersey 15 stays the headline face; it is not used for money.
+- `docs/brand/README.md`'s type table says the same.
+
+**Consequences.** One face for amounts across the title screen and the game UI. Tests: `brand.test.ts` pins the token to VT323 with a monospace fallback and no Jersey; `styles.test.ts` pins the title screen's amount rule (token, tabular figures, minimum size). Not verified: a phone-width screen.
 ---
 
 ## D-122 — The private leaderboard's game side (phase 1): receipts on every fee-paying flow, a placement stand by the plaza, and a blind tally, all off by default
