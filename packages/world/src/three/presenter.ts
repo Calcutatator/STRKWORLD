@@ -1,6 +1,7 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import { type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
+import { type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
+import { ARENA_GATE_TARGET_ID } from '../arena-session.js';
 import {
   FIXED_ROOM_LEVELS,
   createFixedRoom,
@@ -40,7 +41,7 @@ import { segmentHitsBox } from './occlusion.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow } from './jump-shadow.js';
 import { EMPTY_PLAZA_STATS } from '../plaza-stations.js';
-import { createInteractionPromptView } from './interaction-prompt.js';
+import { advanceAffordanceClock, createAffordanceShells, type AffordanceSet } from './affordance.js';
 import type {
   AttackPose,
   AvatarFigure,
@@ -116,6 +117,15 @@ export interface Presenter {
   update(deltaMs: number): void;
   /** Fade whatever stands between the camera and the local avatar. */
   updateOcclusion(camera: Vector3, deltaMs: number): void;
+  /**
+   * D-123: give a station drawn outside the stock builders (a ring gate, a
+   * leaderboard stand) the same cues as a counter: `object`'s meshes, as
+   * they stand now, shimmer while it is shown, and glow while the session's
+   * interaction target has this `id` (or carries this `object`). Returns its
+   * removal. Builders that merge their pieces should rather record them into
+   * their own `AffordanceShells` under the target's id, as the plaza does.
+   */
+  registerAffordance(id: string, object: Object3D): () => void;
   dispose(): void;
 }
 
@@ -289,12 +299,18 @@ export function createPresenter(options: PresenterOptions): Presenter {
     lazyRooms.delete(key);
     const room = build();
     addRoom(key, room);
+    // D-123: a room built late brings its counters' shimmer and glow along.
+    if (room.affordances) affordanceSets.push(room.affordances);
     const stations = lastStations.get(room.building);
     if (stations) room.setStations(stations);
     if (key === 'arena') {
       arenaRoom = room as ArenaRoomView;
       arenaRoom.fxMount?.add(arenaFx.group);
       arenaRoom.setGate?.(arenaGate);
+      // D-123: the ring gate is the arena's station: it shimmers while the
+      // ring is free, and glows when the gate station is the target (by id
+      // `arena:gate`, or by carrying the gate object).
+      if (arenaRoom.gate) registerObject(ARENA_GATE_TARGET_ID, arenaRoom.gate)?.setUsable(ARENA_GATE_TARGET_ID, arenaGate === 'open');
     }
     return room;
   };
@@ -327,10 +343,65 @@ export function createPresenter(options: PresenterOptions): Presenter {
     carried.dispose();
   });
 
-  // D-117: the one "E · …" prompt every station shares.
-  const interactionPrompt = createInteractionPromptView(options.labels);
-  root.add(interactionPrompt.object);
-  disposers.push(() => interactionPrompt.dispose());
+  // D-123: what says "use me" now that the floor does not: every usable
+  // station's affordance shell (shimmer from afar, edge glow on the target).
+  // The stock areas build their own; a station drawn elsewhere registers its
+  // object here (`registerAffordance`), or arrives on a target as `object`.
+  const extraAffordances = new Map<Object3D, AffordanceSet>();
+  const affordanceSets: AffordanceSet[] = [];
+  if (street.plaza?.affordances) affordanceSets.push(street.plaza.affordances);
+  for (const room of rooms.values()) if (room.affordances) affordanceSets.push(room.affordances);
+  if (studio.affordances) affordanceSets.push(studio.affordances);
+  const allAffordances = (): Iterable<AffordanceSet> => affordanceSets;
+  const registerObject = (id: string, object: Object3D): AffordanceSet | null => {
+    const known = extraAffordances.get(object);
+    if (known) return known;
+    const shells = createAffordanceShells();
+    shells.addObject(id, object, object);
+    const set = shells.build(`affordance:${id}`);
+    if (!set) return null;
+    object.add(set.mesh);
+    set.setUsable(id, true);
+    extraAffordances.set(object, set);
+    affordanceSets.push(set);
+    return set;
+  };
+  const unregisterObject = (object: Object3D): void => {
+    const set = extraAffordances.get(object);
+    if (!set) return;
+    extraAffordances.delete(object);
+    const index = affordanceSets.indexOf(set);
+    if (index >= 0) affordanceSets.splice(index, 1);
+    set.dispose();
+  };
+  disposers.push(() => {
+    for (const object of [...extraAffordances.keys()]) unregisterObject(object);
+  });
+  /** The id the interaction system chose, glowing in whichever area holds it. */
+  const focusAffordance = (id: string | null, object: unknown): void => {
+    // A target carrying its object glows that object, whatever id it was registered under.
+    const carried = id !== null && isObject3D(object) ? registerObject(id, object) : null;
+    for (const set of allAffordances()) {
+      if (set === carried) set.focus(set.ids[0] ?? null);
+      else set.focus(id !== null && set.has(id) ? id : null);
+    }
+  };
+  // Reduced motion, read about once a second: a media query read every
+  // frame would allocate, and the setting changes rarely.
+  let reducedMotionNow = false;
+  let reducedMotionAge = Infinity;
+  const readReducedMotion = (dt: number): boolean => {
+    reducedMotionAge += dt;
+    if (reducedMotionAge >= 1000) {
+      reducedMotionAge = 0;
+      try {
+        reducedMotionNow = options.reducedMotion?.() === true;
+      } catch {
+        reducedMotionNow = false;
+      }
+    }
+    return reducedMotionNow;
+  };
 
   // D-097: the local avatar's jump shadow, on the ground under it.
   const jumpShadow = createJumpShadow();
@@ -406,9 +477,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     sandbox.setTarget(null);
     sandboxHeights = FLAT_SANDBOX;
     carried.setColour(null);
-    // The prompt belongs to the session that set it (D-117), and so do the
-    // plaza's figures (D-076).
-    interactionPrompt.show(null);
+    // The target's glow belongs to the session that chose it (D-117,
+    // D-123), and so do the plaza's figures (D-076).
+    focusAffordance(null, null);
     street.plaza?.setStats(EMPTY_PLAZA_STATS);
     // So do the ball, its prompt, the pitch's moments and the scoreboard (D-078).
     football.group.visible = true;
@@ -646,18 +717,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
         },
         setInteractionPrompt(prompt) {
           if (!live()) return;
-          if (!prompt) {
-            interactionPrompt.show(null);
-            return;
-          }
-          // The plaza says how high over its monument and table; anything
-          // else floats at the default height over its own floor (a roof's
-          // deck, or the floor of a room or the Studio).
-          const ground = pixelToGround(prompt.x, prompt.y);
-          const plazaHeight = streetVisible ? street.plaza?.promptHeight(prompt.id as StationId) ?? null : null;
-          const deck = rooftop !== null ? rooftopHeightAt(rooftop, ground.x, ground.z) ?? 0 : 0;
-          if (plazaHeight !== null) interactionPrompt.show(prompt, plazaHeight, 0);
-          else interactionPrompt.show(prompt, undefined, deck);
+          // D-123: no floating "E · …" any more: the chosen target glows,
+          // and the words go to the key chip at the bottom of the screen
+          // (interact-chip.ts), which the engine feeds.
+          focusAffordance(prompt?.id ?? null, prompt?.object);
         },
         setPlazaStats(stats) {
           if (!live()) return;
@@ -686,6 +749,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
           arenaFrame = frame;
           arenaGate = frame?.gate === 'busy' ? 'busy' : 'open';
           arenaRoom?.setGate(arenaGate);
+          if (arenaRoom?.gate) extraAffordances.get(arenaRoom.gate)?.setUsable(ARENA_GATE_TARGET_ID, arenaGate === 'open');
           arenaFx.sync(frame, remoteSwings());
         },
         setArenaPrompt(text) {
@@ -834,7 +898,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (visibleRoom) rooms.get(visibleRoom)?.update(dt);
       if (visibleRoom === 'arena') arenaFx.update(dt);
       if (studioVisible) studio.update(dt);
-      interactionPrompt.update(dt);
+      // D-123: one shared shimmer clock, then every area's glow fades (a
+      // hidden room's too, so it never reappears mid-glow).
+      advanceAffordanceClock(dt, readReducedMotion(dt));
+      for (const set of affordanceSets) set.update(dt);
       remote?.update(dt);
     },
     updateOcclusion(camera, deltaMs) {
@@ -864,6 +931,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
         occluder.setOpacity(next);
       }
     },
+    registerAffordance(id, object) {
+      if (disposed || typeof id !== 'string' || id.length === 0 || !isObject3D(object)) return () => {};
+      registerObject(id, object);
+      return () => unregisterObject(object);
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -886,4 +958,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (errors.length > 1) throw new AggregateError(errors, 'Presenter disposal failed');
     },
   };
+}
+
+function isObject3D(value: unknown): value is Object3D {
+  return typeof value === 'object' && value !== null && (value as { isObject3D?: unknown }).isObject3D === true;
 }

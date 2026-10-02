@@ -10,7 +10,6 @@ import {
   type Material,
   type Object3D,
 } from 'three';
-import type { StationId } from '@strkworld/shared';
 import {
   PLACEMENT_APRON,
   PLACEMENT_STAND,
@@ -27,7 +26,9 @@ import {
   type PlazaRect,
 } from '../map/plaza.js';
 import type { DistrictMap } from '../map/street.js';
+import type { StationId } from '@strkworld/shared';
 import { EMPTY_PLAZA_STATS, normalizePlazaStats, type PlazaStatsPresentation } from '../plaza-stations.js';
+import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 import {
   GeometryBin,
   PALETTE,
@@ -77,7 +78,7 @@ export interface PlazaOccluder extends Occluder {
 export interface PlazaParts {
   /** `street:ground`: the paving and every volume. */
   readonly ground: Group;
-  /** `street:labels`: the gateway sign, the monument's faces, the table card and the prompts. */
+  /** `street:labels`: the gateway sign, the monument's faces and the table card. */
   readonly labels: Group;
   /** The street disposes these with its own signs. */
   readonly textLabels: TextLabel[];
@@ -141,18 +142,22 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
   const stand = hasPlacementStand(map.tiles);
   const stations = plazaStations({ placementStand: stand });
   const bin = new GeometryBin();
+  // D-123: the monument, the table and the placement stand are the plaza's stations; their pieces
+  // are copied into one affordance mesh as they are built.
+  const shells = createAffordanceShells();
+  let affordances: AffordanceSet | null = null;
   let monumentMesh: Mesh | null = null;
   let gatewayMesh: Mesh | null = null;
   try {
     pave(map, floor, bin, stand ? [PLAZA_AREA, PLACEMENT_APRON] : [PLAZA_AREA]);
-    if (stand) placementStand(PLACEMENT_STAND, floor, bin);
+    if (stand) placementStand(PLACEMENT_STAND, floor, shells.record(PLAZA_PLACEMENT_STATION, bin));
     for (const piece of fixtures) {
       switch (piece.kind) {
         case 'monument':
-          monument(piece, floor, bin);
+          monument(piece, floor, shells.record(PLAZA_MONUMENT_STATION, bin));
           break;
         case 'table':
-          table(piece, floor, bin);
+          table(piece, floor, shells.record(PLAZA_SHELLS_STATION, bin));
           break;
         case 'arch-post':
           gatewayPost(piece, floor, bin);
@@ -194,6 +199,13 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
       // The lanterns and the monument's light breathe, gently and together.
       glowMaterial.color.setScalar(0.9 + 0.1 * Math.sin((elapsed / 1000) * 1.6));
     });
+    affordances = shells.build('plaza:affordances');
+    if (affordances) {
+      res.disposable(affordances);
+      parts.ground.add(affordances.mesh);
+      // Both always answer E from the street (D-076), so both always shimmer.
+      for (const id of affordances.ids) affordances.setUsable(id, true);
+    }
   } finally {
     bin.dispose();
   }
@@ -260,21 +272,6 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
     board.object.userData['plaza'] = 'placement-board';
   }
 
-  // D-117: the E prompt is the World's shared one (three/interaction-prompt.ts),
-  // in this plaza's style; the plaza only says how high it floats over each
-  // station: over the monument's tip, just above the table, or over the
-  // placement stand's trophy.
-  const promptHeights = new Map<StationId, number>();
-  for (const station of stations) {
-    if (station.station === PLAZA_PLACEMENT_STATION) {
-      promptHeights.set(station.station, floor + STAND_TOP + 0.35);
-      continue;
-    }
-    const piece = station.station === PLAZA_MONUMENT_STATION ? monumentPiece : tablePiece;
-    if (!piece) continue;
-    promptHeights.set(station.station, station.station === PLAZA_MONUMENT_STATION ? TIP_TOP + 0.25 : floor + 1.2);
-  }
-
   if (monumentMesh && monumentPiece) {
     parts.occluders.push(monumentOccluder(monumentMesh, monumentPiece));
   }
@@ -315,9 +312,7 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
       heldIndex = 0;
       draw();
     },
-    promptHeight(station: StationId): number | null {
-      return promptHeights.get(station) ?? null;
-    },
+    affordances,
   });
 }
 

@@ -1,8 +1,9 @@
 import type { Group, Object3D, Texture } from 'three';
-import type { AvatarSpriteKey, BuildingId, StationId } from '@strkworld/shared';
+import type { AvatarSpriteKey, BuildingId } from '@strkworld/shared';
 import type { FixedRoomStationPresentation } from '../fixed-room.js';
 import type { PlazaStatsPresentation } from '../plaza-stations.js';
 import type { JumpPose } from '../jump.js';
+import type { AffordanceSet } from './affordance.js';
 
 /**
  * Contracts shared by the 3D presentation modules (D-059).
@@ -163,10 +164,10 @@ export interface PlazaView {
   /** Redraw the monument's faces; a null part reads "…". */
   setStats(stats: PlazaStatsPresentation): void;
   /**
-   * D-117: how high the shared E prompt floats over this station, world
-   * units above the street, or null for a station the plaza does not draw.
+   * D-123: the monument's and the table's affordance shells (their shimmer
+   * and edge glow), keyed by their station ids; null if the plaza has none.
    */
-  promptHeight(station: StationId): number | null;
+  readonly affordances: AffordanceSet | null;
 }
 
 export interface RoomView {
@@ -175,6 +176,12 @@ export interface RoomView {
   readonly occluders: readonly Occluder[];
   /** Redraw station state: status, highlight and label. */
   setStations(stations: readonly FixedRoomStationPresentation[]): void;
+  /**
+   * D-123: every counter's affordance shell (shimmer and edge glow), keyed
+   * by station id; a counter is usable while available, or reserved (the
+   * bunker's lift). Null for a floor with no counter.
+   */
+  readonly affordances: AffordanceSet | null;
   update(deltaMs: number): void;
   dispose(): void;
 }
@@ -184,6 +191,8 @@ export interface StudioView {
   readonly occluders: readonly Occluder[];
   /** Same contract as the 2D figure layer: visibility plus one highlighted figure. */
   sync(state: { readonly visible: boolean; readonly highlightedFigure: number | null }): void;
+  /** D-123: the figures' affordance shells, keyed `studioFigureTargetId(figure)`; null with no figure. */
+  readonly affordances: AffordanceSet | null;
   update(deltaMs: number): void;
   dispose(): void;
 }

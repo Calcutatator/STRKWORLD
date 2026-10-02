@@ -2764,6 +2764,29 @@ describe('WorldSession: press E to interact (D-117)', () => {
     expect(used).toEqual(['board', 'gate']);
   });
 
+  it('hands a target\'s 3D object to the view with its prompt, for its edge glow (D-123)', () => {
+    const world = createWorld();
+    const session = world.start();
+    const used: string[] = [];
+    const here = streetTileCentre({ x: STREET.spawn.x, y: STREET.spawn.y });
+    place(session, here);
+    const mesh = { isObject3D: true, name: 'ring-gate' };
+    session.interactions.register({
+      targets: () => [{ ...target('gate', { x: here.x - 16, y: here.y - 48, width: 32, height: 32 }, used), object: mesh }],
+    });
+    tick(world);
+    expect(session.interactionPrompt).toMatchObject({ id: 'gate', label: 'GATE' });
+    expect(session.interactionPrompt?.object).toBe(mesh);
+    expect(world.view.last('setInteractionPrompt')).toEqual([session.interactionPrompt]);
+    // A fight suspends it: no prompt, so no glow and no chip.
+    const release = session.interactions.suspend('combat');
+    tick(world);
+    expect(world.view.last('setInteractionPrompt')).toEqual([null]);
+    release();
+    tick(world);
+    expect(session.interactionPrompt?.object).toBe(mesh);
+  });
+
   it('yields E to a combat context: stations first, and none at all while a fight suspends them', () => {
     const world = createWorld();
     const session = world.start();

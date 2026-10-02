@@ -13,7 +13,7 @@ import {
 import type { WorldConfig } from '../runtime.js';
 import { createDomKeyboard, type DomKeyboard } from '../dom-keyboard.js';
 import { createWorldSession, type WorldSession } from '../world-session.js';
-import { createTouchInteractButton, isTouchScreen, type TouchInteractButton } from '../touch-interact.js';
+import { createInteractChip, isTouchScreen, type InteractChip } from '../interact-chip.js';
 import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js';
 import { CAMERA_FOV, createCameraRig, type CameraRig } from './camera-rig.js';
 import { createImageTextureLoader } from './image-textures.js';
@@ -123,8 +123,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   let rig: CameraRig;
   let session: WorldSession | null = null;
   let keyboard: DomKeyboard | null = null;
-  // D-117: on a touch screen, the "E · …" prompt is a button over the canvas.
-  let touchButton: TouchInteractButton | null = null;
+  // D-123: the key chip naming what E would use; on a touch screen, the tap button.
+  let chip: InteractChip | null = null;
   let destroyed = false;
   let lastTime: number | null = null;
   // One report slot per frame stage, so a handoff failing every frame cannot
@@ -161,7 +161,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     const currentKeyboard = keyboard;
     session = null;
     keyboard = null;
-    touchButton?.show(null);
+    chip?.show(null);
     const errors: unknown[] = [];
     try {
       current?.destroy();
@@ -184,14 +184,14 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     try {
       view = presenter.bindSession(config.remotePeers);
       const bound = view;
-      const button = touchButton;
-      // D-117: on a touch screen the button takes the key prompt's place.
-      const sessionView = button
+      const keyChip = chip;
+      // D-123: the target glows in the scene and its words go to the chip.
+      const sessionView = keyChip
         ? {
           ...bound,
           setInteractionPrompt: (prompt: Parameters<typeof bound.setInteractionPrompt>[0]) => {
-            bound.setInteractionPrompt(null);
-            button.show(prompt);
+            bound.setInteractionPrompt(prompt);
+            keyChip.show(prompt);
           },
         }
         : bound;
@@ -339,15 +339,17 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());
 
-    if (isTouchScreen(win)) {
-      const button = createTouchInteractButton({
+    {
+      const created = createInteractChip({
         mount,
+        touch: isTouchScreen(win),
         onPress: () => guard('interact', () => session?.interact()),
+        reducedMotion: () => prefersReducedMotion(win),
       });
-      touchButton = button;
+      chip = created;
       cleanup.push(() => {
-        touchButton = null;
-        button.destroy();
+        chip = null;
+        created.destroy();
       });
     }
     cleanup.push(() => disposeSandboxCaches());

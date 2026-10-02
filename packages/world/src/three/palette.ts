@@ -532,15 +532,6 @@ export const PLAZA_THEME = Object.freeze({
     titleFont: 'rounded',
     uppercase: true,
   } satisfies SignStyleOptions),
-  /** The "E" prompt over a station the player stands at. */
-  prompt: Object.freeze({
-    lineHeight: 0.24,
-    font: 'rounded',
-    foreground: css(STRK20.cream),
-    background: 'rgba(13,13,13,0.86)',
-    border: css(STRK20.orange),
-    uppercase: true,
-  } satisfies FloatingStyleOptions),
 });
 
 /**
@@ -1009,14 +1000,15 @@ export function buildingTheme(building: BuildingId | null): BuildingTheme {
   return building ? BUILDING_THEMES[building] ?? GENERIC_BUILDING_THEME : GENERIC_BUILDING_THEME;
 }
 
-/** Station render states: its accent material and its approach halo. */
+/**
+ * Station render states: its accent material (the status panel or light).
+ * D-123: the approach halo on the floor is gone; what says "use me" is the
+ * affordance shell (affordance.ts), and a locked counter only greys its light.
+ */
 export interface StationLook {
   readonly color: number;
   readonly emissive: number;
   readonly emissiveIntensity: number;
-  readonly halo: number;
-  readonly haloOpacity: number;
-  readonly edgeOpacity: number;
 }
 
 export interface StationLooks {
@@ -1032,33 +1024,21 @@ export const STATION_LOOKS: StationLooks = Object.freeze({
     color: 0xb07b41,
     emissive: 0xffa640,
     emissiveIntensity: 0.65,
-    halo: 0xffcf73,
-    haloOpacity: 0.2,
-    edgeOpacity: 0.55,
   }),
   highlighted: Object.freeze({
     color: 0xe2b45d,
     emissive: 0xffd66b,
     emissiveIntensity: 1.9,
-    halo: 0xffe08a,
-    haloOpacity: 0.48,
-    edgeOpacity: 0.95,
   }),
   locked: Object.freeze({
     color: 0x665f67,
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: 0x8f8896,
-    haloOpacity: 0.06,
-    edgeOpacity: 0.2,
   }),
   lockedHighlighted: Object.freeze({
     color: 0x736b74,
     emissive: 0x2a2530,
     emissiveIntensity: 0.4,
-    halo: 0xa9a2b0,
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
@@ -1068,33 +1048,21 @@ export const AVNU_STATION_LOOKS: StationLooks = Object.freeze({
     color: AVNU.indigoBorder,
     emissive: AVNU.blue,
     emissiveIntensity: 1,
-    halo: AVNU.blue,
-    haloOpacity: 0.2,
-    edgeOpacity: 0.6,
   }),
   highlighted: Object.freeze({
     color: AVNU.lightBlue,
     emissive: AVNU.lightBlue,
     emissiveIntensity: 2.2,
-    halo: AVNU.lightBlue,
-    haloOpacity: 0.45,
-    edgeOpacity: 0.95,
   }),
   locked: Object.freeze({
     color: lift(AVNU.slate, -0.18),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: AVNU.slate,
-    haloOpacity: 0.06,
-    edgeOpacity: 0.2,
   }),
   lockedHighlighted: Object.freeze({
     color: AVNU.slate,
     emissive: AVNU.indigo,
     emissiveIntensity: 0.5,
-    halo: AVNU.slate,
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
@@ -1104,81 +1072,56 @@ export const STRK20_STATION_LOOKS: StationLooks = Object.freeze({
     color: STRK20.orangePressed,
     emissive: STRK20.orange,
     emissiveIntensity: 1.2,
-    halo: STRK20.orange,
-    haloOpacity: 0.2,
-    edgeOpacity: 0.6,
   }),
   highlighted: Object.freeze({
     color: STRK20.orange,
     emissive: STRK20.orange,
     emissiveIntensity: 2.6,
-    halo: STRK20.orange,
-    haloOpacity: STRK20.glowAlpha,
-    edgeOpacity: 1,
   }),
   locked: Object.freeze({
     color: lift(STRK20.hairline, 0.08),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: 0x6b6b6b,
-    haloOpacity: 0.06,
-    edgeOpacity: 0.2,
   }),
   lockedHighlighted: Object.freeze({
     color: lift(STRK20.hairline, 0.12),
     emissive: STRK20.orangePressed,
     emissiveIntensity: 0.25,
-    halo: 0x8a8a8a,
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
 /**
- * NEAR: green when ready, brighter green with its tint as the halo when you
- * step up to it. Locked only means not enabled yet, so it stays neutral grey;
+ * NEAR: green when ready, brighter green when you step up to it. Locked only means not enabled yet, so it stays neutral grey;
  * amber (pending) is kept for the room's decor.
  */
 export const NEAR_STATION_LOOKS: StationLooks = Object.freeze({
   // A near-black green body under a low green glow: ACES bleaches a bright
-  // green to mint, so the halo (unlit, exact colour) carries the highlight.
+  // green to mint.
   available: Object.freeze({
     color: lift(NEAR.green, -0.38),
     emissive: NEAR.green,
     emissiveIntensity: 0.5,
-    halo: NEAR.green,
-    haloOpacity: 0.2,
-    edgeOpacity: 0.6,
   }),
   highlighted: Object.freeze({
     color: lift(NEAR.green, -0.34),
     emissive: NEAR.green,
     emissiveIntensity: 0.8,
-    halo: NEAR.greenTint,
-    haloOpacity: 0.42,
-    edgeOpacity: 1,
   }),
   locked: Object.freeze({
     color: lift(NEAR.hairline, 0.08),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: NEAR.muted,
-    haloOpacity: 0.06,
-    edgeOpacity: 0.2,
   }),
   lockedHighlighted: Object.freeze({
     color: lift(NEAR.hairline, 0.13),
     emissive: lift(NEAR.muted, -0.3),
     emissiveIntensity: 0.3,
-    halo: NEAR.muted,
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
 /**
- * Endur, a light brand: its muted green when ready and brighter with a mint
- * halo when you step up to it. Locked, the production default while staking
+ * Endur, a light brand: its muted green when ready and brighter when you
+ * step up to it. Locked, the production default while staking
  * is switched off (D-063), is a calm grey, nothing alarming.
  */
 export const ENDUR_STATION_LOOKS: StationLooks = Object.freeze({
@@ -1187,40 +1130,27 @@ export const ENDUR_STATION_LOOKS: StationLooks = Object.freeze({
     color: ENDUR.green,
     emissive: ENDUR.greenDeep,
     emissiveIntensity: 0.25,
-    halo: ENDUR.green,
-    haloOpacity: 0.22,
-    edgeOpacity: 0.6,
   }),
   highlighted: Object.freeze({
     color: mixHex(ENDUR.green, ENDUR.card, 0.2),
     emissive: ENDUR.green,
     emissiveIntensity: 0.8,
-    halo: mixHex(ENDUR.green, ENDUR.base, 0.55),
-    haloOpacity: 0.42,
-    edgeOpacity: 1,
   }),
   locked: Object.freeze({
     color: lift(ENDUR.border, -0.2),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: lift(ENDUR.border, -0.3),
-    haloOpacity: 0.06,
-    edgeOpacity: 0.2,
   }),
   lockedHighlighted: Object.freeze({
     color: lift(ENDUR.border, -0.12),
     emissive: lift(ENDUR.border, -0.6),
     emissiveIntensity: 0.3,
-    halo: lift(ENDUR.border, -0.2),
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
 /**
  * Vesu, a light brand like Endur: electric blue when ready, a lighter blue
- * with a deep-blue halo (which reads on its white floor) when you step up to
- * it. Locked, the default until the Shell opens the counter, is a calm
+ * when you step up to it. Locked, the default until the Shell opens the counter, is a calm
  * periwinkle grey.
  */
 export const VESU_STATION_LOOKS: StationLooks = Object.freeze({
@@ -1229,17 +1159,11 @@ export const VESU_STATION_LOOKS: StationLooks = Object.freeze({
     color: VESU.blue,
     emissive: VESU.blue,
     emissiveIntensity: 0.45,
-    halo: VESU.blue,
-    haloOpacity: 0.2,
-    edgeOpacity: 0.6,
   }),
   highlighted: Object.freeze({
     color: mixHex(VESU.blue, VESU.white, 0.25),
     emissive: VESU.blue,
     emissiveIntensity: 1,
-    halo: VESU.blueText,
-    haloOpacity: 0.36,
-    edgeOpacity: 1,
   }),
   // The periwinkle greyed with Vesu's ink: `lift` would keep its full
   // saturation, and a locked counter must not read as a blue one.
@@ -1247,25 +1171,19 @@ export const VESU_STATION_LOOKS: StationLooks = Object.freeze({
     color: mixHex(VESU.blueSoft, VESU.ink, 0.45),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: mixHex(VESU.blueSoft, VESU.ink, 0.6),
-    haloOpacity: 0.08,
-    edgeOpacity: 0.24,
   }),
   lockedHighlighted: Object.freeze({
     color: mixHex(VESU.blueSoft, VESU.ink, 0.3),
     emissive: mixHex(VESU.blueText, VESU.ink, 0.5),
     emissiveIntensity: 0.3,
-    halo: mixHex(VESU.blueSoft, VESU.ink, 0.5),
-    haloOpacity: 0.18,
-    edgeOpacity: 0.45,
   }),
 });
 
 export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'vesu' | 'netcafe' | 'plain';
 
 /**
- * The Degen floor's counter: hot pink when ready, brighter with a lime halo
- * when you step up to it, and a calm dark violet while locked (the default
+ * The Degen floor's counter: hot pink when ready, brighter when you step up
+ * to it, and a calm dark violet while locked (the default
  * until the Shell opens it).
  */
 export const DEGEN_STATION_LOOKS: StationLooks = Object.freeze({
@@ -1273,33 +1191,21 @@ export const DEGEN_STATION_LOOKS: StationLooks = Object.freeze({
     color: DEGEN.pinkDeep,
     emissive: DEGEN.pink,
     emissiveIntensity: 0.9,
-    halo: DEGEN.pink,
-    haloOpacity: 0.24,
-    edgeOpacity: 0.7,
   }),
   highlighted: Object.freeze({
     color: DEGEN.pink,
     emissive: DEGEN.pink,
     emissiveIntensity: 1.8,
-    halo: DEGEN.lime,
-    haloOpacity: 0.42,
-    edgeOpacity: 1,
   }),
   locked: Object.freeze({
     color: lift(AVNU.indigo, 0.12),
     emissive: 0x000000,
     emissiveIntensity: 0,
-    halo: lift(DEGEN.violet, -0.25),
-    haloOpacity: 0.07,
-    edgeOpacity: 0.22,
   }),
   lockedHighlighted: Object.freeze({
     color: lift(AVNU.indigo, 0.2),
     emissive: lift(DEGEN.violet, -0.3),
     emissiveIntensity: 0.35,
-    halo: lift(DEGEN.violet, -0.1),
-    haloOpacity: 0.16,
-    edgeOpacity: 0.45,
   }),
 });
 
@@ -1614,33 +1520,21 @@ export const NETCAFE_ELEVATOR_LOOKS: StationLooks = Object.freeze({
     color: NETCAFE.steelDark,
     emissive: NETCAFE.amber,
     emissiveIntensity: 0.3,
-    halo: NETCAFE.amber,
-    haloOpacity: 0.08,
-    edgeOpacity: 0.25,
   }),
   highlighted: Object.freeze({
     color: NETCAFE.steelDark,
     emissive: NETCAFE.amber,
     emissiveIntensity: 0.6,
-    halo: NETCAFE.amber,
-    haloOpacity: 0.14,
-    edgeOpacity: 0.4,
   }),
   locked: Object.freeze({
     color: NETCAFE.steelDark,
     emissive: NETCAFE.amber,
     emissiveIntensity: 0.22,
-    halo: NETCAFE.red,
-    haloOpacity: 0.04,
-    edgeOpacity: 0.14,
   }),
   lockedHighlighted: Object.freeze({
     color: NETCAFE.steelDark,
     emissive: NETCAFE.red,
     emissiveIntensity: 0.95,
-    halo: NETCAFE.red,
-    haloOpacity: 0.16,
-    edgeOpacity: 0.5,
   }),
 });
 
@@ -3198,8 +3092,3 @@ export function createTickerStrip(
   return { texture, width, height };
 }
 
-/**
- * D-117: the one "E · …" prompt every station shares, the plaza's own
- * (D-076): cream rounded capitals on near-black, ringed in STRK20 orange.
- */
-export const INTERACTION_PROMPT_STYLE: FloatingStyleOptions = PLAZA_THEME.prompt;

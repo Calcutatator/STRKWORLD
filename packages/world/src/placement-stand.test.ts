@@ -91,10 +91,10 @@ describe('the placement stand in 3D', () => {
     expect(labelsOf(view.labels).some((child) => child.userData['plaza'] === 'placement-board')).toBe(false);
   });
 
-  it('floats the shared E prompt over the trophy, and offers none without the switch (D-117)', () => {
+  it('glows like the other plaza stations: its pieces join the affordance shells, and none without the switch (D-123)', () => {
     const on = buildStreet(createStreetMap({ placementStand: true }), createNullLabelFactory());
-    expect(on.plaza!.promptHeight(PLAZA_PLACEMENT_STATION)).toBeGreaterThan(3);
+    expect(on.plaza!.affordances!.ids).toContain(PLAZA_PLACEMENT_STATION);
     const off = buildStreet(createStreetMap(), createNullLabelFactory());
-    expect(off.plaza!.promptHeight(PLAZA_PLACEMENT_STATION)).toBeNull();
+    expect(off.plaza!.affordances?.ids ?? []).not.toContain(PLAZA_PLACEMENT_STATION);
   });
 });

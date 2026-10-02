@@ -157,6 +157,8 @@ describe('the arena in 3D (D-114)', () => {
     const room = build({ labels: counting });
     const names = meshes(room.group).map((mesh) => mesh.name).sort();
     expect(names).toEqual([
+      // D-123: the emperor's box's shimmer and glow, one additive call.
+      'arena:affordances',
       'arena:banners',
       'arena:dummy-body',
       'arena:fence',
@@ -171,7 +173,7 @@ describe('the arena in 3D (D-114)', () => {
     // The ring's sign and the emperor's box label.
     expect(labels.map((label) => label.userData['text'])).toEqual(['THE RING', "EMPEROR'S BOX\nCLOSED"]);
     const calls = names.length + labels.length;
-    expect(calls).toBe(12);
+    expect(calls).toBe(13);
     expect(calls).toBeLessThanOrEqual(22);
     room.dispose();
   });

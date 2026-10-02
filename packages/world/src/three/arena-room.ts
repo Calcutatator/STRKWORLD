@@ -51,6 +51,7 @@ import {
   type Point2,
 } from './palette.js';
 import type { LabelFactory, Occluder, RoomView, TextLabel } from './types.js';
+import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 
 /**
  * The gladiator pit's arena in 3D (D-114): an open-air stadium oval at the
@@ -71,7 +72,7 @@ import type { LabelFactory, Occluder, RoomView, TextLabel } from './types.js';
  *
  * Draw calls: sand, north stone, south stone, seats (one InstancedMesh, one
  * instance per tier tile), banners, flames (one InstancedMesh), fence, gate
- * (two leaves, one InstancedMesh), gate lamp, dummy, and two labels: 12.
+ * (two leaves, one InstancedMesh), gate lamp, dummy, the emperor's box's affordance shell (D-123) and two labels: 13.
  * The combat feedback (C's `arena-fx.ts`) mounts under `fxMount`.
  */
 
@@ -212,11 +213,16 @@ export function buildArenaRoom(
   dummy.name = 'arena:dummy';
 
   const bin = new GeometryBin();
+  // D-123: the emperor's box (a reserved station: E shows it is closed) has
+  // an affordance shell like any counter; the ring gate's is the presenter's.
+  const shells = createAffordanceShells();
+  let affordances: AffordanceSet | null = null;
+  const boxStation = map.stations[0];
   try {
     sandFloor(bin);
     stands(bin);
     tunnel(bin);
-    emperorsBox(bin);
+    emperorsBox(boxStation ? shells.record(boxStation.station, bin) : bin);
     fence(bin);
     const torches = torchTiles();
     for (const tile of torches) brazierStand(bin, tile.x + 0.5, tile.y + 0.5);
@@ -251,6 +257,12 @@ export function buildArenaRoom(
       receive: true,
     });
 
+    affordances = shells.build('arena:affordances');
+    if (affordances) {
+      res.disposable(affordances);
+      group.add(affordances.mesh);
+      for (const station of map.stations) affordances.setUsable(station.station, station.reserved === true);
+    }
     group.add(seats(res));
     group.add(flames(res, torches, animators, reduced));
     const gate = gateLeaves(res);
@@ -330,6 +342,9 @@ export function buildArenaRoom(
     fxMount,
     dummy,
     gate: gateMesh!,
+    // D-123: the box's shell; the ring gate's the presenter builds from
+    // `gate` (it swings, so it is not merged here).
+    affordances,
     setGate(state) {
       if (disposed || (state !== 'open' && state !== 'busy')) return;
       gateState = state;
