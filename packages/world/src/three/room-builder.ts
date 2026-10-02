@@ -16,6 +16,7 @@ import type { BufferGeometry, Material, MeshStandardMaterial, Object3D, Texture 
 import type { StationId } from '@strkworld/shared';
 import type {
   FixedRoomLevelMap,
+  FixedRoomRect,
   FixedRoomStationDefinition,
   FixedRoomStationPresentation,
 } from '../fixed-room.js';
@@ -31,6 +32,7 @@ import {
   ResourceBag,
   STRK20,
   AVNU,
+  BANK_HALL,
   ENDUR,
   NEAR,
   VESU,
@@ -78,8 +80,11 @@ import {
   type RoomTheme,
   type StationLook,
   type StationLooks,
+  type StationFit,
   type StationPropStyle,
+  type StationTheme,
   type TickerSegment,
+  type Vec3,
 } from './palette.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
@@ -89,9 +94,9 @@ import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomVi
  *
  * The follow camera looks in from the south, so the south wall is a low
  * ledge and the north, east and west walls stand full height, each its own
- * fadeable occluder. Every volume stays on wall or station tiles; the floor
- * the player walks on carries only flat inlays, halos and light. The room is
- * drawn at `origin` (World pixels) over the hidden street.
+ * fadeable occluder. Every volume stays on wall, station or fixture tiles;
+ * the floor the player walks on carries only flat inlays, halos and light.
+ * The room is drawn at `origin` (World pixels) over the hidden street.
  */
 
 export const INTERIOR_WALL_HEIGHT = 2.2;
@@ -395,7 +400,8 @@ interface StationView {
   readonly station: StationId;
   readonly group: Group;
   readonly accent: MeshStandardMaterial;
-  readonly beacon: Mesh;
+  /** A free-standing counter's spinning status beacon; a built-in one's light is part of its status mesh (D-104). */
+  readonly beacon: Mesh | null;
   readonly label: TextLabel;
   readonly phase: number;
   readonly looks: StationLooks;
@@ -472,17 +478,20 @@ export function buildFixedRoom(
       res,
       group,
     });
-    decorateRoom(theme, shell, map, res, animators, labels, textLabels, images);
-    exitDecor(map, theme, shell);
-    liftDecor(map, theme, shell, labels, textLabels, group);
     // D-103: every counter's static desk and props share one lit mesh and
     // one self-lit mesh, and every approach halo one vertex-coloured mesh,
     // so a room of four counters costs barely more than a room of one.
+    // D-104: the fixtures the counters are built into (a teller wall, a
+    // front desk, a booth) go into the same meshes, and their glass into one
+    // more.
     const counters = new GeometryBin();
     const halos: HaloQuads[] = [];
     try {
+      decorateRoom(theme, shell, map, res, animators, labels, textLabels, images, roomFurniture(counters, labels, textLabels, group));
+      exitDecor(map, theme, shell);
+      liftDecor(map, theme, shell, labels, textLabels, group);
       for (const station of map.stations) {
-        const built = buildStation(station, theme, labels, res, group, textLabels, counters);
+        const built = buildStation(station, map, theme, labels, res, group, textLabels, counters);
         stations.push(built.view);
         halos.push(built.halo);
       }
@@ -493,6 +502,12 @@ export function buildFixedRoom(
       });
       if (counters.has('unlit')) {
         flushBin(counters, 'unlit', res.material(unlitMaterial()), res, group, { name: `${group.name}:counter-screens` });
+      }
+      if (counters.has('glass')) {
+        flushBin(counters, 'glass', res.material(unlitMaterial({ transparent: true })), res, group, {
+          name: `${group.name}:glass`,
+          renderOrder: 1,
+        });
       }
     } finally {
       counters.dispose();
@@ -540,8 +555,10 @@ export function buildFixedRoom(
       elapsed += dt;
       const t = elapsed / 1000;
       for (const view of stations) {
-        view.beacon.rotation.y = t * (view.highlighted ? 2.4 : 0.8) + view.phase;
-        view.beacon.position.y = STATION_BEACON_Y + Math.sin(t * 2 + view.phase) * 0.04;
+        if (view.beacon) {
+          view.beacon.rotation.y = t * (view.highlighted ? 2.4 : 0.8) + view.phase;
+          view.beacon.position.y = STATION_BEACON_Y + Math.sin(t * 2 + view.phase) * 0.04;
+        }
         const breathe = view.highlighted ? Math.sin(t * 4.5) : 0;
         if (view.highlighted) paintHalo(view, view.look.haloOpacity * (1 + 0.18 * breathe), Math.min(1, view.look.edgeOpacity * (1 + 0.08 * breathe)));
         view.accent.emissiveIntensity = view.look.emissiveIntensity * (1 + 0.12 * breathe);
@@ -609,6 +626,7 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
  */
 function buildStation(
   station: FixedRoomStationDefinition,
+  map: FixedRoomLevelMap,
   theme: RoomTheme,
   labels: LabelFactory,
   res: ResourceBag,
@@ -629,6 +647,8 @@ function buildStation(
   const dress = stationTheme(theme, station.station);
 
   const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
+  const halo = stationHalo(station, map);
+  if (dress.fit) return buildBuiltInStation(station, map, dress, dress.fit, labels, res, group, textLabels, counters, accent, halo);
   counters.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(dress.kioskBase, 0.1));
   counters.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), dress.kioskTop);
   counters.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), dress.kioskTrim ?? shade(dress.kioskBase, -0.12));
@@ -640,32 +660,6 @@ function buildStation(
   } finally {
     bin.dispose();
   }
-
-  const hx0 = station.x - 1 + 0.04;
-  const hx1 = station.x + station.width + 1 - 0.04;
-  const hz0 = station.y - 1 + 0.04;
-  const hz1 = station.y + station.height + 1 - 0.04;
-  const sx0 = station.x;
-  const sx1 = station.x + station.width;
-  const sz0 = station.y;
-  const sz1 = station.y + station.height;
-  const fillY = 0.012;
-  const e = 0.06;
-  const edgeY = 0.015;
-  const halo: HaloQuads = {
-    fill: [
-      flatQuad(hx0, hz0, hx1, sz0, fillY),
-      flatQuad(hx0, sz1, hx1, hz1, fillY),
-      flatQuad(hx0, sz0, sx0, sz1, fillY),
-      flatQuad(sx1, sz0, hx1, sz1, fillY),
-    ],
-    edge: [
-      flatQuad(hx0, hz0, hx1, hz0 + e, edgeY),
-      flatQuad(hx0, hz1 - e, hx1, hz1, edgeY),
-      flatQuad(hx0, hz0 + e, hx0 + e, hz1 - e, edgeY),
-      flatQuad(hx1 - e, hz0 + e, hx1, hz1 - e, edgeY),
-    ],
-  };
 
   const beacon = new Mesh(res.geometry(new OctahedronGeometry(0.14, 0)), accent);
   beacon.name = `${group.name}:beacon`;
@@ -756,6 +750,838 @@ function paintHalo(view: StationView, fillOpacity: number, edgeOpacity: number):
   write(slice.fill, fillOpacity);
   write(slice.edge, edgeOpacity);
   slice.colour.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------------
+// Halos and built-in counters (D-104)
+// ---------------------------------------------------------------------------
+
+/** Whether a player can stand on a tile: not a wall, a counter or a fixture. */
+function standable(map: FixedRoomLevelMap, x: number, y: number): boolean {
+  const tile = map.tiles[y]?.[x];
+  return tile !== undefined && tile !== 'wall' && tile !== 'station' && tile !== 'fixture';
+}
+
+/**
+ * A station's approach halo as flat quads. A free-standing counter's rings
+ * it (D-059). A built-in one's (D-104) covers only the tiles a player can
+ * stand on to open it, so it never lights the furniture or the floor behind
+ * a teller wall: the fill over those tiles, inset where the region ends, and
+ * its edge traced round the region's outside.
+ */
+function stationHalo(station: FixedRoomStationDefinition, map: FixedRoomLevelMap): HaloQuads {
+  const fillY = 0.012;
+  const e = 0.06;
+  const edgeY = 0.015;
+  const inset = 0.04;
+  const region: [number, number][] = [];
+  let ring = true;
+  for (let y = station.y - 1; y <= station.y + station.height; y++) {
+    for (let x = station.x - 1; x <= station.x + station.width; x++) {
+      if (x >= station.x && x < station.x + station.width && y >= station.y && y < station.y + station.height) continue;
+      if (standable(map, x, y)) region.push([x, y]);
+      else ring = false;
+    }
+  }
+  if (ring) {
+    const hx0 = station.x - 1 + inset;
+    const hx1 = station.x + station.width + 1 - inset;
+    const hz0 = station.y - 1 + inset;
+    const hz1 = station.y + station.height + 1 - inset;
+    const sx0 = station.x;
+    const sx1 = station.x + station.width;
+    const sz0 = station.y;
+    const sz1 = station.y + station.height;
+    return {
+      fill: [
+        flatQuad(hx0, hz0, hx1, sz0, fillY),
+        flatQuad(hx0, sz1, hx1, hz1, fillY),
+        flatQuad(hx0, sz0, sx0, sz1, fillY),
+        flatQuad(sx1, sz0, hx1, sz1, fillY),
+      ],
+      edge: [
+        flatQuad(hx0, hz0, hx1, hz0 + e, edgeY),
+        flatQuad(hx0, hz1 - e, hx1, hz1, edgeY),
+        flatQuad(hx0, hz0 + e, hx0 + e, hz1 - e, edgeY),
+        flatQuad(hx1 - e, hz0 + e, hx1, hz1 - e, edgeY),
+      ],
+    };
+  }
+  const inRegion = (x: number, y: number): boolean => region.some(([rx, ry]) => rx === x && ry === y);
+  const fill: BufferGeometry[] = [];
+  const edge: BufferGeometry[] = [];
+  for (const [x, y] of region) {
+    const west = !inRegion(x - 1, y);
+    const east = !inRegion(x + 1, y);
+    const north = !inRegion(x, y - 1);
+    const south = !inRegion(x, y + 1);
+    const x0 = x + (west ? inset : 0);
+    const x1 = x + 1 - (east ? inset : 0);
+    const z0 = y + (north ? inset : 0);
+    const z1 = y + 1 - (south ? inset : 0);
+    fill.push(flatQuad(x0, z0, x1, z1, fillY));
+    // Edges along x run the tile's full trimmed width; edges along z stop
+    // short of them, so no corner is painted twice.
+    if (north) edge.push(flatQuad(x0, z0, x1, z0 + e, edgeY));
+    if (south) edge.push(flatQuad(x0, z1 - e, x1, z1, edgeY));
+    const za = z0 + (north ? e : 0);
+    const zb = z1 - (south ? e : 0);
+    if (west && zb > za) edge.push(flatQuad(x0, za, x0 + e, zb, edgeY));
+    if (east && zb > za) edge.push(flatQuad(x1 - e, za, x1, zb, edgeY));
+  }
+  return { fill, edge };
+}
+
+/** What a built-in counter hands back: its status light, and where its sign hangs. */
+interface BuiltCounter {
+  /** Painted in the station's accent: the light that shows its state. */
+  readonly status: readonly BufferGeometry[];
+  readonly sign: { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number };
+}
+
+/**
+ * A counter built into its room's fixtures (D-104): its desk in the room's
+ * shared meshes like any counter's, one status mesh holding the light that
+ * shows its state (no beacon), and the Shell's label on a sign set into the
+ * architecture, where a free-standing counter floats a pill.
+ */
+function buildBuiltInStation(
+  station: FixedRoomStationDefinition,
+  map: FixedRoomLevelMap,
+  dress: StationTheme,
+  fit: StationFit,
+  labels: LabelFactory,
+  res: ResourceBag,
+  group: Group,
+  textLabels: TextLabel[],
+  counters: GeometryBin,
+  accent: MeshStandardMaterial,
+  halo: HaloQuads,
+): { view: StationView; halo: HaloQuads } {
+  const built = builtInCounter(fit, station, map, counters);
+  const bin = new GeometryBin();
+  try {
+    for (const geometry of built.status) bin.add('accent', geometry, 0xffffff);
+    flushBin(bin, 'accent', accent, res, group, { name: `${group.name}:status` });
+  } finally {
+    bin.dispose();
+  }
+  const label = labels.sign(station.label, dress.sign ?? BUILT_IN_FALLBACK_SIGN);
+  textLabels.push(label);
+  label.object.position.set(built.sign.x, built.sign.y, built.sign.z);
+  label.object.rotation.y = built.sign.yaw;
+  label.object.userData['station'] = station.station;
+  group.add(label.object);
+  const cx = station.x + station.width / 2;
+  const cz = station.y + station.height / 2;
+  const view: StationView = {
+    station: station.station,
+    group,
+    accent,
+    beacon: null,
+    label,
+    phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
+    looks: dress.looks,
+    halo: null,
+    labelText: station.label,
+    look: dress.looks.locked,
+    highlighted: false,
+  };
+  return { view, halo };
+}
+
+/** A plain sign for a built-in counter whose theme names none. */
+const BUILT_IN_FALLBACK_SIGN: SignStyleOptions = Object.freeze({ width: 1.5, height: 0.32 });
+
+function builtInCounter(fit: StationFit, station: FixedRoomStationDefinition, map: FixedRoomLevelMap, bin: GeometryBin): BuiltCounter {
+  switch (fit) {
+    case 'teller':
+      return tellerWindow(station, bin);
+    case 'endur-booth':
+      return endurWindow(station, bin);
+    case 'vesu-desk':
+      return vesuDeskPlace(station, bin);
+    case 'vesu-booth':
+      return vesuLoanBooth(station, map.width - INTERIOR_WALL_THICKNESS, bin);
+  }
+}
+
+// -- the Bank's banking hall ---------------------------------------------------
+
+/** The teller wall's sections, in height (D-104): shared by the windows and the wall between them. */
+const TELLER = Object.freeze({
+  /** The marble counter top. */
+  top: 0.98,
+  topThickness: 0.08,
+  /** Where the window's opening ends and the header begins. */
+  header: 1.95,
+  /** The header's top, where the orange line runs. */
+  crown: 2.45,
+});
+
+/**
+ * The teller wall's lower part along one run of row 3 (D-104): a walnut
+ * front in raised panels on a dark plinth, the marble top with its brass
+ * nosing and a vein or two, and the header band with its brass edges and
+ * STRK20's orange line along its crown, from x0 to x1 with its front at
+ * `zf`; `panelled` false leaves the front plain (the central bay).
+ */
+function tellerWallBase(bin: GeometryBin, x0: number, x1: number, zf: number, panelled = true): void {
+  const front = zf - 0.03;
+  const back = zf - 0.7;
+  const { top, topThickness, header, crown } = TELLER;
+  bin.add('body', boxGeometry(x0, 0, back, x1, top, front), aoPaint(BANK_HALL.wood, 0.12));
+  bin.add('body', boxGeometry(x0, 0, front, x1, 0.12, zf + 0.01), BANK_HALL.woodDark);
+  const face: Face = { normal: 'z+', plane: front };
+  if (panelled) {
+    const panels = Math.max(1, Math.round((x1 - x0) / 0.95));
+    const step = (x1 - x0) / panels;
+    for (let i = 0; i < panels; i++) {
+      const a = x0 + i * step + 0.1;
+      const b = x0 + (i + 1) * step - 0.1;
+      bin.add('body', faceBox(face, a, 0.2, 0, b, 0.86, 0.018), BANK_HALL.woodLight);
+      bin.add('body', faceBox(face, a + 0.07, 0.27, 0.018, b - 0.07, 0.79, 0.028), BANK_HALL.wood);
+      bin.add('body', faceBox(face, a + 0.07, 0.52, 0.028, b - 0.07, 0.535, 0.032), BANK_HALL.brassDark);
+    }
+  }
+  bin.add('body', boxGeometry(x0, top, back - 0.05, x1, top + topThickness, zf + 0.025), BANK_HALL.marble);
+  bin.add('body', boxGeometry(x0, top - 0.025, zf - 0.005, x1, top + 0.005, zf + 0.03), BANK_HALL.brass);
+  // Veins across the top, a thin diagonal or two per tile.
+  for (let x = Math.ceil(x0 * 2) / 2; x + 0.3 < x1; x += 0.5) {
+    const k = hash01(Math.round(x * 10), Math.round(zf * 10), 431);
+    if (k < 0.45) continue;
+    const y = top + topThickness + 0.002;
+    bin.add('body', beamGeometry([x, y, zf - 0.08], [x + 0.18 + 0.2 * k, y, back + 0.1], 0.012, 0.003), BANK_HALL.marbleVein);
+  }
+  bin.add('body', boxGeometry(x0, header, back + 0.1, x1, crown, zf), BANK_HALL.wood);
+  bin.add('body', boxGeometry(x0, header - 0.03, zf - 0.01, x1, header, zf + 0.012), BANK_HALL.brass);
+  bin.add('body', boxGeometry(x0, crown - 0.03, zf - 0.01, x1, crown, zf + 0.012), BANK_HALL.brass);
+  bin.add('unlit', boxGeometry(x0, crown, zf - 0.04, x1, crown + 0.025, zf + 0.012), STRK20.orange);
+  bin.add('body', boxGeometry(x0, crown + 0.025, back + 0.1, x1, crown + 0.06, zf + 0.02), BANK_HALL.woodDark);
+}
+
+/**
+ * A teller window (D-104): the teller wall's base, a brass-framed glass
+ * screen over the marble with a speaking ring, a cash slot and a brass
+ * grille along its top, the teller's terminal behind the glass, a brass
+ * ledger lamp at its west end whose glass shade glows in the counter's
+ * state, and the header carrying the sign, underlined in the same light.
+ */
+function tellerWindow(station: FixedRoomStationDefinition, bin: GeometryBin): BuiltCounter {
+  const x0 = station.x;
+  const x1 = station.x + station.width;
+  const zf = station.y + station.height;
+  const cx = (x0 + x1) / 2;
+  const { top, topThickness, header } = TELLER;
+  const sill = top + topThickness;
+  tellerWallBase(bin, x0, x1, zf);
+  const glassZ = zf - 0.42;
+  // Brass-capped walnut posts either side of the opening.
+  for (const [a, b] of [[x0, x0 + 0.12], [x1 - 0.12, x1]] as const) {
+    bin.add('body', boxGeometry(a, sill, glassZ - 0.14, b, header, zf - 0.05), BANK_HALL.wood);
+    bin.add('body', boxGeometry(a - 0.005, header - 0.07, glassZ - 0.15, b + 0.005, header - 0.03, zf - 0.04), BANK_HALL.brass);
+  }
+  // The glass, a brass sill and frame, a speaking ring and the cash slot under it.
+  const glass = new Color(BANK_HALL.glass);
+  bin.addRGBA('glass', faceQuad({ normal: 'z+', plane: glassZ }, x0 + 0.12, sill, x1 - 0.12, header - 0.03, 0), () => [glass.r, glass.g, glass.b, 0.2]);
+  bin.addRGBA('glass', beamGeometry([x0 + 0.35, sill + 0.2, glassZ + 0.004], [x0 + 0.75, header - 0.1, glassZ + 0.004], 0.06, 0.002), () => [1, 1, 1, 0.16]);
+  bin.add('body', boxGeometry(x0 + 0.12, sill, glassZ - 0.02, x1 - 0.12, sill + 0.04, glassZ + 0.03), BANK_HALL.brass);
+  bin.add('body', faceTorus({ normal: 'z+', plane: glassZ + 0.01 }, cx, 1.42, 0, 0.075, 0.012, { tubularSegments: 14 }), BANK_HALL.brass);
+  bin.add('body', boxGeometry(cx - 0.26, sill - 0.005, glassZ - 0.02, cx + 0.26, sill + 0.006, glassZ + 0.26), lift(STRK20.black, 0.02));
+  // The grille: brass bars on a rail along the top of the opening.
+  const rail = header - 0.33;
+  bin.add('body', boxGeometry(x0 + 0.12, rail - 0.02, glassZ + 0.01, x1 - 0.12, rail + 0.01, glassZ + 0.04), BANK_HALL.brass);
+  for (let u = x0 + 0.24; u < x1 - 0.18; u += 0.12) {
+    bin.add('body', boxGeometry(u - 0.01, rail, glassZ + 0.015, u + 0.01, header - 0.03, glassZ + 0.035), BANK_HALL.brass);
+  }
+  // The teller's terminal behind the glass: STRK20's black screen and its one orange line.
+  const screen: Face = { normal: 'z+', plane: zf - 0.68 };
+  bin.add('body', faceBox(screen, cx - 0.36, sill + 0.02, 0, cx + 0.36, sill + 0.42, 0.05), lift(STRK20.raised, 0.06));
+  bin.add('unlit', faceBox(screen, cx - 0.3, sill + 0.08, 0.05, cx + 0.3, sill + 0.36, 0.053), lift(STRK20.black, 0.02));
+  bin.add('unlit', faceBox(screen, cx - 0.3, sill + 0.09, 0.053, cx - 0.02, sill + 0.12, 0.056), STRK20.orange);
+  bin.add('unlit', faceBox(screen, cx - 0.3, sill + 0.2, 0.053, cx + 0.14, sill + 0.215, 0.056), STRK20.blush);
+  bin.add('unlit', faceBox(screen, cx - 0.3, sill + 0.25, 0.053, cx + 0.22, sill + 0.265, 0.056), STRK20.peach);
+  // The ledger lamp on the marble, at the window's west end.
+  const lx = x0 + 0.3;
+  const lz = zf - 0.2;
+  bin.add('body', cylinderGeometry(lx, sill, lz, 0.07, 0.08, 0.03, 10), BANK_HALL.brass);
+  bin.add('body', cylinderGeometry(lx, sill + 0.03, lz, 0.014, 0.014, 0.3, 6), BANK_HALL.brass);
+  bin.add('body', boxGeometry(lx - 0.13, sill + 0.31, lz - 0.015, lx + 0.13, sill + 0.33, lz + 0.015), BANK_HALL.brassDark);
+  const shade = cylinderGeometry(0, -0.13, 0, 0.065, 0.065, 0.26, 10).rotateZ(Math.PI / 2).translate(lx, sill + 0.38, lz);
+  const underline = boxGeometry(x0 + 0.2, header - 0.06, zf - 0.005, x1 - 0.2, header - 0.03, zf + 0.018);
+  return { status: [shade, underline], sign: { x: cx, y: (header + TELLER.crown) / 2, z: zf + 0.014, yaw: 0 } };
+}
+
+/**
+ * One window of Endur's booth on the east wall (D-104): a mint-white counter
+ * with Endur's dark kick and a green band, a white top, glass to the
+ * canopy, Endur's card on the screen behind it, and the canopy's green
+ * light over it in the counter's state. Its sign is a green blade hung from
+ * the canopy, facing the camera, so it reads from the hall (a sign flat on
+ * the booth would face west, edge-on to a camera that looks north).
+ */
+function endurWindow(station: FixedRoomStationDefinition, bin: GeometryBin): BuiltCounter {
+  const xf = station.x;
+  const xb = station.x + station.width + ENDUR_BOOTH.depth;
+  const z0 = station.y;
+  const z1 = station.y + station.height;
+  const cz = (z0 + z1) / 2;
+  const top = 0.98;
+  bin.add('body', boxGeometry(xf + 0.03, 0, z0, xb, top, z1), aoPaint(ENDUR.base, 0.1));
+  bin.add('body', boxGeometry(xf, 0, z0 + 0.02, xf + 0.03, 0.1, z1 - 0.02), ENDUR.dark);
+  bin.add('body', boxGeometry(xf, 0.6, z0 + 0.04, xf + 0.035, 0.7, z1 - 0.04), ENDUR.green);
+  bin.add('body', boxGeometry(xf - 0.025, top, z0, xb, top + 0.06, z1), ENDUR.card);
+  bin.add('body', boxGeometry(xf - 0.03, top - 0.02, z0, xf, top + 0.06, z1), ENDUR.greenDeep);
+  // Jambs, the glass and the screen behind it.
+  const sill = top + 0.06;
+  const head = ENDUR_BOOTH.canopy;
+  for (const [a, b] of [[z0, z0 + 0.07], [z1 - 0.07, z1]] as const) bin.add('body', boxGeometry(xf, sill, a, xf + 0.55, head, b), ENDUR.card);
+  const tint = new Color(ENDUR.base);
+  bin.addRGBA('glass', faceQuad({ normal: 'x-', plane: xf + 0.42 }, z0 + 0.07, sill, z1 - 0.07, head, 0), () => [tint.r, tint.g, tint.b, 0.16]);
+  const screen: Face = { normal: 'x-', plane: xf + 0.8 };
+  endurCard(bin, screen, cz, sill + 0.12, 0.36);
+  // A small mint light on the counter, and the canopy's lit edge over the window.
+  const lamp = sphereGeometry(xf + 0.16, sill + 0.035, z0 + 0.16, 0.05, { widthSegments: 8, heightSegments: 4, hemisphere: true });
+  const strip = boxGeometry(xf - 0.065, head, z0 + 0.1, xf - 0.045, head + 0.04, z1 - 0.1);
+  // The blade: a dark-green arm from the canopy and two hangers.
+  const armY = head + 0.16;
+  const bx0 = xf - 1.0;
+  bin.add('body', boxGeometry(bx0, armY, cz - 0.02, xf - 0.04, armY + 0.035, cz + 0.02), ENDUR.dark);
+  for (const hx of [bx0 + 0.12, xf - 0.16]) bin.add('body', boxGeometry(hx - 0.008, ENDUR_BOOTH.blade + 0.15, cz - 0.008, hx + 0.008, armY, cz + 0.008), ENDUR.dark);
+  return { status: [lamp, strip], sign: { x: (bx0 + xf - 0.04) / 2, y: ENDUR_BOOTH.blade, z: cz + 0.012, yaw: 0 } };
+}
+
+/** Endur's booth (D-104): how far it runs back to the east wall, its canopy's height, and where its blades hang. */
+const ENDUR_BOOTH = Object.freeze({ depth: 0.45, canopy: 2.18, blade: 2.11 });
+
+/**
+ * Endur's card on a face, the staking counter's (endurCounter) at any
+ * orientation: white in a grey border, a mint amount field with a green
+ * dot, the green pill with its dark mark.
+ */
+function endurCard(bin: GeometryBin, face: Face, u: number, v0: number, half: number): void {
+  bin.add('body', facePanel(face, u - half - 0.02, v0 - 0.02, u + half + 0.02, v0 + 0.54, 0.004, 0.08), ENDUR.border);
+  bin.add('unlit', facePanel(face, u - half, v0, u + half, v0 + 0.52, 0.012, 0.07), ENDUR.card);
+  bin.add('unlit', facePanel(face, u - half + 0.08, v0 + 0.28, u + half - 0.08, v0 + 0.41, 0.02, 0.06), ENDUR.band);
+  bin.add('unlit', faceDisc(face, u - half + 0.16, v0 + 0.345, 0.02, 0.032, 0.008, 10), ENDUR.green);
+  bin.add('unlit', facePanel(face, u, v0 + 0.333, u + half - 0.14, v0 + 0.357, 0.026, 0.012), ENDUR.dark);
+  bin.add('unlit', facePanel(face, u - half + 0.08, v0 + 0.08, u + half - 0.08, v0 + 0.2, 0.02, 0.06), ENDUR.green);
+  bin.add('unlit', facePanel(face, u - 0.1, v0 + 0.128, u + 0.1, v0 + 0.152, 0.026, 0.012), ENDUR.dark);
+}
+
+/**
+ * The Bank's hall furniture (D-104), drawn over its fixtures: the teller
+ * wall between and beside the windows, its central bay (pilasters, STRK20's
+ * vault emblem, the brand on the header and a clock in a pediment edged in
+ * the facade's orange light), the tellers' back office behind it, Endur's
+ * booth on the east wall, and a bench on the west.
+ */
+function bankHall(theme: RoomTheme, map: FixedRoomLevelMap, room: RoomFurniture): void {
+  const { bin } = room;
+  const W = map.width;
+  const T = INTERIOR_WALL_THICKNESS;
+  const axis = map.width / 2;
+  const tellers = map.stations.filter((station) => stationTheme(theme, station.station).fit === 'teller');
+  const tellerRow = tellers[0]?.y ?? 3;
+  const zf = tellerRow + 1;
+  for (const fixture of map.fixtures) {
+    if (fixture.y === tellerRow && fixture.height === 1) {
+      // A run of teller wall; at the hall's ends it meets the side walls.
+      const x0 = fixture.x === 1 ? T : fixture.x;
+      const x1 = fixture.x + fixture.width === W - 1 ? W - T : fixture.x + fixture.width;
+      const bay = x0 < axis && x1 > axis;
+      tellerWallBase(bin, x0, x1, zf, !bay);
+      if (bay) tellerBay(room, x0, x1, zf, axis);
+      else tellerPanelling(bin, x0, x1, zf);
+    }
+  }
+  backOffice(bin, map, tellers, tellerRow);
+  const booth = map.fixtures.filter((fixture) => fixture.x === W - 2 && fixture.y > tellerRow);
+  if (booth.length > 0) endurBooth(room, map, booth);
+  for (const fixture of map.fixtures) {
+    if (fixture.x === 1 && fixture.y > tellerRow && fixture.width === 1) hallBench(bin, fixture.y, fixture.y + fixture.height);
+  }
+}
+
+/**
+ * The teller wall between windows: walnut panelling over the marble, a
+ * brass ledger lamp with its amber shade lit every other tile.
+ */
+function tellerPanelling(bin: GeometryBin, x0: number, x1: number, zf: number): void {
+  const { top, topThickness, header } = TELLER;
+  const sill = top + topThickness;
+  const back = zf - 0.55;
+  bin.add('body', boxGeometry(x0, sill, back, x1, header, zf - 0.08), BANK_HALL.wood);
+  const face: Face = { normal: 'z+', plane: zf - 0.08 };
+  const panels = Math.max(1, Math.round((x1 - x0) / 0.95));
+  const step = (x1 - x0) / panels;
+  for (let i = 0; i < panels; i++) {
+    const a = x0 + i * step + 0.12;
+    const b = x0 + (i + 1) * step - 0.12;
+    bin.add('body', faceBox(face, a, sill + 0.12, 0, b, header - 0.1, 0.02), BANK_HALL.woodLight);
+    bin.add('body', faceBox(face, a + 0.08, sill + 0.2, 0.02, b - 0.08, header - 0.18, 0.03), BANK_HALL.wood);
+    if (i % 2 === 1 || panels === 1) {
+      const lx = (a + b) / 2;
+      const lz = zf - 0.24;
+      bin.add('body', cylinderGeometry(lx, sill, lz, 0.06, 0.07, 0.025, 10), BANK_HALL.brass);
+      bin.add('body', cylinderGeometry(lx, sill + 0.025, lz, 0.012, 0.012, 0.26, 6), BANK_HALL.brass);
+      bin.add('unlit', cylinderGeometry(0, -0.11, 0, 0.055, 0.055, 0.22, 10).rotateZ(Math.PI / 2).translate(lx, sill + 0.32, lz), BANK_HALL.lamp);
+    }
+  }
+}
+
+/**
+ * The central bay of the teller wall, on the hall's axis: walnut pilasters
+ * with brass capitals, STRK20's vault emblem between them (a dark lens in
+ * its orange ring, as on the facade's pediment), STRK20 on the header, and
+ * a pediment over it all, its rakes lit orange, a clock in its tympanum.
+ */
+function tellerBay(room: RoomFurniture, x0: number, x1: number, zf: number, axis: number): void {
+  const { bin } = room;
+  const { top, topThickness, header, crown } = TELLER;
+  const sill = top + topThickness;
+  const front = zf - 0.03;
+  const stone = lift(STRK20.raised, 0.1);
+  bin.add('body', boxGeometry(x0, sill, zf - 0.6, x1, header, front - 0.02), stone);
+  const face: Face = { normal: 'z+', plane: front - 0.02 };
+  const vy = (sill + header) / 2;
+  bin.add('body', faceDisc(face, axis, vy, 0, 0.36, 0.04, 20), lift(STRK20.black, 0.04));
+  bin.add('unlit', faceTorus(face, axis, vy, 0.045, 0.37, 0.024, { tubularSegments: 28 }), STRK20.orange);
+  bin.add('body', faceTorus(face, axis, vy, 0.05, 0.24, 0.018, { tubularSegments: 20 }), lift(STRK20.hairline, 0.12));
+  bin.add('body', faceDisc(face, axis, vy, 0.04, 0.07, 0.04, 10), BANK_HALL.brass);
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const u = axis + Math.cos(angle) * 0.3;
+    const v = vy + Math.sin(angle) * 0.3;
+    bin.add('body', faceBox(face, u - 0.022, v - 0.022, 0.04, u + 0.022, v + 0.022, 0.065), BANK_HALL.brass);
+  }
+  // Pilasters at the bay's edges, standing proud of the wall to the crown.
+  for (const px of [x0 + 0.18, x1 - 0.18]) {
+    bin.add('body', boxGeometry(px - 0.16, 0, front - 0.1, px + 0.16, crown, zf + 0.025), aoPaint(BANK_HALL.wood, 0.1));
+    bin.add('body', boxGeometry(px - 0.19, 0, front - 0.12, px + 0.19, 0.16, zf + 0.03), BANK_HALL.woodDark);
+    bin.add('body', boxGeometry(px - 0.19, header - 0.08, front - 0.12, px + 0.19, header, zf + 0.03), BANK_HALL.brass);
+    for (const dx of [-0.08, 0, 0.08]) bin.add('body', boxGeometry(px + dx - 0.015, 0.22, zf + 0.02, px + dx + 0.015, header - 0.12, zf + 0.03), BANK_HALL.woodDark);
+  }
+  // STRK20 on the header, as on the facade's entablature.
+  room.sign('STRK20', BANK_BRAND_SIGN, [axis, (header + crown) / 2, zf + 0.014], 0).userData['area'] = 'bank-brand';
+  // The pediment, its rakes in orange light, and the clock.
+  const base = crown + 0.06;
+  const peak = base + 0.78;
+  const half = (x1 - x0) / 2 - 0.05;
+  bin.add('body', prismZ([[axis - half, base], [axis + half, base], [axis, peak]], zf - 0.45, zf - 0.02), BANK_HALL.wood);
+  bin.add('unlit', beamGeometry([axis - half + 0.04, base + 0.03, zf - 0.005], [axis, peak - 0.015, zf - 0.005], 0.03, 0.03), STRK20.orange);
+  bin.add('unlit', beamGeometry([axis + half - 0.04, base + 0.03, zf - 0.005], [axis, peak - 0.015, zf - 0.005], 0.03, 0.03), STRK20.orange);
+  const clock: Face = { normal: 'z+', plane: zf - 0.02 };
+  const cy = base + 0.3;
+  bin.add('body', faceTorus(clock, axis, cy, 0.03, 0.235, 0.03, { tubularSegments: 24, radialSegments: 6 }), BANK_HALL.brass);
+  bin.add('unlit', faceDisc(clock, axis, cy, 0, 0.215, 0.03, 24), STRK20.cream);
+  for (let h = 0; h < 12; h++) {
+    const angle = (h / 12) * Math.PI * 2;
+    const [s, c] = [Math.sin(angle), Math.cos(angle)];
+    const long = h % 3 === 0 ? 0.05 : 0.025;
+    bin.add('body', beamGeometry([axis + s * (0.19 - long), cy + c * (0.19 - long), zf + 0.015], [axis + s * 0.19, cy + c * 0.19, zf + 0.015], 0.014, 0.01), STRK20.black);
+  }
+  // Ten past ten, as clocks in shop windows are set.
+  const hand = (angle: number, length: number, width: number): BufferGeometry =>
+    beamGeometry([axis, cy, zf + 0.02], [axis + Math.sin(angle) * length, cy + Math.cos(angle) * length, zf + 0.02], width, 0.012);
+  bin.add('body', hand((-50 / 360) * Math.PI * 2 - Math.PI / 30, 0.12, 0.022), STRK20.black);
+  bin.add('body', hand((60 / 360) * Math.PI * 2, 0.17, 0.016), STRK20.black);
+  bin.add('body', faceDisc(clock, axis, cy, 0.03, 0.022, 0.02, 8), STRK20.orange);
+}
+
+/** STRK20 on the teller wall's central header (D-104): the facade's brand board, at the header's size. */
+const BANK_BRAND_SIGN: SignStyleOptions = Object.freeze({
+  width: 1.5,
+  height: 0.36,
+  background: css(STRK20.black),
+  foreground: css(STRK20.text),
+  accent: css(STRK20.orange),
+  gradient: Object.freeze([css(STRK20.cream), css(STRK20.blush), css(STRK20.peach)]),
+  cornerRadius: 0.06,
+  borderWidth: 0.06,
+  hairline: false,
+  titleFont: 'display',
+  titleWeight: 900,
+  titleTracking: 0.02,
+  uppercase: true,
+});
+
+/**
+ * The tellers' back office, seen through the windows and over the wall: a
+ * teller's desk behind each window with an amber-shaded lamp and an open
+ * ledger, and walnut filing cabinets along the north wall.
+ */
+function backOffice(bin: GeometryBin, map: FixedRoomLevelMap, tellers: readonly FixedRoomStationDefinition[], tellerRow: number): void {
+  const T = INTERIOR_WALL_THICKNESS;
+  for (const station of tellers) {
+    const cx = station.x + station.width / 2;
+    const z0 = tellerRow - 1.25;
+    const z1 = tellerRow - 0.75;
+    bin.add('body', boxGeometry(cx - 0.62, 0, z0, cx + 0.62, 0.74, z1), aoPaint(BANK_HALL.wood, 0.1));
+    bin.add('body', boxGeometry(cx - 0.66, 0.74, z0 - 0.03, cx + 0.66, 0.79, z1 + 0.03), BANK_HALL.woodLight);
+    bin.add('body', boxGeometry(cx - 0.2, 0.79, z0 + 0.08, cx + 0.16, 0.82, z1 - 0.12), STRK20.cream);
+    bin.add('body', boxGeometry(cx - 0.025, 0.79, z0 + 0.08, cx + 0.005, 0.825, z1 - 0.12), BANK_HALL.marbleVein);
+    const lx = cx + 0.42;
+    bin.add('body', cylinderGeometry(lx, 0.79, z0 + 0.12, 0.05, 0.06, 0.025, 8), BANK_HALL.brass);
+    bin.add('body', cylinderGeometry(lx, 0.81, z0 + 0.12, 0.011, 0.011, 0.24, 6), BANK_HALL.brass);
+    bin.add('unlit', cylinderGeometry(0, -0.1, 0, 0.05, 0.05, 0.2, 10).rotateZ(Math.PI / 2).translate(lx, 1.08, z0 + 0.12), BANK_HALL.lamp);
+    // The teller's chair, its back to the window.
+    bin.add('body', boxGeometry(cx - 0.2, 0.42, z1 + 0.18, cx + 0.2, 0.48, z1 + 0.55), BANK_HALL.woodDark);
+    bin.add('body', boxGeometry(cx - 0.2, 0.48, z1 + 0.5, cx + 0.2, 0.92, z1 + 0.56), BANK_HALL.woodDark);
+    bin.add('body', cylinderGeometry(cx, 0, z1 + 0.37, 0.03, 0.03, 0.42, 6), BANK_HALL.brassDark);
+  }
+  // Filing cabinets along the north wall, clear of the desks.
+  // In front of the north wall's pilasters, which stand 0.16 proud of it.
+  const cabinetZ0 = T + 0.2;
+  const cabinetZ1 = T + 0.64;
+  for (let x = 1; x < map.width - 1; x++) {
+    if (tellers.some((station) => x >= station.x - 1 && x <= station.x + station.width)) continue;
+    bin.add('body', boxGeometry(x + 0.06, 0, cabinetZ0, x + 0.94, 1.18, cabinetZ1), aoPaint(BANK_HALL.wood, 0.1));
+    bin.add('body', boxGeometry(x + 0.04, 1.18, cabinetZ0, x + 0.96, 1.23, cabinetZ1 + 0.02), BANK_HALL.woodDark);
+    const face: Face = { normal: 'z+', plane: cabinetZ1 };
+    for (let d = 0; d < 4; d++) {
+      const v0 = 0.08 + d * 0.27;
+      bin.add('body', faceBox(face, x + 0.12, v0, 0, x + 0.88, v0 + 0.23, 0.015), BANK_HALL.woodLight);
+      bin.add('body', faceBox(face, x + 0.42, v0 + 0.1, 0.015, x + 0.58, v0 + 0.13, 0.035), BANK_HALL.brass);
+    }
+  }
+}
+
+/**
+ * Endur's partner booth on the east wall (D-104), in Endur's light look
+ * inside the dark hall: mint-white piers with dark-green trim, a white
+ * canopy edged in green with Endur's wave along it, a mint lining over the
+ * dark wall, a green droplet on a plinth between the windows, and Endur's
+ * name on the booth's south end, where the camera meets it.
+ */
+function endurBooth(room: RoomFurniture, map: FixedRoomLevelMap, fixtures: readonly FixedRoomRect[]): void {
+  const { bin } = room;
+  const xf = map.width - 2;
+  const xb = xf + 1 + ENDUR_BOOTH.depth;
+  const z0 = Math.min(...fixtures.map((fixture) => fixture.y));
+  const z1 = Math.max(...fixtures.map((fixture) => fixture.y + fixture.height));
+  const head = ENDUR_BOOTH.canopy;
+  bin.add('body', boxGeometry(xb - 0.1, 0, z0, xb, head, z1), ENDUR.base);
+  bin.add('body', boxGeometry(xf - 0.06, head, z0, xb, head + 0.3, z1), ENDUR.card);
+  bin.add('body', boxGeometry(xf - 0.075, head + 0.1, z0, xf - 0.06, head + 0.17, z1), ENDUR.green);
+  bin.add('body', boxGeometry(xf - 0.07, head + 0.29, z0, xb, head + 0.32, z1), ENDUR.card);
+  bin.add('body', boxGeometry(xf - 0.08, head + 0.28, z0, xf - 0.05, head + 0.33, z1), ENDUR.dark);
+  // The wave along the canopy, in short strokes.
+  const steps = Math.round((z1 - z0) * 6);
+  const wave = (i: number): number => head + 0.235 + 0.03 * Math.sin((i / steps) * Math.PI * 2 * (z1 - z0) / 2);
+  for (let i = 0; i < steps; i++) {
+    const za = z0 + ((z1 - z0) * i) / steps;
+    const zb = z0 + ((z1 - z0) * (i + 1)) / steps;
+    bin.add('body', beamGeometry([xf - 0.07, wave(i), za], [xf - 0.07, wave(i + 1), zb], 0.012, 0.02), ENDUR.greenDeep);
+  }
+  for (const fixture of fixtures) {
+    const a = fixture.y;
+    const b = fixture.y + fixture.height;
+    for (const z of [a, b]) bin.add('body', boxGeometry(xf - 0.03, 0, z - 0.03, xf + 0.03, head, z + 0.03), ENDUR.dark);
+    if (fixture.height > 1) {
+      // The pier between the windows is a niche: Endur's droplet on a
+      // plinth, against a white card, the logo's idea rather than its mark.
+      const cz = (a + b) / 2;
+      const back = xf + 0.75;
+      bin.add('body', boxGeometry(xf, 0, a + 0.08, back, 0.02, b - 0.08), ENDUR.band);
+      for (const [za, zb] of [[a, a + 0.08], [b - 0.08, b]] as const) bin.add('body', boxGeometry(xf, 0, za, back, head, zb), ENDUR.base);
+      const face: Face = { normal: 'x-', plane: back };
+      bin.add('body', facePanel(face, cz - 0.5, 0.95, cz + 0.5, 2.0, 0.01, 0.12), ENDUR.card);
+      bin.add('body', boxGeometry(xf + 0.1, 0, cz - 0.32, xf + 0.62, 0.86, cz + 0.32), ENDUR.card);
+      bin.add('body', boxGeometry(xf + 0.09, 0.6, cz - 0.33, xf + 0.63, 0.68, cz + 0.33), ENDUR.green);
+      const r = 0.18;
+      const px = xf + 0.36;
+      bin.add('body', sphereGeometry(px, 0.86 + r, cz, r, { widthSegments: 12, heightSegments: 8 }), ENDUR.green);
+      bin.add('body', coneGeometry(px, 0.86 + r * 1.25, cz, r * 0.93, 0.4, 12), ENDUR.green);
+      continue;
+    }
+    bin.add('body', boxGeometry(xf, 0, a, xb - 0.1, head, b), aoPaint(ENDUR.base, 0.08));
+    bin.add('body', boxGeometry(xf - 0.02, 0, a, xf, 0.1, b), ENDUR.dark);
+    bin.add('body', boxGeometry(xf - 0.025, 0.6, a + 0.06, xf, 0.68, b - 0.06), ENDUR.green);
+  }
+  // Endur's name across the booth's south end.
+  room.sign('Endur', ENDUR_BOOTH_NAME, [(xf + xb) / 2, 1.5, z1 + 0.012], 0).userData['brand'] = 'endur-booth';
+}
+
+/** Endur's name on its booth (D-104): dark green on white in a green edge, as its pill badges are. */
+const ENDUR_BOOTH_NAME: SignStyleOptions = Object.freeze({
+  width: 1.2,
+  height: 0.38,
+  background: css(ENDUR.card),
+  foreground: css(ENDUR.dark),
+  accent: css(ENDUR.green),
+  cornerRadius: 0.5,
+  borderWidth: 0.07,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+});
+
+/**
+ * What a room's furniture is drawn into (D-104): the room's shared counter
+ * meshes, and a way to set a sign into it that disposes with the room.
+ */
+interface RoomFurniture {
+  readonly bin: GeometryBin;
+  sign(text: string, style: SignStyleOptions, at: Vec3, yaw: number): Object3D;
+}
+
+function roomFurniture(bin: GeometryBin, labels: LabelFactory, textLabels: TextLabel[], parent: Group): RoomFurniture {
+  return {
+    bin,
+    sign(text, style, at, yaw) {
+      const label = labels.sign(text, style);
+      textLabels.push(label);
+      label.object.position.set(at[0], at[1], at[2]);
+      label.object.rotation.y = yaw;
+      parent.add(label.object);
+      return label.object;
+    },
+  };
+}
+
+/** A walnut bench along the west wall with brass feet, a brass planter at each end. */
+function hallBench(bin: GeometryBin, z0: number, z1: number): void {
+  const x0 = 1.05;
+  const x1 = 1.72;
+  bin.add('body', boxGeometry(x0, 0.4, z0 + 0.55, x1, 0.48, z1 - 0.55), BANK_HALL.woodLight);
+  bin.add('body', boxGeometry(x0 - 0.04, 0.48, z0 + 0.55, x0 + 0.08, 1.0, z1 - 0.55), BANK_HALL.wood);
+  bin.add('body', boxGeometry(x0 - 0.05, 1.0, z0 + 0.52, x0 + 0.1, 1.04, z1 - 0.52), BANK_HALL.brass);
+  for (const z of [z0 + 0.7, (z0 + z1) / 2, z1 - 0.7]) {
+    bin.add('body', boxGeometry(x0 + 0.05, 0, z - 0.04, x1 - 0.05, 0.4, z + 0.04), BANK_HALL.brassDark);
+  }
+  for (const z of [z0 + 0.28, z1 - 0.28]) {
+    bin.add('body', cylinderGeometry(x0 + 0.33, 0, z, 0.2, 0.15, 0.4, 10), BANK_HALL.brass);
+    bin.add('body', sphereGeometry(x0 + 0.33, 0.66, z, 0.22, { widthSegments: 6, heightSegments: 4, scaleY: 1.25 }), PALETTE.hedge);
+    bin.add('body', sphereGeometry(x0 + 0.38, 0.92, z - 0.04, 0.14, { widthSegments: 6, heightSegments: 4 }), PALETTE.hedgeLight);
+  }
+}
+
+// -- the Vault's lending lounge -------------------------------------------------
+
+/** The front desk and the vault wall, in height (D-104). */
+const VESU_DESK = Object.freeze({
+  top: 1.0,
+  /** The lit header beam over the desk. */
+  beam: 2.24,
+  beamTop: 2.54,
+  /** The vault wall's top, and the lintel over each loan booth. */
+  wall: 2.78,
+  lintel: 2.14,
+});
+
+/**
+ * The front desk's body along one run of row 3 (D-104): white, a white top
+ * edged in Vesu's ink, a periwinkle band across its front, a blue light
+ * line along its foot and a pale one under its lip.
+ */
+function vesuDeskBase(bin: GeometryBin, x0: number, x1: number, zf: number): void {
+  const front = zf - 0.03;
+  const back = zf - 0.78;
+  const { top } = VESU_DESK;
+  bin.add('body', boxGeometry(x0, 0, back, x1, top, front), aoPaint(VESU.white, 0.1));
+  bin.add('body', boxGeometry(x0, 0, front, x1, 0.08, zf - 0.005), VESU.ink);
+  bin.add('unlit', boxGeometry(x0, 0.08, front, x1, 0.1, zf - 0.006), VESU.blue);
+  bin.add('body', boxGeometry(x0, top, back - 0.04, x1, top + 0.06, zf - 0.02), VESU.white);
+  bin.add('body', boxGeometry(x0, top, zf - 0.02, x1, top + 0.065, zf + 0.025), VESU_DESK_TOP);
+  bin.add('unlit', boxGeometry(x0, top - 0.035, front, x1, top - 0.015, zf + 0.004), VESU.blueSoft);
+  bin.add('body', faceBox({ normal: 'z+', plane: front }, x0, 0.3, 0, x1, 0.76, 0.012), VESU.blueSoft);
+  // The staff side: a white back counter at sitting height.
+  bin.add('body', boxGeometry(x0, 0, back - 0.55, x1, 0.74, back), aoPaint(VESU.page, 0.1));
+  bin.add('body', boxGeometry(x0, 0.74, back - 0.58, x1, 0.78, back), VESU.fill);
+}
+
+const VESU_DESK_TOP = lift(VESU.ink, 0.1);
+
+/**
+ * A place at the Vault's front desk (D-104): the desk's run with the supply
+ * card on a screen standing on it and the V at its east end (Vesu's lending
+ * counter, `vesuCounter`), the light along its front glowing in the
+ * counter's state, and its sign in the header beam over it.
+ */
+function vesuDeskPlace(station: FixedRoomStationDefinition, bin: GeometryBin): BuiltCounter {
+  const x0 = station.x;
+  const x1 = station.x + station.width;
+  const zf = station.y + station.height;
+  const cx = (x0 + x1) / 2;
+  vesuDeskBase(bin, x0, x1, zf);
+  vesuCounter(bin, x0 + 0.1, x1 - 0.1, zf - 0.86, zf - 0.1, VESU_DESK.top + 0.06, 1.35);
+  const strip = boxGeometry(x0 + 0.18, 0.5, zf - 0.03, x1 - 0.18, 0.56, zf + 0.012);
+  const puck = cylinderGeometry(x0 + 0.2, VESU_DESK.top + 0.06, zf - 0.14, 0.06, 0.07, 0.025, 12);
+  return { status: [strip, puck], sign: { x: cx, y: (VESU_DESK.beam + VESU_DESK.beamTop) / 2, z: zf - 0.25 + 0.012, yaw: 0 } };
+}
+
+/**
+ * A loan booth in the vault wall (D-104): a niche under a lintel, a white
+ * counter under Vesu's ink top, glass over it, and the loan officer's screen
+ * on the niche's back wall carrying the loan card (Vesu's borrowing counter,
+ * `vesuBorrowCounter`). Its light runs under the lintel and along the
+ * counter's front, its sign is set into the lintel.
+ */
+function vesuLoanBooth(station: FixedRoomStationDefinition, eastFace: number, bin: GeometryBin): BuiltCounter {
+  const x0 = station.x;
+  const x1 = station.x + station.width;
+  const zf = station.y + station.height;
+  const back = station.y;
+  const { top, lintel, wall } = VESU_DESK;
+  // The niche's outer jamb where it meets a side wall or the desk.
+  const jambs: (readonly [number, number])[] = [];
+  jambs.push(x1 >= eastFace - 1 ? [x1 - 0.12, eastFace] : [x1 - 0.12, x1]);
+  jambs.push([x0, x0 + 0.12]);
+  for (const [a, b] of jambs) bin.add('body', boxGeometry(a, 0, back, b, wall, zf), aoPaint(VESU.white, 0.08));
+  const n0 = x0 + 0.12;
+  const n1 = Math.min(x1, eastFace) - 0.12;
+  bin.add('body', boxGeometry(n0, lintel, back, n1, wall, zf), VESU.white);
+  bin.add('body', boxGeometry(n0, lintel - 0.02, zf - 0.6, n1, lintel, zf), VESU.fill);
+  bin.add('body', boxGeometry(n0, 0, back, n1, lintel, back + 0.04), VESU.page);
+  // The counter, its ink top and blue foot line.
+  bin.add('body', boxGeometry(n0, 0, zf - 0.62, n1, top, zf - 0.03), aoPaint(VESU.white, 0.1));
+  bin.add('body', boxGeometry(n0, 0, zf - 0.03, n1, 0.08, zf - 0.005), VESU.ink);
+  bin.add('unlit', boxGeometry(n0, 0.08, zf - 0.03, n1, 0.1, zf - 0.006), VESU.blue);
+  bin.add('body', boxGeometry(n0, top, zf - 0.66, n1, top + 0.06, zf - 0.02), VESU.white);
+  bin.add('body', boxGeometry(n0, top, zf - 0.02, n1, top + 0.065, zf + 0.02), VESU_DESK_TOP);
+  // Glass between counter and officer, the loan card behind it on the back wall.
+  const tint = new Color(VESU.blueSoft);
+  bin.addRGBA('glass', faceQuad({ normal: 'z+', plane: zf - 0.58 }, n0, top + 0.06, n1, lintel - 0.02, 0), () => [tint.r, tint.g, tint.b, 0.14]);
+  const cx = (n0 + n1) / 2;
+  vesuBorrowCounter(bin, cx - 0.74, cx + 1.06, back - 0.07, back + 0.7, top + 0.12, 1.3);
+  const under = boxGeometry(n0 + 0.06, lintel - 0.05, zf - 0.08, n1 - 0.06, lintel - 0.02, zf - 0.02);
+  const strip = boxGeometry(n0 + 0.12, 0.5, zf - 0.03, n1 - 0.12, 0.56, zf + 0.012);
+  return { status: [under, strip], sign: { x: cx, y: (lintel + wall) / 2 + 0.02, z: zf + 0.012, yaw: 0 } };
+}
+
+/**
+ * The Vault's lounge furniture (D-104), drawn over its fixtures: the front
+ * desk's ends and middle, the lit header beam on slim posts over the desk
+ * with `vesu` at its middle, and the vault wall: the round vault door
+ * between the loan booths, its rim in blue light and Vesu's V on its hub,
+ * safe-deposit lockers over it, and a blue line along the wall's top.
+ */
+function vesuLounge(theme: RoomTheme, map: FixedRoomLevelMap, room: RoomFurniture): void {
+  const { bin } = room;
+  const T = INTERIOR_WALL_THICKNESS;
+  const eastFace = map.width - T;
+  const desk = map.stations.filter((station) => stationTheme(theme, station.station).fit === 'vesu-desk');
+  const booths = map.stations.filter((station) => stationTheme(theme, station.station).fit === 'vesu-booth');
+  const row = desk[0]?.y ?? booths[0]?.y ?? 3;
+  const zf = row + 1;
+  const wallStart = booths.length > 0 ? Math.min(...booths.map((station) => station.x)) : map.width - 1;
+  let deskEnd = T;
+  for (const fixture of map.fixtures) {
+    if (fixture.y !== row || fixture.height !== 1) continue;
+    if (fixture.x < wallStart) {
+      const x0 = fixture.x === 1 ? T : fixture.x;
+      const x1 = fixture.x + fixture.width;
+      vesuDeskBase(bin, x0, x1, zf);
+      deskEnd = Math.max(deskEnd, x1);
+    } else {
+      vaultDoor(bin, fixture.x, fixture.x + fixture.width, row, zf);
+    }
+  }
+  // The header beam on posts at the desk's ends and either side of the
+  // stretch between its places, which frame Vesu's avatar on the wall behind.
+  const beamZ0 = zf - 0.4;
+  const beamZ1 = zf - 0.25;
+  const { beam, beamTop } = VESU_DESK;
+  const posts = [T + 0.08, deskEnd - 0.1];
+  for (let i = 1; i < desk.length; i++) posts.push(desk[i - 1]!.x + desk[i - 1]!.width + 0.05, desk[i]!.x - 0.05);
+  for (const px of posts) {
+    bin.add('body', boxGeometry(px - 0.05, VESU_DESK.top + 0.06, beamZ0 + 0.02, px + 0.05, beam, beamZ1 - 0.02), VESU.white);
+  }
+  bin.add('body', boxGeometry(T, beam, beamZ0, deskEnd, beamTop, beamZ1), VESU.white);
+  bin.add('unlit', boxGeometry(T, beam - 0.025, beamZ0 + 0.02, deskEnd, beam, beamZ1 - 0.02), VESU.blue);
+  bin.add('body', boxGeometry(T, beamTop, beamZ0 - 0.01, deskEnd, beamTop + 0.03, beamZ1 + 0.01), VESU.ink);
+  if (desk.length > 1) {
+    const mid = (desk[0]!.x + desk[0]!.width + desk[1]!.x) / 2;
+    const wordmark = room.sign(VESU_WORDMARK_TEXT, VESU_BEAM_WORDMARK, [mid, (beam + beamTop) / 2, beamZ1 + 0.012], 0);
+    wordmark.userData['area'] = 'vesu-wordmark';
+  }
+  // The vault wall's body behind the booths and the door, up to its top.
+  if (booths.length > 0) {
+    const { wall } = VESU_DESK;
+    bin.add('body', boxGeometry(wallStart, 0, T, eastFace, wall, row), aoPaint(VESU.white, 0.06));
+    bin.add('body', boxGeometry(wallStart, wall, T, eastFace, wall + 0.04, zf + 0.02), VESU.page);
+    bin.add('body', boxGeometry(wallStart, wall, zf - 0.02, eastFace, wall + 0.05, zf + 0.025), VESU.ink);
+    // A skylight of periwinkle glass in blue light, for the view from above.
+    bin.add('unlit', flatQuad(wallStart + 0.6, T + 0.5, eastFace - 0.6, zf - 0.6, wall + 0.042), VESU.blue);
+    bin.add('unlit', flatQuad(wallStart + 0.66, T + 0.56, eastFace - 0.66, zf - 0.66, wall + 0.044), VESU.blueSoft);
+    bin.add('unlit', boxGeometry(wallStart, wall - 0.05, zf - 0.01, eastFace, wall - 0.02, zf + 0.012), VESU.blue);
+    // Where the desk's header meets the vault wall, a white return.
+    bin.add('body', boxGeometry(deskEnd - 0.02, 0, row - 0.2, wallStart + 0.02, wall, row + 0.2), VESU.white);
+  }
+}
+
+/** `vesu` at the middle of the desk's header beam: ink letters on its white, widened like Base Neue Wide. */
+const VESU_BEAM_WORDMARK: SignStyleOptions = Object.freeze({
+  width: 1.3,
+  height: 0.28,
+  background: 'rgba(255,255,255,0)',
+  foreground: css(VESU.ink),
+  accent: css(VESU.ink),
+  cornerRadius: 0,
+  borderWidth: 0,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleStretch: 1.4,
+  titleTracking: -0.01,
+  lowercase: true,
+});
+
+/**
+ * The vault door, round and two tiles wide, in the vault wall between the
+ * loan booths: a white frame of safe-deposit lockers round a steel-grey
+ * door, its rim lit in Vesu's blue, a spoked wheel, bolts, and the V on the
+ * hub in its light-page gradient.
+ */
+function vaultDoor(bin: GeometryBin, x0: number, x1: number, row: number, zf: number): void {
+  const { wall } = VESU_DESK;
+  // The door sits back in the wall so its wheel and hub stay over its own tiles.
+  const front = zf - 0.32;
+  bin.add('body', boxGeometry(x0, 0, row, x1, wall, front), aoPaint(VESU.white, 0.06));
+  const cx = (x0 + x1) / 2;
+  const r = Math.min(0.8, (x1 - x0) / 2 - 0.1);
+  const cy = r + 0.16;
+  // The wall's face round the door: the piers either side and the locker bank over it.
+  const lockerBottom = cy + r + 0.08;
+  for (const [a, b] of [[x0, x0 + 0.08], [x1 - 0.08, x1]] as const) bin.add('body', boxGeometry(a, 0, front, b, wall, zf - 0.04), VESU.white);
+  bin.add('body', boxGeometry(x0, lockerBottom - 0.04, front, x1, wall, zf - 0.04), VESU.white);
+  bin.add('body', faceTorus({ normal: 'z+', plane: front }, cx, cy, 0.14, r + 0.04, 0.1, { tubularSegments: 36, radialSegments: 6 }), VESU.white);
+  const face: Face = { normal: 'z+', plane: zf - 0.04 };
+  // Lockers over and beside the door.
+  const lockerTop = wall - 0.08;
+  const rows = 3;
+  const cols = Math.max(2, Math.round((x1 - x0) / 0.33));
+  const cw = (x1 - x0 - 0.12) / cols;
+  const rh = (lockerTop - lockerBottom) / rows;
+  for (let rIndex = 0; rIndex < rows && rh > 0.08; rIndex++) {
+    for (let c = 0; c < cols; c++) {
+      const a = x0 + 0.06 + c * cw;
+      const b = lockerBottom + rIndex * rh;
+      bin.add('body', facePanel(face, a + 0.02, b + 0.02, a + cw - 0.02, b + rh - 0.02, 0.004, 0.025), VESU.page);
+      bin.add('body', faceBox(face, a + cw - 0.07, b + rh / 2 - 0.01, 0.004, a + cw - 0.04, b + rh / 2 + 0.01, 0.02), 0xc9ccd2);
+    }
+  }
+  // The door: a recess, the slab, its lit rim, a ring of bolts, the wheel and the hub.
+  const door: Face = { normal: 'z+', plane: front };
+  bin.add('body', faceDisc(door, cx, cy, -0.02, r + 0.05, 0.03, 32), VESU.fill);
+  bin.add('body', faceDisc(door, cx, cy, 0, r, 0.1, 32), 0xc8ccd6);
+  bin.add('unlit', faceTorus(door, cx, cy, 0.1, r - 0.02, 0.022, { tubularSegments: 40 }), VESU.blue);
+  bin.add('body', faceTorus(door, cx, cy, 0.1, r * 0.7, 0.02, { tubularSegments: 28 }), 0xa9aebb);
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    bin.add('body', faceDisc(door, cx + Math.cos(angle) * r * 0.84, cy + Math.sin(angle) * r * 0.84, 0.1, 0.035, 0.03, 8), 0xe3e6ec);
+  }
+  const wheel = r * 0.42;
+  bin.add('body', faceTorus(door, cx, cy, 0.2, wheel, 0.022, { tubularSegments: 24 }), VESU.ink);
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI + Math.PI / 6;
+    const [du, dv] = [Math.cos(angle) * wheel, Math.sin(angle) * wheel];
+    bin.add('body', beamGeometry(faceToWorld(door, cx - du, cy - dv, 0.2), faceToWorld(door, cx + du, cy + dv, 0.2), 0.03, 0.03), VESU.ink);
+  }
+  bin.add('body', faceBox(door, cx - 0.04, cy - 0.04, 0.1, cx + 0.04, cy + 0.04, 0.2), VESU.ink);
+  bin.add('unlit', faceDisc(door, cx, cy, 0.1, 0.25, 0.12, 24), VESU.white);
+  addVesuMark(bin, 'unlit', { normal: 'z+', plane: front + 0.225 }, cx, cy - 0.15, 0.32, 0, 0.012, 'light');
 }
 
 /** Themed props on the counter top (y = 1), in the station's style. */
@@ -888,25 +1714,26 @@ function endurCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: 
  * periwinkle tab, an amount field, a rate bar, the electric-blue primary
  * button), and the V standing at its east end, a desk-sized mark in the
  * logo's light-page gradients. Bars and fields only: no figure on it.
+ * `k` scales the card about its foot (the front desk's screens, D-104).
  */
-function vesuCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number): void {
+function vesuCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number, k = 1): void {
   const cx = (x0 + x1) / 2 - 0.16;
   const face: Face = { normal: 'z+', plane: z0 + 0.12 };
-  bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.12), VESU.ink);
-  bin.add('body', facePanel(face, cx - 0.46, top + 0.07, cx + 0.46, top + 0.6, 0.004, 0.08), VESU.fill);
-  bin.add('unlit', facePanel(face, cx - 0.44, top + 0.09, cx + 0.44, top + 0.58, 0.012, 0.07), VESU.white);
+  bin.add('body', boxGeometry(cx - 0.05 * k, top, z0 + 0.06, cx + 0.05 * k, top + 0.1 * k, z0 + 0.12), VESU.ink);
+  bin.add('body', facePanel(face, cx - 0.46 * k, top + 0.07 * k, cx + 0.46 * k, top + 0.6 * k, 0.004, 0.08), VESU.fill);
+  bin.add('unlit', facePanel(face, cx - 0.44 * k, top + 0.09 * k, cx + 0.44 * k, top + 0.58 * k, 0.012, 0.07), VESU.white);
   // The token field: a disc, a name bar and the periwinkle tab.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.42, cx + 0.38, top + 0.53, 0.018, 0.04), VESU.page);
-  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.475, 0.018, 0.035, 0.006, 12), 0x6d4df2);
-  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.466, cx - 0.02, top + 0.484, 0.024, 0.009), VESU.muted);
-  bin.add('unlit', facePanel(face, cx + 0.16, top + 0.448, cx + 0.34, top + 0.502, 0.024, 0.027), VESU.blueSoft);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.42 * k, cx + 0.38 * k, top + 0.53 * k, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31 * k, top + 0.475 * k, 0.018, 0.035 * k, 0.006, 12), 0x6d4df2);
+  bin.add('unlit', facePanel(face, cx - 0.24 * k, top + 0.466 * k, cx - 0.02 * k, top + 0.484 * k, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.16 * k, top + 0.448 * k, cx + 0.34 * k, top + 0.502 * k, 0.024, 0.027), VESU.blueSoft);
   // The amount field, and the rate bar under it.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.29, cx + 0.38, top + 0.39, 0.018, 0.04), VESU.page);
-  bin.add('unlit', facePanel(face, cx - 0.32, top + 0.33, cx + 0.02, top + 0.35, 0.024, 0.01), VESU.ink);
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.245, cx - 0.12, top + 0.265, 0.018, 0.01), VESU.blueText);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.29 * k, cx + 0.38 * k, top + 0.39 * k, 0.018, 0.04), VESU.page);
+  bin.add('unlit', facePanel(face, cx - 0.32 * k, top + 0.33 * k, cx + 0.02 * k, top + 0.35 * k, 0.024, 0.01), VESU.ink);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.245 * k, cx - 0.12 * k, top + 0.265 * k, 0.018, 0.01), VESU.blueText);
   // The primary button.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.12, cx + 0.38, top + 0.21, 0.018, 0.04), VESU.blue);
-  bin.add('unlit', facePanel(face, cx - 0.1, top + 0.157, cx + 0.1, top + 0.173, 0.024, 0.008), VESU.white);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.12 * k, cx + 0.38 * k, top + 0.21 * k, 0.018, 0.04), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.1 * k, top + 0.157 * k, cx + 0.1 * k, top + 0.173 * k, 0.024, 0.008), VESU.white);
   // The V, on the desk's east end.
   addVesuMark(bin, 'unlit', { normal: 'z+', plane: (z0 + z1) / 2 }, x1 - 0.24, top, 0.34, 0, 0.05, 'light');
 }
@@ -918,37 +1745,38 @@ function vesuCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: n
  * standing on it), a collateral field over a debt field (each a token disc
  * and a name bar, the debt's with the periwinkle tab) and the electric-blue
  * primary button. Bars, discs and panels only: no figure, rate or symbol on it.
+ * `k` scales the card about its foot (a loan booth's screen, D-104).
  */
-function vesuBorrowCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number): void {
+function vesuBorrowCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number, k = 1): void {
   const cx = (x0 + x1) / 2 - 0.16;
   const face: Face = { normal: 'z+', plane: z0 + 0.12 };
-  bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.12), VESU.ink);
-  bin.add('body', facePanel(face, cx - 0.46, top + 0.07, cx + 0.46, top + 0.66, 0.004, 0.08), VESU.fill);
-  bin.add('unlit', facePanel(face, cx - 0.44, top + 0.09, cx + 0.44, top + 0.64, 0.012, 0.07), VESU.white);
+  bin.add('body', boxGeometry(cx - 0.05 * k, top, z0 + 0.06, cx + 0.05 * k, top + 0.1 * k, z0 + 0.12), VESU.ink);
+  bin.add('body', facePanel(face, cx - 0.46 * k, top + 0.07 * k, cx + 0.46 * k, top + 0.66 * k, 0.004, 0.08), VESU.fill);
+  bin.add('unlit', facePanel(face, cx - 0.44 * k, top + 0.09 * k, cx + 0.44 * k, top + 0.64 * k, 0.012, 0.07), VESU.white);
   // The health bar along the top, where the status beacon never hides it:
   // pale to night in segments, the ink marker standing on it.
   const segments = [VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night];
-  const [b0, b1, gap] = [cx - 0.38, cx + 0.38, 0.014];
+  const [b0, b1, gap] = [cx - 0.38 * k, cx + 0.38 * k, 0.014];
   const step = (b1 - b0 + gap) / segments.length;
   segments.forEach((hex, i) => {
-    bin.add('unlit', facePanel(face, b0 + i * step, top + 0.535, b0 + (i + 1) * step - gap, top + 0.57, 0.018, 0.012), hex);
+    bin.add('unlit', facePanel(face, b0 + i * step, top + 0.535 * k, b0 + (i + 1) * step - gap, top + 0.57 * k, 0.018, 0.012), hex);
   });
   const marker = b0 + (b1 - b0) * 0.34;
-  bin.add('unlit', facePanel(face, marker - 0.011, top + 0.515, marker + 0.011, top + 0.59, 0.026, 0.006), VESU.ink);
+  bin.add('unlit', facePanel(face, marker - 0.011, top + 0.515 * k, marker + 0.011, top + 0.59 * k, 0.026, 0.006), VESU.ink);
   // The collateral field: a night disc, a name bar and an ink amount bar.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.375, cx + 0.38, top + 0.475, 0.018, 0.04), VESU.page);
-  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.425, 0.018, 0.033, 0.006, 12), VESU.night);
-  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.416, cx - 0.04, top + 0.434, 0.024, 0.009), VESU.muted);
-  bin.add('unlit', facePanel(face, cx + 0.08, top + 0.416, cx + 0.32, top + 0.434, 0.024, 0.009), VESU.ink);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.375 * k, cx + 0.38 * k, top + 0.475 * k, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31 * k, top + 0.425 * k, 0.018, 0.033 * k, 0.006, 12), VESU.night);
+  bin.add('unlit', facePanel(face, cx - 0.24 * k, top + 0.416 * k, cx - 0.04 * k, top + 0.434 * k, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.08 * k, top + 0.416 * k, cx + 0.32 * k, top + 0.434 * k, 0.024, 0.009), VESU.ink);
   // The debt field: a blue disc, a name bar and the periwinkle tab.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.255, cx + 0.38, top + 0.355, 0.018, 0.04), VESU.page);
-  bin.add('unlit', faceDisc(face, cx - 0.31, top + 0.305, 0.018, 0.033, 0.006, 12), VESU.blue);
-  bin.add('unlit', facePanel(face, cx - 0.24, top + 0.296, cx - 0.04, top + 0.314, 0.024, 0.009), VESU.muted);
-  bin.add('unlit', facePanel(face, cx + 0.14, top + 0.28, cx + 0.34, top + 0.33, 0.024, 0.025), VESU.blueSoft);
-  bin.add('unlit', facePanel(face, cx + 0.18, top + 0.298, cx + 0.3, top + 0.312, 0.028, 0.007), VESU.blueText);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.255 * k, cx + 0.38 * k, top + 0.355 * k, 0.018, 0.04), VESU.page);
+  bin.add('unlit', faceDisc(face, cx - 0.31 * k, top + 0.305 * k, 0.018, 0.033 * k, 0.006, 12), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.24 * k, top + 0.296 * k, cx - 0.04 * k, top + 0.314 * k, 0.024, 0.009), VESU.muted);
+  bin.add('unlit', facePanel(face, cx + 0.14 * k, top + 0.28 * k, cx + 0.34 * k, top + 0.33 * k, 0.024, 0.025), VESU.blueSoft);
+  bin.add('unlit', facePanel(face, cx + 0.18 * k, top + 0.298 * k, cx + 0.3 * k, top + 0.312 * k, 0.028, 0.007), VESU.blueText);
   // The primary button.
-  bin.add('unlit', facePanel(face, cx - 0.38, top + 0.12, cx + 0.38, top + 0.21, 0.018, 0.04), VESU.blue);
-  bin.add('unlit', facePanel(face, cx - 0.1, top + 0.157, cx + 0.1, top + 0.173, 0.024, 0.008), VESU.white);
+  bin.add('unlit', facePanel(face, cx - 0.38 * k, top + 0.12 * k, cx + 0.38 * k, top + 0.21 * k, 0.018, 0.04), VESU.blue);
+  bin.add('unlit', facePanel(face, cx - 0.1 * k, top + 0.157 * k, cx + 0.1 * k, top + 0.173 * k, 0.024, 0.008), VESU.white);
 }
 
 function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y: number) => Color {
@@ -1121,10 +1949,12 @@ function decorateRoom(
   labels: LabelFactory,
   textLabels: TextLabel[],
   images: ImageTextureLoader | null,
+  furniture: RoomFurniture,
 ): void {
   switch (theme.decor) {
     case 'strk20':
       strk20Decor(theme, shell, map);
+      if (map.fixtures.length > 0) bankHall(theme, map, furniture);
       return;
     case 'avnu':
       avnuDecor(theme, shell, map, res, animators);
@@ -1140,6 +1970,7 @@ function decorateRoom(
       return;
     case 'vesu':
       vesuDecor(theme, shell, map, res, labels, textLabels);
+      if (map.fixtures.length > 0) vesuLounge(theme, map, furniture);
       return;
     case 'plain':
       return;
@@ -1182,7 +2013,10 @@ function inSpans(wall: InteriorWall, u0: number, u1: number): boolean {
 function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
   const north = shell.walls.north;
   const nf = north.face;
-  const anchor = stationAnchor(map);
+  // D-104: a hall with a teller wall centres its north wall on the hall's
+  // axis, and the vault emblem moves onto the teller wall's central bay.
+  const hall = map.fixtures.length > 0;
+  const anchor = hall ? map.width / 2 : stationAnchor(map);
   const stone = lift(STRK20.raised, 0.13);
   const hair = lift(STRK20.hairline, 0.12);
   for (const wall of Object.values(shell.walls)) {
@@ -1198,6 +2032,47 @@ function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
     north.bins.add('body', faceBox(nf, u - 0.26, 1.9, 0, u + 0.26, 2.02, 0.16), hair);
   }
   const vy = 1.2;
+  if (!hall) strk20VaultLens(north, anchor, vy);
+  for (const u of [anchor - 3.4, anchor + 3.4]) {
+    if (!inSpans(north, u - 0.6, u + 0.6)) continue;
+    north.bins.add('body', faceBox(nf, u - 0.56, 0.96, 0, u + 0.56, 1.94, 0.04), lift(STRK20.black, 0.03));
+    const [top, mid, bottom] = [1.88, 1.45, 1.02];
+    gradientPanel(north, u - 0.5, mid, u + 0.5, top, 0.045, STRK20.blush, STRK20.cream);
+    gradientPanel(north, u - 0.5, bottom, u + 0.5, mid, 0.045, STRK20.peach, STRK20.blush);
+    north.bins.add('unlit', faceBox(nf, u - 0.5, 0.9, 0.04, u - 0.1, 0.925, 0.05), STRK20.orange);
+  }
+  // D-104: no slot or lamp where a booth stands against the wall.
+  const covered = (wall: InteriorWall, u: number): boolean => {
+    const x = wall.side === 'west' ? 1 : map.width - 2;
+    const tile = map.tiles[Math.floor(u)]?.[x];
+    return wall.side === 'east' && (tile === 'station' || tile === 'fixture');
+  };
+  for (const wall of [shell.walls.west, shell.walls.east]) {
+    for (const [a, b] of wall.spans) {
+      const slots = [a + (b - a) * 0.25, a + (b - a) * 0.5, a + (b - a) * 0.75];
+      for (const u of slots) {
+        if (covered(wall, u)) continue;
+        wall.bins.add('body', faceBox(wall.face, u - 0.1, 0.4, 0, u + 0.1, 1.86, 0.04), lift(STRK20.black, 0.03));
+        wall.bins.add('unlit', faceBox(wall.face, u - 0.025, 0.46, 0.04, u + 0.025, 1.8, 0.05), STRK20.orange);
+      }
+      for (const u of [(slots[0]! + slots[1]!) / 2, (slots[1]! + slots[2]!) / 2]) {
+        if (covered(wall, u)) continue;
+        wall.bins.add('body', faceBox(wall.face, u - 0.05, 1.45, 0, u + 0.05, 1.68, 0.06), hair);
+        wall.bins.add('unlit', faceBox(wall.face, u - 0.08, 1.68, 0.04, u + 0.08, 1.86, 0.18), STRK20.blush);
+      }
+    }
+  }
+  // Hairline joints across the walkable floor, and a black runner edged in light.
+  const joint = lift(STRK20.hairline, 0.06);
+  for (let x = 2; x < map.width - 1; x++) shell.floor.add('floor', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.003), joint);
+  for (let y = 2; y < map.height - 1; y++) shell.floor.add('floor', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.003), joint);
+  carpet(shell, map, lift(STRK20.black, 0.03), theme.floorAccent, 'glow', hall);
+}
+
+/** STRK20's vault door as a dark lens ringed in orange, on a wall (the free-standing Bank's one nod). */
+function strk20VaultLens(north: InteriorWall, anchor: number, vy: number): void {
+  const nf = north.face;
+  const hair = lift(STRK20.hairline, 0.12);
   north.bins.add('body', faceDisc(nf, anchor, vy, 0, 0.74, 0.06, 20), lift(STRK20.raised, 0.08));
   north.bins.add('unlit', faceTorus(nf, anchor, vy, 0.075, 0.74, 0.035, { tubularSegments: 28 }), STRK20.orange);
   north.bins.add('body', faceTorus(nf, anchor, vy, 0.09, 0.48, 0.03, { tubularSegments: 20 }), hair);
@@ -1208,32 +2083,6 @@ function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
     const v = vy + Math.sin(angle) * 0.62;
     north.bins.add('body', faceBox(nf, u - 0.035, v - 0.035, 0.06, u + 0.035, v + 0.035, 0.09), hair);
   }
-  for (const u of [anchor - 3.4, anchor + 3.4]) {
-    if (!inSpans(north, u - 0.6, u + 0.6)) continue;
-    north.bins.add('body', faceBox(nf, u - 0.56, 0.96, 0, u + 0.56, 1.94, 0.04), lift(STRK20.black, 0.03));
-    const [top, mid, bottom] = [1.88, 1.45, 1.02];
-    gradientPanel(north, u - 0.5, mid, u + 0.5, top, 0.045, STRK20.blush, STRK20.cream);
-    gradientPanel(north, u - 0.5, bottom, u + 0.5, mid, 0.045, STRK20.peach, STRK20.blush);
-    north.bins.add('unlit', faceBox(nf, u - 0.5, 0.9, 0.04, u - 0.1, 0.925, 0.05), STRK20.orange);
-  }
-  for (const wall of [shell.walls.west, shell.walls.east]) {
-    for (const [a, b] of wall.spans) {
-      const slots = [a + (b - a) * 0.25, a + (b - a) * 0.5, a + (b - a) * 0.75];
-      for (const u of slots) {
-        wall.bins.add('body', faceBox(wall.face, u - 0.1, 0.4, 0, u + 0.1, 1.86, 0.04), lift(STRK20.black, 0.03));
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.025, 0.46, 0.04, u + 0.025, 1.8, 0.05), STRK20.orange);
-      }
-      for (const u of [(slots[0]! + slots[1]!) / 2, (slots[1]! + slots[2]!) / 2]) {
-        wall.bins.add('body', faceBox(wall.face, u - 0.05, 1.45, 0, u + 0.05, 1.68, 0.06), hair);
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.08, 1.68, 0.04, u + 0.08, 1.86, 0.18), STRK20.blush);
-      }
-    }
-  }
-  // Hairline joints across the walkable floor, and a black runner edged in light.
-  const joint = lift(STRK20.hairline, 0.06);
-  for (let x = 2; x < map.width - 1; x++) shell.floor.add('floor', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.003), joint);
-  for (let y = 2; y < map.height - 1; y++) shell.floor.add('floor', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.003), joint);
-  carpet(shell, map, lift(STRK20.black, 0.03), theme.floorAccent, 'glow');
 }
 
 /** A self-lit panel shading from `bottom` at v0 to `top` at v1 (the STRK20 heading gradient). */
@@ -1250,12 +2099,21 @@ function gradientPanel(
   wall.bins.add('unlit', faceQuad(wall.face, u0, v0, u1, v1, w), (_x, y) => mixColor(bottom, top, (y - v0) / (v1 - v0)));
 }
 
-/** A runner from the exit to the first station in line with it. */
-function carpet(shell: InteriorShell, map: FixedRoomLevelMap, colour: number, edge: number, edgeKey = 'floor'): void {
+/**
+ * A runner from the exit to the first station in line with it; with
+ * `toFixtures`, to whatever stands first in its way, a station or the
+ * fixture it meets (D-104: the Bank's runner ends at the teller wall).
+ */
+function carpet(shell: InteriorShell, map: FixedRoomLevelMap, colour: number, edge: number, edgeKey = 'floor', toFixtures = false): void {
   const exit = map.exit;
   if (!exit) return;
   const station = map.stations.find((candidate) => candidate.x < exit.x + exit.width && candidate.x + candidate.width > exit.x);
-  const zTop = station ? station.y + station.height + 1 : map.height / 2;
+  let zTop = station ? station.y + station.height + 1 : map.height / 2;
+  if (toFixtures) {
+    let y = exit.y - 1;
+    while (y > 0 && standable(map, exit.x, y) && standable(map, exit.x + exit.width - 1, y)) y -= 1;
+    zTop = y + 1;
+  }
   const x0 = exit.x + 0.15;
   const x1 = exit.x + exit.width - 0.15;
   const zBottom = exit.y;
@@ -1855,14 +2713,20 @@ function vesuDecor(
 ): void {
   const north = shell.walls.north;
   const nf = north.face;
-  const anchor = stationAnchor(map);
+  // D-104: the lounge hangs Vesu's avatar and boards behind its front desk,
+  // west of the vault wall, which hides the rest of the north wall.
+  const vaultWall = map.stations.filter((station) => stationTheme(theme, station.station).fit === 'vesu-booth');
+  const deskEnd = vaultWall.length > 0 ? Math.min(...vaultWall.map((station) => station.x)) : map.width;
+  const lounge = map.fixtures.length > 0;
+  const anchor = lounge ? (INTERIOR_WALL_THICKNESS + deskEnd) / 2 : stationAnchor(map);
+  const visible = (u0: number, u1: number): boolean => inSpans(north, u0, u1) && u1 <= deskEnd - 0.1;
   for (const wall of Object.values(shell.walls)) {
     for (const [a, b] of wall.spans) wall.bins.add('unlit', faceBox(wall.face, a, 2.05, 0, b, 2.09, 0.03), VESU.blue);
   }
 
   // Vesu's avatar behind the counter: the V glowing on black.
   const [p0, p1, q0, q1] = [anchor - 0.98, anchor + 0.98, 0.3, 2.0];
-  if (inSpans(north, p0 - 0.1, p1 + 0.1)) {
+  if (visible(p0 - 0.1, p1 + 0.1)) {
     north.bins.add('body', facePanel(nf, p0 - 0.05, q0 - 0.05, p1 + 0.05, q1 + 0.05, 0.012, 0.2), VESU.fill);
     north.bins.add('unlit', facePanel(nf, p0, q0, p1, q1, 0.03, 0.18), VESU.ink);
     addVesuMark(north.bins, 'unlit', nf, anchor, q0 + 0.24, 1.26, 0.04, 0.06, 'dark');
@@ -1870,21 +2734,22 @@ function vesuDecor(
   }
 
   // The market boards: rows of token discs, name bars and rate bars.
-  for (const [u, seed] of [[anchor - 3.35, 1], [anchor + 3.35, 2]] as const) {
-    if (!inSpans(north, u - 1.45, u + 1.45)) continue;
+  const boardStep = lounge ? 3.25 : 3.35;
+  for (const [u, seed] of [[anchor - boardStep, 1], [anchor + boardStep, 2]] as const) {
+    if (!visible(u - 1.4, u + 1.4)) continue;
     vesuMarketBoard(north, u - 1.3, 0.92, u + 1.3, 1.96, seed);
   }
   // White planters at the north wall's ends, clear of the boards.
   for (const [a, b] of north.spans) {
-    vesuPlanter(north, a + 0.55);
-    vesuPlanter(north, b - 0.55);
+    for (const u of [a + 0.55, b - 0.55]) if (u < deskEnd - 0.3) vesuPlanter(north, u);
   }
 
   // Down each side, a bank of safe-deposit lockers under `vesu`.
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const [s0, s1] of wall.spans) {
       const mid = (s0 + s1) / 2;
-      const [l0, l1] = [mid - 2.4, mid + 1.6];
+      // Clear of the vault wall and the desk, which stand against the walls' north ends.
+      const [l0, l1] = lounge ? [4.7, 8.7] : [mid - 2.4, mid + 1.6];
       if (!inSpans(wall, l0 - 0.1, l1 + 0.1)) continue;
       vesuLockers(wall, l0, l1);
       const sign = labels.sign(VESU_WORDMARK_TEXT, VESU_WALL_WORDMARK);
