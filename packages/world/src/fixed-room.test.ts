@@ -785,6 +785,14 @@ describe('fixed room definitions', () => {
           height: 1,
         },
       ],
+      // The gateway the terminal stands in, and two rows of lounge seats.
+      fixtures: [
+        { x: 6, y: 1, width: 6, height: 2 },
+        { x: 6, y: 3, width: 2, height: 1 },
+        { x: 10, y: 3, width: 2, height: 1 },
+        { x: 3, y: 6, width: 3, height: 1, prop: 'bench' },
+        { x: 12, y: 6, width: 3, height: 1, prop: 'bench' },
+      ],
     });
     expect(FIXED_ROOM_DEFINITIONS).toMatchObject({ bridge: BRIDGE_ROOM_DEFINITION });
   });
@@ -1125,6 +1133,86 @@ function expectDefinitionError(definition: FixedRoomDefinition, code: string): v
     expect((error as FixedRoomDefinitionError).code).toBe(code);
   }
 }
+
+describe('fixed room fixtures (counters built into their rooms)', () => {
+  const BUILT_IN = [
+    ['exchange', EXCHANGE_ROOM_DEFINITION],
+    ['post office', POST_OFFICE_ROOM_DEFINITION],
+    ['bridge', BRIDGE_ROOM_DEFINITION],
+  ] as const;
+
+  /** Tiles a player can walk to from the spawn, stepping onto (never through) pads and the exit. */
+  function reachable(room: ReturnType<typeof createFixedRoom> | ReturnType<typeof createFixedRoomLevel>): Set<string> {
+    const seen = new Set<string>([`${room.spawn.x},${room.spawn.y}`]);
+    const queue = [room.spawn];
+    while (queue.length > 0) {
+      const { x, y } = queue.pop()!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const next = { x: x + dx, y: y + dy };
+        const key = `${next.x},${next.y}`;
+        if (seen.has(key)) continue;
+        const tile = room.tiles[next.y]?.[next.x];
+        if (tile === 'lift' || tile === 'exit') seen.add(key);
+        if (tile !== 'floor') continue;
+        seen.add(key);
+        queue.push(next);
+      }
+    }
+    return seen;
+  }
+
+  it.each([
+    ...BUILT_IN.map(([name, definition]) => [name, createFixedRoom(definition)] as const),
+    ['degen floor', createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL)] as const,
+  ])('makes the %s counter\'s furniture solid and keeps every counter, lift and the exit in reach', (_name, room) => {
+    expect(room.fixtures.length).toBeGreaterThan(0);
+    for (const fixture of room.fixtures) {
+      for (let y = fixture.y; y < fixture.y + fixture.height; y++) {
+        for (let x = fixture.x; x < fixture.x + fixture.width; x++) {
+          expect(room.tiles[y]![x]).toBe('fixture');
+          expect(isFixedRoomSolidAt(room, x, y)).toBe(true);
+          expect(isFixedRoomApproach(room, x, y) && !isFixedRoomSolidAt(room, x, y)).toBe(false);
+        }
+      }
+    }
+    const reached = reachable(room);
+    for (const station of room.stations) {
+      // The tile in front of the counter stays free and is reached from the door.
+      expect(room.tiles[station.y + 1]![station.x]).toBe('floor');
+      expect(reached.has(`${station.x},${station.y + 1}`)).toBe(true);
+      // The counter's furniture closes its back and sides: only the front row is its approach.
+      for (let x = station.x - 1; x <= station.x + station.width; x++) {
+        expect(isFixedRoomSolidAt(room, x, station.y - 1)).toBe(true);
+      }
+      expect(isFixedRoomSolidAt(room, station.x - 1, station.y)).toBe(true);
+      expect(isFixedRoomSolidAt(room, station.x + station.width, station.y)).toBe(true);
+    }
+    for (const lift of room.lifts) expect(reached.has(`${lift.x},${lift.y}`)).toBe(true);
+    if (room.exit) expect(reached.has(`${room.exit.x},${room.exit.y}`)).toBe(true);
+  });
+
+  it('copies and freezes the fixtures into the map, props and all', () => {
+    const room = createFixedRoom(POST_OFFICE_ROOM_DEFINITION);
+    expect(room.fixtures).toEqual(POST_OFFICE_ROOM_DEFINITION.fixtures);
+    expect(room.fixtures[0]).not.toBe(POST_OFFICE_ROOM_DEFINITION.fixtures[0]);
+    expect(Object.isFrozen(room.fixtures)).toBe(true);
+    expect(Object.isFrozen(room.fixtures[0])).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.fixtures)).toBe(true);
+    expect(room.fixtures.filter((fixture) => fixture.prop).map((fixture) => fixture.prop)).toEqual(['pillar-box', 'writing-desk']);
+  });
+
+  it('rejects a prop the room builder does not know, and furniture across a counter\'s front (D-104\'s codes)', () => {
+    expectDefinitionError(
+      { ...POST_OFFICE_ROOM_DEFINITION, fixtures: [{ x: 4, y: 6, width: 1, height: 1, prop: 'fountain' }] } as unknown as FixedRoomDefinition,
+      'invalid-fixture',
+    );
+    // A desk across the counter's front row: its approach is all furniture.
+    expectDefinitionError(
+      { ...POST_OFFICE_ROOM_DEFINITION, fixtures: [...POST_OFFICE_ROOM_DEFINITION.fixtures, { x: 2, y: 4, width: 4, height: 1 }] },
+      'unreachable-station',
+    );
+  });
+});
 
 describe('fixed room station admission', () => {
   it('fails closed for missing, malformed, unknown, and duplicate snapshots', () => {
@@ -1937,6 +2025,14 @@ describe('fixed room floors (the Exchange tower)', () => {
       lifts: [
         { to: 'ground', x: 1, y: 10, width: 2, height: 1, arrival: { x: 2, y: 9 } },
         { to: 'roof', x: 15, y: 1, width: 2, height: 1, arrival: { x: 15, y: 2 } },
+      ],
+      // The back room in the poster wall, the bar's ends, two high tables.
+      fixtures: [
+        { x: 7, y: 1, width: 4, height: 2 },
+        { x: 7, y: 3, width: 1, height: 1 },
+        { x: 10, y: 3, width: 1, height: 1 },
+        { x: 4, y: 6, width: 1, height: 1, prop: 'high-table' },
+        { x: 13, y: 6, width: 1, height: 1, prop: 'high-table' },
       ],
     });
     expect(EXCHANGE_ROOF_LEVEL).toEqual({

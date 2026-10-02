@@ -15,6 +15,7 @@ import {
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
+  Raycaster,
   SRGBColorSpace,
   Texture,
   Vector3,
@@ -42,6 +43,10 @@ import { createNullLabelFactory } from './labels.js';
 import {
   BANK_HALL,
   DEFAULT_ROOM_THEME,
+  AVNU,
+  AVNU_COUNTER_HEADER,
+  DEGEN,
+  DEGEN_COUNTER_HEADER,
   ENDUR_BOOTH_SIGN,
   TELLER_SIGN,
   VESU_HEADER_SIGN,
@@ -50,6 +55,10 @@ import {
   ENDUR,
   ENDUR_STATION_LOOKS,
   NEAR,
+  NEAR_DEPARTURE_HEADER,
+  POST_OFFICE_SEND_SIGN,
+  POST_OFFICE_SEND_TEXT,
+  POST_OFFICE_WINDOW_SIGN,
   ROOM_THEMES,
   STRK20,
   STRK20_STATION_LOOKS,
@@ -71,6 +80,7 @@ import {
   DEGEN_SIGN_TEXT,
   INTERIOR_SOUTH_WALL_HEIGHT,
   INTERIOR_WALL_HEIGHT,
+  BUILT_IN_COUNTER_STATIONS,
   buildFixedRoom,
   degenPosterStyle,
   type InteriorOccluder,
@@ -120,6 +130,14 @@ function meshNamed(root: Object3D, suffix: string): Mesh {
     if (!found && object instanceof Mesh && object.name.endsWith(suffix)) found = object;
   });
   if (!found) throw new Error(`no mesh ${suffix}`);
+  return found;
+}
+
+function floatingLabelsIn(root: Object3D): Object3D[] {
+  const found: Object3D[] = [];
+  root.traverse((object) => {
+    if (object.userData['kind'] === 'floating') found.push(object);
+  });
   return found;
 }
 
@@ -181,6 +199,19 @@ function haloOf(room: RoomView, station: string): { colour: number; opacity: num
   return { colour: hex, opacity: colour.getW(fill[0]), edge: colour.getW(edge[0]), box };
 }
 
+/** World-space vertices of one station's slice of the room's shared halo mesh, fill and edge. */
+function haloVertices(room: RoomView, station: string): Vector3[] {
+  const { fill, edge } = stationGroup(room, station).userData['halo'] as { fill: [number, number]; edge: [number, number] };
+  const mesh = meshNamed(room.group, ':halos');
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const found: Vector3[] = [];
+  for (const [start, count] of [fill, edge]) {
+    for (let i = start; i < start + count; i++) found.push(new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
+  }
+  return found;
+}
+
 /**
  * D-103: one counter's share of a room-wide mesh (`:counters` or
  * `:counter-screens`): the triangles standing over its own tiles, as a mesh
@@ -239,8 +270,7 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it.each(DEFINITIONS)('gives $building one kiosk, label and halo per station', (definition) => {
-    const map = createFixedRoom(definition);
+  it.each(FLOORS)('gives the $building $level floor one counter, label and halo per station', (map) => {
     const room = buildFixedRoom(map, createNullLabelFactory());
     const stations = room.group.children.filter((child) => child.name.startsWith('station:'));
     expect(stations).toHaveLength(map.stations.length);
@@ -252,8 +282,17 @@ describe('buildFixedRoom', () => {
       const label = stationLabel(group);
       expect(label.userData['text']).toBe(station.label);
       const position = label.getWorldPosition(new Vector3());
-      const builtIn = stationTheme(roomTheme(map.building), station.station).fit !== undefined;
-      if (builtIn) {
+      const ours = BUILT_IN_COUNTER_STATIONS.includes(station.station);
+      const builtIn = ours || stationTheme(roomTheme(map.building, map.level), station.station).fit !== undefined;
+      if (ours) {
+        // D-105: a sign on the counter's own architecture, over the window and never past its front.
+        expect(label.userData['kind']).toBe('sign');
+        expect(position.x).toBeCloseTo(OX + station.x + station.width / 2);
+        expect(position.y).toBeGreaterThan(1.6);
+        expect(position.z).toBeGreaterThan(OZ + station.y);
+        expect(position.z).toBeLessThanOrEqual(OZ + station.y + station.height + 0.05);
+        expect(floatingLabelsIn(group)).toEqual([]);
+      } else if (builtIn) {
         // D-104: a sign in the architecture, over the counter or its halo; never a floating pill.
         expect(label.userData['kind']).toBe('sign');
         expect(position.x).toBeGreaterThanOrEqual(OX + station.x - 1);
@@ -267,7 +306,7 @@ describe('buildFixedRoom', () => {
       }
       expect(position.y).toBeGreaterThan(1.2);
       // The halo covers the tiles a player can stand on to open the counter:
-      // its whole ring when it stands free, the hall in front when built in.
+      // its whole ring when it stands free, the floor in front when built in.
       const approach = walkableApproach(map, station);
       const halo = haloOf(room, station.station).box;
       expect(halo.min.x).toBeCloseTo(OX + Math.min(...approach.map((tile) => tile.x)), 1);
@@ -275,6 +314,11 @@ describe('buildFixedRoom', () => {
       expect(halo.min.z).toBeCloseTo(OZ + Math.min(...approach.map((tile) => tile.y)), 1);
       expect(halo.max.z).toBeCloseTo(OZ + Math.max(...approach.map((tile) => tile.y)) + 1, 1);
       expect(halo.max.y).toBeLessThan(0.05);
+      for (const vertex of haloVertices(room, station.station)) {
+        // Every vertex on an edge or inside a standing tile, never over furniture.
+        const inside = approach.some((tile) => vertex.x >= OX + tile.x - 1e-6 && vertex.x <= OX + tile.x + 1 + 1e-6 && vertex.z >= OZ + tile.y - 1e-6 && vertex.z <= OZ + tile.y + 1 + 1e-6);
+        expect(inside).toBe(true);
+      }
     }
     room.dispose();
   });
@@ -321,19 +365,18 @@ describe('buildFixedRoom', () => {
   it('redraws a station label only when its text changes', () => {
     const base = createNullLabelFactory();
     const setText = vi.fn();
-    const labels: LabelFactory = {
-      sign: base.sign,
-      floating(text, options) {
-        const label = base.floating(text, options);
-        return {
-          object: label.object,
-          dispose: () => label.dispose(),
-          setText(next) {
-            setText(next);
-            label.setText(next);
-          },
-        };
+    const spy = (label: ReturnType<LabelFactory['sign']>): ReturnType<LabelFactory['sign']> => ({
+      object: label.object,
+      dispose: () => label.dispose(),
+      setText(next) {
+        setText(next);
+        label.setText(next);
       },
+    });
+    // The Exchange's counter paints its label on a sign; any other counter floats one.
+    const labels: LabelFactory = {
+      sign: (text, options) => spy(base.sign(text, options)),
+      floating: (text, options) => spy(base.floating(text, options)),
     };
     const { map, room } = build('exchange', labels);
     const presentations = fixedRoomStationPresentations(map, roomState(map, 'available', 'exchange:swap'));
@@ -410,13 +453,9 @@ describe('buildFixedRoom', () => {
   it('dresses the Bridge room in NEAR: green light on black, a route map behind the desk', () => {
     const { map, room } = build('bridge');
     const group = stationGroup(room, 'bridge:deposit');
-    // The station label in NEAR's uppercase mono, white on black.
-    expect(floatingLabel(group).userData['options']).toMatchObject({
-      font: 'mono',
-      uppercase: true,
-      foreground: '#ffffff',
-      background: 'rgba(0,0,0,0.9)',
-    });
+    // The station label heads the gateway's departure board, NEAR's uppercase mono in green on black.
+    expect(stationLabel(group).userData['options']).toEqual(NEAR_DEPARTURE_HEADER);
+    expect(NEAR_DEPARTURE_HEADER).toMatchObject({ titleFont: 'mono', uppercase: true, foreground: '#00ec97', background: '#000000' });
     // Locked until the Shell says otherwise, then green; the highlight's halo in the tint.
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
     expect(accent.emissiveIntensity).toBe(0);
@@ -897,6 +936,113 @@ describe('buildFixedRoom', () => {
   });
 });
 
+describe('counters built into their rooms', () => {
+  const builtIn = FLOORS.filter((map) => map.stations.some((station) => BUILT_IN_COUNTER_STATIONS.includes(station.station)));
+  const signsIn = (root: Object3D): Object3D[] => {
+    const found: Object3D[] = [];
+    root.traverse((object) => {
+      if (object.userData['kind'] === 'sign') found.push(object);
+    });
+    return found;
+  };
+  /** The tallest surface of a mesh over a room rectangle, sampled by rays straight down. */
+  const heightOver = (mesh: Mesh, rect: { x: number; y: number; width: number; height: number }): number => {
+    const ray = new Raycaster();
+    let top = -Infinity;
+    for (let i = 0; i < rect.width * 5; i++) {
+      for (let j = 0; j < rect.height * 5; j++) {
+        ray.set(new Vector3(OX + rect.x + (i + 0.5) / 5, 10, OZ + rect.y + (j + 0.5) / 5), new Vector3(0, -1, 0));
+        const hit = ray.intersectObject(mesh, false)[0];
+        if (hit) top = Math.max(top, hit.point.y);
+      }
+    }
+    return top;
+  };
+
+  it('builds the Exchange, Degen floor, Post Office and Bridge counters in, and leaves the Bank and Vault as they were', () => {
+    expect([...BUILT_IN_COUNTER_STATIONS].sort()).toEqual(['bridge:deposit', 'exchange:degen', 'exchange:swap', 'post-office:transfer']);
+    expect(builtIn.map((map) => `${map.building}:${map.level}`).sort()).toEqual(['bridge:ground', 'exchange:degen', 'exchange:ground', 'post-office:ground']);
+  });
+
+  it.each(builtIn)('stands the $building $level counter\'s furniture on its fixtures, desk-high and more', (map) => {
+    const room = buildFixedRoom(map, createNullLabelFactory());
+    room.group.updateMatrixWorld(true);
+    const station = map.stations[0]!;
+    // D-103: the room's counters share one lit mesh; these rooms hold one counter each.
+    const counter = meshNamed(room.group, ':counters');
+    // Each piece of furniture round the counter stands at least table-high, and the counter desk-high.
+    for (const fixture of map.fixtures.filter((candidate) => candidate.prop === undefined)) {
+      expect(heightOver(counter, fixture), JSON.stringify(fixture)).toBeGreaterThan(0.75);
+    }
+    expect(heightOver(counter, station)).toBeGreaterThan(0.95);
+    // The state colour lights the architecture too, beyond the counter's own front.
+    const status = new Box3().setFromObject(meshNamed(stationGroup(room, station.station), ':status'));
+    expect(status.max.y).toBeGreaterThan(1.6);
+    room.dispose();
+  });
+
+  it.each(builtIn)('draws each free-standing prop on the $building $level floor, at no draw call of its own', (map) => {
+    const room = buildFixedRoom(map, createNullLabelFactory());
+    room.group.updateMatrixWorld(true);
+    const floor = meshNamed(room.group, ':floor');
+    const props = map.fixtures.filter((fixture) => fixture.prop !== undefined);
+    expect(props.length).toBeGreaterThan(0);
+    for (const prop of props) {
+      const tall = verticesIn(floor, OX + prop.x, OZ + prop.y, OX + prop.x + prop.width, OZ + prop.y + prop.height).filter((vertex) => vertex.y > 0.7);
+      expect(tall.length, prop.prop).toBeGreaterThan(0);
+    }
+    room.dispose();
+  });
+
+  it('heads each counter with its building\'s own sign, and the Post Office adds SEND over its window', () => {
+    const expected: Record<string, unknown> = {
+      'exchange:swap': AVNU_COUNTER_HEADER,
+      'exchange:degen': DEGEN_COUNTER_HEADER,
+      'post-office:transfer': POST_OFFICE_WINDOW_SIGN,
+      'bridge:deposit': NEAR_DEPARTURE_HEADER,
+    };
+    for (const map of builtIn) {
+      const room = buildFixedRoom(map, createNullLabelFactory());
+      room.group.updateMatrixWorld(true);
+      const station = map.stations[0]!;
+      const group = stationGroup(room, station.station);
+      expect(stationLabel(group).userData['options']).toEqual(expected[station.station]);
+      const others = signsIn(group).filter((sign) => sign.userData['station'] === undefined);
+      if (map.building === 'post-office') {
+        expect(others.map((sign) => sign.userData['text'])).toEqual([POST_OFFICE_SEND_TEXT]);
+        expect(others[0]!.userData['options']).toEqual(POST_OFFICE_SEND_SIGN);
+        // SEND sits on the fascia right over the window's ticket.
+        const send = others[0]!.getWorldPosition(new Vector3());
+        const ticket = stationLabel(group).getWorldPosition(new Vector3());
+        expect(send.x).toBeCloseTo(ticket.x);
+        expect(send.y).toBeGreaterThan(ticket.y);
+      } else {
+        expect(others).toEqual([]);
+      }
+      room.dispose();
+    }
+  });
+
+  it('dresses each counter in its building\'s colours', () => {
+    const counterColours = (building: string, level = 'ground'): number[] => {
+      const map = builtIn.find((candidate) => candidate.building === building && candidate.level === level)!;
+      const room = buildFixedRoom(map, createNullLabelFactory());
+      const colours = [...coloursOf(meshNamed(room.group, ':counters')), ...coloursOf(meshNamed(room.group, ':counter-screens'))];
+      room.dispose();
+      return colours;
+    };
+    const has = (colours: number[], hex: number) => colours.includes(new Color(hex).getHex());
+    // avnu's navy and blue; the Degen floor's neon; the airmail red and blue; NEAR's green and teal.
+    expect(has(counterColours('exchange'), AVNU.blue)).toBe(true);
+    expect(has(counterColours('exchange', 'degen'), DEGEN.pink)).toBe(true);
+    expect(has(counterColours('exchange', 'degen'), DEGEN.cyan)).toBe(true);
+    const post = counterColours('post-office');
+    expect(has(post, 0xc23b2b) && has(post, 0x2f5fa3) && has(post, 0xfbf4e4)).toBe(true);
+    const bridge = counterColours('bridge');
+    expect(has(bridge, NEAR.green) && has(bridge, NEAR.teal)).toBe(true);
+  });
+});
+
 describe('the Exchange tower floors', () => {
   const degenMap = createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL);
   const labelsIn = (root: Object3D, key: string): Object3D[] => {
@@ -939,13 +1085,14 @@ describe('the Exchange tower floors', () => {
     expect(stations.map((child) => child.userData['station'])).toEqual([EXCHANGE_DEGEN_STATION]);
     const counter = stationGroup(room, EXCHANGE_DEGEN_STATION);
     expect(counter.userData['status']).toBe('locked');
-    expect(floatingLabel(counter).userData['text']).toBe('DEGEN SWAP');
+    expect(stationLabel(counter).userData['text']).toBe('DEGEN SWAP');
+    expect(stationLabel(counter).userData['options']).toEqual(DEGEN_COUNTER_HEADER);
     const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
     expect(accent.color.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.locked.color).getHex());
     // Available and stepped up to: hot pink with a lime halo, and the Shell's label.
     room.setStations(fixedRoomStationPresentations(degenMap, roomState(degenMap, 'available', EXCHANGE_DEGEN_STATION, 'DEGEN')));
     expect(counter.userData['status']).toBe('available');
-    expect(floatingLabel(counter).userData['text']).toBe('DEGEN');
+    expect(stationLabel(counter).userData['text']).toBe('DEGEN');
     expect(accent.emissive.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.highlighted.emissive).getHex());
     // No exit: the south wall is one unbroken ledge, the lifts are the way out.
     expect(degenMap.exit).toBeNull();
