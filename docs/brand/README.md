@@ -23,8 +23,8 @@ Approved 2026-10-02 (D-113). The references were Cube World's title and menu scr
 
 | Role | Font | Notes |
 |---|---|---|
-| Headlines, titles, big numbers | **Jersey 15** | A tall, condensed pixel face with a scoreboard feel. Set it large with tight leading (line-height about 0.95). |
-| Body | **VT323** | A pixel terminal face. It reads small, so set it about 1.35× the size a normal sans would need: 20px minimum on screens, with line-height about 1.2. |
+| Headlines and titles | **Jersey 15** | A tall, condensed pixel face with a scoreboard feel. Set it large with tight leading (line-height about 0.95). Not for money amounts: its 8/B and 6/8 merge (D-121). |
+| Body and money amounts | **VT323** | A pixel terminal face. Every amount and balance uses it with tabular figures (D-121). It reads small, so set it about 1.35× the size a normal sans would need: 20px minimum on screens, with line-height about 1.2. |
 | Buttons, tabs, menus, labels | **Silkscreen** | Pixel caps at weight 400 or 700, with slight letter-spacing. |
 
 All three are Google Fonts under the SIL Open Font License, so commercial use is fine. Self-host them in the app.

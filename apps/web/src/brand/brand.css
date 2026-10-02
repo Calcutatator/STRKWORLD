@@ -62,8 +62,9 @@
   --brand-font-headline: "Jersey 15", "VT323", ui-monospace, monospace;
   --brand-font-body: "VT323", ui-monospace, monospace;
   --brand-font-menu: "Silkscreen", "VT323", ui-monospace, monospace;
-  /* VT323's digits blur at small sizes; numbers and balances take Jersey 15. */
-  --brand-font-numeric: "Jersey 15", ui-monospace, monospace;
+  /* Money amounts take VT323 (D-121): its 1/l/I, 5/S, 8/B and 6/b stay distinct
+     and it is monospaced, so columns align. Jersey 15 merges 8/B and 6/8. */
+  --brand-font-numeric: "VT323", ui-monospace, monospace;
   --brand-body-size: 1.375rem;
   --brand-body-leading: 1.2;
 

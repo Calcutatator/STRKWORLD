@@ -415,6 +415,16 @@ describe('the panel kit', () => {
       expect(rule.body, rule.prelude).not.toMatch(/(^|[;\s])(animation|transition)\s*:/);
     }
   });
+
+  it('sets title-screen amounts in the numeric token with tabular figures and a legible size (D-121)', () => {
+    const body = ruleBody(
+      '.title-menu .room-entry input[name="amount"],\n.title-menu .room-entry .review-costs dd,\n.title-menu .room-entry .batch-list li',
+    );
+    expect(body).toMatch(/font-family:\s*var\(--brand-font-numeric\)/);
+    expect(body).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    const size = /font-size:\s*([\d.]+)rem/.exec(body);
+    expect(Number(size?.[1])).toBeGreaterThanOrEqual(1.5);
+  });
 });
 
 describe("the game theme's type (D-119)", () => {

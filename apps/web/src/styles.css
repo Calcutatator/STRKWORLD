@@ -1510,13 +1510,16 @@ button[data-locked="true"] {
   text-shadow: none;
 }
 
-/* Amounts and balances: VT323's digits blur small, so numbers take Jersey 15. */
+/* Amounts and balances take VT323 (D-121). It reads smaller than Jersey 15, so
+   the size is up, and tabular figures keep the review's column aligned. */
 .title-menu .room-entry input[name="amount"],
 .title-menu .room-entry .review-costs dd,
 .title-menu .room-entry .batch-list li {
   font-family: var(--brand-font-numeric);
-  font-size: 1.3rem;
-  letter-spacing: 0.02em;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .title-menu .room-entry label,
