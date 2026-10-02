@@ -1180,11 +1180,15 @@ class Session implements WorldSession {
 
   /**
    * Space jumps: a short cosmetic hop that never touches movement or
-   * collision. Ignored, never queued, while a panel or Shell claim owns the
-   * keyboard (the gate; the keyboard also never reads a keystroke aimed at a
-   * text field), while a room's counter holds the controls ('shell'), and in
-   * the Avatar Studio. A held key's repeats do nothing, and a press in the
-   * air or in the cooldown is dropped: no double jump, no buffered jump.
+   * collision. It works wherever the avatar walks (D-111): the street, the
+   * plaza and the sandbox, every interior and its upper floors, the roof, the
+   * bunker and the Avatar Studio, with the same arc everywhere. Ignored, never
+   * queued, while a panel or Shell claim owns the keyboard (the gate; the
+   * keyboard also never reads a keystroke aimed at a text field) and while a
+   * room's counter holds the controls ('shell'). A held key's repeats do
+   * nothing, and a press in the air or in the cooldown is dropped: no double
+   * jump, no buffered jump. Only the street's sandbox has a heightmap, so a
+   * jump climbs nowhere else: indoors every fixture stays a wall (D-106).
    */
   private createJump(): void {
     const keyboard = this.keyboard;
@@ -1202,9 +1206,12 @@ class Session implements WorldSession {
     this.jumpKey = onKey;
   }
 
-  /** Whether Space may jump right now. */
+  /**
+   * Whether Space may jump right now: whenever the World owns the keyboard
+   * (D-111). The Avatar Studio is no exception; its selection is by walking.
+   */
   private canJump(): boolean {
-    if (this.inputSuspended || this.avatarStudioActive) return false;
+    if (this.inputSuspended) return false;
     const room = this.activeRoomController();
     if (room?.state.inRoom && room.state.controlOwner !== 'world') return false;
     return true;

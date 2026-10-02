@@ -45,7 +45,7 @@ function fakeFigures() {
   return { factory, created };
 }
 
-function setup(reducedMotion?: () => boolean) {
+function setup(reducedMotion?: () => boolean, vaultOpen = false) {
   const parent = new Group();
   const figures = fakeFigures();
   const presenter = createPresenter({
@@ -53,6 +53,7 @@ function setup(reducedMotion?: () => boolean) {
     labels: createNullLabelFactory(),
     figures: figures.factory,
     ...(reducedMotion ? { reducedMotion } : {}),
+    ...(vaultOpen ? { vaultOpen: true } : {}),
   });
   const view = presenter.bindSession();
   // The Studio builds its figures first; the local avatar hangs off the root.
@@ -654,3 +655,82 @@ describe('presenter: the local jump (D-097)', () => {
   });
 });
 
+
+describe('presenter: one jump in every scene (D-111)', () => {
+  type World = ReturnType<typeof setup>;
+  const roof = EXCHANGE_ROOF_LEVEL.rooftop;
+  /** How each scene is shown, and the surface the feet stand on there. */
+  const SCENES: ReadonlyArray<{ readonly name: string; readonly show: (world: World) => void; readonly floor: number }> = [
+    { name: 'the street', floor: 0, show: (world) => world.view.setPlayerPosition(tile(40, 15), true) },
+    ...(['bank', 'bridge', 'exchange', 'post-office', 'bunker', 'vault'] as const).map((building) => ({
+      name: `the ${building} interior`,
+      floor: 0,
+      show: (world: World) => {
+        world.view.setStreetVisible(false);
+        world.view.showRoom(building);
+        world.view.setPlayerPosition(tile(4, 5), true);
+      },
+    })),
+    {
+      name: 'the Degen floor',
+      floor: 0,
+      show: (world) => {
+        world.view.setStreetVisible(false);
+        world.view.showRoom('exchange', 'degen');
+        world.view.setPlayerPosition(tile(5, 6), true);
+      },
+    },
+    {
+      name: 'the avnu roof',
+      floor: EXCHANGE_ROOF_HEIGHT,
+      show: (world) => {
+        world.view.showRooftop('exchange');
+        world.view.setPlayerPosition(tile(roof.x + 5, roof.y + 3), true);
+        world.view.setPlayerElevation(EXCHANGE_ROOF_HEIGHT);
+      },
+    },
+    {
+      name: 'the Avatar Studio',
+      floor: 0,
+      show: (world) => {
+        world.view.setStreetVisible(false);
+        world.view.syncStudio({ visible: true, highlightedFigure: null });
+        world.view.setPlayerPosition(tile(6, 6), true);
+      },
+    },
+  ];
+
+  it.each(SCENES)('lifts the avatar the full jump height and tucks it in $name, then lands', ({ show, floor }) => {
+    const world = setup(undefined, true);
+    show(world);
+    world.presenter.update(16);
+    const ground = world.avatar.object.position.y;
+    expect(ground).toBeCloseTo(floor, 1);
+    world.view.playerJump();
+    for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) world.presenter.update(25);
+    expect(world.presenter.jumpLift).toBeCloseTo(JUMP_HEIGHT, 1);
+    expect(world.avatar.object.position.y).toBeCloseTo(ground + JUMP_HEIGHT, 1);
+    expect(world.avatar.update.mock.calls.at(-1)![1].jump?.tuck).toBeGreaterThan(0.9);
+    for (let ms = 0; ms < JUMP_TOTAL_MS; ms += 25) world.presenter.update(25);
+    expect(world.avatar.object.position.y).toBeCloseTo(ground, 5);
+    world.presenter.dispose();
+  });
+
+  it('plays a peer\'s jump in the Studio, as on the street and the roof', () => {
+    const at = tile(6, 6);
+    const parent = new Group();
+    const figures = fakeFigures();
+    const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: figures.factory });
+    const peers = createRemotePeerSource([{ id: 'peer', x: at.x, y: at.y, facing: 'down', sprite: 'avatar-3', jumps: 0 }]);
+    const view = presenter.bindSession(peers.source);
+    view.setStreetVisible(false);
+    view.syncStudio({ visible: true, highlightedFigure: null });
+    const remote = figures.created.find((figure) => figure.object.parent?.name === 'remote-avatars')!;
+    presenter.update(16);
+    expect(remote.object.position.y).toBe(0);
+    peers.publish([{ id: 'peer', x: at.x, y: at.y, facing: 'down', sprite: 'avatar-3', jumps: 1 }]);
+    for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) presenter.update(25);
+    expect(remote.object.position.y).toBeCloseTo(JUMP_HEIGHT, 1);
+    presenter.dispose();
+  });
+});
