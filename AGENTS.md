@@ -13637,3 +13637,33 @@ reads as a different, wrong token rather than an omitted one.
 `apps/backend/src/pool-stats.test.ts`'s parsing and validation suite.
 
 ---
+
+### 2026-10-02 — Contract deploys from a wallet: declare support, Blake2s class hashes, and a deployer-independent address
+
+Three things that cost time building the ReceiptLedger deploy page (D-116).
+First, Argent's last public extension source (argent-x v5.23.0, 2025-03-14)
+does route `wallet_addDeclareTransaction`, but its handler carries a
+`FIXME: this is a hack. It won't work` comment on how it forwards the class,
+and Ready's current build is not public, so declare-from-a-dapp in Ready is
+unconfirmed; deploying through the UDC is an ordinary invoke and is fine.
+Second, mainnet runs Starknet v0.14.3, so a new declaration needs the
+**Blake2s** compiled class hash (starknet.js 10.8.0
+`hash.computeCompiledClassHashBlake`, the default from v0.14.1), not the
+Poseidon one; Scarb 2.13.1's CASM and Universal Sierra Compiler 2.9.1's CASM
+hash identically. Third, the mainnet UDC
+`0x02ceed65a4bd731034c01113685c831b01c15d7d432f71afb1cf1634b53a2125` exposes
+`deploy_contract(class_hash, salt, not_from_zero, calldata)`; with
+`not_from_zero = false` the address depends only on class, salt and
+calldata, so it can be published before anyone deploys. Also: snforge 0.52
+turns a constructor panic into an uncatchable execution error, so neither
+`should_panic` nor `deploy()`'s `Result` can test a constructor assert.
+
+*Verified:* `gh api` read of `argentlabs/argent-x`
+`packages/extension/src/inpage/requestMessageHandlers/addDeclareTransaction.ts`;
+`starknet_getBlockWithTxHashes` (`starknet_version` 0.14.3) and
+`starknet_getClassAt` on the UDC over `https://api.cartridge.gg/x/starknet/mainnet`
+on 2026-10-02; both CASM files hashed with starknet.js; a mainnet
+`starknet_estimateFee` (SKIP_VALIDATE) accepted the declare at 4.74 STRK;
+the snforge behaviour from a failing test in `contracts/receipt-ledger`.
+
+---
