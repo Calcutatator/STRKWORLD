@@ -263,6 +263,7 @@ export {
   PLAZA_STATIONS,
   PLAZA_PLACEMENT_STATION,
   PLACEMENT_STAND,
+  PLACEMENT_PATH,
   isPlazaNearby,
   plazaStationAtApproach,
   plazaStations,
