@@ -245,7 +245,7 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Seven verbs, none of them financial. There is no message type through which
+ * Ten verbs, none of them financial. There is no message type through which
  * a client could tell the room anything else, which is the enforcement: the
  * room's surface has no field for it.
  */
@@ -258,7 +258,7 @@ export const MESSAGE = Object.freeze({
   resume: 'resume',
   /**
    * `{ area, x, y, facing, sprite }` — D-087: go live in a presence area
-   * (`street`, `roof`, `studio` or, since D-112, `bunker`) at a placement in that area, from a
+   * (`street`, `roof`, `studio`, since D-112 `bunker` and since D-114 `arena`) at a placement in that area, from a
    * suspend or from another area. Peers in the area left stop seeing the
    * avatar; peers in the area entered start. Sent to the current area, it
    * refreshes the placement and the sprite.
@@ -279,6 +279,21 @@ export const MESSAGE = Object.freeze({
    * presence area (D-111, D-112). Whatever a client sends with it is never read.
    */
   jump: 'jump',
+  /**
+   * No payload — D-114: claim the arena ring from its gate approach. Only
+   * while the ring is idle and the sender is live in the arena; the room
+   * moves the fighter into the ring itself. Whatever a client sends with it
+   * is never read.
+   */
+  arenaClaim: 'arena:claim',
+  /**
+   * No payload — D-114: one swing, judged from the position and facing the
+   * room holds for the sender. Damage is the room's constant; whatever a
+   * client sends with it is never read.
+   */
+  arenaAttack: 'arena:attack',
+  /** No payload — D-114: forfeit the sender's fight (it ends as `left`). Never read. */
+  arenaLeave: 'arena:leave',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];

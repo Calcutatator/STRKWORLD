@@ -5,7 +5,7 @@
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
  * throttling, suspend, presence areas (D-087), interest, the block sandbox's actions and returns
- * (D-060) and the football's kicks and steps (D-078) — is exercisable in a
+ * (D-060), the football's kicks and steps (D-078) and the arena ring (D-114) — is exercisable in a
  * plain unit test against the same objects that get encoded in production.
  *
  * Nothing here persists. When the last session leaves, the registry is empty
@@ -14,8 +14,9 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import { CLIMB_WINDOW_MS, SANDBOX_STEP_HEIGHT } from '@strkworld/shared';
+import { CLIMB_WINDOW_MS, SANDBOX_STEP_HEIGHT, arenaTileCentre } from '@strkworld/shared';
 import type {
+  ArenaRingSnapshot,
   Facing,
   FootballSnapshot,
   GameId,
@@ -42,7 +43,23 @@ import {
 import type { SandboxPlayer } from './sandbox-rules.js';
 import { LobbyFootball, type KickOutcome } from './football.js';
 import type { BallState, FootballEvent, FootballPlayer } from './football-rules.js';
-import { LobbyState, PresenceEntry, type FootballEntry, type SandboxColumnEntry } from './state.js';
+import { LobbyArena } from './arena.js';
+import {
+  ARENA_CHALLENGER_WALKABLE,
+  type ArenaAttackOutcome,
+  type ArenaClaimOutcome,
+  type ArenaEvent,
+  type ArenaLeaveOutcome,
+  type ArenaStance,
+} from './arena-rules.js';
+import {
+  ARENA_RING_KEY,
+  ArenaRingEntry,
+  LobbyState,
+  PresenceEntry,
+  type FootballEntry,
+  type SandboxColumnEntry,
+} from './state.js';
 
 /**
  * What a client may offer when it joins or reappears. All of it untrusted.
@@ -148,6 +165,8 @@ export interface LobbyPresenceOptions {
   footballKickIntervalMs?: number;
   /** D-078: where the ball starts; a kick-off ball when absent. A test seam. */
   footballBall?: BallState;
+  /** D-114: the round the arena's next claim increments from. A test seam (the wrap). */
+  arenaRound?: number;
   /**
    * Randomness source for server-minted identifiers. Injectable so a test can
    * be deterministic; production uses `crypto.getRandomValues`.
@@ -221,6 +240,16 @@ export class LobbyPresence {
    * how fast a player moves. Server-side only, and gone on leave.
    */
   readonly #movedAt = new Map<string, number>();
+  /** D-114: the arena ring, mirrored into `state.arena`'s one entry. */
+  readonly #arena: LobbyArena;
+  /** The ring entry itself, for the room to add to arena views only. */
+  readonly #ringEntry: ArenaRingEntry;
+  /**
+   * The latest time any call brought, for the rare transitions that come
+   * without one (a suspend or a release called with no `now`). Never read
+   * for a floor.
+   */
+  #latestNow = 0;
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -269,6 +298,12 @@ export class LobbyPresence {
       kickIntervalMs: config.footballKickIntervalMs,
       ...(options.footballBall === undefined ? {} : { ball: options.footballBall }),
     });
+    this.#ringEntry = new ArenaRingEntry();
+    (this.state.arena as MapSchema<ArenaRingEntry>).set(ARENA_RING_KEY, this.#ringEntry);
+    this.#arena = new LobbyArena(
+      this.#ringEntry,
+      options.arenaRound === undefined ? {} : { round: options.arenaRound },
+    );
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -311,6 +346,7 @@ export class LobbyPresence {
 
   /** Apply a movement, subject to the per-session rate floor. */
   move(sessionKey: string, request: MoveRequest, now: number): MoveOutcome {
+    this.#seen(now);
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return 'absent';
     const entry = this.peers.get(session.gameId);
@@ -324,7 +360,9 @@ export class LobbyPresence {
     }
     // D-087: a shared room holds its players to its own walkable tiles. The
     // street keeps its rule, a clamp to the world.
-    if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y })) {
+    // D-114: the arena's challenger also walks the ring's interior.
+    const extra = session.area === 'arena' && this.#arena.holdsRing(sessionKey) ? ARENA_CHALLENGER_WALKABLE : undefined;
+    if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y }, extra)) {
       this.#rejected += 1;
       return 'rejected';
     }
@@ -404,10 +442,16 @@ export class LobbyPresence {
    * from the sky onto a random allowed tile — never within a tile of where
    * the player stood, so the drop cannot mark where they left the street —
    * and `resume` starts empty-handed.
+   *
+   * D-114: a fighter in the arena ring who suspends ends the fight as `left`.
+   * `now` dates that end; without one, the latest time any call brought.
    */
-  suspend(sessionKey: string): boolean {
+  suspend(sessionKey: string, now: number = this.#latestNow): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return false;
+    this.#seen(now);
+    // D-114: a fighter who steps out of the world forfeits, and is not returned.
+    if (session.area === 'arena') this.#arena.gone(sessionKey, 'left', now);
     // Every live position, the leaver's included, before their entry goes.
     const players = this.#livePlayers();
     session.suspended = true;
@@ -478,11 +522,19 @@ export class LobbyPresence {
    * and pick it up at the next patch, once each, like any move (D-086).
    * Leaving the street puts a carried block back and leaves the ball, as a
    * suspend does; a shared room has neither.
+   *
+   * D-114, the refresh rule: while a session is the arena ring's challenger,
+   * an `area` request naming the arena (a look change) updates the sprite
+   * only. The held position and facing are kept, so a refresh racing the
+   * claim's move into the ring, or the close's move out, cannot write the
+   * old position back or suspend the fighter for standing off the grid.
+   * Leaving the arena, or a suspend, forfeits the fight as `left`.
    */
   enterArea(sessionKey: string, request: AreaRequest, now: number): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined) return false;
     if (!isValidMonotonicTime(now)) return false;
+    this.#seen(now);
     const area = normalizePresenceArea(ownDataField(request, 'area'));
     const x = normalizeCoordinate(ownDataField(request, 'x'), this.#worldLimit);
     const y = normalizeCoordinate(ownDataField(request, 'y'), this.#worldLimit);
@@ -492,9 +544,16 @@ export class LobbyPresence {
       y === null ||
       (area !== 'street' && !isAreaWalkable(area, x, y))
     ) {
-      this.suspend(sessionKey);
+      // D-114: the arena's challenger refreshing their look keeps the place
+      // the room holds for them, wherever the request says they stand.
+      if (area === 'arena' && this.#refreshFighter(session, sessionKey, request, now)) return true;
+      this.suspend(sessionKey, now);
       return false;
     }
+    // D-114: likewise for a well-formed refresh: the room moved the fighter
+    // into the ring (and will move them out), so a look change racing either
+    // move must not write back where the client last thought it stood.
+    if (area === 'arena' && this.#refreshFighter(session, sessionKey, request, now)) return true;
 
     if (session.suspended) {
       if (!this.#place(session.gameId, request)) return false;
@@ -507,6 +566,8 @@ export class LobbyPresence {
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) return false;
       if (!this.#throttle.stamp(sessionKey, now)) return false;
+      // D-114: leaving the arena forfeits a fight in its ring, with no return.
+      if (session.area === 'arena' && area !== 'arena') this.#arena.gone(sessionKey, 'left', now);
       if (session.area === 'street' && area !== 'street') {
         // Every street position, the leaver's included, before they go.
         const players = this.#livePlayers();
@@ -542,11 +603,16 @@ export class LobbyPresence {
 
   /**
    * Forget a connection completely. Called on leave and on dispose. A carried
-   * sandbox block is put back as on suspend (D-060).
+   * sandbox block is put back as on suspend (D-060), and a fight in the arena
+   * ring ends as `disconnect` (D-114).
    */
-  release(sessionKey: string): void {
+  release(sessionKey: string, now: number = this.#latestNow): void {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined) return;
+    this.#seen(now);
+    // D-114: a fighter who disconnects ends the fight as `disconnect`.
+    this.#arena.gone(sessionKey, 'disconnect', now);
+    this.#arena.forget(sessionKey);
     const players = this.#livePlayers();
     this.peers.delete(session.gameId);
     this.#sessions.delete(sessionKey);
@@ -745,6 +811,136 @@ export class LobbyPresence {
     return players;
   }
 
+  // -------------------------------------------------------------------------
+  // The arena ring — D-114
+  // -------------------------------------------------------------------------
+
+  /**
+   * Claim the arena ring for a session live in the arena, from the position
+   * the registry holds: the claim message carries nothing. An accepted claim
+   * moves the fighter's held position to the ring spawn, facing the dummy.
+   * Refusals are silent; the ring in state is the only answer.
+   */
+  arenaClaim(sessionKey: string, now: number): ArenaClaimOutcome {
+    this.#seen(now);
+    const session = this.#sessions.get(sessionKey);
+    const entry = session === undefined || session.suspended ? undefined : this.peers.get(session.gameId);
+    const outcome = this.#arena.claim(
+      {
+        key: sessionKey,
+        gameId: session?.gameId ?? ('' as GameId),
+        area: entry === undefined ? null : (session as Session).area,
+        x: entry?.position.x ?? Number.NaN,
+        y: entry?.position.y ?? Number.NaN,
+      },
+      now,
+    );
+    this.#applyArenaEvents(this.#arena.advance(now), now);
+    return outcome;
+  }
+
+  /**
+   * One swing for a session, judged from the position and facing the
+   * registry holds: the attack message carries nothing, and damage is the
+   * rules' constant. The floor is spent even when the swing is refused.
+   */
+  arenaAttack(sessionKey: string, now: number): ArenaAttackOutcome {
+    this.#seen(now);
+    const outcome = this.#arena.attack(sessionKey, now, (key) => this.#arenaStance(key));
+    this.#applyArenaEvents(this.#arena.advance(now), now);
+    return outcome;
+  }
+
+  /** Forfeit a session's fight: it ends as `left`. Silent like every arena refusal. */
+  arenaLeave(sessionKey: string, now: number): ArenaLeaveOutcome {
+    this.#seen(now);
+    const outcome = this.#arena.leave(sessionKey, now);
+    this.#applyArenaEvents(this.#arena.advance(now), now);
+    return outcome;
+  }
+
+  /**
+   * Run the ring's deadlines up to `now` and keep `secondsLeft` current.
+   * Returns whether anyone was moved (the close returns the fighter to the
+   * gate), so the room knows its views are stale.
+   */
+  arenaTick(now: number): boolean {
+    this.#seen(now);
+    return this.#applyArenaEvents(this.#arena.advance(now), now);
+  }
+
+  /** Whether the ring has a deadline pending: the room keeps its arena clock running while true. */
+  get arenaActive(): boolean {
+    return this.#arena.active;
+  }
+
+  /** The ring as the authority holds it, at `now`. Frozen. */
+  arenaSnapshot(now: number): ArenaRingSnapshot {
+    return this.#arena.snapshot(now);
+  }
+
+  /** The ring's one schema entry, which the room adds to arena members' views only. */
+  get arenaRingEntry(): ArenaRingEntry {
+    return this.#ringEntry;
+  }
+
+  /** Whether a connection is live in the arena, and so may be sent the ring. */
+  isArenaMember(sessionKey: string): boolean {
+    return this.areaFor(sessionKey) === 'arena';
+  }
+
+  /**
+   * The refresh rule: a same-area `area` request from the ring's challenger
+   * updates the sprite only. Applied (true) only for a live session in the
+   * arena that holds the ring; the move floor is stamped as for any refresh.
+   */
+  #refreshFighter(session: Session, sessionKey: string, request: AreaRequest, now: number): boolean {
+    if (session.suspended || session.area !== 'arena' || !this.#arena.holdsRing(sessionKey)) return false;
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return false;
+    if (!this.#throttle.stamp(sessionKey, now)) return false;
+    entry.sprite = normalizeSprite(ownDataField(request, 'sprite'), this.#spriteKeys, this.#defaultSprite);
+    return true;
+  }
+
+  /** Where a session live in the arena stands and faces, as the registry holds it. */
+  #arenaStance(sessionKey: string): ArenaStance | null {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended || session.area !== 'arena') return null;
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return null;
+    return { x: entry.position.x, y: entry.position.y, facing: normalizeFacing(entry.facing) };
+  }
+
+  /**
+   * Stand each placed session where the ring says, if it is still live in
+   * the arena. A server move, not a client one: the move floor is stamped so
+   * the next client move waits a full interval, and a client still sending
+   * where it stood before is refused by the step check (the fence is between).
+   */
+  #applyArenaEvents(events: readonly ArenaEvent[], now: number): boolean {
+    let moved = false;
+    for (const event of events) {
+      const session = this.#sessions.get(event.key);
+      if (session === undefined || session.suspended || session.area !== 'arena') continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      const at = arenaTileCentre(event.tile);
+      entry.position.x = at.x;
+      entry.position.y = at.y;
+      entry.facing = event.facing;
+      this.#throttle.stamp(event.key, now);
+      this.#movedAt.set(event.key, now);
+      moved = true;
+    }
+    return moved;
+  }
+
+  /** Remember the latest valid time a call brought. */
+  #seen(now: number): void {
+    if (isValidMonotonicTime(now) && now > this.#latestNow) this.#latestNow = now;
+  }
+
   /** The identifier a connection currently holds, if any. */
   gameIdFor(sessionKey: string): GameId | undefined {
     return this.#sessions.get(sessionKey)?.gameId;
@@ -776,6 +972,11 @@ export class LobbyPresence {
    * of view. A street peer standing over the tower's footprint (only a
    * hostile client can) is never sent to the roof, so whatever a roof player
    * is shown over the footprint is on the roof.
+   *
+   * D-114: in the arena the radius is ignored, because the room is larger
+   * than the interest box and a spectator anywhere in it must see the fight.
+   * The ring's fighter is pinned into every arena observer's view first, then
+   * the nearest others fill the cap, so 48 in the arena are each sent 24.
    */
   visibleTo(sessionKey: string): PresenceEntry[] {
     const observer = this.#sessions.get(sessionKey);
@@ -783,14 +984,18 @@ export class LobbyPresence {
     const self = this.peers.get(observer.gameId);
     if (self === undefined) return [];
     const roofView = observer.area === 'roof';
+    const arenaView = observer.area === 'arena';
     const same: PresenceEntry[] = [];
+    const pinned = new Set<PresenceEntry>();
     const below: PresenceEntry[] = [];
-    for (const session of this.#sessions.values()) {
+    for (const [key, session] of this.#sessions) {
       if (session === observer || session.suspended) continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
-      if (session.area === observer.area) same.push(entry);
-      else if (
+      if (session.area === observer.area) {
+        same.push(entry);
+        if (arenaView && this.#arena.holdsRing(key)) pinned.add(entry);
+      } else if (
         roofView &&
         session.area === 'street' &&
         !isOverAreaGrid('roof', entry.position.x, entry.position.y)
@@ -798,7 +1003,12 @@ export class LobbyPresence {
         below.push(entry);
       }
     }
-    const near = selectVisible(self, same, this.#interestRadius, this.#maxVisiblePeers);
+    // D-114: the arena is bigger than the interest box, and a spectator in the
+    // far stands must still see the fight, so its observers take every arena
+    // session as a candidate, the ring's fighter first, then nearest, capped.
+    const near = arenaView
+      ? selectVisible(self, same, Number.POSITIVE_INFINITY, this.#maxVisiblePeers, pinned)
+      : selectVisible(self, same, this.#interestRadius, this.#maxVisiblePeers);
     if (below.length === 0 || near.length >= this.#maxVisiblePeers) return near;
     return near.concat(
       selectVisible(self, below, this.#interestRadius, this.#maxVisiblePeers - near.length),
