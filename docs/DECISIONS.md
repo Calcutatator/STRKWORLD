@@ -6066,3 +6066,18 @@ The lead's decisions:
 - D-013's "the HUD shows the second" no longer holds: the pool balance is shown in the Bank's window.
 - Tests: `HudLayer.test.tsx` (the pill, no balance row or `?`, the menu opening and closing, Escape and an outside press, no keys taken while closed, sign-out once and only in production, Help reachable from the menu), `hud-model.test.ts` (no balance held), `entry-pass.test.ts` (forget), `session.test.ts` (sign-out with and without `standard:disconnect`, then connecting again in the same session), `ProductionRoot.test.tsx` (disconnect, presence destroyed, title screen, pass forgotten, reconnect; a refusing wallet still returns to the title screen) and `App.after-gate.test.tsx` (the real pill and menu through the production root: lobby left, World lease released, title screen, reconnect).
 - Not verified: a real wallet's disconnect prompt, and Safari or Firefox. The renders were made in Chromium.
+
+---
+
+## D-121 — Money amounts are VT323 everywhere, the title screen included
+
+**2026-10-02 · Accepted (the lead: legibility of amounts is a correctness issue in a money app) · amends D-115 (the title screen's numeric face) · settles the disagreement D-119 (PR #200) recorded**
+
+**Context.** D-115 set `--brand-font-numeric` to Jersey 15 and the title screen's deposit review showed amounts in it. D-119 measured the numeral glyphs at the sizes windows use: in Jersey 15, 8/B and 6/8 merge and 1/l are near-identical. VT323 keeps 1/l/I, 5/S, 8/B and 6/b distinct and is monospaced, so columns align. D-119 therefore kept amounts in VT323 in the game UI and recorded that this disagreed with D-115.
+
+**Decision.**
+- `--brand-font-numeric` is `"VT323", ui-monospace, monospace`. Every consumer follows it: the title screen's `--ui-number-font`, and its amount field, review costs and batch list.
+- VT323 reads smaller than Jersey 15, so the title screen's amounts go from 1.3rem to 1.6rem (line-height 1.1), with `font-variant-numeric: tabular-nums` so the review's figures line up. Jersey 15 stays the headline face; it is not used for money.
+- `docs/brand/README.md`'s type table says the same.
+
+**Consequences.** One face for amounts across the title screen and the game UI. Tests: `brand.test.ts` pins the token to VT323 with a monospace fallback and no Jersey; `styles.test.ts` pins the title screen's amount rule (token, tabular figures, minimum size). Not verified: a phone-width screen.
