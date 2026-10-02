@@ -108,6 +108,7 @@ docs/
   ARCHITECTURE.md  Boundaries, data flow, and what must never cross them.
   WORKPLAN.md   Division of labour, sequencing and lane briefs.
   DECISIONS.md  Decision log with reasoning.
+  brand/        Brand guide, wordmark and social kit (D-113).
   research/     Primary-source audits backing the spec.
 ```
 
