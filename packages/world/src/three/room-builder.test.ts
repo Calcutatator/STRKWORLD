@@ -127,7 +127,7 @@ function floatingLabel(root: Object3D): Object3D {
 }
 
 /**
- * D-099: one station's slice of the room's shared halo mesh: its colour (as
+ * D-103: one station's slice of the room's shared halo mesh: its colour (as
  * an sRGB hex), its fill's and edge's opacity, and the box it covers.
  */
 function haloOf(room: RoomView, station: string): { colour: number; opacity: number; edge: number; box: Box3 } {
@@ -150,7 +150,7 @@ function haloOf(room: RoomView, station: string): { colour: number; opacity: num
 }
 
 /**
- * D-099: one counter's share of a room-wide mesh (`:counters` or
+ * D-103: one counter's share of a room-wide mesh (`:counters` or
  * `:counter-screens`): the triangles standing over its own tiles, as a mesh
  * in the same place, so its colours and extent read as before.
  */
@@ -404,7 +404,7 @@ describe('buildFixedRoom', () => {
     const { map, room } = build('bank');
     const staking = stationGroup(room, 'bank:staking');
     const shielding = stationGroup(room, 'bank:shielding');
-    // Its own counter, on its own tiles east of shielding and unshielding (D-099).
+    // Its own counter, on its own tiles east of shielding and unshielding (D-103).
     room.group.updateMatrixWorld(true);
     const counter = new Box3().setFromObject(counterPart(room, map, 'bank:staking'));
     expect(counter.min.x).toBeGreaterThanOrEqual(OX + 10);
@@ -479,7 +479,7 @@ describe('buildFixedRoom', () => {
     expect(floatingLabel(unstaking).userData['options']).toEqual(floatingLabel(staking).userData['options']);
     expect(stationGroup(room, 'bank:unshielding').children.some((child) => child.userData['brand'])).toBe(false);
 
-    // D-099: the counter's own group holds only what its state changes, the
+    // D-103: the counter's own group holds only what its state changes, the
     // status panel and the beacon (two meshes) with its label and plate; its
     // desk and halo are in the room's shared meshes. All dispose with the room.
     const meshes: Mesh[] = [];
@@ -511,7 +511,7 @@ describe('buildFixedRoom', () => {
       stationLooks: VESU_STATION_LOOKS,
     });
     // Its counters wear Vesu's own look, as the Bank's staking counter wears
-    // Endur's: lending's two, and borrowing's two as their twins (D-083, D-099).
+    // Endur's: lending's two, and borrowing's two as their twins (D-083, D-103).
     expect(stationTheme(theme, VAULT_SUPPLY_STATION)).toBe(VESU_STATION_THEME);
     expect(stationTheme(theme, VAULT_REDEEM_STATION)).toBe(VESU_STATION_THEME);
     expect(stationTheme(theme, VAULT_BORROW_STATION)).toBe(VESU_BORROW_STATION_THEME);
@@ -653,7 +653,7 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it('gives the Vault\'s borrowing and repaying their own counters in Vesu\'s look, a loan card on each (D-083, D-099)', () => {
+  it('gives the Vault\'s borrowing and repaying their own counters in Vesu\'s look, a loan card on each (D-083, D-103)', () => {
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
     const lending = stationGroup(room, VAULT_SUPPLY_STATION);
@@ -1051,7 +1051,7 @@ describe('the Exchange tower floors', () => {
     loading.dispose();
   });
 
-  it.each([BANK_ROOM_DEFINITION, VAULT_ROOM_DEFINITION])('shares the $building counters\' desks and halos, so each extra counter costs only its own state (D-099)', (definition) => {
+  it.each([BANK_ROOM_DEFINITION, VAULT_ROOM_DEFINITION])('shares the $building counters\' desks and halos, so each extra counter costs only its own state (D-103)', (definition) => {
     const one = buildFixedRoom(createFixedRoom({ ...definition, stations: [definition.stations[0]!] }), createNullLabelFactory());
     const four = buildFixedRoom(createFixedRoom(definition), createNullLabelFactory());
     expect(definition.stations).toHaveLength(4);

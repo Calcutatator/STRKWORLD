@@ -46,7 +46,7 @@ describe('Vesu\'s palette', () => {
     expect(BUILDING_THEMES.vault).toMatchObject({ wall: VESU.white, wallAlt: VESU.fill, glow: VESU.blue, openPortal: VESU.blue });
     expect(BUILDING_THEMES.vault!.brand).toMatchObject({ text: 'vesu', style: { lowercase: true, foreground: '#0a0a0a' } });
     expect(ROOM_THEMES.vault).toMatchObject({ floorA: VESU.white, floorB: VESU.page, trim: VESU.blue, label: VESU_LABEL });
-    // D-099: lending's two counters wear the supply card, borrowing's two the loan card.
+    // D-103: lending's two counters wear the supply card, borrowing's two the loan card.
     expect(ROOM_THEMES.vault!.stations).toEqual({
       'vault:supply': VESU_STATION_THEME,
       'vault:redeem': VESU_STATION_THEME,

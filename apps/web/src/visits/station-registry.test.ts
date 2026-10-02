@@ -8,7 +8,7 @@ import { STATION_ALIASES, canonicalStation, resolveStation, stationDefinition, s
 
 /**
  * The Bank's and the Vault's counters in the station registry (D-077, D-083,
- * D-085, D-099): one action per counter, each resolved against the register
+ * D-085, D-103): one action per counter, each resolved against the register
  * and this build's policy on its own route and switch.
  */
 
@@ -32,7 +32,7 @@ const borrowOn: WalletRoutePolicy = {
   allowedTokens: { ...vaultOn.allowedTokens, borrow: [STRK, USDC] },
 };
 
-describe('the World and the Shell name the same counters (D-099)', () => {
+describe('the World and the Shell name the same counters (D-103)', () => {
   it.each(['bank', 'vault'] as const)('publishes the %s room\'s counters in the room\'s order', (building) => {
     const room = fixedRoomDefinitionsFor({ vaultOpen: true }).find((definition) => definition.building === building)!;
     expect(stationSnapshot(building, PRIVACY_REGISTER, {}, null).map(({ station, label }) => ({ station, label }))).toEqual(
@@ -57,7 +57,7 @@ describe('the World and the Shell name the same counters (D-099)', () => {
   });
 });
 
-describe('the Bank\'s four counters (D-099)', () => {
+describe('the Bank\'s four counters (D-103)', () => {
   it('gives each counter one route and one control, the transfer none of them', () => {
     expect(['bank:shielding', 'bank:unshielding', 'bank:staking', 'bank:unstaking'].map((station) => stationDefinition('bank', station as never))).toEqual([
       expect.objectContaining({ label: 'SHIELD', routes: ['bank.shield'], view: 'bank', modes: ['shield'], initialMode: 'shield' }),
@@ -109,7 +109,7 @@ describe('the Bank\'s four counters (D-099)', () => {
   });
 });
 
-describe('the Vault\'s four counters (D-077, D-083, D-099)', () => {
+describe('the Vault\'s four counters (D-077, D-083, D-103)', () => {
   it('opens SUPPLY and REDEEM, one route each, when the build switches the Vault on', () => {
     expect(resolveStation('vault', 'vault:supply', PRIVACY_REGISTER, {}, vaultOn)).toMatchObject({
       status: 'available',

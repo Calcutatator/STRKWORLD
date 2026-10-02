@@ -65,7 +65,7 @@ import { debugBank } from '../../debug/debug-tap.js';
  * at the commit point is derived from the intents actually prepared, never
  * from the control on screen (D-020, D-024).
  *
- * **One action per counter (D-099).** Each counter reviews and confirms one
+ * **One action per counter (D-103).** Each counter reviews and confirms one
  * intent, which pays its own pool fee: `review()` checks the form, queues the
  * one intent through the accumulator (which still validates its shape, D-018)
  * and prepares it. Backing out of the review returns the intent to the form,
@@ -309,7 +309,7 @@ export interface BankPanelOptions {
    * larger than the one the player was shown.
    */
   feeTolerance?: bigint;
-  /** The counter's controls: one in every shipped window (D-099). An omitted list allows every mode. */
+  /** The counter's controls: one in every shipped window (D-103). An omitted list allows every mode. */
   allowedModes?: readonly BankMode[];
   /** The first mode shown by a fixed station. Must be in `allowedModes`. */
   initialMode?: BankMode;
@@ -352,11 +352,11 @@ export interface BankPanel {
   maxSpendable(): bigint | null;
   applyMax(): void;
   /**
-   * D-099: the counter's one primary action: check the form, queue its one
+   * D-103: the counter's one primary action: check the form, queue its one
    * intent and prepare it for review, as `addToBatch` then `prepare`.
    */
   review(signal?: AbortSignal): Promise<void>;
-  /** Check the form and queue its one intent; a second is refused (D-099). */
+  /** Check the form and queue its one intent; a second is refused (D-103). */
   addToBatch(signal?: AbortSignal): Promise<void>;
   prepare(signal?: AbortSignal): Promise<void>;
   confirm(signal?: AbortSignal): Promise<void>;
@@ -394,7 +394,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   if (!allowedModes.includes(initialMode)) {
     throw new Error(`BankPanel initial mode is not allowed: ${initialMode}`);
   }
-  // D-099: one intent per counter. The accumulator still re-validates the
+  // D-103: one intent per counter. The accumulator still re-validates the
   // intent's shape and refuses a second one.
   const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: 1 });
 
@@ -432,7 +432,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let publicRead = 0;
   /** A form edit or a Back owns the composition over work started from an older one. */
   let composition = 0;
-  /** D-099: one review at a time, from its check of the form to its prepare. */
+  /** D-103: one review at a time, from its check of the form to its prepare. */
   let reviewing = false;
   /**
    * Network cost per batch shape, as reported by the seam.
@@ -521,8 +521,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return gasByShape.get(shapeKey([...intents.map((intent) => intent.kind), mode])) ?? null;
   }
 
-  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
-    const failure = toFailure(error);
+  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number, operation?: Intent['kind']): void {
+    const failure: ShellFailure = operation ? { ...toFailure(error), operation } : toFailure(error);
     // D-034 is the exception to the ordinary stale-write rule. A private
     // submit response can be lost after the player closes the window; the
     // provider-level notice must still learn about that ambiguity. The notice
@@ -538,7 +538,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       // The lost response is single-attempt. Do not leave the old intent in a
       // newly unlocked form where acknowledgement could turn it into a blind
       // retry; the player may compose a fresh action after the gate opens.
-      // D-099: the form held the action too, so it is emptied with it.
+      // D-103: the form held the action too, so it is emptied with it.
       accumulator.clear();
       setBatch(accumulator.intents);
       patch({ amountText: '', recipientText: '' });
@@ -857,7 +857,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
 
-        // D-099: the form keeps what was typed until the action settles, so
+        // D-103: the form keeps what was typed until the action settles, so
         // backing out of the review leaves it there to edit.
         setBatch(result.value);
         patch({ notice: pending });
@@ -914,7 +914,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
         });
       } catch (error) {
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, confirmed.value[0]?.kind);
       }
     },
 
@@ -963,7 +963,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
       } catch (error) {
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, batch.intents[0]?.kind);
         if (current(id)) trace('failed');
         return;
       }
@@ -1034,7 +1034,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
           // The balance moved. It is not re-read here: the player asks.
           balance: { status: 'unrequested' },
-          // D-099: the action is done; the form starts empty for the next one.
+          // D-103: the action is done; the form starts empty for the next one.
           amountText: '',
           recipientText: '',
           notice: { tone: 'info', text: COPY.balance.changed },
@@ -1067,13 +1067,13 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           trace('fee-moved');
           return;
         }
-        fail(error, 'prepare-again', id);
+        fail(error, 'prepare-again', id, batch.intents[0]?.kind);
         if (current(id)) trace('failed');
       }
     },
 
     /**
-     * D-099: the form is the action. Anything left queued by an earlier,
+     * D-103: the form is the action. Anything left queued by an earlier,
      * abandoned attempt is dropped first, so what is prepared is always what
      * the form says now.
      */
@@ -1097,7 +1097,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     /**
-     * Back out of a review, or of a failed prepare, to the form. D-099: the
+     * Back out of a review, or of a failed prepare, to the form. D-103: the
      * one queued intent is dropped rather than left waiting; the form still
      * holds what was typed.
      */

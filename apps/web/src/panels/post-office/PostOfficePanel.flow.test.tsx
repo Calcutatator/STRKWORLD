@@ -108,7 +108,7 @@ async function type(name: 'amount' | 'recipient', value: string): Promise<void> 
 async function composeSend(recipient: Address): Promise<void> {
   await type('amount', '1');
   await type('recipient', recipient);
-  // D-099: one click from the form to the review.
+  // D-103: one click from the form to the review.
   await click(button(COPY.gameMode.reviewAction));
 }
 

@@ -41,7 +41,7 @@ import {
 } from './fixed-room.js';
 
 /**
- * D-099's teller line: the counters stand west to east along the north wall,
+ * D-103's teller line: the counters stand west to east along the north wall,
  * each approach names only its own counter, no two approaches overlap, the
  * row in front of them is open floor end to end, and nothing stands between
  * the exit and the counters.
@@ -671,7 +671,7 @@ describe('fixed room definitions', () => {
     expect(isFixedRoomSolidAt(room, room.spawn.x, room.spawn.y)).toBe(false);
     expect(isFixedRoomExit(room, room.exit.x, room.exit.y)).toBe(true);
     expect(isFixedRoomSolidAt(room, room.exit.x, room.exit.y)).toBe(false);
-    // One station per room, except the Bank's and the Vault's four counters (D-099).
+    // One station per room, except the Bank's and the Vault's four counters (D-103).
     expect(room.stations).toHaveLength(definition === BANK_ROOM_DEFINITION || definition === VAULT_ROOM_DEFINITION ? 4 : 1);
     for (const station of room.stations) {
       expect(isFixedRoomSolidAt(room, station.x, station.y)).toBe(true);
@@ -680,7 +680,7 @@ describe('fixed room definitions', () => {
     }
   });
 
-  it('lines the Bank\'s four counters along the north wall, one action each (D-099)', () => {
+  it('lines the Bank\'s four counters along the north wall, one action each (D-103)', () => {
     expect(BANK_ROOM_DEFINITION.stations).toEqual([
       { station: 'bank:shielding', label: 'SHIELD', x: 2, y: 3, width: 2, height: 1 },
       { station: 'bank:unshielding', label: 'UNSHIELD', x: 6, y: 3, width: 2, height: 1 },
@@ -746,7 +746,7 @@ describe('fixed room definitions', () => {
     expect(FIXED_ROOM_DEFINITIONS).toMatchObject({ bridge: BRIDGE_ROOM_DEFINITION });
   });
 
-  it('pins the opened Vault\'s four counters at the authored coordinates (D-077, D-083, D-099)', () => {
+  it('pins the opened Vault\'s four counters at the authored coordinates (D-077, D-083, D-103)', () => {
     expect(VAULT_ROOM_DEFINITION).toEqual({
       building: 'vault',
       width: 18,
@@ -778,7 +778,7 @@ describe('fixed room definitions', () => {
     ]);
   });
 
-  it('reads the Vault\'s old lending id as SUPPLY, and nothing else as anything but itself (D-099)', () => {
+  it('reads the Vault\'s old lending id as SUPPLY, and nothing else as anything but itself (D-103)', () => {
     expect(VAULT_LENDING_STATION).toBe('vault:lending');
     expect(FIXED_ROOM_STATION_ALIASES).toEqual({ 'vault:lending': 'vault:supply' });
     expect(Object.isFrozen(FIXED_ROOM_STATION_ALIASES)).toBe(true);
@@ -857,7 +857,7 @@ describe('fixed room definitions', () => {
   it.each([
     ['the Bank', BANK_ROOM_DEFINITION],
     ['the Vault', VAULT_ROOM_DEFINITION],
-  ] as const)('opens each of %s\'s counters on its own, leaves a locked one shut, and re-arms on the way back (D-099)', (_name, definition) => {
+  ] as const)('opens each of %s\'s counters on its own, leaves a locked one shut, and re-arms on the way back (D-103)', (_name, definition) => {
     const h = harness(definition);
     h.controller.enter();
     const [first, second, third, fourth] = definition.stations;

@@ -163,7 +163,7 @@ function onlyWindow(): Element {
 
 describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () => {
   it('names the counters as the room does, admitting each as its counter is', () => {
-    // D-099: the Vault's four counters, in the room's order.
+    // D-103: the Vault's four counters, in the room's order.
     expect(menuCounters('vault', VAULT_COUNTERS, PRIVACY_REGISTER, borrowOn)).toEqual([
       { station: 'vault:supply', label: 'SUPPLY' },
       { station: 'vault:redeem', label: 'REDEEM' },
@@ -178,7 +178,7 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     // Their route unapproved in the register: hidden too, with borrowing switched on.
     const unapproved = PRIVACY_REGISTER.map((entry) => (entry.route === 'vault.borrow' ? { ...entry, approvedBy: null } : entry));
     expect(menuCounters('vault', VAULT_COUNTERS, unapproved, borrowOn)).toHaveLength(2);
-    // The Bank's four (D-099): SHIELD always, the others while their counters open.
+    // The Bank's four (D-103): SHIELD always, the others while their counters open.
     expect(menuCounters('bank', BANK_COUNTERS, PRIVACY_REGISTER, null)).toEqual([
       { station: 'bank:shielding', label: 'SHIELD' },
       { station: 'bank:unshielding', label: 'UNSHIELD' },
@@ -206,7 +206,7 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     });
     await openMenu('vault', operations);
 
-    // The Vault's own window first, SUPPLY, with the four counter tabs above it (D-099).
+    // The Vault's own window first, SUPPLY, with the four counter tabs above it (D-103).
     expect(tabs()).toEqual(['SUPPLY', 'REDEEM', 'BORROW', 'REPAY']);
     expect(selectedTab()).toBe('SUPPLY');
     expect(onlyWindow().closest('.vault-experience')?.getAttribute('data-mode')).toBe('supply');
@@ -217,7 +217,7 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     await click(button('BORROW'));
     expect(selectedTab()).toBe('BORROW');
     const borrow = onlyWindow();
-    // BORROW borrows and adds collateral; repaying is REPAY's (D-099).
+    // BORROW borrows and adds collateral; repaying is REPAY's (D-103).
     expect([...borrow.querySelectorAll('.borrow-modes [role="tab"]')].map((tab) => tab.textContent)).toEqual([
       COPY.borrow.modes.borrow,
       COPY.borrow.modes['add-collateral'],
@@ -227,7 +227,8 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     // D-024: the approved words, verbatim, previewed while composing.
     expect(borrow.querySelector('[data-testid="disclosure"]')?.textContent).toBe(disclosureOf('vault.borrow'));
     expect(borrow.querySelector('.borrow-risk')?.textContent).toContain(COPY.borrow.risk.lines[1]);
-    expect(borrow.textContent).toContain(COPY.borrow.loans.unrequested);
+    // D-102: the loans are read on opening, with no button to press first.
+    expect(borrow.querySelector('.borrow-loans')?.textContent).toContain(COPY.borrow.loans.empty);
 
     await choose('debt', USDC);
     await type('collateral-amount', '10000');
@@ -276,7 +277,7 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     expect(container!.querySelector('.borrow-experience')).toBeNull();
   });
 
-  it('offers the Bank\'s four counters as tabs, one window at a time, each doing one thing (D-099)', async () => {
+  it('offers the Bank\'s four counters as tabs, one window at a time, each doing one thing (D-103)', async () => {
     const operations = createDemoOperations({ funded: true });
     await openMenu('bank', operations);
     expect(tabs()).toEqual(['SHIELD', 'UNSHIELD', 'STAKE', 'UNSTAKE']);

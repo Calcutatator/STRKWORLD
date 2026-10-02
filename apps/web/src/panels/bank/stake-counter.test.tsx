@@ -187,7 +187,7 @@ describe('the staking counter, end to end in demo', () => {
     expect(reviewSummary(panel).intents).toEqual([stakeIntent(max)]);
   });
 
-  it('settles one stake at a time: the counter holds one action (D-099)', async () => {
+  it('settles one stake at a time: the counter holds one action (D-103)', async () => {
     const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * ONE }, registered: ['0x0456'] });
     const panel = stakeCounter(operations);
     await panel.open();
@@ -222,7 +222,7 @@ describe('the staking counter on screen', () => {
     expect(markup).toContain(escaped(COPY.stake.unstaking));
     expect(markup).toContain(COPY.stake.oneAtATime);
     expect(markup).toContain(COPY.kit.enterAmount);
-    // D-099: STAKE does one thing; unstaking is the UNSTAKE counter beside it,
+    // D-103: STAKE does one thing; unstaking is the UNSTAKE counter beside it,
     // so there are no tabs here at all, and no other grade shares it (D-030).
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain(COPY.unstake.title);
@@ -303,7 +303,7 @@ describe('the staking counter on screen', () => {
 });
 
 describe('the bank:staking station', () => {
-  it('is its own stake-only station in demo, among the Bank\'s four counters (D-099)', () => {
+  it('is its own stake-only station in demo, among the Bank\'s four counters (D-103)', () => {
     const resolved = resolveStation('bank', 'bank:staking');
     expect(resolved).toMatchObject({
       status: 'available',

@@ -224,7 +224,7 @@ export function VisitLayerView({
       );
     }
 
-    // D-099: the Bank's, the Vault's and the Post Office's counters, one
+    // D-103: the Bank's, the Vault's and the Post Office's counters, one
     // action each, in the same windows Menu Mode's tabs show.
     const view = station.definition.view;
     if (view === 'bank' || view === 'unstake' || view === 'vault' || view === 'borrow') {

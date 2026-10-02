@@ -320,7 +320,7 @@ describe('bank panel — entering the room', () => {
   });
 });
 
-describe('bank panel — one action per counter (D-099)', () => {
+describe('bank panel — one action per counter (D-103)', () => {
   it('reviews straight from the form: one call checks, queues and prepares the one intent', async () => {
     const operations = fake();
     const panel = await openPanel(operations, { allowedModes: ['unshield'], initialMode: 'unshield' });
@@ -466,7 +466,7 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
   });
 
-  it('leaves nothing queued after Back, so the costed one-action shape gives the maximum (D-099)', async () => {
+  it('leaves nothing queued after Back, so the costed one-action shape gives the maximum (D-103)', async () => {
     // One action per counter: backing out of a review drops the queued
     // intent, keeps the form, and the next action is the same one-intent
     // shape the review just costed.
@@ -508,7 +508,7 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.store.getState().flow.name).toBe('review');
   });
 
-  it('queues one action per counter: a second Add is refused (D-099)', async () => {
+  it('queues one action per counter: a second Add is refused (D-103)', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('unshield');
@@ -904,7 +904,7 @@ describe('bank panel — composing a visit', () => {
     });
   });
 
-  it('refuses a second transfer while one is queued, then sends the next after confirm (D-065, D-099)', async () => {
+  it('refuses a second transfer while one is queued, then sends the next after confirm (D-065, D-103)', async () => {
     const operations = fake({ registered: [BOB, ALICE] });
     const panel = await openPanel(operations);
     panel.setMode('transfer');
@@ -1022,7 +1022,7 @@ describe('bank panel — composing a visit', () => {
     expect(panel.store.getState().flow.name).toBe('submitted');
   });
 
-  it('never queues a spend beside a shield: one action at a time (D-022, D-099)', async () => {
+  it('never queues a spend beside a shield: one action at a time (D-022, D-103)', async () => {
     const panel = await openPanel(fake());
     panel.setAmount('1');
     await panel.addToBatch();
@@ -1213,6 +1213,22 @@ describe('bank panel — fault injection', () => {
     expect(flow.name === 'failed' && flow.message).toBe(COPY.errors['not-registered']);
   });
 
+  it.each(['prepare', 'confirm'] as const)('names the failing route to onError when the %s fails, for the debug log', async (on) => {
+    const operations = fake();
+    const failures: ShellFailure[] = [];
+    const panel = await openPanel(operations, { onError: (failure) => failures.push(failure) });
+    operations.injectFault({ kind: 'unknown', on });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    if (on === 'confirm') await panel.confirm();
+
+    const kind = panel.store.getState().batch[0]?.kind;
+    expect(kind).toBeDefined();
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({ kind: 'unknown', operation: kind });
+  });
+
   describe('a Post Office send whose recipient the pool has never seen (D-074)', () => {
     async function postOffice(operations: FakePrivacyOperations) {
       const connect = createConnectFlow(operations);
@@ -1251,7 +1267,7 @@ describe('bank panel — fault injection', () => {
       expect(panel.store.getState().flow).toEqual(recipientFailure);
       expect(connect.store.getState().name).toBe('connected');
       expect(failures.map((failure) => failure.kind)).toEqual(['recipient-not-registered']);
-      // Back returns to the form with the send still typed (D-099), as any failed prepare does.
+      // Back returns to the form with the send still typed (D-103), as any failed prepare does.
       panel.cancelPrepared();
       expect(panel.store.getState()).toMatchObject({ batch: [], recipientText: STRANGER, amountText: '1' });
       expect(operations.submitted).toHaveLength(0);
@@ -2137,7 +2153,7 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
    * shape. A quote is therefore evidence about the shape it was taken on and
    * nothing else — there is no interpolation between two observations here,
    * because a fitted curve is still a guess about somebody's money. Since
-   * D-099 every counter prepares one action, so the shape is the mode's.
+   * D-103 every counter prepares one action, so the shape is the mode's.
    */
 
   it('offers a maximum only once the one-spend shape has actually been costed', async () => {
@@ -2206,7 +2222,7 @@ describe('bank panel — a relay with no avnu key (D-070)', () => {
     expect(operations.submitted).toHaveLength(0);
   });
 
-  it('leaves nothing behind a failed spend once the player goes Back, so a shield is its own action (D-099)', async () => {
+  it('leaves nothing behind a failed spend once the player goes Back, so a shield is its own action (D-103)', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('unshield');

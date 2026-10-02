@@ -5,11 +5,11 @@ import { stationDefinition } from '../../visits/station-registry.js';
 import { CounterWindow } from '../CounterWindow.js';
 import { menuCounters, useMenuCounter } from '../MenuCounters.js';
 
-/** The Bank's four counters (D-099), in the room's order, west to east. */
+/** The Bank's four counters (D-103), in the room's order, west to east. */
 export const BANK_COUNTERS = Object.freeze(['bank:shielding', 'bank:unshielding', 'bank:staking', 'bank:unstaking'] as const);
 
 /**
- * The Bank's Menu Mode (D-088, D-099): the four counters of its Game Mode
+ * The Bank's Menu Mode (D-088, D-103): the four counters of its Game Mode
  * room as tabs, SHIELD · UNSHIELD · STAKE · UNSTAKE. SHIELD is always offered
  * (its window still shows its own locked door); each other tab only while its
  * counter would open in this build, so a counter the build leaves off is

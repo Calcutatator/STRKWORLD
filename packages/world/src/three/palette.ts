@@ -1406,7 +1406,7 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     }),
     stationLooks: STRK20_STATION_LOOKS,
     // Endur staking is its own counter in its own brand (D-063), and so is
-    // unstaking beside it (D-099).
+    // unstaking beside it (D-103).
     stations: Object.freeze({ 'bank:staking': ENDUR_STATION_THEME, 'bank:unstaking': ENDUR_STATION_THEME }),
   }),
   exchange: Object.freeze({
@@ -1495,7 +1495,7 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     exitGlow: VESU.blue,
     label: VESU_LABEL,
     stationLooks: VESU_STATION_LOOKS,
-    // D-099: lending's two counters wear the supply card, borrowing's two the loan card.
+    // D-103: lending's two counters wear the supply card, borrowing's two the loan card.
     stations: Object.freeze({
       'vault:supply': VESU_STATION_THEME,
       'vault:redeem': VESU_STATION_THEME,

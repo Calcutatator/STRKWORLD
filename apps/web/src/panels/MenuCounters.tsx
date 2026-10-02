@@ -11,7 +11,7 @@ import { resolveStation, type StationDefinition } from '../visits/station-regist
  *
  * A building whose Game Mode room holds more than one window (the Bank's
  * SHIELD, UNSHIELD, STAKE and UNSTAKE and the Vault's SUPPLY, REDEEM, BORROW
- * and REPAY since D-099, the Exchange's SWAP and DEGEN SWAP) shows the
+ * and REPAY since D-103, the Exchange's SWAP and DEGEN SWAP) shows the
  * same windows in Menu Mode, one at a time, behind a row of tabs named as the
  * counters are. Each tab is admitted exactly as its counter is: by
  * `resolveStation`, against the same register, policy and build switches, so

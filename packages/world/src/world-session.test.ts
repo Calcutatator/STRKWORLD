@@ -1628,7 +1628,7 @@ describe('WorldSession orchestration', () => {
     world.start();
     enterBuilding(world, 'bank');
     // The Bank's other three counters ride along, locked: the Shell has not
-    // switched them on (D-063, D-099).
+    // switched them on (D-063, D-103).
     const others = FIXED_ROOM_DEFINITIONS.bank.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false }));
     expect(world.view.last('renderRoom')).toEqual([
       'bank',

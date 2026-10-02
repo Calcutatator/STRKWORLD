@@ -673,7 +673,7 @@ describe('station registry', () => {
       unapprovedShield,
     ];
 
-    // Every other counter keeps its own grade (D-030, D-099): shielding's lock is not theirs.
+    // Every other counter keeps its own grade (D-030, D-103): shielding's lock is not theirs.
     expect(stationSnapshot('bank', register)).toEqual([
       { station: 'bank:shielding', label: 'SHIELD', status: 'locked' },
       { station: 'bank:unshielding', label: 'UNSHIELD', status: 'available' },

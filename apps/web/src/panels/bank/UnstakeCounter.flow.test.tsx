@@ -76,7 +76,7 @@ async function render(operations: FakePrivacyOperations): Promise<HTMLElement> {
     );
   });
   await settle();
-  // D-099: unstaking is the UNSTAKE counter's own window, in Endur's look,
+  // D-103: unstaking is the UNSTAKE counter's own window, in Endur's look,
   // with no stake form and no tabs beside it.
   const panel = container.querySelector<HTMLElement>('section.panel')!;
   expect(panel.getAttribute('data-brand')).toBe('endur');

@@ -96,7 +96,7 @@ describe('the staking station, driven through the screen in demo', () => {
       [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`]: '6 STRK',
     });
     expect(container.querySelector('.panel-compose')?.textContent).toContain(COPY.stake.demoRate);
-    // D-099: one click from the form to the review; nothing is queued in between.
+    // D-103: one click from the form to the review; nothing is queued in between.
     await click(button(COPY.gameMode.reviewAction));
     expect(container.querySelector('.station-action')).toBeNull();
 

@@ -7,7 +7,7 @@ import type { ShellFailure } from '../../privacy/errors.js';
 import { BORROW_TOKENS } from '../../production/config.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createVaultPanel } from '../vault/vault-machine.js';
-import { borrowPairChoices, borrowTokenChoices, createBorrowPanel, loanFor, refusalOf, takesEverything } from './borrow-machine.js';
+import { borrowPairChoices, borrowTokenChoices, createBorrowPanel, loanFor, poolBalanceFor, refusalOf, takesEverything } from './borrow-machine.js';
 
 /**
  * The Borrow counter's machine (D-083), against the deterministic fake:
@@ -64,23 +64,67 @@ describe('the Borrow counter (D-083)', () => {
       .toEqual(['USDC', 'STRK']);
   });
 
-  it('opens on a version query and Vesu\'s pool alone: no loans read, no wallet prompt', async () => {
+  it('reads the loans and then the pool balances when it opens, one wallet request at a time (D-102)', async () => {
     const operations = fake();
-    const loans = vi.spyOn(operations, 'borrowPositions');
+    const order: string[] = [];
+    const realPositions = operations.borrowPositions.bind(operations);
+    const realBalances = operations.balances.bind(operations);
+    const loans = vi.spyOn(operations, 'borrowPositions').mockImplementation(async (options) => {
+      order.push('loans:start');
+      const answer = await realPositions(options);
+      order.push('loans:end');
+      return answer;
+    });
+    const balances = vi.spyOn(operations, 'balances').mockImplementation(async (tokens, signal) => {
+      order.push('balances:start');
+      return realBalances(tokens, signal);
+    });
     const market = vi.spyOn(operations, 'borrowMarket');
-    const { panel } = machine(operations);
+    const { panel, failures } = machine(operations);
     await panel.open();
     const state = panel.store.getState();
     expect(state.capability).toEqual({ status: 'supported' });
     expect(state.door.open).toBe(true);
     expect(state.disclosure).toBe(DISCLOSURE);
     expect(state.market.status).toBe('loaded');
-    expect(state.loans).toEqual({ status: 'unrequested' });
+    expect(state.loans).toMatchObject({ status: 'loaded', positions: [] });
+    expect(state.balances).toMatchObject({ status: 'loaded', fee: { feeAmount: POOL_FEE, feeToken: STRK } });
+    expect(poolBalanceFor(state, STRK)?.total).toBe(50_000n * E18);
     expect(state.mode).toBe('borrow');
     // The first pair Vesu offers, collateral-major.
     expect(state.pair).toEqual({ collateral: STRK, debt: ETH });
-    expect(loans).not.toHaveBeenCalled();
+    expect(loans).toHaveBeenCalledTimes(1);
+    expect(balances).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['loans:start', 'loans:end', 'balances:start']);
     expect(market).toHaveBeenCalledTimes(1);
+    expect(failures).toEqual([]);
+  });
+
+  it('takes a declined read as the player\'s answer: back to the button, nothing reported (D-102)', async () => {
+    const operations = fake();
+    vi.spyOn(operations, 'borrowPositions').mockRejectedValueOnce(Object.assign(new Error('no'), { kind: 'user-rejected' }));
+    vi.spyOn(operations, 'balances').mockRejectedValueOnce(Object.assign(new Error('no'), { kind: 'user-rejected' }));
+    const { panel, failures } = machine(operations);
+    await panel.open();
+    const state = panel.store.getState();
+    expect(state.loans).toEqual({ status: 'unrequested' });
+    expect(state.balances).toEqual({ status: 'unrequested' });
+    expect(failures).toEqual([]);
+    await panel.refreshLoans();
+    await panel.refreshBalances();
+    expect(panel.store.getState().loans.status).toBe('loaded');
+    expect(panel.store.getState().balances.status).toBe('loaded');
+  });
+
+  it('reads nothing from the wallet while its door is locked', async () => {
+    const operations = fake();
+    const loans = vi.spyOn(operations, 'borrowPositions');
+    const balances = vi.spyOn(operations, 'balances');
+    const register = PRIVACY_REGISTER.filter((entry) => entry.route !== 'vault.borrow');
+    const panel = createBorrowPanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, register });
+    await panel.open();
+    expect(loans).not.toHaveBeenCalled();
+    expect(balances).not.toHaveBeenCalled();
   });
 
   it('opens a loan: the review states the health after and the approved disclosure, and the receipt is the counter\'s own', async () => {
@@ -105,6 +149,7 @@ describe('the Borrow counter (D-083)', () => {
     expect(done.flow).toMatchObject({ name: 'submitted', outcome: 'succeeded' });
     expect(done.notice?.text).toBe(COPY.borrow.loans.changed);
     expect(done.loans).toEqual({ status: 'unrequested' });
+    expect(done.balances).toEqual({ status: 'unrequested' });
     expect(operations.borrowSubmitted).toHaveLength(1);
     expect(receipts.pending('vault')).toEqual([expect.objectContaining({ building: 'vault', counter: 'borrow' })]);
     expect(failures).toEqual([]);
@@ -112,6 +157,11 @@ describe('the Borrow counter (D-083)', () => {
     expect(steps.filter((step) => step.step === 'prepare')).toEqual([{ step: 'prepare', kind: 'borrow', all: false }]);
     expect(steps.filter((step) => step.step === 'confirm').map((step) => (step as { stage: string }).stage).at(-1)).toBe('submitted');
     expect(JSON.stringify(steps, (_key, value) => (typeof value === 'bigint' ? value.toString() : value))).not.toMatch(/0x0[0-9a-f]{20,}|10000/);
+    // D-102: back at the form, the loan and the pool balance are read again on their own.
+    panel.acknowledge();
+    await vi.waitFor(() => expect(panel.store.getState().balances.status).toBe('loaded'));
+    const back = panel.store.getState();
+    expect(back.loans).toMatchObject({ status: 'loaded', positions: [expect.objectContaining({ collateral: STRK, debt: USDC })] });
   });
 
   it('says why it refuses a loan past the max LTV, reports nothing, and asks the wallet nothing', async () => {
@@ -140,11 +190,10 @@ describe('the Borrow counter (D-083)', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('reads the loans on request, with their health and the public stand-in, and offers them to repay', async () => {
+  it('reads the loans on opening, with their health and the public stand-in, and offers them to repay', async () => {
     const operations = fake({ positions: [{ collateral: STRK, debt: USDC, collateralAmount: 10_000n * E18, debtAmount: 100n * USDC_ONE }] });
     const { panel } = machine(operations);
     await panel.open();
-    await panel.refreshLoans();
     const state = panel.store.getState();
     expect(state.loans.status).toBe('loaded');
     if (state.loans.status !== 'loaded') return;

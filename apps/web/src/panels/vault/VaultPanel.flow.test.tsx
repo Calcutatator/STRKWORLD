@@ -80,7 +80,7 @@ async function openCounter(operations: PrivacyOperations, station: 'vault:supply
   return { stations, world };
 }
 
-/** Close this counter's window and walk up to another, as a player does (D-099). */
+/** Close this counter's window and walk up to another, as a player does (D-103). */
 async function walkTo(world: ReturnType<typeof createEventBus<WorldEvents>>, station: 'vault:supply' | 'vault:redeem'): Promise<void> {
   await click(button(COPY.flow.close));
   await act(async () => world.emit('station:activated', { building: 'vault', station }));
@@ -129,7 +129,7 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     const operations = createDemoOperations({ funded: true });
     const { stations, world } = await openCounter(operations);
 
-    // The World was told the counters are open: presentation only (D-083, D-099).
+    // The World was told the counters are open: presentation only (D-083, D-103).
     expect(stations.at(-1)).toEqual({
       building: 'vault',
       stations: [
@@ -186,7 +186,7 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     expect(vault().textContent).toContain(COPY.vault.position.worth);
 
     // Redeem everything at REDEEM: the field shows what is supplied, and Max
-    // fills the whole position, which redeems every share (D-089, D-099).
+    // fills the whole position, which redeems every share (D-089, D-103).
     await walkTo(world, 'vault:redeem');
     await click(button(COPY.vault.position.show));
     expect(vault().querySelector('.ui-amount-balance')?.textContent).toMatch(new RegExp(`^${COPY.vault.form.supplied}: [0-9.]+ STRK$`));

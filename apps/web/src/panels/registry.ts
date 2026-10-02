@@ -30,7 +30,7 @@ export interface BuildingPanelDescriptor {
 }
 
 export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.freeze({
-  // D-099: the Bank's four counters as Menu Mode tabs.
+  // D-103: the Bank's four counters as Menu Mode tabs.
   bank: Object.freeze({ building: 'bank', title: COPY.buildings.bank, Component: BankMenuPanel }),
   // D-088: the ground floor's swap, and the degen floor's whenever its
   // counter would open.
@@ -42,7 +42,7 @@ export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.fr
   }),
   bridge: Object.freeze({ building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel }),
   // D-077: Menu Mode's Vault, the same windows as its counters. Their routes'
-  // doors still gate every control inside them. D-088, D-099: SUPPLY, REDEEM,
+  // doors still gate every control inside them. D-088, D-103: SUPPLY, REDEEM,
   // BORROW and REPAY as tabs, each while its counter would open.
   vault: Object.freeze({ building: 'vault', title: COPY.buildings.vault, Component: VaultMenuPanel }),
 });

@@ -231,7 +231,7 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain('Add to this visit');
   });
 
-  it('shows each counter one action and no visit queue, in Game Mode and Menu Mode alike (D-099)', async () => {
+  it('shows each counter one action and no visit queue, in Game Mode and Menu Mode alike (D-103)', async () => {
     const seam = operations();
     for (const experience of ['station', 'menu'] as const) {
       for (const mode of ['shield', 'unshield', 'stake', 'transfer'] as const) {
@@ -310,7 +310,7 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain('name="amount"');
     expect(markup).not.toContain(COPY.balance.refresh);
     expect(confirmButton(markup)).toBeNull();
-    // One counter, one control: no tabs to mark (D-099).
+    // One counter, one control: no tabs to mark (D-103).
     expect(markup).not.toContain('role="tablist"');
   });
 

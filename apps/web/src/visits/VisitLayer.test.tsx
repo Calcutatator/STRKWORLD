@@ -247,7 +247,7 @@ describe('VisitLayerView', () => {
     expect(markup).not.toContain('name="amount"');
   });
 
-  it('renders the Bank\'s four counters as Menu Mode tabs, SHIELD first, with no transfer (D-099)', () => {
+  it('renders the Bank\'s four counters as Menu Mode tabs, SHIELD first, with no transfer (D-103)', () => {
     const markup = render(
       <VisitLayerView
         state={{ name: 'visiting', building: 'bank', surface: { name: 'menu' } }}
@@ -276,7 +276,7 @@ describe('VisitLayerView', () => {
     for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action']) expect(markup).not.toContain(gone);
   });
 
-  it('renders the SHIELD counter as one action, with no tabs (D-099)', () => {
+  it('renders the SHIELD counter as one action, with no tabs (D-103)', () => {
     const markup = render(
       <VisitLayerView
         state={{
@@ -293,7 +293,7 @@ describe('VisitLayerView', () => {
     );
 
     expect(markup).toContain('data-experience="station"');
-    // D-099: SHIELD alone; unshielding is the counter beside it.
+    // D-103: SHIELD alone; unshielding is the counter beside it.
     expect(markup).toContain(`<h3 class="counter-action">${COPY.bank.shield}</h3>`);
     expect(markup).not.toContain('Unshield');
     expect(markup).not.toContain('role="tablist"');

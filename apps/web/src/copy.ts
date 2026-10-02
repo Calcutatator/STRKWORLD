@@ -212,6 +212,10 @@ export const COPY = freezeCopy({
     stake: 'Stake',
     amount: 'Amount',
     recipient: 'To',
+    /** An unshield goes to the connected wallet unless the player chooses another address. */
+    toYourWallet: 'To: your wallet',
+    sendToAnother: 'Send to another address',
+    useMyWallet: 'Use my wallet',
     max: 'Max',
     /** D-091: the send's primary button before it has a recipient. */
     enterRecipient: 'Enter a recipient',
@@ -274,8 +278,8 @@ export const COPY = freezeCopy({
     /** Pragma prices one side or neither, so there is no independent figure to hold the output against. */
     priceImpactUnknown: 'Not known',
     priceImpactHigh: "Large price impact: you get noticeably less than Pragma's price for what you sell.",
-    route: 'Route',
-    routeAvnu: 'via avnu',
+    /** The review's collapsed section for everything beyond sell, buy and rate. */
+    details: 'Details',
     poolFeeToken: 'Set in STRK. Your wallet chooses which token in your pool balance pays it.',
     quoting: 'Fetching a quote…',
     quotePaused: 'Press Review swap for a quote.',
@@ -323,7 +327,7 @@ export const COPY = freezeCopy({
   stake: {
     eyebrow: 'Liquid staking with Endur',
     intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
-    /** D-085: unstaking is a counter of its own (D-099: UNSTAKE, beside STAKE). */
+    /** D-085: unstaking is a counter of its own (D-103: UNSTAKE, beside STAKE). */
     unstaking:
       "To unstake, use the Unstake counter. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
     /** D-091: the preview rows. Estimates at xSTRK's live rate, never shown at review. */
@@ -592,6 +596,26 @@ export const COPY = freezeCopy({
       noDebt: '∞',
       maxHint: 'Max keeps your health factor at 1.25 or more. Anything under 1.05 is refused.',
       readLoans: 'Show your loans above to see what you can borrow and your health factor after.',
+      /** D-102: the collateral this pair already holds, and where collateral comes from. Written before the figure: "Your collateral: 0 STRK". */
+      yourCollateral: 'Your collateral',
+      collateralReading: 'reading…',
+      collateralUnread: 'not read yet',
+      collateralSource: 'Your Vault supply is not collateral here. Add collateral below, from your pool balance.',
+      /** Fills the collateral field with the pool balance, less the pool fee in STRK. */
+      maxCollateral: 'Max collateral',
+      addCollateralFirst: 'Add collateral first.',
+      belowFloorHint: "Vesu's smallest loan is worth about $10, so add more collateral.",
+      /** Why "Available to borrow" shows no figure (D-102). */
+      availableWhy: {
+        'loans-loading': 'Reading your loans…',
+        'loans-unread': 'Read your loans first',
+        'no-collateral': 'Add collateral first',
+        stale: 'Price feed stale',
+        'not-offered': 'Not offered right now',
+        'at-limit': 'None at a health factor of 1.25',
+        'no-liquidity': 'Vesu has none to lend right now',
+        'below-floor': "Under Vesu's $10 minimum",
+      },
       tooLow: 'Health factor too low',
       overDebt: 'More than you owe',
       overCollateral: 'More than the loan holds',
@@ -620,7 +644,7 @@ export const COPY = freezeCopy({
     },
     loans: {
       title: 'Your loans',
-      unrequested: 'STRKWORLD reads your loans from the chain only when you ask. Your wallet may ask you first.',
+      unrequested: 'Your loans have not been read. Your wallet may ask you first.',
       show: 'Show my loans',
       loading: 'Reading your loans…',
       again: 'Read my loans again',
@@ -822,7 +846,7 @@ export const COPY = freezeCopy({
   gameMode: {
     menu: 'Menu Mode',
     exit: 'Leave building',
-    /** D-099: every counter does one action and confirms it, and each pays its own pool fee. */
+    /** D-103: every counter does one action and confirms it, and each pays its own pool fee. */
     singleAction: 'This counter confirms one action at a time, and each action pays its own pool fee.',
     reviewAction: 'Review this action',
     /** D-088: names Menu Mode's row of counter tabs for assistive tech. */

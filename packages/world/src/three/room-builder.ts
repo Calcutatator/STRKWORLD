@@ -407,7 +407,7 @@ interface StationView {
 }
 
 /**
- * Where one station's halo sits in the room's shared halo mesh (D-099): its
+ * Where one station's halo sits in the room's shared halo mesh (D-103): its
  * fill's vertices and its edge's, coloured per vertex (linear RGB and alpha)
  * so a station's state still drives its own halo while every halo in the room
  * costs one draw call between them.
@@ -475,7 +475,7 @@ export function buildFixedRoom(
     decorateRoom(theme, shell, map, res, animators, labels, textLabels, images);
     exitDecor(map, theme, shell);
     liftDecor(map, theme, shell, labels, textLabels, group);
-    // D-099: every counter's static desk and props share one lit mesh and
+    // D-103: every counter's static desk and props share one lit mesh and
     // one self-lit mesh, and every approach halo one vertex-coloured mesh,
     // so a room of four counters costs barely more than a room of one.
     const counters = new GeometryBin();
@@ -602,7 +602,7 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
  * A counter on the station rect, a status beacon, a floating label and the
  * approach halo, dressed in the station's own theme or else its room's.
  *
- * D-099: the desk and its props go into the room's shared `counters` bin and
+ * D-103: the desk and its props go into the room's shared `counters` bin and
  * the halo comes back as quads for the room's shared halo mesh; what stays on
  * the station's own group is what its state changes: the status panel, the
  * beacon, the label and any brand plate.
@@ -710,7 +710,7 @@ function buildStation(
 const QUAD_VERTICES = 6;
 
 /**
- * The room's approach halos as one mesh (D-099): every station's fill, then
+ * The room's approach halos as one mesh (D-103): every station's fill, then
  * every station's edge, so the edges blend over the fills exactly as the two
  * separate meshes did. Each station keeps a slice of the colour attribute and
  * paints its own state into it. Until the Shell reports otherwise a station
@@ -1161,7 +1161,7 @@ function perimeterInlay(shell: InteriorShell, map: FixedRoomLevelMap, inset: num
 
 /**
  * Centre of the north wall span the counters face, for decor behind them:
- * one counter's own centre, or the middle of a row of them (D-099).
+ * one counter's own centre, or the middle of a row of them (D-103).
  */
 function stationAnchor(map: FixedRoomLevelMap): number {
   if (map.stations.length === 0) return map.width / 2;

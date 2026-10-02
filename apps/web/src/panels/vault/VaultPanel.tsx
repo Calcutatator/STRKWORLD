@@ -71,7 +71,7 @@ function poolLabel(token: VaultTokenView): string {
  * switched on shows a locked door rather than a form nobody can submit; a
  * wallet that cannot run a shadow account is told so instead of being shown a
  * form; and the only confirm button is inside `ConfirmGate`, which cannot
- * render without the prepared route's approved disclosure. D-099: SUPPLY and
+ * render without the prepared route's approved disclosure. D-103: SUPPLY and
  * REDEEM are counters of their own, so a window shows one of them; the Game
  * Mode counter and Menu Mode's tab render the same window, and the Vault
  * confirms one action at a time either way.
@@ -88,7 +88,7 @@ export function VaultPanel({
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: VaultPanelMachine;
   experience?: 'menu' | 'station';
-  /** The counter: SUPPLY or REDEEM (D-099). */
+  /** The counter: SUPPLY or REDEEM (D-103). */
   mode?: VaultMode;
   register?: readonly RouteGrade[];
   /** Menu Mode's counter tabs (D-088); presentation only. */

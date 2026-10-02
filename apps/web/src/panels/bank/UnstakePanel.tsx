@@ -7,7 +7,7 @@ import { useEndurRate } from './endur-rate.js';
 import { UnstakeCounter } from './UnstakeCounter.js';
 
 /**
- * The Bank's UNSTAKE counter (D-099): Endur's unstaking (D-085), its request,
+ * The Bank's UNSTAKE counter (D-103): Endur's unstaking (D-085), its request,
  * the pending requests and the claim, in a window of its own and in Endur's
  * look, as the STAKE counter beside it is.
  *
@@ -29,7 +29,7 @@ export function UnstakePanel({
   register?: readonly RouteGrade[];
   /** Presentation only: the counter and Menu Mode render the same window. */
   experience?: 'menu' | 'station';
-  /** Menu Mode's counter tabs (D-088, D-099); presentation only. */
+  /** Menu Mode's counter tabs (D-088, D-103); presentation only. */
   counters?: ReactNode;
 }) {
   const { operations } = usePrivacy();

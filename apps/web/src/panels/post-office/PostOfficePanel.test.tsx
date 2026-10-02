@@ -35,7 +35,7 @@ describe('Post Office Menu Mode', () => {
     expect(markup).toContain(COPY.postOffice.oneAtATime);
     expect(markup).toContain(COPY.bank.enterRecipient);
     // D-040's visit vocabulary would promise several sends settling together;
-    // since D-099 no counter has it.
+    // since D-103 no counter has it.
     for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action']) expect(markup).not.toContain(gone);
   });
 

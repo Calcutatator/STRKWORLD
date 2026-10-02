@@ -77,7 +77,7 @@ describe('the Shell opens unshield exactly when the production policy enables it
     }
   });
 
-  it('opens the UNSHIELD counter alone and keeps every other station shut (D-099)', () => {
+  it('opens the UNSHIELD counter alone and keeps every other station shut (D-103)', () => {
     expect(resolveStation('bank', 'bank:unshielding', PRIVACY_REGISTER, {}, unshieldOnly).status).toBe('available');
     expect(stationSnapshot('bank', PRIVACY_REGISTER, {}, unshieldOnly)).toEqual([
       // Enabling unshield enables nothing else (D-062), shielding and staking included.
@@ -97,7 +97,7 @@ describe('the Shell opens unshield exactly when the production policy enables it
   });
 });
 
-describe("the Bank's UNSHIELD counter follows this build's environment (D-099)", () => {
+describe("the Bank's UNSHIELD counter follows this build's environment (D-103)", () => {
   afterEach(() => {
     livePolicy.current = null;
   });

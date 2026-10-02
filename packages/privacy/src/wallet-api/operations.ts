@@ -802,29 +802,52 @@ function toActions(intents: readonly Intent[], config?: PoolConfig): STRK20_ACTI
  *
  * Tokens come from the validated intent, already pinned to STRK → xSTRK; the
  * target is the pinned constant, never caller input.
+ *
+ * Every felt is written canonically: `0x`, lowercase, no leading zeros. The
+ * Wallet API 0.10.4 `FELT` (and so `ADDRESS`) is
+ * `^0x(0|[a-fA-F1-9]{1}[a-fA-F0-9]{0,62})$`, and an `invoke` calldata item
+ * must be that or a `${…}` placeholder. The pinned constants are written
+ * padded to 64 digits (`0x030dee…`, `0x04718f…`), which is neither, and Ready
+ * refused the padded stake as 114 `INVALID_REQUEST_PAYLOAD`. Unlike a
+ * `shadow_account_invoke`, whose calls starknet.js re-encodes with
+ * `CallData.toHex`, an `invoke` action reaches the wallet exactly as built.
  */
 function stakeActions(intent: StakeIntent, taker: Address): STRK20_ACTION[] {
+  // Pool balances are u128, and the withdraw's amount must be one FELT: a
+  // larger stake could never be proved, so it is refused before the wallet.
+  if (intent.amountIn > U128_MASK) {
+    throw new PrivacyError('unknown', 'A stake amount must fit in a pool balance (u128).');
+  }
   const assets = splitU256(intent.amountIn);
+  const tokenIn = canonicalFelt(intent.tokenIn);
+  const tokenOut = canonicalFelt(intent.tokenOut);
+  const anonymizer = canonicalFelt(ENDUR_DEPOSIT_ANONYMIZER);
   return [
     {
       type: 'withdraw',
-      token: intent.tokenIn,
+      token: tokenIn,
       amount: toFelt(intent.amountIn),
-      recipient: ENDUR_DEPOSIT_ANONYMIZER,
+      recipient: anonymizer,
     },
-    { type: 'transfer', token: intent.tokenOut, amount: 'OPEN', recipient: taker },
+    { type: 'transfer', token: tokenOut, amount: 'OPEN', recipient: canonicalFelt(taker) },
     {
       type: 'invoke',
-      contract: ENDUR_DEPOSIT_ANONYMIZER,
+      contract: anonymizer,
       calldata: [
-        intent.tokenIn,
-        intent.tokenOut,
+        tokenIn,
+        tokenOut,
         toFelt(assets.low),
         toFelt(assets.high),
         OPEN_NOTE_PLACEHOLDER,
       ],
     },
   ];
+}
+
+/** One spelling per felt, the Wallet API's: `0x`, lowercase hex, no leading zeros. */
+function canonicalFelt(value: string): string {
+  if (!isFelt(value)) throw new PrivacyError('unknown', 'Invalid felt in a private action.');
+  return toFelt(BigInt(value));
 }
 
 /** Cairo serializes a u256 as two felts, low 128 bits first. */

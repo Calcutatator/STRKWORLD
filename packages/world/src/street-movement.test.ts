@@ -181,7 +181,7 @@ describe('street movement seam', () => {
       isSolidAt: (x: number, y: number) => isFixedRoomSolidAt(room, x, y),
     });
 
-    // The STAKE counter (columns 10-11, D-099) occupies row 3 (world y 96..128 in this origin-free map).
+    // The STAKE counter (columns 10-11, D-103) occupies row 3 (world y 96..128 in this origin-free map).
     // With 16px collision substeps, the body must stop at center y=144 rather
     // than entering row 4's lower edge-adjacent position at y=128.
     expect(position).toEqual({ x: 10 * 32 + 16, y: 144 });

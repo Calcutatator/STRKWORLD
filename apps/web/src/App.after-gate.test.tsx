@@ -138,7 +138,7 @@ function bankStations(snapshots: ShellEvents['world:stations'][]): string[] {
 }
 
 function bankPanel(): Element | null {
-  // D-099: the SHIELD counter's own window, naming its one action.
+  // D-103: the SHIELD counter's own window, naming its one action.
   return container!.querySelector('section.panel[data-building="bank"] .counter-action');
 }
 

@@ -9,7 +9,7 @@ import { COPY } from '../copy.js';
 import { detectRoutePolicy } from '../production/config.js';
 
 /**
- * A Bank-machine counter: one control each (D-099), so `modes` holds exactly
+ * A Bank-machine counter: one control each (D-103), so `modes` holds exactly
  * one mode and `initialMode` is it. The Post Office's TRANSFER is one too.
  */
 type BankStationDefinition = {
@@ -17,7 +17,7 @@ type BankStationDefinition = {
   view: 'bank'; modes: readonly [BankMode]; initialMode: BankMode;
 };
 /**
- * The Bank's UNSTAKE counter (D-085, D-099): Endur's request, the pending
+ * The Bank's UNSTAKE counter (D-085, D-103): Endur's request, the pending
  * requests and the claim, behind the two unstaking routes, which one policy
  * route (`unstake`) gates together, so the station keeps one grade (D-030).
  */
@@ -36,7 +36,7 @@ type BridgeStationDefinition = {
   view: 'bridge';
 };
 /**
- * The Vault's lending counters (D-077, D-099): SUPPLY and REDEEM, one route
+ * The Vault's lending counters (D-077, D-103): SUPPLY and REDEEM, one route
  * and one action each, both `anonymous` in the register (D-030).
  */
 type VaultStationDefinition = {
@@ -44,7 +44,7 @@ type VaultStationDefinition = {
   view: 'vault'; mode: VaultMode;
 };
 /**
- * The borrowing counters (D-083, D-099): Vesu loans from a second shadow
+ * The borrowing counters (D-083, D-103): Vesu loans from a second shadow
  * account. BORROW borrows and adds collateral; REPAY repays and withdraws
  * collateral. Both drive the one `vault.borrow` route, whose grade entry and
  * disclosure (liquidation) are its own, so no station mixes them (D-030).
@@ -93,7 +93,7 @@ function freezeStationDefinition(definition: StationDefinition): StationDefiniti
 }
 
 /**
- * Station ids an earlier build used, and the counter each now names (D-099).
+ * Station ids an earlier build used, and the counter each now names (D-103).
  * Only the Vault's lending counter was renamed (`vault:lending` held supply
  * and redeem; SUPPLY keeps its place in the room), so an id from a stale
  * World or an old debug log still resolves to a counter that exists. The
@@ -109,7 +109,7 @@ export function canonicalStation(station: StationId): StationId {
 }
 
 const STATIONS: readonly StationDefinition[] = Object.freeze([
-  // D-099: the Bank's four counters, one action each, west to east. Shielding
+  // D-103: the Bank's four counters, one action each, west to east. Shielding
   // and unshielding are `public-edge`; staking (D-063) and unstaking (D-085)
   // their own Endur routes. No station mixes grades (D-030), and each locks
   // on its own route and switch.
@@ -183,7 +183,7 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     view: 'bridge',
   },
   // The Vault (D-077): Vesu lending from the player's shadow account, one
-  // action per counter (D-099). The room exists only when this build switches
+  // action per counter (D-103). The room exists only when this build switches
   // both lending routes on; otherwise the World keeps the door locked and the
   // player never reaches these counters.
   {
@@ -254,7 +254,7 @@ export type StationResolution =
 /**
  * Resolve again at the interaction boundary. A World snapshot is presentation,
  * never authorization, and an unknown id is always a locked result. A renamed
- * id resolves as the counter it now names (`STATION_ALIASES`, D-099).
+ * id resolves as the counter it now names (`STATION_ALIASES`, D-103).
  *
  * A station can bundle more than one route — `bank:unstaking` is the unstake
  * request and its claim behind one door. Those two gates disagree in how a locked

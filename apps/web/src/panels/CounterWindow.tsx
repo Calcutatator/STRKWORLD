@@ -9,7 +9,7 @@ import { VaultPanel } from './vault/VaultPanel.js';
 
 /**
  * The window behind one of the Bank's, the Vault's or the Post Office's
- * counters (D-099), drawn from the station registry's meaning for it: the
+ * counters (D-103), drawn from the station registry's meaning for it: the
  * same window whether the player walked up to the counter (Game Mode) or
  * chose its tab (Menu Mode, D-088). Admission is not decided here; the
  * caller has already resolved the station. Keyed by station, so moving to

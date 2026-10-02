@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Intent } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../../copy.js';
@@ -52,7 +52,7 @@ function wearsEndur(state: BankState): boolean {
 }
 
 /**
- * One Bank-machine counter (D-099): SHIELD, UNSHIELD or STAKE in the Bank,
+ * One Bank-machine counter (D-103): SHIELD, UNSHIELD or STAKE in the Bank,
  * or the Post Office's TRANSFER (D-040).
  *
  * A thin view over `bank-machine.ts`. Every rule that matters — no polled
@@ -80,9 +80,9 @@ export function BankPanel({
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BankPanelMachine;
-  /** Presentation only: the counter and Menu Mode render the same window (D-099). */
+  /** Presentation only: the counter and Menu Mode render the same window (D-103). */
   experience?: 'menu' | 'station';
-  /** The counter's one control (D-099). */
+  /** The counter's one control (D-103). */
   mode?: BankMode;
   /** The existing machine can render a different building title. */
   title?: string;
@@ -93,7 +93,7 @@ export function BankPanel({
   register?: readonly RouteGrade[];
   /** One short line explaining what this window does — the Post Office's own identity narrowed onto this machine. */
   intro?: string;
-  /** Menu Mode's counter tabs (D-088, D-099); presentation only. */
+  /** Menu Mode's counter tabs (D-088, D-103); presentation only. */
   counters?: ReactNode;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
@@ -122,6 +122,7 @@ export function BankPanel({
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertaintyState = useStore(submissionUncertainty.store);
+  const recipientChoice = useState(false);
   // D-091: xSTRK's live rate, one public read while the staking counter is open.
   const rate = useEndurRate(operations, state.mode === 'stake');
   const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
@@ -188,7 +189,7 @@ export function BankPanel({
           // The Bridge nudge says "shield it here", so only a window that can shield carries it.
           bridgeNudge={state.mode === 'shield'}
         />
-        {/* D-099: a counter with no Menu Mode tabs above it names its one action. */}
+        {/* D-103: a counter with no Menu Mode tabs above it names its one action. */}
         {counters ? null : <h3 className="counter-action">{ACTION_LABELS[state.mode]}</h3>}
 
         {!state.door.open ? (
@@ -226,7 +227,13 @@ export function BankPanel({
                 </button>
               </div>
             ) : blocked || gateBlocked ? null : (
-              <ComposeBlock state={state} panel={panel} rate={rate} onRefresh={() => void refreshFor(state, panel)} />
+              <ComposeBlock
+                state={state}
+                panel={panel}
+                rate={rate}
+                onRefresh={() => void refreshFor(state, panel)}
+                recipientChoice={recipientChoice}
+              />
             )}
 
             {state.flow.name === 'failed' ? (
@@ -337,15 +344,30 @@ function ComposeBlock({
   panel,
   rate,
   onRefresh,
+  recipientChoice,
 }: {
   state: BankState;
   panel: BankPanelMachine;
   rate: EndurRateView;
   onRefresh: () => void;
+  /** Whether an unshield goes to another address rather than the wallet's own, owned by the window. */
+  recipientChoice: readonly [boolean, (other: boolean) => void];
 }) {
   const preparing = state.flow.name === 'preparing';
   const busy = preparing || state.adding;
   const needsRecipient = modeNeedsRecipient(state.mode);
+  // An unshield goes to the connected wallet unless the player chooses
+  // another address. The address is the session's own, already in the shell;
+  // it is written into the machine's recipient and goes nowhere new. Without
+  // a connected session (demo) there is no own address, so the field shows.
+  // D-103: the choice outlives the form, which steps aside while an action is
+  // reviewed, so backing out of a review to another address keeps that address.
+  const { account } = usePrivacy();
+  const [otherAddress, setOtherAddress] = recipientChoice;
+  const toOwnWallet = state.mode === 'unshield' && account !== null && !otherAddress;
+  useEffect(() => {
+    if (toOwnWallet && state.recipientText !== account) panel.setRecipient(account);
+  }, [toOwnWallet, account, state.recipientText, panel]);
   // D-022: a Max only where the spendable figure is known and costed. The
   // shipped wallet reports one total per token, so in production there is
   // none, and the button is not drawn rather than drawn dead.
@@ -364,7 +386,7 @@ function ComposeBlock({
     ? wallet
     : balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
   const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : balance });
-  const recipient = state.recipientText.trim();
+  const recipient = toOwnWallet ? account : state.recipientText.trim();
   const ready = COPY.gameMode.reviewAction;
   const action = needsRecipient && recipient === ''
     ? { label: COPY.bank.enterRecipient, disabled: true }
@@ -385,18 +407,44 @@ function ComposeBlock({
       className="panel-compose"
       onSubmit={(event) => {
         event.preventDefault();
-        // D-099: one action per counter, reviewed straight from the form.
+        // D-103: one action per counter, reviewed straight from the form.
         void panel.review();
       }}
     >
-      {needsRecipient ? (
-        <RecipientField
-          label={COPY.bank.recipient}
-          value={state.recipientText}
-          onChange={(text) => panel.setRecipient(text)}
-          validate={(text) => (looksLikeAddress(text) ? null : COPY.notices.badRecipient)}
-          disabled={busy}
-        />
+      {toOwnWallet ? (
+        <div className="ui-recipient">
+          <div className="ui-recipient-box ui-recipient-own">
+            <span className="ui-recipient-own-text" data-testid="unshield-own-wallet">
+              {COPY.bank.toYourWallet} ({shortenAddress(account)})
+            </span>
+            <button
+              type="button"
+              className="ui-chip"
+              disabled={busy}
+              onClick={() => {
+                setOtherAddress(true);
+                panel.setRecipient('');
+              }}
+            >
+              {COPY.bank.sendToAnother}
+            </button>
+          </div>
+        </div>
+      ) : needsRecipient ? (
+        <>
+          <RecipientField
+            label={COPY.bank.recipient}
+            value={state.recipientText}
+            onChange={(text) => panel.setRecipient(text)}
+            validate={(text) => (looksLikeAddress(text) ? null : COPY.notices.badRecipient)}
+            disabled={busy}
+          />
+          {state.mode === 'unshield' && account !== null ? (
+            <button type="button" className="ui-link-button" disabled={busy} onClick={() => setOtherAddress(false)}>
+              {COPY.bank.useMyWallet}
+            </button>
+          ) : null}
+        </>
       ) : null}
 
       <AmountField
@@ -440,7 +488,7 @@ function composeRows(state: BankState, amount: bigint | null, rate: EndurRateVie
   const rows: DetailRow[] = [];
   if (state.mode === 'shield' && state.pool) {
     // D-094: what reaches the pool, the fee on top, and what leaves the
-    // wallet. D-099: every shield is its own action and pays its own fee.
+    // wallet. D-103: every shield is its own action and pays its own fee.
     const figures = shieldFigures(amount ?? 0n, state.pool.feeAmount);
     rows.push({ id: 'shield', label: COPY.bank.youShield, value: formatStrk(figures.amount) });
     rows.push({

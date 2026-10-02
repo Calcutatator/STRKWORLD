@@ -14,7 +14,7 @@ import { detectRoutePolicy, routePolicyFrom } from './config.js';
 /**
  * D-063's "built switched off", as a player would meet it: under the
  * production default the STAKE counter is locked with its own not-enabled
- * line and Menu Mode hides its tab (D-088, D-099), and only the build's stake
+ * line and Menu Mode hides its tab (D-088, D-103), and only the build's stake
  * switch opens them. Availability comes from the existing machinery alone — the register
  * plus `routeDoor`'s live policy — with nothing stake-specific deciding it.
  *
@@ -54,7 +54,7 @@ function stakingStation(): string {
   );
 }
 
-/** The STAKE counter's own window (D-099), over its own machine. */
+/** The STAKE counter's own window (D-103), over its own machine. */
 async function stakeWindow(): Promise<{ markup: string; open: boolean }> {
   const operations = new FakePrivacyOperations({ balances: { [STRK]: parseTokenAmount('100')! } });
   const panel = createBankPanel({ operations, receipts: createReceiptLedger(), allowedModes: ['stake'], initialMode: 'stake', canStartFinancialAction: () => true });
