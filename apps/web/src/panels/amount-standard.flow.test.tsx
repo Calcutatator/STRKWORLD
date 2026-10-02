@@ -258,3 +258,40 @@ describe('the amount standard at every Vault counter (D-103)', () => {
     expect(operations.borrowSubmitted.at(-1)).toMatchObject({ kind: 'withdraw-collateral', amount: 100n * E18 });
   });
 });
+
+describe('REPAY\'s Max leaves the pool fee aside (D-103)', () => {
+  const owing = (strkInPool: bigint) => new FakePrivacyOperations({
+    balances: { [STRK]: strkInPool, [USDC]: 2_000n * USDC_ONE },
+    poolConfig: { noteMaturityBlocks: 0 },
+    // USDC collateral, STRK debt: the debt is in the pool's fee token.
+    borrow: { positions: [{ collateral: USDC, debt: STRK, collateralAmount: 1_000n * USDC_ONE, debtAmount: 100n * E18 }] },
+  });
+  const maxFilled = (): bigint => {
+    const text = container!.querySelector<HTMLInputElement>('input[name="amount"]')!.value;
+    const [whole, fraction = ''] = text.split('.');
+    return BigInt(whole!) * E18 + BigInt(fraction.padEnd(18, '0').slice(0, 18) || '0');
+  };
+
+  it('never fills more than the pool balance less the fee, so amount + fee fits the balance', async () => {
+    const balance = 50n * E18;
+    await open(owing(balance), 'vault', 'vault:repay');
+    expect(container!.querySelector('.borrow-experience')?.getAttribute('data-mode')).toBe('repay');
+    await click(button(COPY.kit.max));
+    const max = maxFilled();
+    const fee = 6n * E18;
+    expect(max).toBeGreaterThan(0n);
+    expect(max).toBeLessThanOrEqual(balance - fee);
+    expect(max + fee).toBeLessThanOrEqual(balance);
+    // A part repayment: less than the 100 STRK owed, and the review totals it with the fee.
+    expect(max).toBeLessThan(100n * E18);
+    await click(button(COPY.gameMode.reviewAction));
+    expect(totalOf('.panel-review', COPY.borrow.review.repay, [COPY.bank.poolFee])).toBe(`${(max + fee) / E18} STRK`);
+  });
+
+  it('fills the whole debt when the pool covers it with the fee to spare', async () => {
+    await open(owing(500n * E18), 'vault', 'vault:repay');
+    await click(button(COPY.kit.max));
+    expect(maxFilled()).toBe(100n * E18);
+    expect(container!.querySelector('.ui-amount-hint')?.textContent).toBe(COPY.borrow.form.repayAllLine);
+  });
+});
