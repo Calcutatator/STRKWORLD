@@ -20,7 +20,6 @@ import {
   ENDUR_UNSTAKE_ROUTE,
   routeDisclosure,
   routeDoor,
-  routeRequiresDisclosure,
   type DoorState,
 } from '../routes.js';
 import { stageCopy } from './bank-machine.js';
@@ -90,9 +89,8 @@ export interface UnstakeSummary {
   readonly totalCost: bigint;
   /** The hard guard passed to `confirm`. Never signs above the prepared total. */
   readonly feeCeiling: bigint;
-  /** The prepared route's approved disclosure, verbatim, for the commit point. */
+  /** The prepared route's pre-commit line, if it has one. */
   readonly disclosures: readonly string[];
-  readonly requiresDisclosure: boolean;
   /**
    * Leaderboard phase 1: present, and true, only when the prepared batch
    * carries a private placement receipt or tick. The review says so, subtly.
@@ -309,7 +307,6 @@ export function createUnstakePanel(options: UnstakePanelOptions): UnstakePanel {
             totalCost: batch.totalCost,
             feeCeiling: batch.totalCost + feeTolerance,
             disclosures: disclosure ? [disclosure] : [],
-            requiresDisclosure: routeRequiresDisclosure(routeId, register),
             ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
           },
         },

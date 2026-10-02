@@ -709,15 +709,14 @@ describe('station registry', () => {
     expect(resolveStation('bank', 'bank:shielding', register)).toMatchObject({ status: 'locked' });
   });
 
-  it('keeps the Post Office transfer station open only while its D-065 approval and waiver stand', () => {
+  it('keeps the Post Office transfer station open only while its D-065 approval stands', () => {
     const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
-    expect(transfer).toMatchObject({ grade: 'anonymous', disclosureWaivedBy: 'D-065' });
+    expect(transfer).toMatchObject({ grade: 'anonymous', disclosure: null });
     expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({ status: 'available' });
 
     for (const change of [
       { approvedBy: null, approvedOn: null, rationale: null },
-      { disclosureWaivedBy: null },
-      { disclosureWaivedBy: 'D-064' },
+      { rationale: null },
     ] satisfies Partial<RouteGrade>[]) {
       const register = [
         ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),

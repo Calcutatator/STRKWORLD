@@ -23,7 +23,6 @@ import {
   VAULT_REDEEM_ROUTE,
   VAULT_SUPPLY_ROUTE,
   routeDisclosure,
-  routeRequiresDisclosure,
   routeDoor,
   type DoorState,
 } from '../routes.js';
@@ -252,9 +251,8 @@ export interface VaultSummary {
   readonly totalCost: bigint;
   /** The hard guard passed to `confirm`. Never signs above the prepared total. */
   readonly feeCeiling: bigint;
-  /** The prepared route's approved disclosure, verbatim, for the commit point. */
+  /** The prepared route's pre-commit line, if it has one. */
   readonly disclosures: readonly string[];
-  readonly requiresDisclosure: boolean;
   /**
    * Leaderboard phase 1: present, and true, only when the prepared batch
    * carries a private placement receipt or tick. The review says so, subtly.
@@ -797,7 +795,6 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
               totalCost: batch.totalCost,
               feeCeiling: batch.totalCost + feeTolerance,
               disclosures: disclosure ? [disclosure] : [],
-              requiresDisclosure: routeRequiresDisclosure(routeId, register),
               ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
             },
           },

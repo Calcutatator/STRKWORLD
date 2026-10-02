@@ -141,8 +141,13 @@ function inJumpColumn(root: Object3D, walkable: (x: number, z: number) => boolea
   return [...found].sort();
 }
 
+/**
+ * The arena (D-114) is left out: its tiers are walkable surfaces at a height,
+ * so its band moves with the floor under the head; arena-room.test.ts checks
+ * its headroom from each tile's own surface.
+ */
 const FLOORS: readonly FixedRoomLevelMap[] = [
-  ...fixedRoomDefinitionsFor({ vaultOpen: true }).map(createFixedRoom),
+  ...fixedRoomDefinitionsFor({ vaultOpen: true }).filter((definition) => definition.building !== 'arena').map(createFixedRoom),
   createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL),
   createFixedRoomLevel(EXCHANGE_ROOF_LEVEL),
 ];

@@ -1,6 +1,6 @@
 import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
-import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
+import { PRIVACY_REGISTER, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
 import { BORROW_TOKENS, STRK_TOKEN, VAULT_TOKENS, detectRoutePolicy } from '../production/config.js';
@@ -9,10 +9,9 @@ import { BORROW_TOKENS, STRK_TOKEN, VAULT_TOKENS, detectRoutePolicy } from '../p
  * What the shell is allowed to open, and what it must say when it does.
  *
  * The privacy register in `packages/shared` is the single source of truth for
- * both halves (D-020, D-024): whether a route may be offered at all, and the
- * exact approved words shown to the player. This module reads it and does not
- * restate it — a paraphrase here would be a privacy claim that no project lead
- * approved.
+ * both halves (D-020): whether a route may be offered at all, and the
+ * pre-commit line, if any, shown to the player. This module reads it and does
+ * not restate it. The lines are product copy and change freely (D-118).
  *
  * Everything fails closed. An id the register does not carry is a locked door,
  * not a default-open one, because the register is what CI checks and a route
@@ -315,7 +314,7 @@ function notEnabledDoor(routeId: string): DoorState {
 }
 
 /**
- * The approved disclosures for the intents actually queued, de-duplicated.
+ * The pre-commit lines for the intents actually queued, de-duplicated.
  *
  * Derived from the batch rather than from whatever control the player last
  * touched. A player who queues a shield and then switches tab is still about
@@ -332,42 +331,6 @@ export function disclosuresForIntents(
     if (disclosure) seen.add(disclosure);
   }
   return [...seen];
-}
-
-/**
- * Whether any route in the batch is a below-private deviation.
- *
- * The register already refuses to make an undisclosed deviation playable, so
- * `disclosures` being empty for such a batch means something between the
- * register and the screen has gone wrong. The commit gate uses this to fail
- * closed on that combination rather than trusting the chain that produced it.
- * The one exception is a deviation whose disclosure the lead waived by
- * decision (D-064 for staking, D-065 for the transfer): it needs none, and
- * must not block the commit.
- */
-export function batchRequiresDisclosure(
-  intents: readonly Intent[],
-  register: readonly RouteGrade[] = PRIVACY_REGISTER,
-): boolean {
-  return intents.some((intent) => {
-    const entry = findRoute(ROUTE_BY_INTENT_KIND[intent.kind], register);
-    // An unknown route is not a "no disclosure needed" answer.
-    return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
-  });
-}
-
-/**
- * Whether committing on one route needs its disclosure on screen: the
- * route-level twin of `batchRequiresDisclosure`, for a surface that commits
- * one registered route by name (the entry gate, D-072). An unknown route
- * fails closed.
- */
-export function routeRequiresDisclosure(
-  routeId: string,
-  register: readonly RouteGrade[] = PRIVACY_REGISTER,
-): boolean {
-  const entry = findRoute(routeId, register);
-  return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
 }
 
 /** Routes that leave value sitting in public and must offer the way back (D-021). */

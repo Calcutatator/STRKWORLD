@@ -24,7 +24,7 @@ import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createStore, type ReadableStore } from '../../store/store.js';
-import { VAULT_BORROW_ROUTE, routeDisclosure, routeDoor, routeRequiresDisclosure, type DoorState } from '../routes.js';
+import { VAULT_BORROW_ROUTE, routeDisclosure, routeDoor, type DoorState } from '../routes.js';
 import { stageCopy } from '../bank/bank-machine.js';
 import { tidyFloor } from '../kit/amount-math.js';
 
@@ -151,7 +151,6 @@ export interface BorrowSummary {
   readonly totalCost: bigint;
   readonly feeCeiling: bigint;
   readonly disclosures: readonly string[];
-  readonly requiresDisclosure: boolean;
   /**
    * Leaderboard phase 1: present, and true, only when the prepared batch
    * carries a private placement receipt or tick. The review says so, subtly.
@@ -732,7 +731,6 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
               totalCost: batch.totalCost,
               feeCeiling: batch.totalCost + feeTolerance,
               disclosures: disclosure ? [disclosure] : [],
-              requiresDisclosure: routeRequiresDisclosure(VAULT_BORROW_ROUTE, register),
               ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
             },
           },

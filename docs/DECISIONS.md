@@ -596,7 +596,7 @@ street and make entry indistinguishable is superseded.
 
 ## D-020 — Absolute privacy is the default; every deviation needs approval
 
-**2026-08-16 · Accepted · strengthens D-018 · approval gate completed by D-024**
+**2026-08-16 · Accepted · strengthens D-018 · approval gate completed by D-024 · the disclosure half (requirement 2) superseded by D-118: approval is the whole gate; 2026-10-02: the lead removed the mandatory disclosure strings; copy is product copy, changed freely**
 
 **Context.** D-018 established that every financial building needs an approved
 private execution path. It did not say *how private*, and the routes differ
@@ -748,7 +748,7 @@ Wallet API artifact compatibility with AVNU's live paymaster.
 
 ## D-024 — The approved privacy disclosures are canonical product copy
 
-**2026-08-16 · Accepted · implements D-020**
+**2026-08-16 · Superseded by D-118 · implements D-020 · 2026-10-02: the lead removed the mandatory disclosure strings; copy is product copy, changed freely**
 
 **Context.** D-020 locked every below-private route until the project lead had
 approved both the deviation and plain-language player copy. The project lead
@@ -2885,7 +2885,7 @@ user chose a counter in the Bank, in Endur's look, built now and switched off.
 
 ## D-064 — The lead waives the in-game disclosure for Endur staking
 
-**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only · amended by D-085 (the unstaking note now points at the unstaking counter; the waiver itself is unchanged)**
+**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only · amended by D-085 (the unstaking note now points at the unstaking counter; the waiver itself is unchanged) · the waiver mechanism superseded by D-118 (no route needs a disclosure, so none needs a waiver; staking still shows no pre-commit line)**
 
 **Context.** D-063's staking counter is graded `anonymous`: who staked is
 hidden, while the STRK staked and the xSTRK received are public, as with the
@@ -2922,7 +2922,7 @@ own decision; there is no blanket switch.
 
 ## D-065 — A first transfer reveals its recipient; no note, one recipient per send
 
-**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver**
+**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver · the waiver mechanism superseded by D-118 (the transfer still shows no pre-commit line; the grade and the one-recipient rule stand)**
 
 **Context.** The 2026-09-27 privacy audit verified on mainnet that a first
 transfer to a new recipient opens a channel keyed by the recipient's address:
@@ -5906,7 +5906,7 @@ The windows do not come from STRKWORLD retrying. The click handlers call `sessio
 - **Not reachable yet.** PR 0 adds no door, no room definition and nothing on the street map, so the World never emits `building:entered { arena }`. The lobby refuses `arena` in `normalizePresenceArea` until B lands its ring authority (an entry naming it suspends the session, as a private interior does); `SHARED_AREA_GRIDS.arena` is already the generated grid, so B only deletes the gate. The lobby schema is unchanged until B.
 
 **Consequences.** Entering the arena tells observers there that a player came through the pit, the same inference D-087 accepts for the roof. Watching a fight shows only a presence id already visible to peers, HP and counters; no name, address or amount. Any wager or record feature needs its own decision. Tests: `shared/arena.test.ts` (the grid's dimensions; the presence grid matches the classifier tile for tile and is rebuilt identically; every walkable tile connects to the spawn; the ring interior lies inside its fence, walled except at the gate; the dummy tile is solid and the challenger's rects cover the rest of the interior exactly; tiers 1–5; the snapshot validator's accept, reject and own-data cases), `lobby/areas.test.ts` (the arena is refused until B).
-- A (world scene): _placeholder — `map/arena-pit.test.ts`, `three/arena-pit-builder.test.ts`, `three/arena-room.test.ts`, `presence-area-grids.test.ts`, `world-session-arena.test.ts`._
+- A (world scene): `map/arena-pit.test.ts` (the pit's exact rows at street x 61-75, rows 20-26; rim and bowl solid, the threshold walkable; no invisible wall: every solid tile round it is drawn rim or bowl, every rim tile touches the bowl, the bowl never touches the lawn; the door on the arch reachable from the spawn by the stone path; the return tile (67, 19) walkable and off the door; clear of the plaza, the Studio path and the sandbox fence), `three/arena-pit-builder.test.ts` (exactly four street draw calls, the street at 90 of its 150; nothing between ankle and head height over a walkable tile; the arch clears heads over the threshold and fades alone with its sign as an occluder; no door portal; the braziers flicker deterministically, never below 0.55, slower under reduced motion), `three/arena-room.test.ts` (built by its own builder through `buildFixedRoom`; 12 draw calls, at most 22; one bench per tier tile, 447, in one InstancedMesh; surface heights 0 / 0.4 / 0.8-2.6 per tier, podium 1.0, arcade 3.6, and no step between walkable tiles over 0.45; headroom over every walkable tile measured from its own surface, with the gate open or shut; the south stands fade alone; the gate shuts and its lamp turns red while the ring is held, a cut under reduced motion; the dummy at its tile; sixteen braziers never out; the box relabels but never opens; the presenter stands local feet and the camera on the tiers, eases up the stairs, sits the avatar after 1.5 s idle on a tier, times the swing, holds the battle stance for the fighter, shows the prompt), `presence-area-grids.test.ts` (`ARENA_PRESENCE_GRID` is `ARENA_ROOM_DEFINITION` tile for tile, the ring and the box solid in both; the bunker and the arena are the only shared interiors), `world-session-arena.test.ts` (walking or jumping onto the arch enters; the spawn's `area:moved` comes before `building:entered { arena }`, moves are published and the remote layer is on; the exit puts the player on (67, 19) facing north and clears the ring frame and prompt; the ring is solid unless the arena session opens it, the dummy and the fence always; `leapTo` the ring spawn and return publishes each, ignored outside the arena or off the grid; E (an interaction action behind any focused station, D-117: the emperor's box takes the press first) and a primary click reach the session only in the arena while the World owns input; F locks and the fighting look switches and restores; no channel, no ring). Updated, not weakened: the street's door lists, the room and listener counts, and the jump scenes' baselines (the arrival leap is the view's jump).
 - B (lobby ring): `lobby/arena-rules.test.ts` (idle → claim → countdown → fighting at 3 s → knockout after 10 hits → ended → idle at +4 s with the return; the 90 s timeout with no winner; leave, suspend and area change end as `left`, release as `disconnect`, idle after 1.5 s with no return for a fighter who is gone; a late clock runs every missed deadline; two claims in one turn give exactly one challenger and `busy`; busy in countdown, fighting and ended; off-approach and off-arena claims rejected; the shared 900 ms claim/leave floor; a countdown attack changes nothing but spends the floor; reach 32/45/52 px hit and 53 px miss; the arc at 75° and 76°, facing away, side-on and point-blank; a 10 ms attack spam lands one hit per 400 ms; extra fields, getters and prototypes on the stance are ignored; `round` wraps at 65536), `lobby/arena-area.test.ts` (every arena tile walkable exactly as `arenaTileAt` says; placements in the ring, dummy, fence, gate or void suspend; a non-fighter cannot cross the gate or fence; the fighter walks the ring but not through the fence, gate or dummy; the claim writes the ring spawn and the close the return tile; a stale move is refused; the refresh rule keeps position and facing through a well-formed, off-grid or malformed look change; 48 in the arena are each sent 24 with the fighter first and the rest nearest first; a spectator past the interest box sees everyone; street, roof, Studio and bunker observers are never sent an arena player), `lobby/arena-room.test.ts` (real server and `LobbyClient`: a whole fight by state with a spectator seeing the same swings and HP; a busy claim changes nothing and a disconnect opens the ring; two claims in one turn; a look change racing the claim keeps the room's position; a raw street client never decodes the ring, which joins a view on entry and leaves it on exit; an attack flood past 40 a second disconnects), `lobby/client-arena.test.ts` (intents only from the arena, payload-less, held to their client floors; an attack sends a waiting move first so the room judges the facing the player sees; the snapshot is frozen, stable and fails closed on six kinds of malformed entry; `onArena` isolation; the 32.7/s message budget), `lobby/areas.test.ts` (the arena accepted; the challenger's extra rects in placement and step checks), `lobby/privacy.test.ts` (root fields `arena`, `football`, `peers`, `sandbox`; the ring and slot field sets; a fight with hostile looks and facings leaks nothing, names only the fighter, and a street view never decodes the ring), `lobby/policy.test.ts` (pinned selection; three new verbs and no new server message). With B the lobby accepts `arena`: the gate in `areas.ts` is gone.
 - C (combat client): _placeholder — `arena-session.test.ts`, `arena-fx.test.ts`, `avatar-figure` attack pose, `arena-controller.test.ts`, `ArenaHud.test.tsx`, real-lobby integration._
 
@@ -5916,7 +5916,7 @@ Not verified: a real browser (nothing is reachable until A and B land).
 
 ## D-115 — The way in is a title screen: the live overworld floats behind the wordmark, and each step stacks below it as a simple menu
 
-**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in**
+**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in · amended by D-118: the connect paragraph ("STRKWORLD asks your wallet to do the private part…") removed from the launch menu at the lead's request, 2026-10-02, and the menu restacked without it**
 
 **Context.** The connect flow and the entry gate (D-055, D-072, D-073) were dark `.room` cards on a blank page in rounded system type. D-113 approved a brand built from the game itself, with Cube World's title and menu screens as the reference, and left the web UI's type to a separate change.
 
@@ -6004,7 +6004,32 @@ The lead's decisions:
 
 ---
 
-## D-119 — The private leaderboard's game side (phase 1): receipts on every fee-paying flow, a placement stand by the plaza, and a blind tally, all off by default
+## D-118 — No mandatory disclosures: pre-commit lines are product copy, and approval is the whole privacy gate
+
+**2026-10-02 · Accepted (the lead: "I never asked for privacy disclosures. If there is something forcing we add weird disclosures like this that I do not request, please remove it.") · supersedes D-024 · supersedes D-020's disclosure requirement (its approval gate stands) · supersedes the D-064 and D-065 waiver mechanism · amends D-115 (the connect paragraph is gone from the launch menu)**
+
+**Context.** The lead asked for the launch menu's connect paragraph ("STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it, …") to be removed, then said they never asked for privacy disclosures and that anything forcing them should go. The paragraph itself was ordinary shell copy (`COPY.connect.body`), not a register string. What forced disclosures was elsewhere:
+- D-024 froze the register's `disclosure` strings: changing one needed a decision entry, and `copy.test.ts` failed if shell copy restated one.
+- D-020's second requirement made a disclosure mandatory for every below-`private` route. `isRoutePlayable()` locked a route without one, CI check 8 failed the build ("approved deviation(s) still missing player-facing copy"), and `ConfirmGate` disabled the confirm button when a deviation reached it with none (`requiresDisclosure`, `COPY.notices.disclosureMissing`).
+- D-064 and D-065 added a waiver (`disclosureWaivedBy`, `DISCLOSURE_WAIVERS`) as the only way out.
+
+**Decision.**
+- **The connect paragraph is removed everywhere it showed**: the title screen's wallet card and its capability "Try again" room (`production/ProductionRoot.tsx`), and the in-city connect room (`connect/ConnectRoom.tsx`). The `COPY.connect.body` string is deleted. The no-wallet, wrong-network and unreachable lines still show, since they say what went wrong.
+- **The launch menu restacks without it** (D-115): the wordmark, then ▶ CONNECT WALLET, then the wallet buttons, as one tight centred stack sitting in the upper-middle of the screen.
+- **A register entry's `disclosure` is optional product copy**, changed freely like anything in `copy.ts`. No decision entry is needed to change or remove one.
+- **Approval is the whole privacy gate.** A below-`private` route still needs `approvedBy`, `approvedOn` and `rationale`, or its door stays locked (D-020, check 8). A missing pre-commit line no longer locks a door, fails CI or disables a confirm button.
+- **The waiver machinery is gone**: `disclosureWaivedBy`, `DISCLOSURE_WAIVERS`, `isDisclosureWaived`, `routesAwaitingCopy`, `batchRequiresDisclosure`, `routeRequiresDisclosure`, `ConfirmGate`'s `requiresDisclosure` prop and `COPY.notices.disclosureMissing`.
+- **Tests no longer pin disclosure wording.** Tests that check copy never overclaims privacy (no "untraceable", no hidden-amount claims) stay. They stop copy from promising more than a route delivers; they do not force any text to be shown.
+- **The other pre-commit lines and privacy-themed copy stay on screen for now.** That includes the Bank shield and unshield lines, the Exchange, Bridge, Vault, Borrow and Unstake lines, and the stand-in-address and Plaza explanations. The lead will decide which of them go.
+
+**Consequences.**
+- Copy edits to the register's lines or to shell copy are ordinary product changes.
+- `scripts/privacy-report.sh` now reports grades and approvals only.
+- `observable` is still the reviewer's exact record of what an observer sees. It was never player copy, and it is unchanged.
+
+---
+
+## D-120 — The private leaderboard's game side (phase 1): receipts on every fee-paying flow, a placement stand by the plaza, and a blind tally, all off by default
 
 **2026-10-02 · Accepted (the lead decided what counts, the two modes, the stand, the tally and its storage, and that the lobby gets nothing) · builds on D-116 (the `ReceiptLedger`, live at `0x01517eee…766f8`) · amends D-036 (the frozen `PrivacyOperations` seam gains one method, `checkPlacement`) · amends D-077, D-083, D-084, D-085 (each feature shadow's calls may end with one ledger `tick`) · amends D-014 for one route (the backend keeps a tally of hashes and counts) · keeps D-011 (no placement in lobby traffic, presence or the shared bus) and D-117 (the stand is a plaza station, used with E through the shared interaction system) · adds `VITE_STRK20_LEADERBOARD_ENABLED` (beside D-116's `VITE_STRK20_LEADERBOARD_LEDGER`) and `BACKEND_LEADERBOARD_ENABLED` / `_LEDGER` / `_FILE`, all unset by default**
 

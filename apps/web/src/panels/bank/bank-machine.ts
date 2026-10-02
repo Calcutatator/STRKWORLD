@@ -21,7 +21,6 @@ import {
 } from '../../accumulator/batch-accumulator.js';
 import {
   ROUTE_BY_INTENT_KIND,
-  batchRequiresDisclosure,
   disclosuresForIntents,
   routeDisclosure,
   routeDoor,
@@ -207,18 +206,8 @@ export interface PreparedSummary {
   /** The hard guard passed to `confirm`. Never signs above the quoted total. */
   readonly feeCeiling: bigint;
   readonly warnings: readonly BatchWarning[];
-  /**
-   * Approved disclosures for the routes in `intents`, verbatim from the
-   * register. Carried on the summary so the commit surface cannot render
-   * without them.
-   */
+  /** The register's pre-commit lines for the routes in `intents`, if any. */
   readonly disclosures: readonly string[];
-  /**
-   * Whether any route in `intents` is a below-private deviation, and therefore
-   * whether `disclosures` being empty is a bug rather than a fact. The commit
-   * gate fails closed on the combination.
-   */
-  readonly requiresDisclosure: boolean;
   /**
    * Leaderboard phase 1: present, and true, only when the prepared batch
    * carries a private placement receipt or tick. The review says so, subtly.
@@ -911,7 +900,6 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               feeCeiling: batch.totalCost + feeTolerance,
               warnings: batch.warnings,
               disclosures: disclosuresForIntents(batch.intents, register),
-              requiresDisclosure: batchRequiresDisclosure(batch.intents, register),
               ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
               // `promptCount` is deliberately not carried into the summary:
               // it is a source-derived expectation awaiting the funded run

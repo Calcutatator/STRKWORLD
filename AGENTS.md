@@ -259,11 +259,17 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-119)
+### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-120)
 
 Four traps from wiring the private leaderboard's game side. (1) `shadowAccountAddress` (`calculateContractAddressFromHash`, several Pedersen hashes in JS) costs about 30 ms. Cross-checking all 128 rows of a shadow page took about 4 s per page, in tests and in a browser alike. The count never rests on the addresses (each receipt's commitment is `h(p, n)`, derived locally, and its count is the ledger's), so only the newest deployed row is checked. (2) A value import of `@strkworld/privacy` anywhere in the Shell's eager graph fails `architecture.test.ts` (it pulls `starknet` into the entry chunk), so the placement maths runs inside `checkPlacement` and the Shell imports types only. `PrivacyError` is matched with `toFailure`, never `instanceof`. (3) `PrivacyOperations` is frozen (D-036, `operations.test.ts`): an optional member fails its "every pinned member is a method" type check, so `checkPlacement` is required and rejects while the leaderboard is off. Every test double implementing the seam needed it. (4) The tally's exposure is wider than "links a season's receipts to each other": a shield receipt rides in the shield's transaction, whose `Deposit` names the depositor, so whoever holds `p` can find the account of a player who shielded. Also, `count_of` is `-> u64` (one felt), and `tick` reverts a second receipt in one transaction, so a batch must never carry two.
 
 *Verified:* `npx vitest run --reporter=default` (full suite) and `npx tsc --noEmit -p tsconfig.json`; `leaderboard-operations.test.ts` timed the per-row derivation before the change (2-4 s per test, then time-outs); the ledger's interface was read in `contracts/receipt-ledger/src/lib.cairo`. The stand and its panel were rendered from the dev server with the switch on. Not verified: any of it against a live wallet.
+
+### 2026-10-02 — No disclosure is mandatory any more: approval is the whole privacy gate, and every player-facing line is product copy (D-118)
+
+The lead never asked for privacy disclosures. D-024's frozen strings, D-020's "every deviation must disclose" and the D-064/D-065 waivers are gone. A register entry's `disclosure` is optional copy, edited freely with no decision entry. `isRoutePlayable()`, check 8 and `ConfirmGate` check approval only (`approvedBy`, `approvedOn`, `rationale`). Do not reintroduce a test or check that requires a line to exist or pins its wording. Tests that stop copy overclaiming privacy ("untraceable", hidden amounts) are a different thing and stay. The launch menu's connect paragraph (`COPY.connect.body`) is deleted. The title stack (`.title-front`) is now centred with a deeper bottom padding, plus a portrait rule, so it sits upper-middle without the paragraph.
+
+*Verified:* `npx vitest run --reporter=default` (the full suite), `npm run typecheck`, `bash scripts/check-invariants.sh`, and Chromium WebGL renders of the title screen at 1440×900 and 390×844 (wallet list, no wallets, entry gate).
 
 ### 2026-10-02 — Every station's E goes through one interaction system; register a source or an action there, never a new `keydown-E` listener (D-117)
 
@@ -2106,6 +2112,8 @@ xSTRK views against the Cartridge public RPC; `packages/privacy` and
 `apps/backend` tests pin the action order and the relay's exact admission.
 
 ### 2026-09-27 — A disclosure can be waived only by a decision that names the route (D-064)
+
+*Superseded by D-118 (2026-10-02): no disclosure is required, so the waiver mechanism below no longer exists.*
 
 The privacy register's `disclosureWaivedBy` replaces a deviation's in-game
 disclosure and nothing else: approval, date and rationale are still required,

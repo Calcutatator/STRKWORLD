@@ -1,5 +1,6 @@
 import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, STREET_ORIGIN_X, type BuildingId } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
+import { ARENA_PIT_BUILDING, ARENA_PIT_DOOR, paintArenaPit } from './arena-pit.js';
 import { BUNKER_BUILDING, BUNKER_DOOR, paintBunker } from './bunker.js';
 import { paintPitch } from './pitch.js';
 import { paintPlaza } from './plaza.js';
@@ -34,7 +35,10 @@ export type TileKind =
   | 'footing'
   | 'railing'
   | 'stairhead'
-  | 'service';
+  | 'service'
+  | 'pitrim'
+  | 'pitbowl'
+  | 'pitstep';
 
 export interface TileSpec {
   kind: TileKind;
@@ -94,6 +98,23 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    * (D-107). Solid; the renderer stands both on these.
    */
   service: Object.freeze({ kind: 'service', solid: true, colour: 0x6f6a66 }),
+  /**
+   * The gladiator pit's rim (D-114): a low parapet of weathered blocks round
+   * the sunken bowl, and the arch's gateposts. Solid; the renderer stands the
+   * rim, the posts and the braziers on these.
+   */
+  pitrim: Object.freeze({ kind: 'pitrim', solid: true, colour: 0x8f8574 }),
+  /**
+   * The gladiator pit's sunken bowl (D-114). Solid: nobody walks down into
+   * it, the arch's door takes them into the arena. The street ground skips
+   * these tiles and the pit builder draws the bowl below the lawn.
+   */
+  pitbowl: Object.freeze({ kind: 'pitbowl', solid: true, colour: 0xcdb38a }),
+  /**
+   * The gladiator pit's threshold under its arch (D-114), at pavement
+   * height. Walkable: it carries the arena's door.
+   */
+  pitstep: Object.freeze({ kind: 'pitstep', solid: false, colour: 0x9d9384 }),
 });
 
 /**
@@ -300,6 +321,11 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // Unmarked: no facade, no sign, no label (see bunker.ts).
   paintBunker(tiles);
 
+  // The gladiator pit (D-114): a sunken stone bowl on the east half of the
+  // south lawn, its arch on the north rim and a stone path from the
+  // pavement to it (see arena-pit.ts).
+  paintArenaPit(tiles);
+
   // The football pitch square where the road begins (D-078): its walkway,
   // field and furniture, and the fence on its street side with a gate where
   // the road and both pavements run in (see pitch.ts).
@@ -324,10 +350,13 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     tiles,
     // The hidden stair's top step is a door like the others, so entering and
     // leaving reuse the rooms' machinery; it is added here rather than in the
-    // Tiled layer, whose loader admits only `BUILDINGS` (D-107).
+    // Tiled layer, whose loader admits only `BUILDINGS` (D-107). So is the
+    // gladiator pit's arch (D-114).
     doors: [
       ...objectLayerToDoors(doorObjects, { width, height }),
       { building: BUNKER_BUILDING, ...BUNKER_DOOR, locked: false },
+      // The pit's arch (D-114), likewise a codename building outside `BUILDINGS`.
+      { building: ARENA_PIT_BUILDING, ...ARENA_PIT_DOOR, locked: false },
     ],
     exteriorLabels,
     avatarStudioEntrance: { x: X + 23, y: height - 1, width: 2, height: 1 },

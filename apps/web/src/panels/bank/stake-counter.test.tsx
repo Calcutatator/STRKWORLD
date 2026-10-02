@@ -122,9 +122,8 @@ describe('the staking counter, end to end in demo', () => {
     expect(summary.gasEstimate).toBe(STAKE_GAS);
     expect(summary.totalCost).toBe(POOL_FEE + STAKE_GAS);
     expect(summary.feeCeiling).toBe(POOL_FEE + STAKE_GAS);
-    // D-064: nothing to disclose, and the gate is not told to demand anything.
+    // D-064: no pre-commit line for staking.
     expect(summary.disclosures).toEqual([]);
-    expect(summary.requiresDisclosure).toBe(false);
     expect(summary.warnings.some((warning) => warning.kind === 'public-leg')).toBe(false);
 
     await panel.confirm();
@@ -262,7 +261,6 @@ describe('the staking counter on screen', () => {
     expect(confirm).toBeDefined();
     expect(confirm).not.toContain('disabled');
     expect(markup).not.toContain('commit-disclosures');
-    expect(markup).not.toContain(COPY.notices.disclosureMissing);
     expect(markup).toContain(formatStrkExact(POOL_FEE));
   });
 

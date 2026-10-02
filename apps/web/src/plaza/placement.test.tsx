@@ -225,7 +225,7 @@ describe('the build switch', () => {
 
 describe('the review step\'s quiet line', () => {
   const gate = (countsTowardPlacement?: boolean) => renderToStaticMarkup(
-    <ConfirmGate disclosures={[]} requiresDisclosure={false} busy={false} onConfirm={() => {}} onCancel={() => {}}
+    <ConfirmGate disclosures={[]} busy={false} onConfirm={() => {}} onCancel={() => {}}
       {...(countsTowardPlacement === undefined ? {} : { countsTowardPlacement })} />,
   );
 

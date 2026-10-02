@@ -328,7 +328,7 @@ the swap probe above has passed, with every swap variable from it still set.
 To close it again, unset the five variables and redeploy; the counter then
 says its list is unavailable while the ground floor keeps swapping.
 
-## The private leaderboard probe (leaderboard phase 1)
+## The private leaderboard probe (leaderboard phase 1, D-120)
 
 Off by default, in three pieces that switch on together: the browser's
 receipts and ticks, the placement stand by the plaza, and the backend's blind

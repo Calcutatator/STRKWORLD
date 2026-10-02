@@ -286,7 +286,6 @@ describe('the Vault counter (D-077)', () => {
     expect(review.summary.disclosures).toEqual([
       PRIVACY_REGISTER.find((entry) => entry.route === 'vault.supply')!.disclosure,
     ]);
-    expect(review.summary.requiresDisclosure).toBe(true);
     expect(operations.vaultSubmitted).toEqual([]);
 
     await panel.confirm();

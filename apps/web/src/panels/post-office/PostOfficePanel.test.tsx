@@ -50,14 +50,12 @@ describe('Post Office Menu Mode', () => {
 
   it('runs the privacy gate before resolving the Post Office panel', () => {
     const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
-    // Since D-065 the route is an approved `anonymous` deviation whose
-    // disclosure is waived. Withdrawing either the approval or the waiver
-    // locks the building, whatever else the entry still says.
+    // Since D-065 the route is an approved `anonymous` deviation. Withdrawing
+    // the approval locks the building, whatever else the entry still says.
     expect(resolveRoom('post-office', BUILDING_PANELS).kind).toBe('panel');
     for (const change of [
       { approvedBy: null, approvedOn: null, rationale: null },
-      { disclosureWaivedBy: null },
-      { disclosureWaivedBy: 'D-064' },
+      { approvedBy: null },
     ] satisfies Partial<RouteGrade>[]) {
       const register = [
         ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),

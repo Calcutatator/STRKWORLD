@@ -185,9 +185,10 @@ route is unavailable, the building stays locked rather than unshielding and
 calling from the player's wallet or redirecting to a normal app frontend.
 
 Admission is also graded (D-020): absolute privacy is the default, and any
-route below `private` needs the project lead's recorded approval plus
-player-facing disclosure in `packages/shared/src/privacy-grades.ts` — an
-unapproved or undisclosed deviation renders a locked door, enforced in CI.
+route below `private` needs the project lead's recorded approval in
+`packages/shared/src/privacy-grades.ts` — an unapproved deviation renders a
+locked door, enforced in CI. A route's pre-commit line, if it has one, is
+ordinary product copy, optional and changed freely (D-118).
 Routes that leave player-held value in public (`bridge.deposit`) must offer the
 next step back into the pool via `returnToPool` (D-021). AVNU's private swap is
 the D-023 exception: its public executor leg ends in an OPEN pool note, so the

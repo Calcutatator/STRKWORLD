@@ -300,7 +300,7 @@ function Review({ state, onConfirm, onCancel, onAcknowledge }: { state: Exchange
     { id: 'slippage', label: <GlossaryTerm term={COPY.exchange.slippage} definition={<>{COPY.glossary.slippageFixedAt} {review.slippage} {COPY.glossary.slippageReason}</>} />, value: review.slippage },
     { id: 'expires', label: <GlossaryTerm term={COPY.exchange.expiresAt} definition={COPY.glossary.quoteExpiry} />, value: review.expiresAt },
   ];
-  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} requiresDisclosure countsTowardPlacement={review.countsTowardPlacement === true} busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><div className="exchange-review-summary">
+  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} countsTowardPlacement={review.countsTowardPlacement === true} busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><div className="exchange-review-summary">
     {/* D-103: what you sell, what you should get, the fees on top, the total from the pool, then the rate. */}
     <AmountSummary
       entered={{ label: COPY.exchange.sell, value: review.sell }}

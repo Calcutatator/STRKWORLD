@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Address, Intent } from '@strkworld/privacy';
-import { COPY } from '../copy.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { ConfirmGate } from './ConfirmGate.js';
-import { ROUTE_BY_INTENT_KIND, batchRequiresDisclosure, disclosuresForIntents, findRoute } from './routes.js';
+import { ROUTE_BY_INTENT_KIND, disclosuresForIntents, findRoute } from './routes.js';
 
 /**
- * The commit gate and the narrow waivers of D-064 (staking) and D-065 (the
- * transfer).
- *
- * Every panel feeds `ConfirmGate` the same two derived facts — the batch's
- * approved disclosures and whether it needs any — so the gate is exercised
- * here exactly as the Bank, Exchange and Post Office wire it.
+ * The commit gate shows whatever pre-commit lines the register carries for
+ * the batch, right above the button, and nothing when it carries none. The
+ * lines are product copy (D-118): none of them is required, so an empty list
+ * never blocks the button.
  */
 
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -34,7 +31,6 @@ function gate(intents: readonly Intent[], register: readonly RouteGrade[] = PRIV
   return renderToStaticMarkup(
     <ConfirmGate
       disclosures={disclosuresForIntents(intents, register)}
-      requiresDisclosure={batchRequiresDisclosure(intents, register)}
       busy={false}
       onConfirm={() => {}}
       onCancel={() => {}}
@@ -48,75 +44,42 @@ function confirmButton(markup: string): string {
   return found;
 }
 
-describe('ConfirmGate under the D-064 and D-065 waivers', () => {
-  it('enables confirm for the waived stake route, with no disclosure to show', () => {
-    expect(batchRequiresDisclosure([stake])).toBe(false);
-    expect(disclosuresForIntents([stake])).toEqual([]);
-
-    const markup = gate([stake]);
-    expect(confirmButton(markup)).not.toContain('disabled');
-    expect(markup).not.toContain('commit-disclosures');
-    expect(markup).not.toContain('confirm-blocked');
+describe('ConfirmGate', () => {
+  it('enables confirm for a route with no pre-commit line, and shows no list', () => {
+    for (const intent of [stake, transfer]) {
+      const entry = findRoute(ROUTE_BY_INTENT_KIND[intent.kind])!;
+      expect(entry.disclosure, entry.route).toBeNull();
+      expect(disclosuresForIntents([intent])).toEqual([]);
+      const markup = gate([intent]);
+      expect(confirmButton(markup), entry.route).not.toContain('disabled');
+      expect(markup, entry.route).not.toContain('commit-disclosures');
+    }
   });
 
-  it('still refuses an undisclosed deviation that no decision waived', () => {
-    // The approved copy dropped somewhere between the register and the screen.
+  it('never blocks the button when a deviation carries no line (D-118)', () => {
     const register = withRoute('bank.unshield', { disclosure: null });
-
-    expect(batchRequiresDisclosure([unshield], register)).toBe(true);
     const markup = gate([unshield], register);
-    expect(confirmButton(markup)).toContain('disabled');
-    expect(markup).toContain('class="confirm-blocked"');
-    expect(markup).toContain(COPY.notices.disclosureMissing);
-  });
-
-  it('refuses the stake as well once its waiver is gone: the waiver, not the grade, opens the gate', () => {
-    for (const waiver of [null, '', 'waived', 'D-64']) {
-      const register = withRoute('bank.stake', { disclosureWaivedBy: waiver });
-      expect(batchRequiresDisclosure([stake], register), String(waiver)).toBe(true);
-      expect(confirmButton(gate([stake], register)), String(waiver)).toContain('disabled');
-    }
-    // An unknown route is never "nothing to disclose".
-    const withoutStake = PRIVACY_REGISTER.filter((entry) => entry.route !== 'bank.stake');
-    expect(confirmButton(gate([stake], withoutStake))).toContain('disabled');
-  });
-
-  it('enables confirm for the transfer under D-065, graded anonymous with its disclosure waived', () => {
-    const entry = findRoute(ROUTE_BY_INTENT_KIND.transfer)!;
-    expect(entry).toMatchObject({ grade: 'anonymous', disclosure: null, disclosureWaivedBy: 'D-065' });
-    expect(batchRequiresDisclosure([transfer])).toBe(false);
-    expect(disclosuresForIntents([transfer])).toEqual([]);
-
-    const markup = gate([transfer]);
     expect(confirmButton(markup)).not.toContain('disabled');
     expect(markup).not.toContain('commit-disclosures');
-    expect(markup).not.toContain('confirm-blocked');
+    expect(markup).not.toContain('role="alert"');
   });
 
-  it('refuses the transfer once its waiver is gone or borrowed: the waiver, not the grade, opens the gate', () => {
-    for (const waiver of [null, '', 'D-064', 'D-65']) {
-      const register = withRoute('post-office.transfer', { disclosureWaivedBy: waiver });
-      expect(batchRequiresDisclosure([transfer], register), String(waiver)).toBe(true);
-      const markup = gate([transfer], register);
-      expect(confirmButton(markup), String(waiver)).toContain('disabled');
-      expect(markup, String(waiver)).toContain(COPY.notices.disclosureMissing);
-    }
-    // An unknown route is never "nothing to disclose".
-    const withoutTransfer = PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer');
-    expect(confirmButton(gate([transfer], withoutTransfer))).toContain('disabled');
-  });
-
-  it('is no blanket switch: every other deviation still shows its own disclosure at the gate', () => {
+  it('shows the line a route carries, right above the button', () => {
     for (const intent of [shield, unshield, swap]) {
       const entry = findRoute(ROUTE_BY_INTENT_KIND[intent.kind])!;
-      expect(entry.grade, entry.route).not.toBe('private');
-      expect(entry.disclosureWaivedBy ?? null, entry.route).toBeNull();
-      expect(batchRequiresDisclosure([intent]), entry.route).toBe(true);
-
+      if (!entry.disclosure) continue;
       const markup = gate([intent]);
       expect(markup, entry.route).toContain('data-testid="commit-disclosures"');
-      expect(markup, entry.route).toContain(entry.disclosure!.replaceAll("'", '&#x27;'));
+      expect(markup, entry.route).toContain(entry.disclosure.replaceAll("'", '&#x27;'));
+      expect(markup.indexOf('commit-disclosures'), entry.route).toBeLessThan(markup.indexOf('class="confirm"'));
       expect(confirmButton(markup), entry.route).not.toContain('disabled');
     }
+  });
+
+  it('disables only while busy', () => {
+    const markup = renderToStaticMarkup(
+      <ConfirmGate disclosures={[]} busy onConfirm={() => {}} onCancel={() => {}} />,
+    );
+    expect(confirmButton(markup)).toContain('disabled');
   });
 });

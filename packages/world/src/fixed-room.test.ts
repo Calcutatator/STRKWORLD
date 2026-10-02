@@ -894,8 +894,9 @@ describe('fixed room definitions', () => {
     expect(Object.keys(FIXED_ROOM_DEFINITIONS)).not.toContain('vault');
     expect(FIXED_ROOM_LEVELS.vault).toBeUndefined();
     const alwaysOpen = Object.values(FIXED_ROOM_DEFINITIONS);
-    // The four open buildings' rooms and the hidden room under the alley (D-107).
-    expect(alwaysOpen).toHaveLength(5);
+    // The four open buildings' rooms, the hidden room under the alley (D-107)
+    // and the gladiator pit's arena (D-114).
+    expect(alwaysOpen).toHaveLength(6);
     for (const options of [{}, { vaultOpen: false }, { vaultOpen: 1 as never }, { vaultOpen: 'true' as never }]) {
       expect(fixedRoomDefinitionsFor(options)).toEqual(alwaysOpen);
     }

@@ -11,7 +11,6 @@ import {
   isRouteOpen,
   routeDisclosure,
   routeDoor,
-  routeRequiresDisclosure,
   routeReturnsToPool,
   ROUTE_BY_INTENT_KIND,
   VAULT_BORROW_ROUTE,
@@ -41,7 +40,7 @@ const unapprovedDeviation: RouteGrade = {
   rationale: null,
 };
 
-const approvedButUndisclosed: RouteGrade = { ...approvedDeviation, disclosure: null };
+const approvedWithoutLine: RouteGrade = { ...approvedDeviation, disclosure: null };
 
 describe('route gate', () => {
   it('keeps the canonical register immutable at the Web seam', () => {
@@ -74,8 +73,8 @@ describe('route gate', () => {
     expect(door.reason).toBe('unapproved-route');
   });
 
-  it('locks an approved deviation that has no player-facing copy', () => {
-    expect(routeDoor('vault.supply', [approvedButUndisclosed]).open).toBe(false);
+  it('opens an approved deviation that has no pre-commit line: copy is not part of the gate (D-118)', () => {
+    expect(routeDoor('vault.supply', [approvedWithoutLine]).open).toBe(true);
   });
 
   it('does not admit a route whose identifier is inherited', () => {
@@ -143,15 +142,14 @@ describe('route gate', () => {
     expect(routeDisclosure('bank.shield')).toBe(shield?.disclosure);
   });
 
-  it('opens the transfer only while its D-065 approval and waiver both stand', () => {
+  it('opens the transfer only while its D-065 approval stands', () => {
     const transfer = findRoute('post-office.transfer')!;
-    expect(transfer).toMatchObject({ grade: 'anonymous', approvedBy: 'calc', disclosure: null, disclosureWaivedBy: 'D-065' });
+    expect(transfer).toMatchObject({ grade: 'anonymous', approvedBy: 'calc', disclosure: null });
     expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, null).open).toBe(true);
     for (const change of [
       { approvedBy: null },
       { rationale: null },
-      { disclosureWaivedBy: null },
-      { disclosureWaivedBy: 'D-064' },
+      { approvedOn: null },
     ] satisfies Partial<RouteGrade>[]) {
       const register = PRIVACY_REGISTER.map((entry) => (entry.route === 'post-office.transfer' ? { ...entry, ...change } : entry));
       expect(routeDoor('post-office.transfer', register, null), JSON.stringify(change)).toMatchObject({
@@ -421,11 +419,10 @@ describe('the entry gate deposit route (D-072)', () => {
     allowedTokens: { ...denyAll.allowedTokens, shield: [STRK] },
   };
 
-  it('is registered on its own, with the Bank shield\'s approved disclosure', () => {
+  it('is registered on its own, with the Bank shield\'s pre-commit line', () => {
     expect(ENTRY_SHIELD_ROUTE).toBe('entry.shield');
     expect(findRoute(ENTRY_SHIELD_ROUTE)).toMatchObject({ building: 'bank', grade: 'public-edge', approvedBy: 'calc' });
     expect(routeDisclosure(ENTRY_SHIELD_ROUTE)).toBe(routeDisclosure('bank.shield'));
-    expect(routeRequiresDisclosure(ENTRY_SHIELD_ROUTE)).toBe(true);
   });
 
   it('follows the build\'s shield switch, so it can never pass the policy check open', () => {
@@ -441,7 +438,6 @@ describe('the entry gate deposit route (D-072)', () => {
   it('locks outright when the register loses it or its approval', () => {
     const without = PRIVACY_REGISTER.filter((entry) => entry.route !== ENTRY_SHIELD_ROUTE);
     expect(routeDoor(ENTRY_SHIELD_ROUTE, without, null)).toMatchObject({ open: false, reason: 'unknown-route' });
-    expect(routeRequiresDisclosure(ENTRY_SHIELD_ROUTE, without)).toBe(true);
     const unapproved = PRIVACY_REGISTER.map((entry) => entry.route === ENTRY_SHIELD_ROUTE
       ? { ...entry, approvedBy: null, approvedOn: null, rationale: null }
       : entry);
@@ -472,8 +468,6 @@ describe('the entry gate deposit route (D-072)', () => {
 
   it('leaves the Bank\'s own shield route and the intent mapping unchanged', () => {
     expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
-    expect(routeRequiresDisclosure('post-office.transfer')).toBe(false);
-    expect(routeRequiresDisclosure('bank.stake')).toBe(false);
     expect(buildingDoor('bank').open).toBe(true);
   });
 });
@@ -573,11 +567,9 @@ describe('the Borrow switch (D-083)', () => {
     allowedTokens: { ...denyAll.allowedTokens, vault: [STRK], borrow: tokens },
   });
 
-  it('is its own graded route, with its own disclosure, never the Vault\'s', () => {
+  it('is its own graded route, never the Vault\'s', () => {
     expect(VAULT_BORROW_ROUTE).toBe('vault.borrow');
     expect(findRoute(VAULT_BORROW_ROUTE)?.building).toBe('vault');
-    expect(routeRequiresDisclosure(VAULT_BORROW_ROUTE)).toBe(true);
-    expect(routeDisclosure(VAULT_BORROW_ROUTE)).not.toBe(routeDisclosure('vault.supply'));
     expect(routeReturnsToPool(VAULT_BORROW_ROUTE)).toBe(false);
   });
 
