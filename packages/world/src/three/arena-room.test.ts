@@ -23,7 +23,8 @@ import {
   type ArenaRoomView,
 } from './arena-room.js';
 import { createNullLabelFactory } from './labels.js';
-import { ARENA_SIT_AFTER_MS, arenaSwingPose, createPresenter, roomSurfaceHeightAt } from './presenter.js';
+import { createPresenter, roomSurfaceHeightAt } from './presenter.js';
+import { ARENA_SEAT_IDLE_MS, attackPoseAt } from '../arena-swing.js';
 import { buildFixedRoom } from './room-builder.js';
 import type { AvatarFigure, AvatarFigureFactory, LabelFactory } from './types.js';
 
@@ -441,7 +442,7 @@ describe('the presenter in the arena (D-114)', () => {
   it('sits the local avatar down after standing still on a tier, and swings on cue', () => {
     const world = setup();
     world.view.setPlayerPosition(roomTile(2, 16), true);
-    for (let t = 0; t < ARENA_SIT_AFTER_MS + 100; t += 50) world.presenter.update(50);
+    for (let t = 0; t < ARENA_SEAT_IDLE_MS + 100; t += 50) world.presenter.update(50);
     expect(world.avatar.update.mock.calls.at(-1)![1]).toMatchObject({ seated: true });
     world.view.setPlayerMotion({ vx: 100, vy: 0, sprinting: false });
     world.presenter.update(16);
@@ -477,10 +478,10 @@ describe('the presenter in the arena (D-114)', () => {
   });
 
   it('times a swing in three stages over ARENA_SWING_MS', () => {
-    expect(arenaSwingPose(0)).toEqual({ stage: 'windup', progress: 0 });
-    expect(arenaSwingPose(150)).toEqual({ stage: 'strike', progress: 50 / 120 });
-    expect(arenaSwingPose(285)).toEqual({ stage: 'recover', progress: 0.5 });
-    expect(arenaSwingPose(ARENA_SWING_MS)).toBeNull();
-    expect(arenaSwingPose(-1)).toBeNull();
+    expect(attackPoseAt(0)).toEqual({ stage: 'windup', progress: 0 });
+    expect(attackPoseAt(150)).toEqual({ stage: 'strike', progress: 50 / 120 });
+    expect(attackPoseAt(285)).toEqual({ stage: 'recover', progress: 0.5 });
+    expect(attackPoseAt(ARENA_SWING_MS)).toBeNull();
+    expect(attackPoseAt(-1)).toBeNull();
   });
 });

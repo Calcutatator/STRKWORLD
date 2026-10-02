@@ -162,6 +162,38 @@ suspending; `building:exited` takes it straight back to the street. The lobby
 validates its positions against `BUNKER_PRESENCE_GRID`, with the same move
 floor, jump floor, interest radius and view cap as every other area.
 
+D-114 adds the gladiator pit's arena as a fourth shared room, entered the
+bunker's way (`area:moved`, then `building:entered { building: 'arena' }`),
+and the first shared room with a game in it: a training ring the lobby room
+runs (`LobbyArena` over the pure `@strkworld/lobby/arena` rules), like the
+football. The ring is one view-filtered schema entry sent only to arena
+sessions; three payload-less verbs (`arena:claim`, `arena:attack`,
+`arena:leave`) are the only client input, and hits are judged from the
+room's held position and facing. The client side has three parts:
+
+- **The Shell's arena controller** (`apps/web/src/arena/arena-controller.ts`)
+  adopts each lobby client, like the football's, and exposes one stable
+  `ArenaChannel`: the lobby's validated ring while connected, the same rules
+  run locally for solo play otherwise. The arena HUD (`ArenaHud.tsx`) reads
+  the same channel: the fighter's HP and timer, the countdown, the banners,
+  LEAVE RING (and Esc) and, on touch screens, STRIKE, which goes through the
+  World's own click path so the floor and the local swing apply.
+- **The World's arena session** (`packages/world/src/arena-session.ts`)
+  turns the channel into prompts, intents and leaps through
+  `ArenaSessionHost`: the gate's CLAIM / IN USE (a press-E station, D-117,
+  when the host has the interaction system), attacks on E, a click or STRIKE
+  only while fighting, the client floors, the leap in on a new round as
+  challenger and out at idle, the fighting look and the locked F in between,
+  and the swing echo. The ring interior is walkable only through
+  `isRingTileWalkable`, which A's room `isSolidAt` asks.
+- **The arena fx** (`three/arena-fx.ts`) draws only what the frame says: the
+  damage number is the HP delta (split across coalesced hits), the bar the
+  server's HP, the topple the server's knockout; it flashes, wobbles and
+  topples the room's own dummy. Peers' swings play from the server's swing
+  counter through the remote layer (`playSwing`), the fighter holds the
+  battle stance (`setFighter`), and anyone idle 1.5 s on a tier sits; those
+  poses live in `avatar-figure.ts` and pass the clipping check in every look.
+
 The D-047 Avatar Studio foundation is implemented and user-rendered-accepted
 on localhost as a hidden, non-financial 18×12 room outside `BuildingId` and
 `BUILDINGS`. The south path still ends at a bottom-edge trigger with no facade

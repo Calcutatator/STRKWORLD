@@ -27,7 +27,7 @@ import {
   type AvatarTail,
   type AvatarWeapon,
 } from './avatar-looks.js';
-import type { AvatarFigure, AvatarMotion } from './types.js';
+import type { AttackPose, AvatarFigure, AvatarMotion } from './types.js';
 
 /**
  * Procedural low-poly chibi avatars (D-059): presentation only.
@@ -117,6 +117,39 @@ const GOLDEN_RATIO_FRACTION = 0.618033988749895;
 /** D-097: at the top of a jump the legs swing up this far and the arms rise this far, radians. */
 const JUMP_LEG_TUCK = 0.42;
 const JUMP_ARM_RISE = 0.55;
+
+// D-114: the arena. Angles in radians; a negative x turn swings a limb forward.
+/** The battle stance: feet apart, weapon arm raised ahead, shield arm forward, a slight crouch. */
+const GUARD_LEG_SPREAD = 0.12;
+const GUARD_ARM_RIGHT = -0.55;
+const GUARD_ARM_LEFT = -0.3;
+const GUARD_ARM_OUT = 0.12;
+const GUARD_LEAN = 0.04;
+/** In the stance the gait's arm swing is damped to this share: the weapon stays up. */
+const GUARD_ARM_SWING = 0.3;
+/** The swing (AttackPose): the weapon arm drawn back and out, then driven forward past level. */
+const SWING_WINDUP_ARM = 0.75;
+const SWING_STRIKE_ARM = -1.45;
+/** A pole (staff, halberd, bow) is thrust rather than swung, so its top never sweeps the head. */
+const POLE_WINDUP_ARM = -0.1;
+const POLE_GUARD_ARM = -0.15;
+const POLE_STRIKE_ARM = -0.8;
+/** Shoulder gear (a mantle, pauldrons) caps how far forward the arm rises. */
+const SHOULDER_GEAR_GUARD_ARM = -0.35;
+const SHOULDER_GEAR_STRIKE_ARM = -0.6;
+const SHOULDER_GEAR_WINDUP_ARM = 0.45;
+const SWING_WINDUP_OUT = 0.32;
+const SWING_STRIKE_OUT = 0.14;
+/** Upper-body twist: the weapon shoulder back on the wind-up, through on the strike. */
+const SWING_WINDUP_TWIST = -0.18;
+const SWING_STRIKE_TWIST = 0.18;
+/** The hips lunge forward this far on the strike, world units, and the body leans in. */
+const SWING_LUNGE = 0.1;
+const SWING_LEAN = 0.06;
+/** Seated on a tier: thighs out ahead (a robe's less), the body lowered onto the seat, hands on the knees. */
+const SEAT_LEG = -0.7;
+const SEAT_DROP = 0.12;
+const SEAT_ARM = -0.4;
 
 /** Body proportions per size class, in world units (1 unit = 1 tile). */
 interface BuildDims {
@@ -1848,6 +1881,11 @@ function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
 
+/** Smoothstep: eases in and out of 0..1. */
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
 interface FigurePhases {
   readonly breath: number;
   readonly blink: number;
@@ -1915,6 +1953,17 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   /** D-097: this frame's jump shape. */
   let jumpStretch = 1;
   let jumpTuck = 0;
+  /** D-114: the stance weights (eased) and this frame's swing. */
+  let guardWeight = 0;
+  let seatWeight = 0;
+  let attack: AttackPose | null = null;
+  /** D-114: this look's swing, set by applyLook. */
+  let guardArm = GUARD_ARM_RIGHT;
+  let windupArm = SWING_WINDUP_ARM;
+  let strikeArm = SWING_STRIKE_ARM;
+  /** How far out the wind-up draws the arm; null keeps the stance's. */
+  let windupOut: number | null = SWING_WINDUP_OUT;
+  let guardOut = GUARD_ARM_OUT;
   let disposed = false;
 
   const applyLook = (): void => {
@@ -1944,6 +1993,14 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       : weapon.kind === 'staff' || weapon.kind === 'halberd' || weapon.kind === 'bow'
         ? STEADY_ARM_SWING
         : WEAPON_ARM_SWING;
+    const pole = weapon !== null && (weapon.kind === 'staff' || weapon.kind === 'halberd' || weapon.kind === 'bow');
+    const shoulderGear = findGear(look.outfit, 'mantle') !== undefined || findGear(look.outfit, 'pauldrons') !== undefined;
+    guardArm = pole ? POLE_GUARD_ARM : shoulderGear ? SHOULDER_GEAR_GUARD_ARM : GUARD_ARM_RIGHT;
+    windupArm = pole ? POLE_WINDUP_ARM : shoulderGear ? SHOULDER_GEAR_WINDUP_ARM : SWING_WINDUP_ARM;
+    // A pole stays upright beside the head: drawn out sideways, its top would sweep in.
+    windupOut = pole ? null : SWING_WINDUP_OUT;
+    guardOut = pole ? 0 : GUARD_ARM_OUT;
+    strikeArm = Math.max(pole ? POLE_STRIKE_ARM : SWING_STRIKE_ARM, shoulderGear ? SHOULDER_GEAR_STRIKE_ARM : -Infinity);
   };
 
   /** The build's scale, stretched or squashed by a jump about the feet, volume kept roughly. */
@@ -1989,6 +2046,76 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       armLeftPivot.rotation.z = spread + JUMP_ARM_RISE * jumpTuck;
       armRightPivot.rotation.z = -spread - JUMP_ARM_RISE * jumpTuck;
     }
+    applyArenaPose(spread, swung);
+  };
+
+  /**
+   * D-114: the battle stance, the swing and the seat, layered on the gait.
+   * The swing owns the weapon arm, the twist and the lunge while it plays;
+   * the stance and the seat ease in and out with the gait's time constant.
+   */
+  const applyArenaPose = (spread: number, swung: number): void => {
+    if (guardWeight > 0) {
+      const g = guardWeight;
+      legLeftPivot.rotation.z = GUARD_LEG_SPREAD * g;
+      legRightPivot.rotation.z = -GUARD_LEG_SPREAD * g;
+      // Feet apart lowers the hips a touch, so the soles stay on the ground.
+      hips.position.y -= swung * (1 - Math.cos(GUARD_LEG_SPREAD * g));
+      const damp = 1 - (1 - GUARD_ARM_SWING) * g;
+      armRightPivot.rotation.x = armRightPivot.rotation.x * damp + guardArm * g;
+      armLeftPivot.rotation.x = armLeftPivot.rotation.x * damp + GUARD_ARM_LEFT * g;
+      armRightPivot.rotation.z = -spread - guardOut * g;
+      armLeftPivot.rotation.z = spread + GUARD_ARM_OUT * g * 0.5;
+      upperBody.rotation.x += GUARD_LEAN * g;
+    } else {
+      legLeftPivot.rotation.z = 0;
+      legRightPivot.rotation.z = 0;
+    }
+    hips.position.z = 0;
+    if (attack !== null) {
+      const rest = armRightPivot.rotation.x;
+      const restOut = -armRightPivot.rotation.z;
+      const restTwist = upperBody.rotation.y;
+      const t = Math.min(1, Math.max(0, Number.isFinite(attack.progress) ? attack.progress : 0));
+      let arm: number;
+      let out: number;
+      let twist: number;
+      let lunge: number;
+      if (attack.stage === 'windup') {
+        const e = smooth(t);
+        arm = lerp(rest, windupArm, e);
+        out = lerp(restOut, windupOut ?? restOut, e);
+        twist = lerp(restTwist, SWING_WINDUP_TWIST, e);
+        lunge = 0;
+      } else if (attack.stage === 'strike') {
+        // Fast out of the wind-up, slowing into the hit.
+        const e = 1 - (1 - t) * (1 - t);
+        arm = lerp(windupArm, strikeArm, e);
+        out = lerp(windupOut ?? restOut, SWING_STRIKE_OUT, e);
+        twist = lerp(SWING_WINDUP_TWIST, SWING_STRIKE_TWIST, e);
+        lunge = e;
+      } else {
+        const e = smooth(t);
+        arm = lerp(strikeArm, rest, e);
+        out = lerp(SWING_STRIKE_OUT, restOut, e);
+        twist = lerp(SWING_STRIKE_TWIST, restTwist, e);
+        lunge = 1 - e;
+      }
+      armRightPivot.rotation.x = arm;
+      armRightPivot.rotation.z = -out;
+      // On the move the twist is smaller, so a coat's tail stays clear of the striding legs.
+      upperBody.rotation.y = twist * (1 - 0.85 * walkWeight);
+      upperBody.rotation.x += SWING_LEAN * lunge;
+      hips.position.z = SWING_LUNGE * lunge;
+    }
+    if (seatWeight > 0) {
+      const s = seatWeight;
+      legLeftPivot.rotation.x = lerp(legLeftPivot.rotation.x, SEAT_LEG * strideScale, s);
+      legRightPivot.rotation.x = lerp(legRightPivot.rotation.x, SEAT_LEG * strideScale, s);
+      hips.position.y -= SEAT_DROP * s;
+      armLeftPivot.rotation.x = lerp(armLeftPivot.rotation.x, SEAT_ARM, s);
+      armRightPivot.rotation.x = lerp(armRightPivot.rotation.x, SEAT_ARM, s);
+    }
   };
 
   applyLook();
@@ -2029,6 +2156,15 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
         applyBodyScale();
       }
       jumpTuck = tuck;
+      // D-114: the stance eases like the gait; a seat is never taken mid-swing or on the move.
+      const guard = motion?.guard === true;
+      const pose = motion?.attack;
+      attack = pose && (pose.stage === 'windup' || pose.stage === 'strike' || pose.stage === 'recover') ? pose : null;
+      const seated = motion?.seated === true && !moving && attack === null && !jump;
+      guardWeight += ((guard && !seated ? 1 : 0) - guardWeight) * blend;
+      seatWeight += ((seated ? 1 : 0) - seatWeight) * blend;
+      if (guardWeight < 1e-3) guardWeight = 0;
+      if (seatWeight < 1e-3) seatWeight = 0;
       applyPose();
     },
     dispose(): void {

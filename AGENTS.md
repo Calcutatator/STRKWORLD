@@ -259,6 +259,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — The arena's combat client renders the server's counters and nothing else; the swing had to be tuned per look to pass the clipping check (D-114, stream C)
+
+- **No guessing.** The damage number is the dummy's HP delta between two ring frames, split across the hits counter's delta (two hits coalesced in one 50 ms patch are two numbers). A counted miss (swings up, HP unchanged) shows nothing. The fighter's own swing is a cosmetic prediction; the server's swing counter plays it for spectators, and the fighter's client skips that echo within 400 ms. The first frame after a join, and a new fight, are baselines, so nobody sees a burst of numbers on arrival.
+- **Stable snapshots for React.** `useSyncExternalStore` needs `getSnapshot` to return the same object while nothing changed. `normalizeArenaRing` builds a fresh frozen object on every call, so the arena controller caches its last reading and returns it while the ring reads the same. Without that the HUD re-renders forever.
+- **Clipping decides the swing.** The chibi head is wider than the shoulders and the arms are 0.31 long, so an overhead chop drives the weapon through the head. The swing draws the arm back and out, then drives it forward past level. The limits by look:
+  - A pole (staff, halberd, bow) is thrust, never drawn back or spread, because its top tilts into the head when the hand moves.
+  - Shoulder gear (a mantle, pauldrons) caps the forward angle at -0.6.
+  - The upper-body twist shrinks while walking, because a coat's tail sweeps into the striding leg.
+  - The head never counter-turns, because a beard pierces a fur collar.
+  - Rigid one-piece legs cannot sit on a bench, so "seated" is a perch: thighs 0.7 forward (a robe's legs 0.58 of that) and the body lowered 0.12.
+
+  Every look passes in the stance, at every swing stage standing and walking, and seated (`tools/avatar-clipping.ts` `arenaPoses`).
+- **The dummy is the room's.** Stream A builds the dummy in the arena room: a group named `arena:dummy`, its origin at the post's foot, next to `arena:fx-mount`. The fx adopts it by dep, or by name once it is mounted beside it. It flashes cloned materials, because the room's materials are shared and the whole stand would otherwise flash.
+- **E is shared.** With the press-E system (D-117):
+  - the gate is a station target (`gateTargets`: CLAIM, or IN USE, which sends nothing), carrying the gate's mesh when the host gives it (`gateObject`) so the interaction cues can glow it; no floor tiles or floating prompt for the gate;
+  - the attack is an action (`onAttack`);
+  - the session holds `suspend('combat')` from the new round to idle, so E always attacks in a fight.
+
+  Without the system, the session draws its own prompt.
+- **Fonts.** The HUD takes its faces and colours from `brand/brand.css` (D-115, self-hosted) through `--brand-*` tokens, switches off the game's `font-size-adjust` (D-119) because it sizes its own type, and keeps Jersey 15 to the countdown and banner titles: its small digits merge, so HP and the timer are VT323.
+
+*Verified:* the C line of D-114's tests; the full suite and typecheck with streams A and B merged (A, B and C together on main: 286 files, 6056 tests). One swing timeline (`arena-swing.ts` `attackPoseAt`), one seat rule (`isArenaSeatAt` behind the presenter's room gate, since the Studio and bunker share the arena's pixels) and one attack path (E, a click and STRIKE all reach the session's single floor) serve both streams. Renders of a mid-fight frame from the offline rasterizer, with A's real room, are `renders/arena-fight.png` and `renders/arena-fight-close.png` in the working scratchpad, not committed. Not verified: a real browser.
+
 ### 2026-10-02 — Pixel faces need `font-size-adjust` on cap height, not x-height; a new `:root` token needs every partner theme to re-declare it (D-119)
 
 Traps met moving the game theme to Jersey 15, VT323 and Silkscreen:

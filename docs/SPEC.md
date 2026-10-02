@@ -177,6 +177,7 @@ an arbitrary contract, selector or calldata blob.
 | Bridge | Public funding edge, followed by a separate shield | Active, but never presented as a private app interaction |
 | Privacy Plaza | None: no money moves, and no route is registered (D-076) | Active; its monument shows public pool-wide aggregates and its table a client-only shell game |
 | Football pitch | None: no money moves, no route, no station (D-078) | Active; one shared ball the lobby simulates, kicked with E, and nothing counted per player |
+| Gladiator pit (arena) | None: no money moves, no route, no window; its one station (the Emperor's box) never opens (D-114) | A shared room with a training ring the lobby runs: one fighter at a time against a dummy, everyone else watching; HP and counters only, nothing kept past the fight |
 
 Every active financial route allowlists exact contracts, selectors and tokens;
 validates action limits, quote expiry, minimum output/slippage and fee ceilings;
@@ -402,26 +403,31 @@ financial action, but a nearby observer may infer the chosen building and visit
 timing from the last position and disappearance. The project lead accepts that
 trade-off for v1 (D-019).
 
-### Multiplayer scope (D-087, D-112)
+### Multiplayer scope (D-087, D-112, D-114)
 
 Only the overworld is multiplayer — the street, the sandbox, the football
 pitch and the Privacy Plaza — plus an approved list of shared rooms:
 **the roof of the avnu building** (the Exchange tower's roof, reached by
 lift), **the avatar changing room** (the Avatar Studio), both D-087, and
 **the hidden bunker** under the alley across from the plaza (D-107, public
-since D-112; its out-of-order lift stays locked). Every other interior is a
+since D-112; its out-of-order lift stays locked), and **the gladiator pit's
+arena** on the south lawn (D-114). Every other interior is a
 private solo instance: the Bank, the Vault, the Post Office, the Bridge, and
 the Exchange's ground floor and degen floor suspend presence as before.
 Adding a room to this list needs a decision.
 
-A live player is in exactly one presence area, `street`, `roof`, `studio` or `bunker`,
+A live player is in exactly one presence area, `street`, `roof`, `studio`, `bunker` or `arena`,
 and sees and is seen by players in the same one. One view is one-way on top
 of that: the roof also shows the street's passers-by below, as it did before
 D-087, but street players never see the roof's players, and the Studio, the
 bunker and the street never see one another. The area is the lobby's server-side
 bookkeeping; no wire field names it. No shared room carries money: the roof has no station, the Studio only
 the cosmetic sprite field, and the bunker's only station (its lift) is
-reserved and never opens. Reaching the roof tells observers there that a
+reserved and never opens. The arena's ring is the lobby's: a claim from the
+gate approach, three payload-less intents (claim, attack, leave), hits judged
+from the room's own held position and facing, and a ring entry of HP and
+counters plus the fighter's ephemeral presence id. The client only renders
+that state and sends intents; it never decides a hit. Reaching the roof tells observers there that a
 player came through the Exchange — the same inference D-019 already accepts
 at its door — and their stay on the floors below is bracketed by suspend and
 roof arrival.
@@ -438,7 +444,7 @@ while the pool is small (D-015, D-019).
 ## 7. What the game builds
 
 - **The game itself** — Three.js canvas over a tile-authored world (D-059; Tiled-shaped map data, embedded tilesets per D-008 if exported), React overlay, PWA shell. STRK20 provides zero game primitives.
-- **Colyseus lobby** — presence and position only, in four presence areas (the overworld, the Exchange roof and the Avatar Studio, D-087, and the hidden bunker, D-112), plus two anonymous shared toys on the street: D-060's block sandbox at the road's east end and D-078's football at its west end, whose kick carries no payload. Never sees an address.
+- **Colyseus lobby** — presence and position only, in five presence areas (the overworld, the Exchange roof and the Avatar Studio, D-087, the hidden bunker, D-112, and the gladiator pit's arena, D-114), plus two anonymous shared toys on the street: D-060's block sandbox at the road's east end and D-078's football at its west end, whose kick carries no payload, and the arena's training ring, whose three intents carry none either. Never sees an address.
 - **The Bridge funding edge** — NEAR Intents 1Click orchestration in `packages/bridge`, deposit-only, public by design, followed by a prompted shield (D-009, D-012).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation
