@@ -110,35 +110,61 @@ export function previewHealth(loan: PreviewLoan, assets: PairAssets): PreviewHea
 }
 
 /**
+ * Why nothing can be borrowed (D-102), so "Available to borrow" can always say
+ * a number or a reason: the pair is not offered, a price is stale, there is no
+ * collateral, the loan is already at the Max health target, Vesu has nothing
+ * to lend within its caps, or the loan would sit under Vesu's $10 floor.
+ */
+export type BorrowLimitReason = 'not-offered' | 'stale' | 'no-collateral' | 'at-limit' | 'no-liquidity' | 'below-floor';
+
+export type BorrowCapacity =
+  | { readonly status: 'ok'; readonly amount: bigint }
+  | { readonly status: 'none'; readonly reason: BorrowLimitReason };
+
+/**
  * The most a borrow may add to `loan` (whose collateral already counts any
  * collateral being added) and leave health at `target` or above, within
- * Vesu's debt cap, its utilization ceiling and its $10 floor. Null when
- * nothing can be borrowed or a price is stale.
+ * Vesu's debt cap, its utilization ceiling and its $10 floor; or why nothing
+ * can be (D-102).
  */
+export function borrowCapacity(
+  market: BorrowMarket,
+  pair: BorrowPairChoice,
+  loan: PreviewLoan,
+  target: bigint = MAX_FILL_HEALTH,
+): BorrowCapacity {
+  const none = (reason: BorrowLimitReason): BorrowCapacity => ({ status: 'none', reason });
+  const assets = pairAssets(market, pair);
+  const offered = market.pairs.find((entry) => sameAddress(entry.collateral, pair.collateral) && sameAddress(entry.debt, pair.debt));
+  if (!assets || !offered || offered.debtCap <= 0n) return none('not-offered');
+  const { collateral, debt, maxLtv } = assets;
+  if (!collateral.priceValid || !debt.priceValid || debt.price <= 0n) return none('stale');
+  if (loan.collateralAmount <= 0n) return none('no-collateral');
+  // Vesu's floor on the collateral behind any debt.
+  if (collateralValue(loan.collateralAmount, collateral) <= collateral.floor) return none('below-floor');
+  // debtValue(after) × target ≤ collateralValue × maxLtv, with the seam's base unit more debt.
+  const limitUsd = (collateralValue(loan.collateralAmount, collateral) * maxLtv) / target;
+  const debtLimit = (limitUsd * debt.scale) / debt.price;
+  const byHealth = debtLimit - loan.debtAmount - 1n;
+  if (byHealth <= 0n) return none('at-limit');
+  // The pair's debt cap and the asset's utilization ceiling.
+  const utilizationLimit = (debt.maxUtilization * (debt.reserve + debt.totalDebt)) / SCALE - debt.totalDebt;
+  const amount = min(byHealth, offered.debtCap - offered.totalDebt - 1n, utilizationLimit, debt.reserve);
+  if (amount <= 0n) return none('no-liquidity');
+  // Vesu's floor on the debt after: it must be worth more than it.
+  if (debtValue(loan.debtAmount + amount + 1n, debt) <= debt.floor) return none('below-floor');
+  return { status: 'ok', amount };
+}
+
+/** `borrowCapacity`'s figure alone: null when nothing can be borrowed. */
 export function maxBorrow(
   market: BorrowMarket,
   pair: BorrowPairChoice,
   loan: PreviewLoan,
   target: bigint = MAX_FILL_HEALTH,
 ): bigint | null {
-  const assets = pairAssets(market, pair);
-  const offered = market.pairs.find((entry) => sameAddress(entry.collateral, pair.collateral) && sameAddress(entry.debt, pair.debt));
-  if (!assets || !offered || offered.debtCap <= 0n) return null;
-  const { collateral, debt, maxLtv } = assets;
-  if (!collateral.priceValid || !debt.priceValid || debt.price <= 0n) return null;
-  // debtValue(after) × target ≤ collateralValue × maxLtv, with the seam's base unit more debt.
-  const limitUsd = (collateralValue(loan.collateralAmount, collateral) * maxLtv) / target;
-  const debtLimit = (limitUsd * debt.scale) / debt.price;
-  let amount = debtLimit - loan.debtAmount - 1n;
-  // The pair's debt cap and the asset's utilization ceiling.
-  amount = min(amount, offered.debtCap - offered.totalDebt - 1n);
-  const utilizationLimit = (debt.maxUtilization * (debt.reserve + debt.totalDebt)) / SCALE - debt.totalDebt;
-  amount = min(amount, utilizationLimit, debt.reserve);
-  if (amount <= 0n) return null;
-  // Vesu's floors: the debt after, and the collateral behind it, must each be worth more than theirs.
-  if (debtValue(loan.debtAmount + amount + 1n, debt) <= debt.floor) return null;
-  if (collateralValue(loan.collateralAmount, collateral) <= collateral.floor) return null;
-  return amount;
+  const capacity = borrowCapacity(market, pair, loan, target);
+  return capacity.status === 'ok' ? capacity.amount : null;
 }
 
 /**

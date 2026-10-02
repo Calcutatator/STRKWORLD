@@ -609,6 +609,26 @@ export const COPY = freezeCopy({
       noDebt: '∞',
       maxHint: 'Max keeps your health factor at 1.25 or more. Anything under 1.05 is refused.',
       readLoans: 'Show your loans above to see what you can borrow and your health factor after.',
+      /** D-102: the collateral this pair already holds, and where collateral comes from. Written before the figure: "Your collateral: 0 STRK". */
+      yourCollateral: 'Your collateral',
+      collateralReading: 'reading…',
+      collateralUnread: 'not read yet',
+      collateralSource: 'Your Vault supply is not collateral here. Add collateral below, from your pool balance.',
+      /** Fills the collateral field with the pool balance, less the pool fee in STRK. */
+      maxCollateral: 'Max collateral',
+      addCollateralFirst: 'Add collateral first.',
+      belowFloorHint: "Vesu's smallest loan is worth about $10, so add more collateral.",
+      /** Why "Available to borrow" shows no figure (D-102). */
+      availableWhy: {
+        'loans-loading': 'Reading your loans…',
+        'loans-unread': 'Read your loans first',
+        'no-collateral': 'Add collateral first',
+        stale: 'Price feed stale',
+        'not-offered': 'Not offered right now',
+        'at-limit': 'None at a health factor of 1.25',
+        'no-liquidity': 'Vesu has none to lend right now',
+        'below-floor': "Under Vesu's $10 minimum",
+      },
       tooLow: 'Health factor too low',
       overDebt: 'More than you owe',
       overCollateral: 'More than the loan holds',
@@ -637,7 +657,7 @@ export const COPY = freezeCopy({
     },
     loans: {
       title: 'Your loans',
-      unrequested: 'STRKWORLD reads your loans from the chain only when you ask. Your wallet may ask you first.',
+      unrequested: 'Your loans have not been read. Your wallet may ask you first.',
       show: 'Show my loans',
       loading: 'Reading your loans…',
       again: 'Read my loans again',
