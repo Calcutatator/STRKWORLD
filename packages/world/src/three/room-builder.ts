@@ -96,6 +96,7 @@ import {
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
 import { elevatorBay, netcafeDecor, netcafeProp, netcafeStairs } from './bunker-room.js';
+import { degenCatStandee } from './degen-cat.js';
 
 /**
  * Fixed-room interiors as lit dioramas (D-059).
@@ -411,7 +412,7 @@ interface StationView {
   /** A free-standing counter's spinning status beacon; a built-in one's light is part of its status mesh (D-104). */
   readonly beacon: Mesh | null;
   readonly label: TextLabel;
-  /** D-107: a line shown only while the player stands at the counter (the hidden room's lift), or none. */
+  /** D-107: a line shown only after E at the counter (the hidden room's lift, D-117), or none. */
   readonly prompt: TextLabel | null;
   readonly phase: number;
   readonly looks: StationLooks;
@@ -638,7 +639,9 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
       : looks.locked;
   view.look = look;
   view.highlighted = highlighted;
-  if (view.prompt) view.prompt.object.visible = highlighted;
+  // D-117: the lift's "Out of order" shows once E asked for it, while the
+  // player still stands there; walking up only lights the counter.
+  if (view.prompt) view.prompt.object.visible = presentation.notice === true;
   view.accent.color.setHex(look.color);
   view.accent.emissive.setHex(look.emissive);
   view.accent.emissiveIntensity = look.emissiveIntensity;
@@ -917,8 +920,8 @@ function buildBuiltInStation(
   label.object.rotation.z = built.sign.roll ?? 0;
   label.object.userData['station'] = station.station;
   group.add(label.object);
-  // D-107: a line that floats over the counter only while the player stands
-  // at it (the lift's "Out of order"); hidden otherwise.
+  // D-107: a line that floats over the counter only once E asked for it
+  // (the lift's "Out of order", D-117); hidden otherwise.
   let prompt: TextLabel | null = null;
   if (built.prompt && dress.prompt) {
     prompt = labels.floating(dress.prompt.text, dress.prompt.style);
@@ -1382,12 +1385,15 @@ const ENDUR_BOOTH_NAME: SignStyleOptions = Object.freeze({
  */
 interface RoomFurniture {
   readonly bin: GeometryBin;
+  /** The room's group, for the few pieces that need a mesh of their own. */
+  readonly parent: Group;
   sign(text: string, style: SignStyleOptions, at: Vec3, yaw: number): Object3D;
 }
 
 function roomFurniture(bin: GeometryBin, labels: LabelFactory, textLabels: TextLabel[], parent: Group): RoomFurniture {
   return {
     bin,
+    parent,
     sign(text, style, at, yaw) {
       const label = labels.sign(text, style);
       textLabels.push(label);
@@ -2669,7 +2675,7 @@ function decorateRoom(
       avnuDecor(theme, shell, map, res, animators);
       return;
     case 'degen':
-      degenDecor(theme, shell, map, res, animators, labels, textLabels, images);
+      degenDecor(theme, shell, map, res, animators, labels, textLabels, images, furniture);
       return;
     case 'post-office':
       postOfficeDecor(theme, shell, map);
@@ -2891,8 +2897,10 @@ function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMa
  * The Degen floor: avnu's navy and indigo, turned up. Neon runs along every
  * wall, DEGEN MODE glows behind the counter over an LED run, and the walls
  * carry a poster per `DEGEN_TOKENS` entry: the project's own art in a neon
- * frame of its colour. Nothing here is a price, a chart or an arrow: the
- * World must not know what money is (AGENTS.md §4).
+ * frame of its colour. In the back room behind the counter stands a
+ * cardboard cutout of the crying cat (`degen-cat.ts`). Nothing here is a
+ * price, a chart or an arrow: the World must not know what money is
+ * (AGENTS.md §4).
  */
 function degenDecor(
   theme: RoomTheme,
@@ -2903,6 +2911,7 @@ function degenDecor(
   labels: LabelFactory,
   textLabels: TextLabel[],
   images: ImageTextureLoader | null,
+  furniture: RoomFurniture,
 ): void {
   const north = shell.walls.north;
   const nf = north.face;
@@ -2930,6 +2939,8 @@ function degenDecor(
     const slot = DEGEN_POSTER_SLOTS[index]!;
     degenPoster(shell.walls[slot.wall], slot.u, token, res, labels, textLabels, images);
   });
+  // The lead's crying cat, a cardboard standee in the back room behind the counter.
+  degenCatStandee(furniture.bin, furniture.parent, res, images);
   // Neon tubes up the side walls, between and beside the posters.
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const u of [2.9, 9.9]) {

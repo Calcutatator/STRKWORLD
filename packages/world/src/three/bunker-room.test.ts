@@ -44,12 +44,13 @@ function labelsIn(root: Object3D): Object3D[] {
   return found;
 }
 
-function state(highlighted: boolean): FixedRoomState {
+function state(highlighted: boolean, notice = false): FixedRoomState {
   return {
     inRoom: true,
     building: 'bunker',
     controlOwner: 'world',
     highlightedStation: highlighted ? BUNKER_ELEVATOR_STATION : null,
+    noticeStation: notice ? BUNKER_ELEVATOR_STATION : null,
     stations: [{ station: BUNKER_ELEVATOR_STATION, label: map.stations[0]!.label, status: 'locked' }],
   };
 }
@@ -73,7 +74,7 @@ describe('the hidden room\'s presentation (D-107)', () => {
     room.dispose();
   });
 
-  it('tapes the paper sign across the lift\'s doors and floats "Out of order" only while the player stands at it', () => {
+  it('tapes the paper sign across the lift\'s doors and floats "Out of order" only after E there (D-117)', () => {
     const room = build();
     const group = room.group.getObjectByName(`station:${BUNKER_ELEVATOR_STATION}`)!;
     const labels = labelsIn(group);
@@ -85,7 +86,11 @@ describe('the hidden room\'s presentation (D-107)', () => {
     expect(prompt.userData['text']).toBe(BUNKER_ELEVATOR_MESSAGE);
     expect(prompt.userData['options']).toEqual(NETCAFE_ELEVATOR_PROMPT);
     expect(prompt.visible).toBe(false);
+    // Walking up only lights the counter; the shared "E · LIFT" prompt is the session's.
     room.setStations(fixedRoomStationPresentations(map, state(true)));
+    expect(prompt.visible).toBe(false);
+    expect(group.userData['highlighted']).toBe(true);
+    room.setStations(fixedRoomStationPresentations(map, state(true, true)));
     expect(prompt.visible).toBe(true);
     expect(group.userData['status']).toBe('locked');
     room.setStations(fixedRoomStationPresentations(map, state(false)));

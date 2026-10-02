@@ -7,8 +7,22 @@ the DeFi flows that run through shadow accounts. Players count their own
 receipts privately, at the stand near the plaza. The contract never learns, and
 never publishes, which account a receipt belongs to.
 
-Mainnet, once deployed: `0x2ff2a244894a28c72d8ac838038bcaa7a1dab84a68ff073ca4c854cbe8f7346`
-(class `0x74839e69fc00592d88c19283a5b8880fd34770e52d736bc1569a06b3a104199`).
+**Deployed on mainnet 2026-10-02:** `0x01517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8`
+(class `0x2ae831b0a7419a934c5631b65b78b7beabb08dc0607e0ab08f9c237a2612173`; declare tx
+`0x1c17b124…b9fb147`, deploy tx `0x014f6762…800514e`). Verified on-chain: `anonymizer()` and
+`pool()` return the canonical anonymizer and the STRK20 pool, `leaf_count()` is 0.
+
+How it was deployed, and what did not work:
+- Ready X would not sign the DECLARE from the page (Confirm stayed disabled). The page's
+  compiled class hash, from Scarb 2.13.1's CASM, also did not match what the sequencer
+  compiles from the same Sierra (mainnet v0.14.3), so a declare carrying it is rejected
+  with "Mismatch compiled class hash".
+- It was declared and deployed with **sncast 0.64.0** (universal-sierra-compiler 2.10.1)
+  from a throwaway OpenZeppelin deployer account the lead created and funded. sncast hashes
+  Scarb's ABI its own way, giving class `0x2ae831b0…2612173`; the UDC deploy (salt
+  `'strkworld-lb-ledger-v1'`, not unique) landed at the address above.
+- The page below is kept for reference but is not the route that worked. Use sncast 0.64+
+  for any redeploy.
 The address is fixed in advance: see [How the address is fixed](#how-the-address-is-fixed).
 
 ## What it does

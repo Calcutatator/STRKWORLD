@@ -177,13 +177,15 @@ describe('WorldSession block sandbox (D-060)', () => {
     expect(world.recording.last('setCarried')).toEqual([null]);
   });
 
-  it('adds nothing without a sandbox channel: no block key and no sandbox calls', () => {
+  it('adds nothing without a sandbox channel: E does nothing there and no sandbox calls', () => {
     const keyboard = fakeKeyboard();
     const recording = recordingView();
     const session = createWorldSession({ view: recording.view, keyboard });
     place(session, centre(X, Y));
     session.update(16);
-    expect(keyboard.count('keydown-E')).toBe(0);
+    // D-117: the session's one E key, with no sandbox action behind it.
+    expect(keyboard.count('keydown-E')).toBe(1);
+    expect(session.interact()).toBe(false);
     expect(recording.count('setSandboxColumns')).toBe(0);
     expect(recording.count('setSandboxAim')).toBe(0);
   });

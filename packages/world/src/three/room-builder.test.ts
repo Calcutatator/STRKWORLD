@@ -85,6 +85,7 @@ import {
   degenPosterStyle,
   type InteriorOccluder,
 } from './room-builder.js';
+import { DEGEN_CAT_CUTOUT } from './degen-cat.js';
 import type { ImageTextureLoader, LabelFactory, RoomView } from './types.js';
 
 /** Every ground floor a World can build, the opened Vault's included (D-077). */
@@ -1144,8 +1145,9 @@ describe('the Exchange tower floors', () => {
     const images = deferredImages();
     const room = buildFixedRoom(degenMap, createNullLabelFactory(), ROOM_ORIGIN, images.loader);
     room.group.updateMatrixWorld(true);
-    // One request per poster, for that token's bundled art, in the list's order.
-    expect(images.requests.map((request) => request.url)).toEqual(DEGEN_TOKENS.map((token) => token.poster));
+    // One request per poster, for that token's bundled art, in the list's order,
+    // then the cat standee's cutout.
+    expect(images.requests.map((request) => request.url)).toEqual([...DEGEN_TOKENS.map((token) => token.poster), DEGEN_CAT_CUTOUT]);
     // While the art loads the stand-ins show: the planes wait hidden, and no board spends a call.
     const posters = postersIn(room.group);
     expect(posters.map((poster) => poster.userData['poster']).sort()).toEqual(DEGEN_TOKENS.map((token) => token.ticker).sort());
@@ -1178,10 +1180,11 @@ describe('the Exchange tower floors', () => {
       expect(position.y).toBeCloseTo(DEGEN_POSTER_BOTTOM + DEGEN_POSTER_SIZE.height / 2);
       expect(poster.rotation.y).toBeCloseTo(FACING[slot.wall]);
     });
-    // Art replaces boards one for one, so the floor keeps its budget.
+    // Art replaces boards one for one, so the floor keeps its budget; the
+    // standee's face is the one call art adds, over bare cardboard.
     expect(labelsIn(room.group, 'token')).toEqual([]);
     const standIn = buildFixedRoom(degenMap, createNullLabelFactory());
-    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group));
+    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group) + 1);
     standIn.dispose();
     room.dispose();
   });
@@ -1224,7 +1227,7 @@ describe('the Exchange tower floors', () => {
     expect(boards.map((board) => board.userData['text'])).toEqual([`${failing.ticker}\n${failing.name}`]);
     expect(boards[0]!.userData['options']).toEqual(degenPosterStyle(failing));
     const standIn = buildFixedRoom(degenMap, createNullLabelFactory());
-    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group));
+    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group) + 1);
     standIn.dispose();
     room.dispose();
     // A loader that throws outright is a failed load too, never a broken room.

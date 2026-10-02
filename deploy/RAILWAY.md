@@ -94,7 +94,10 @@ Exchange stays locked. Leave
 Leave `VITE_STRK20_LEADERBOARD_LEDGER` unset (D-116). It is the address of
 the private leaderboard's `ReceiptLedger` contract
 (`contracts/receipt-ledger/README.md`), set only once the lead has deployed it
-and the web side sends receipts; unset, no action carries a receipt.
+and the web side sends receipts; unset, no action carries a receipt. The
+mainnet ledger is deployed at
+`0x01517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8`; that is
+the value to set when the leaderboard is switched on.
 
 ## After it deploys
 

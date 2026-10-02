@@ -33,7 +33,9 @@ describe('station hint', () => {
       expect(markup, building).toContain(COPY.guide.stationHint);
       expect(markup, building).toContain('role="note"');
     }
-    expect(COPY.guide.stationHint).toContain('walk up');
+    expect(COPY.guide.stationHint).toContain('Walk up');
+    // D-117: counters open on E, never by walking up alone.
+    expect(COPY.guide.stationHint).toContain('press E');
     expect(COPY.guide.stationHint).toContain(COPY.gameMode.menu);
   });
 

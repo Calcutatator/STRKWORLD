@@ -158,12 +158,15 @@ export interface PitchView {
   setScore(west: number, east: number): void;
 }
 
-/** What the session changes on the Privacy Plaza (D-076): its figures and its E prompt. */
+/** What the session changes on the Privacy Plaza (D-076): its figures. */
 export interface PlazaView {
   /** Redraw the monument's faces; a null part reads "…". */
   setStats(stats: PlazaStatsPresentation): void;
-  /** Show the E prompt over this station, or over none. */
-  setHighlight(station: StationId | null): void;
+  /**
+   * D-117: how high the shared E prompt floats over this station, world
+   * units above the street, or null for a station the plaza does not draw.
+   */
+  promptHeight(station: StationId): number | null;
 }
 
 export interface RoomView {

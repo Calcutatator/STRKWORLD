@@ -945,12 +945,12 @@ export const COPY = freezeCopy({
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
       { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you.' },
       { input: 'F', effect: 'Swap your outfit.' },
-      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at. On the football pitch, kick the ball when E · KICK shows.' },
+      { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, an outfit in the Avatar Studio. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
     ],
     buildingsTitle: 'Inside a building',
     buildings:
-      'Walk through a door to go in. A lit counter opens when you walk up to it; a grey one is not open in this build yet, and Menu Mode says why. Walk back out, or press Leave building, to return to the street.',
+      'Walk through a door to go in. Walk up to a lit counter and press E when its prompt shows to open it; a grey one is not open in this build yet, and Menu Mode says why. Walk back out, or press Leave building, to return to the street.',
     routeTitle: 'A first route',
     /** Shown step by step, only while each route is open in this build (`hud/guide-route.ts`). */
     route: {
@@ -972,7 +972,7 @@ export const COPY = freezeCopy({
     pitch:
       'The road begins at a football pitch with one ball for everyone there. Walk into the ball to dribble it, or press E when E · KICK shows to kick it away from you. West shoots east and East shoots west; the first side to 5 wins, and the score starts again from 0–0.',
     dismiss: 'Got it',
-    stationHint: 'Lit counters open when you walk up to them; grey ones are not open yet. Menu Mode opens the full menu.',
+    stationHint: 'Walk up to a lit counter and press E to open it; grey ones are not open yet. Menu Mode opens the full menu.',
   },
 
   /** Next-step prompts (`panels/next-step.ts`) and the D-021 Bridge nudge. */
