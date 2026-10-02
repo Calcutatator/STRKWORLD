@@ -162,7 +162,7 @@ describe('the Exchange swap: the live quote', () => {
     swapReview: { expectedAmountOut: 2n * ONE, slippageBps: 50, expiresAt: FAR, ...(priceCheck ? { priceCheck } : {}) },
   });
 
-  it('fills the read-only Buy side, the USD values, the rate and the four rows, then Review takes that quote', async () => {
+  it('fills the read-only Buy side, the USD values, the rate and the three rows, then Review takes that quote', async () => {
     const operations = quoted({ status: 'checked', boundBps: 300, shortfallBps: 42, sellUsd: 4_310_000_00n, expectedBuyUsd: 4_291_900_00n });
     const prepare = vi.spyOn(operations, 'prepare');
     await open(operations);
@@ -177,8 +177,8 @@ describe('the Exchange swap: the live quote', () => {
       [COPY.exchange.receiveAtLeast]: '1.99 ETH',
       [COPY.exchange.priceImpact]: '0.42%',
       [COPY.bank.poolFee]: '6 STRK',
-      [COPY.exchange.route]: COPY.exchange.routeAvnu,
     });
+    expect(container!.textContent).not.toContain('via avnu');
     expect(submit().textContent).toBe(COPY.exchange.review);
 
     await click(button(COPY.kit.invert));

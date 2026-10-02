@@ -203,7 +203,6 @@ function QuoteDetails({ quote, feeInSellToken }: { quote: ReadyQuote; feeInSellT
       value: quote.summary.poolFee,
       ...(feeInSellToken ? {} : { note: COPY.exchange.poolFeeToken }),
     },
-    { id: 'route', label: COPY.exchange.route, value: COPY.exchange.routeAvnu },
   ];
   return <div className="exchange-quote" data-stale={quote.stale ? 'true' : undefined}>
     <p className="exchange-rate"><span className="ui-visually-hidden">{COPY.exchange.rate}: </span><InvertibleRate forward={quote.summary.rate} inverse={quote.summary.inverseRate} /></p>
@@ -281,20 +280,35 @@ function DegenBoard({ assets }: { assets: readonly ExchangeAsset[] }) {
   </section>;
 }
 
+/**
+ * The review: what you sell, what you should get and the rate, and nothing
+ * else until the player opens Details. Safety stays outside the disclosure:
+ * the no-price-check warning and its acknowledgement, and (inside ConfirmGate,
+ * above the button) the register's D-024 disclosures. Every figure is still
+ * rendered, so opening Details only reveals them.
+ */
 function Review({ state, onConfirm, onCancel, onAcknowledge }: { state: ExchangeState; onConfirm: () => void; onCancel: () => void; onAcknowledge: (value: boolean) => void }) {
   const flow = state.flow; if (flow.name !== 'review' && flow.name !== 'submitting') return null;
   const review = flow.summary;
   const unchecked = review.priceCheck === 'unchecked';
-  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} requiresDisclosure busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><dl>
-    <dt>{COPY.exchange.sell}</dt><dd>{review.sell}{review.sellUsd ? <span className="exchange-usd"> {review.sellUsd}</span> : null}</dd>
-    <dt>{COPY.exchange.expectedBuy}</dt><dd>{review.expectedBuy}{review.expectedBuyUsd ? <span className="exchange-usd"> {review.expectedBuyUsd}</span> : null}</dd>
+  const rows: DetailRow[] = [
+    ...(review.sellUsd ? [{ id: 'sell-value', label: `${COPY.exchange.sell}: ${COPY.exchange.usdValue}`, value: review.sellUsd }] : []),
+    ...(review.expectedBuyUsd ? [{ id: 'buy-value', label: `${COPY.exchange.expectedBuy}: ${COPY.exchange.usdValue}`, value: review.expectedBuyUsd }] : []),
+    // An unchecked pair's warning is shown above, outside this disclosure.
+    ...(unchecked ? [] : [{ id: 'price-check', label: COPY.exchange.priceCheck, value: <span className="exchange-price-check" data-status={review.priceCheck}>{review.priceCheckNote}</span> }]),
+    { id: 'minimum', label: <GlossaryTerm term={COPY.exchange.protectedMinimum} definition={COPY.glossary.protectedMinimum} />, value: review.protectedMinimum },
+    { id: 'slippage', label: <GlossaryTerm term={COPY.exchange.slippage} definition={<>{COPY.glossary.slippageFixedAt} {review.slippage} {COPY.glossary.slippageReason}</>} />, value: review.slippage },
+    { id: 'expires', label: <GlossaryTerm term={COPY.exchange.expiresAt} definition={COPY.glossary.quoteExpiry} />, value: review.expiresAt },
+    { id: 'fee', label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />, value: review.poolFee },
+    { id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: review.networkCost },
+    { id: 'total', label: COPY.bank.total, value: review.total, tone: 'emphasis' },
+  ];
+  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} requiresDisclosure busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><dl className="exchange-review-summary">
+    <dt>{COPY.exchange.sell}</dt><dd>{review.sell}</dd>
+    <dt>{COPY.exchange.expectedBuy}</dt><dd>{review.expectedBuy}</dd>
     <dt>{COPY.exchange.rate}</dt><dd>{review.rate}</dd>
-    <dt>{COPY.exchange.priceCheck}</dt><dd className="exchange-price-check" data-status={review.priceCheck}>{review.priceCheckNote}</dd>
-    <dt><GlossaryTerm term={COPY.exchange.protectedMinimum} definition={COPY.glossary.protectedMinimum} /></dt><dd>{review.protectedMinimum}</dd>
-    <dt><GlossaryTerm term={COPY.exchange.slippage} definition={<>{COPY.glossary.slippageFixedAt} {review.slippage} {COPY.glossary.slippageReason}</>} /></dt><dd>{review.slippage}</dd>
-    <dt><GlossaryTerm term={COPY.exchange.expiresAt} definition={COPY.glossary.quoteExpiry} /></dt><dd>{review.expiresAt}</dd>
-    <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt><dd>{review.poolFee}</dd>
-    <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt><dd>{review.networkCost}</dd>
-    <dt>{COPY.bank.total}</dt><dd>{review.total}</dd>
-  </dl>{unchecked ? <label className="exchange-acknowledge" role="alert"><input type="checkbox" checked={state.priceAcknowledged} disabled={flow.name === 'submitting'} onChange={(event) => onAcknowledge(event.target.checked)} /> {COPY.exchange.acknowledgeUnchecked}</label> : null}</ConfirmGate></div>;
+  </dl>
+  {unchecked ? <p className="exchange-price-check" data-status={review.priceCheck} role="note">{review.priceCheckNote}</p> : null}
+  <details className="exchange-review-details"><summary>{COPY.exchange.details}</summary><DetailRows rows={rows} label={COPY.exchange.details} /></details>
+  {unchecked ? <label className="exchange-acknowledge" role="alert"><input type="checkbox" checked={state.priceAcknowledged} disabled={flow.name === 'submitting'} onChange={(event) => onAcknowledge(event.target.checked)} /> {COPY.exchange.acknowledgeUnchecked}</label> : null}</ConfirmGate></div>;
 }
