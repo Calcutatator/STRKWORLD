@@ -206,7 +206,8 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     // D-024: the approved words, verbatim, previewed while composing.
     expect(borrow.querySelector('[data-testid="disclosure"]')?.textContent).toBe(disclosureOf('vault.borrow'));
     expect(borrow.querySelector('.borrow-risk')?.textContent).toContain(COPY.borrow.risk.lines[1]);
-    expect(borrow.textContent).toContain(COPY.borrow.loans.unrequested);
+    // D-102: the loans are read on opening, with no button to press first.
+    expect(borrow.querySelector('.borrow-loans')?.textContent).toContain(COPY.borrow.loans.empty);
 
     await choose('debt', USDC);
     await type('collateral-amount', '10000');

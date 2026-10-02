@@ -13,6 +13,7 @@ import {
   MAX_FILL_HEALTH,
   PREVIEW_MIN_HEALTH,
   PREVIEW_WARNING_HEALTH,
+  borrowCapacity,
   maxBorrow,
   maxWithdraw,
   pairAssets,
@@ -140,6 +141,25 @@ describe('the Borrow form preview (D-089)', () => {
     // 100 STRK at $0.0414 backs about $2.25 at 1.25: under Vesu's $10 floor, so nothing to fill.
     expect(maxBorrow(market(), STRK_USDC, { collateralAmount: 100n * E18, debtAmount: 0n })).toBeNull();
     expect(maxBorrow(market({ strk: { priceValid: false } }), STRK_USDC, loan)).toBeNull();
+  });
+
+  it('says why nothing can be borrowed, so "Available to borrow" always has a figure or a reason (D-102)', () => {
+    const none = { collateralAmount: 0n, debtAmount: 0n };
+    const backed = { collateralAmount: 100_000n * E18, debtAmount: 0n };
+    expect(borrowCapacity(market(), STRK_USDC, none)).toEqual({ status: 'none', reason: 'no-collateral' });
+    expect(borrowCapacity(market({ strk: { priceValid: false } }), STRK_USDC, backed)).toEqual({ status: 'none', reason: 'stale' });
+    expect(borrowCapacity(market({ pairs: [pair(STRK, USDC, 680_000_000_000_000_000n, { debtCap: 0n })] }), STRK_USDC, backed))
+      .toEqual({ status: 'none', reason: 'not-offered' });
+    // 100 STRK at $0.0414 is worth $4.14: under Vesu's $10 collateral floor.
+    expect(borrowCapacity(market(), STRK_USDC, { collateralAmount: 100n * E18, debtAmount: 0n })).toEqual({ status: 'none', reason: 'below-floor' });
+    // 300 STRK ($12.42) clears the collateral floor but backs about $6.75 at 1.25: under the $10 debt floor.
+    expect(borrowCapacity(market(), STRK_USDC, { collateralAmount: 300n * E18, debtAmount: 0n })).toEqual({ status: 'none', reason: 'below-floor' });
+    // A loan already at or past 1.25 has nothing more at Max.
+    expect(borrowCapacity(market(), STRK_USDC, { collateralAmount: 1_000n * E18, debtAmount: 25n * USDC_ONE })).toEqual({ status: 'none', reason: 'at-limit' });
+    expect(borrowCapacity(market({ usdc: { reserve: 0n } }), STRK_USDC, backed)).toEqual({ status: 'none', reason: 'no-liquidity' });
+    // And a figure, the same as maxBorrow's, whenever there is one.
+    const capacity = borrowCapacity(market(), STRK_USDC, backed);
+    expect(capacity).toEqual({ status: 'ok', amount: maxBorrow(market(), STRK_USDC, backed) });
   });
 
   it('fills a withdrawal Max the seam accepts, and the whole collateral when nothing is owed', () => {

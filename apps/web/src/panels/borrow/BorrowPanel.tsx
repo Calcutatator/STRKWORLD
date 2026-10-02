@@ -19,6 +19,7 @@ import { GlossaryTerm } from '../Glossary.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
 import { AmountField, BeforeAfter, DetailRows, checkAmount, primaryAction, type AmountCheck, type DetailRow, type DetailTone } from '../kit/index.js';
+import { feeReserve, maxAfterReserve, maxBasis } from '../kit/amount-math.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { voyagerContractUrl } from '../vault/vault-machine.js';
 import {
@@ -27,6 +28,7 @@ import {
   createBorrowPanel,
   loanFor,
   maxLtvFor,
+  poolBalanceFor,
   takesEverything,
   tidyBorrowAmount,
   type BorrowMode,
@@ -35,7 +37,7 @@ import {
   type BorrowState,
   type BorrowTokenView,
 } from './borrow-machine.js';
-import { maxBorrow, maxWithdraw, pairAssets, previewHealth, type PreviewHealth, type PreviewLoan } from './borrow-preview.js';
+import { borrowCapacity, maxWithdraw, pairAssets, previewHealth, type BorrowLimitReason, type PreviewHealth, type PreviewLoan } from './borrow-preview.js';
 
 /** Vesu's × 10^18 fraction as a percentage: "68.00%". */
 export function formatLtv(value: bigint): string {
@@ -123,7 +125,7 @@ export function BorrowPanel({
 
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const gateBlocked = uncertaintyState.active && !uncertaintyState.acknowledged;
-  const attention = state.loans.status === 'loading'
+  const attention = state.loans.status === 'loading' || state.balances.status === 'loading'
     ? 'connect'
     : state.flow.name === 'submitting' && state.flow.stage === 'awaiting-approval'
       ? 'confirm'
@@ -235,7 +237,7 @@ function tokenOf(state: BorrowState, token: string): BorrowTokenView | undefined
 }
 
 /**
- * The loans, read when the player asks: each with its collateral and debt,
+ * The loans, read when the counter opens (D-102) or again on request: each with its collateral and debt,
  * its LTV against the pair's max, its health and the price at which it turns
  * liquidatable, and the band it is in. The stand-in address is public, and
  * the line under the loans says so.
@@ -390,7 +392,7 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
   const preview = previewFor(state, pair, collateral, debt);
   const action = preview.tooLow
     ? { label: COPY.borrow.form.tooLow, disabled: true }
-    : preview.collateralCheck.status === 'invalid'
+    : preview.collateralCheck.status === 'invalid' || preview.collateralCheck.status === 'exceeds-balance'
       ? primaryAction({ check: preview.collateralCheck, symbol: collateral.symbol, ready: '' })
       : primaryAction({
           check: preview.check,
@@ -450,15 +452,22 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
       )}
       {maxLtv !== undefined ? <p className="borrow-max-ltv">{`${COPY.borrow.maxLtv} ${formatLtv(maxLtv)}`}</p> : null}
       {state.mode === 'borrow' ? (
-        <AmountField
-          label={COPY.borrow.collateralAmount}
-          name="collateral-amount"
-          value={state.collateralText}
-          onChange={(text) => panel.setCollateralAmount(text)}
-          decimals={collateral.decimals}
-          symbol={collateral.symbol}
-          disabled={preparing}
-        />
+        <>
+          <CollateralHeld state={state} pair={pair} collateral={collateral} />
+          <AmountField
+            label={COPY.borrow.collateralAmount}
+            name="collateral-amount"
+            value={state.collateralText}
+            onChange={(text) => panel.setCollateralAmount(text)}
+            decimals={collateral.decimals}
+            symbol={collateral.symbol}
+            balance={preview.pool.balance}
+            {...(preview.pool.max ? { max: preview.pool.max } : {})}
+            hint={preview.pool.hint(state.collateralText)}
+            disabled={preparing}
+          />
+          <PoolBalanceRead state={state} onRead={() => void panel.refreshBalances()} />
+        </>
       ) : null}
       <AmountField
         label={state.mode === 'borrow' ? COPY.borrow.borrowAmount : COPY.borrow.amount}
@@ -470,16 +479,75 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
         {...(preview.balanceLabel ? { balanceLabel: preview.balanceLabel } : {})}
         {...(preview.exceeds ? { exceedsMessage: preview.exceeds } : {})}
         {...(preview.max ? { max: preview.max } : {})}
-        hint={preview.hint}
+        hint={preview.hint === 'add-collateral'
+          ? <AddCollateralFirst max={preview.pool.max} disabled={preparing} onFill={(amount) => panel.setCollateralAmount(formatTokenAmountExact(amount, collateral.decimals))} />
+          : preview.hint}
         disabled={preparing}
       />
-      {state.mode === 'borrow' && state.loans.status !== 'loaded' ? <p className="borrow-read-loans">{COPY.borrow.form.readLoans}</p> : null}
+      {state.mode === 'add-collateral' ? <PoolBalanceRead state={state} onRead={() => void panel.refreshBalances()} /> : null}
+      {state.mode === 'borrow' && (state.loans.status === 'unrequested' || state.loans.status === 'failed') ? <p className="borrow-read-loans">{COPY.borrow.form.readLoans}</p> : null}
       <DetailRows rows={preview.rows} label={COPY.flow.review} />
       <button type="submit" className="review" disabled={action.disabled}>
         {action.label}
       </button>
       <p className="panel-hint">{COPY.gameMode.singleAction}</p>
     </form>
+  );
+}
+
+/**
+ * What this pair already holds as collateral (D-102), "0 STRK" when nothing,
+ * and the one line that says where collateral comes from: the pool balance,
+ * here, never the Vault's supply, which sits on another stand-in by design.
+ */
+function CollateralHeld({ state, pair, collateral }: { state: BorrowState; pair: BorrowPairChoice; collateral: BorrowTokenView }) {
+  const loan = loanFor(state, pair);
+  const figure = state.loans.status === 'loaded'
+    ? formatHolding(loan?.collateralAmount ?? 0n, collateral)
+    : state.loans.status === 'loading' ? COPY.borrow.form.collateralReading : COPY.borrow.form.collateralUnread;
+  return (
+    <div className="borrow-collateral-held">
+      <p>
+        {`${COPY.borrow.form.yourCollateral}: `}
+        <strong className="ui-figure">{figure}</strong>
+      </p>
+      <p className="vault-note borrow-collateral-source">{COPY.borrow.form.collateralSource}</p>
+    </div>
+  );
+}
+
+/** The pool balance collateral is added from, read on opening; a chip when it was declined or failed. */
+function PoolBalanceRead({ state, onRead }: { state: BorrowState; onRead: () => void }) {
+  const { balances } = state;
+  if (balances.status === 'loaded') return null;
+  return (
+    <p className="vault-balance-read" data-status={balances.status}>
+      {balances.status === 'loading' ? (
+        <span aria-busy="true">{COPY.vault.form.balanceLoading}</span>
+      ) : balances.status === 'failed' ? (
+        <>
+          <span role="alert">{COPY.vault.form.balanceUnavailable}</span>{' '}
+          <button type="button" className="ui-chip" onClick={onRead}>{COPY.vault.form.balanceAgain}</button>
+        </>
+      ) : (
+        <button type="button" className="ui-chip" onClick={onRead}>{COPY.vault.form.showBalance}</button>
+      )}
+    </p>
+  );
+}
+
+/** With no collateral to borrow against: say so, and offer to fill the collateral from the pool balance. */
+function AddCollateralFirst({ max, disabled, onFill }: { max: (() => bigint | null) | null; disabled: boolean; onFill: (amount: bigint) => void }) {
+  const amount = max ? max() : null;
+  return (
+    <>
+      {`${COPY.borrow.form.addCollateralFirst} `}
+      {max ? (
+        <button type="button" className="ui-chip borrow-max-collateral" disabled={disabled || amount === null} onClick={() => { if (amount !== null) onFill(amount); }}>
+          {COPY.borrow.form.maxCollateral}
+        </button>
+      ) : null}
+    </>
   );
 }
 
@@ -516,18 +584,45 @@ function healthTone(health: PreviewHealth): { tone: DetailTone; note: string | n
 }
 
 /**
- * The compose surface's figures (D-089), from the last loans and market
- * reads. With the loans unread there is no "before", so no preview, no
- * "Available to borrow" and no Max: an existing loan would change them all.
+ * The pool balance collateral is added from (D-102), and its Max: the
+ * spendable figure where the wallet splits it, else the per-token total
+ * (D-089's rule), less the pool fee when the collateral is STRK, tidied.
+ */
+function poolFieldFor(state: BorrowState, collateral: BorrowTokenView): {
+  balance: bigint | null;
+  max: (() => bigint | null) | null;
+  hint: (text: string) => string | null;
+} {
+  const held = poolBalanceFor(state, collateral.token);
+  if (!held) return { balance: null, max: null, hint: () => null };
+  const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
+  const reserve = feeReserve(collateral.token, fee);
+  const maximum = tidied(maxAfterReserve(maxBasis(held), reserve), collateral);
+  return {
+    balance: held.total,
+    max: () => maximum,
+    hint: (text) => maximum !== null && reserve !== null && reserve > 0n && text === formatTokenAmountExact(maximum, collateral.decimals)
+      ? COPY.balance.feeReserved
+      : null,
+  };
+}
+
+/**
+ * The compose surface's figures (D-089, D-102), from the last loans, market
+ * and pool-balance reads. With the loans unread there is no "before", so no
+ * preview and no Max: an existing loan would change them all, and "Available
+ * to borrow" says why instead of a figure.
  */
 function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: BorrowTokenView, debt: BorrowTokenView): {
   check: AmountCheck;
   collateralCheck: AmountCheck;
+  pool: ReturnType<typeof poolFieldFor>;
   balance: bigint | null;
   balanceLabel: string | null;
   exceeds: string | null;
   max: (() => bigint | null) | null;
-  hint: string | null;
+  /** 'add-collateral' asks for collateral first, with a Max-collateral chip. */
+  hint: string | 'add-collateral' | null;
   rows: DetailRow[];
   tooLow: boolean;
 } {
@@ -537,16 +632,27 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   const market = state.market.status === 'loaded' ? state.market.market : null;
   const held: PreviewLoan | null = known ? { collateralAmount: loan?.collateralAmount ?? 0n, debtAmount: loan?.debtAmount ?? 0n } : null;
   const amountToken = mode === 'borrow' || mode === 'repay' ? debt : collateral;
-  const collateralCheck = mode === 'borrow' ? checkAmount(state.collateralText, { decimals: collateral.decimals }) : { status: 'empty' as const, amount: null };
+  const pool = poolFieldFor(state, collateral);
+  const collateralCheck = mode === 'borrow' ? checkAmount(state.collateralText, { decimals: collateral.decimals, balance: pool.balance }) : { status: 'empty' as const, amount: null };
   const added = collateralCheck.status === 'ok' ? collateralCheck.amount : 0n;
   let balance: bigint | null = null;
   let balanceLabel: string | null = null;
   let exceeds: string | null = null;
   let max: (() => bigint | null) | null = null;
   let maximum: bigint | null = null;
+  // Why nothing can be borrowed, when nothing can (D-102).
+  let why: BorrowLimitReason | 'loans-loading' | 'loans-unread' | null = null;
+  if (mode === 'borrow' && !held) why = state.loans.status === 'loading' ? 'loans-loading' : 'loans-unread';
+  if (mode === 'add-collateral') {
+    balance = pool.balance;
+    max = pool.max;
+  }
   if (held && market) {
     if (mode === 'borrow') {
-      maximum = tidied(maxBorrow(market, pair, { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount }), debt);
+      // Max on what is held plus what is being added: with the field empty, the collateral already held.
+      const capacity = borrowCapacity(market, pair, { collateralAmount: held.collateralAmount + added, debtAmount: held.debtAmount });
+      maximum = capacity.status === 'ok' ? tidied(capacity.amount, debt) : null;
+      why = capacity.status === 'none' ? capacity.reason : maximum === null ? 'at-limit' : null;
       max = () => maximum;
     } else if (mode === 'withdraw-collateral' && loan) {
       maximum = tidied(maxWithdraw(market, pair, held, loan.health.maxLtv), collateral);
@@ -569,8 +675,12 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   const typed = check.status === 'ok' ? check.amount : null;
   const everything = takesEverything(state, pair, typed);
   const rows: DetailRow[] = [];
-  if (mode === 'borrow' && held && market) {
-    rows.push({ id: 'available', label: COPY.borrow.form.available, value: formatExact(maximum ?? 0n, debt) });
+  if (mode === 'borrow') {
+    rows.push({
+      id: 'available',
+      label: COPY.borrow.form.available,
+      value: maximum !== null ? formatExact(maximum, debt) : COPY.borrow.form.availableWhy[why ?? 'at-limit'],
+    });
   }
   let tooLow = false;
   const assets = market ? pairAssets(market, pair, loan?.health.maxLtv) : null;
@@ -602,14 +712,18 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
         && (next.band === 'too-close' || next.band === 'liquidatable');
     }
   }
-  const hint = mode === 'borrow' && max !== null
-    ? COPY.borrow.form.maxHint
+  const hint = mode === 'borrow'
+    ? why === 'no-collateral'
+      ? 'add-collateral' as const
+      : why === 'below-floor'
+        ? COPY.borrow.form.belowFloorHint
+        : max !== null ? COPY.borrow.form.maxHint : null
     : everything && mode === 'repay'
       ? COPY.borrow.form.repayAllLine
       : everything && mode === 'withdraw-collateral'
         ? COPY.borrow.form.withdrawAllLine
         : null;
-  return { check, collateralCheck, balance, balanceLabel, exceeds, max, hint, rows, tooLow };
+  return { check, collateralCheck, pool, balance, balanceLabel, exceeds, max, hint, rows, tooLow };
 }
 
 /** A Max figure floored to a tidy precision (D-089); nothing when that leaves nothing. */

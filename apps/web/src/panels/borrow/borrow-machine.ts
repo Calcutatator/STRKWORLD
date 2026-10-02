@@ -8,6 +8,7 @@ import type {
   BorrowRequest,
   OperationStage,
   PreparedBorrowBatch,
+  PrivateBalance,
   PrivacyErrorKind,
   PrivacyOperations,
   VaultOutcome,
@@ -33,10 +34,13 @@ import { tidyFloor } from '../kit/amount-math.js';
  * Vault's room. Built on the Vault's machine (`vault-machine.ts`) and its
  * rules, with a pair instead of a token:
  *
- * - **Nothing is read on its own that could prompt.** Opening the counter
- *   asks the wallet which API it speaks (no prompt) and reads Vesu's pool
- *   through the backend (public, names nobody). The loans are read only when
- *   the player asks: the wallet derives a commitment for them first.
+ * - **The counter reads what its figures need when it opens** (D-102,
+ *   amending D-083's read-on-request). Opening asks the wallet which API it
+ *   speaks (no prompt), reads Vesu's pool through the backend (public, names
+ *   nobody), then the loans (the wallet derives a commitment first and may
+ *   ask) and the pool balances (`wallet_strk20Balances`, which it may also
+ *   ask for), one after the other, never two prompts at once. A declined
+ *   read is the player's answer: back to the button, nothing reported.
  * - **The seam owns the protocol and the maths.** This machine names a mode,
  *   a pair, amounts and "everything"; the seam reads, assesses every action
  *   against Vesu's own rules on fresh reads, and refuses before the wallet is
@@ -108,6 +112,22 @@ export type BorrowMarketView =
   | { readonly status: 'loaded'; readonly market: BorrowMarket }
   | { readonly status: 'failed' };
 
+/**
+ * The pool balances collateral is added from (D-102), with the pool fee Max
+ * leaves behind. Read when the counter opens; the figures stay in the window,
+ * are never logged, and go back to unread after a submission.
+ */
+export type BorrowBalancesView =
+  | { readonly status: 'unrequested' }
+  | { readonly status: 'loading' }
+  | {
+      readonly status: 'loaded';
+      readonly balances: readonly PrivateBalance[];
+      /** Null when the pool's fee could not be read: then no collateral Max. */
+      readonly fee: { readonly feeAmount: bigint; readonly feeToken: Address } | null;
+    }
+  | { readonly status: 'failed' };
+
 export type BorrowLoansView =
   | { readonly status: 'unrequested' }
   | { readonly status: 'loading' }
@@ -169,6 +189,8 @@ export interface BorrowState {
   readonly pair: BorrowPairChoice | null;
   readonly market: BorrowMarketView;
   readonly loans: BorrowLoansView;
+  /** The pool balances collateral comes from (D-102). */
+  readonly balances: BorrowBalancesView;
   /** Borrow mode only: collateral to add with the loan; empty for none. */
   readonly collateralText: string;
   /** The amount to borrow, add, repay or withdraw. */
@@ -198,6 +220,8 @@ export interface BorrowPanel {
   refreshMarket(signal?: AbortSignal): Promise<void>;
   /** Read the loans, and the pool with them. The wallet may ask first. */
   refreshLoans(signal?: AbortSignal): Promise<void>;
+  /** Read the offered tokens' pool balances, and the pool fee (D-102). The wallet may ask first. */
+  refreshBalances(signal?: AbortSignal): Promise<void>;
   setMode(mode: BorrowMode): void;
   /** Choose a pair the mode offers: an offered pair to borrow in, or a held loan. */
   setPair(collateral: Address, debt: Address): void;
@@ -235,6 +259,12 @@ export function borrowPairChoices(state: Pick<BorrowState, 'mode' | 'tokens' | '
 export function loanFor(state: Pick<BorrowState, 'loans'>, pair: BorrowPairChoice | null): BorrowPosition | undefined {
   if (pair === null || state.loans.status !== 'loaded') return undefined;
   return state.loans.positions.find((loan) => sameAddress(loan.collateral, pair.collateral) && sameAddress(loan.debt, pair.debt));
+}
+
+/** The pool balance of `token` as last read, if it was (D-102). */
+export function poolBalanceFor(state: Pick<BorrowState, 'balances'>, token: Address): PrivateBalance | undefined {
+  if (state.balances.status !== 'loaded') return undefined;
+  return state.balances.balances.find((entry) => sameAddress(entry.token, token));
 }
 
 /** The pair's max LTV as Vesu offers it now, if it does. */
@@ -304,6 +334,7 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
   let attempt = 0;
   let session = 0;
   let loansRead = 0;
+  let balancesRead = 0;
   let marketRead = 0;
   let capabilityRead = 0;
   const begin = (): number => (attempt += 1);
@@ -408,8 +439,67 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
   }
 
   async function loadMarketIfOpen(signal?: AbortSignal): Promise<void> {
+    if (readable()) await loadMarket(signal);
+  }
+
+  async function readLoans(signal?: AbortSignal): Promise<void> {
+    const mySession = session;
+    const read = ++loansRead;
+    patch({ loans: { status: 'loading' } });
+    const market = loadMarket(signal);
+    try {
+      const answer = await operations.borrowPositions({ signal, onStage: forwardStage });
+      if (session !== mySession || read !== loansRead) return;
+      const latest = store.getState();
+      const loans: BorrowLoansView = { status: 'loaded', standIn: answer.standIn, positions: answer.positions };
+      const settled = latest.flow.name !== 'preparing' && latest.flow.name !== 'review' && latest.flow.name !== 'submitting';
+      patch({ loans, ...(settled ? { pair: pairFor({ ...latest, loans }, latest.pair) } : {}) });
+    } catch (error) {
+      if (session !== mySession || read !== loansRead) return;
+      // A declined read is the player's answer, not a failure: back to the button.
+      const { kind } = toFailure(error);
+      if (kind !== 'user-rejected') report(kind);
+      patch({
+        loans: kind === 'user-rejected' ? { status: 'unrequested' } : { status: 'failed', kind, message: COPY.errors[kind] },
+        ...(kind === 'shadow-accounts-unsupported' ? { capability: { status: 'unsupported' } as const } : {}),
+      });
+    }
+    await market;
+  }
+
+  /** Whether the counter can read anything: its door open, the wallet able, a pair to offer. */
+  function readable(): boolean {
     const state = store.getState();
-    if (state.door.open && state.capability.status === 'supported' && tokens.length > 1) await loadMarket(signal);
+    return state.door.open && state.capability.status === 'supported' && tokens.length > 1;
+  }
+
+  /**
+   * The offered tokens' pool balances and the pool fee (D-102): what collateral
+   * is added from, and what its Max leaves behind. `wallet_strk20Balances`
+   * may ask the player first; a declined read goes back to the button.
+   */
+  async function readBalances(signal?: AbortSignal): Promise<void> {
+    const mySession = session;
+    const read = ++balancesRead;
+    if (tokens.length === 0) return;
+    patch({ balances: { status: 'loading' } });
+    try {
+      const [balances, fee] = await Promise.all([
+        operations.balances(tokens.map((entry) => entry.token), signal),
+        // The fee is only for Max's reserve: a fee that cannot be read leaves that Max off, nothing more.
+        operations.poolConfig(signal).then(
+          (config) => ({ feeAmount: config.feeAmount, feeToken: config.feeToken }),
+          () => null,
+        ),
+      ]);
+      if (session !== mySession || read !== balancesRead) return;
+      patch({ balances: { status: 'loaded', balances, fee } });
+    } catch (error) {
+      if (session !== mySession || read !== balancesRead) return;
+      const { kind } = toFailure(error);
+      if (kind !== 'user-rejected') report(kind);
+      patch({ balances: kind === 'user-rejected' ? { status: 'unrequested' } : { status: 'failed' } });
+    }
   }
 
   function amountIn(text: string, decimals: number): bigint | null {
@@ -464,6 +554,7 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
       discardPrepared();
       loansRead += 1;
       marketRead += 1;
+      balancesRead += 1;
       const { mode } = store.getState();
       stateStore.setState(freezeBorrowState({ ...initialState(register, tokens), mode }));
       const outstanding = receipts.pending('vault').find((receipt) => receipt.counter === 'borrow');
@@ -474,7 +565,13 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
       });
       await checkCapability(signal);
       if (session !== mySession) return;
-      await loadMarketIfOpen(signal);
+      // D-102: the figures the form needs, read on opening rather than on a
+      // button press: the loans (which read the pool beside them), then the
+      // pool balances, one wallet request at a time.
+      if (!readable()) return;
+      await readLoans(signal);
+      if (session !== mySession) return;
+      await readBalances(signal);
     },
 
     close(): void {
@@ -483,6 +580,7 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
       discardPrepared();
       loansRead += 1;
       marketRead += 1;
+      balancesRead += 1;
       capabilityRead += 1;
     },
 
@@ -497,29 +595,9 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
       await loadMarketIfOpen(signal);
     },
 
-    async refreshLoans(signal?: AbortSignal): Promise<void> {
-      const mySession = session;
-      const read = ++loansRead;
-      patch({ loans: { status: 'loading' } });
-      const market = loadMarket(signal);
-      try {
-        const answer = await operations.borrowPositions({ signal, onStage: forwardStage });
-        if (session !== mySession || read !== loansRead) return;
-        const latest = store.getState();
-        const loans: BorrowLoansView = { status: 'loaded', standIn: answer.standIn, positions: answer.positions };
-        const settled = latest.flow.name !== 'preparing' && latest.flow.name !== 'review' && latest.flow.name !== 'submitting';
-        patch({ loans, ...(settled ? { pair: pairFor({ ...latest, loans }, latest.pair) } : {}) });
-      } catch (error) {
-        if (session !== mySession || read !== loansRead) return;
-        const { kind } = toFailure(error);
-        report(kind);
-        patch({
-          loans: { status: 'failed', kind, message: COPY.errors[kind] },
-          ...(kind === 'shadow-accounts-unsupported' ? { capability: { status: 'unsupported' } as const } : {}),
-        });
-      }
-      await market;
-    },
+    refreshLoans: readLoans,
+
+    refreshBalances: readBalances,
 
     setMode(mode: BorrowMode): void {
       if (!BORROW_MODES.includes(mode)) return;
@@ -714,10 +792,12 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
         record(result.transactionHash);
         if (prepared === batch) prepared = null;
         loansRead += 1;
+        balancesRead += 1;
         if (!current(id)) return;
         patch({
           flow: { name: 'submitted', transactionHash: result.transactionHash, outcome: result.outcome },
           loans: { status: 'unrequested' },
+          balances: { status: 'unrequested' },
           notice: result.outcome === 'reverted' ? null : { tone: 'info', text: COPY.borrow.loans.changed },
           collateralText: '',
           amountText: '',
@@ -754,6 +834,13 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
       receipts.acknowledge(flow.transactionHash);
       const state = store.getState();
       patch({ flow: { name: 'composing' }, notice: null, pair: pairFor(state, state.pair) });
+      // D-102: back at the form, its figures are read again rather than left for a button.
+      if (!readable()) return;
+      const mySession = session;
+      void (async () => {
+        if (state.loans.status === 'unrequested') await readLoans();
+        if (session === mySession && state.balances.status === 'unrequested') await readBalances();
+      })();
     },
   });
 }
@@ -768,6 +855,7 @@ function initialState(register: readonly RouteGrade[], tokens: readonly BorrowTo
     pair: null,
     market: { status: 'unrequested' },
     loans: { status: 'unrequested' },
+    balances: { status: 'unrequested' },
     collateralText: '',
     amountText: '',
     all: false,
@@ -800,6 +888,13 @@ function freezeBorrowState(state: BorrowState): BorrowState {
     loans: state.loans.status === 'loaded'
       ? Object.freeze({ ...state.loans, positions: Object.freeze([...state.loans.positions]) })
       : Object.freeze({ ...state.loans }) as BorrowLoansView,
+    balances: state.balances.status === 'loaded'
+      ? Object.freeze({
+          ...state.balances,
+          balances: Object.freeze(state.balances.balances.map((entry) => Object.freeze({ ...entry }))),
+          fee: state.balances.fee === null ? null : Object.freeze({ ...state.balances.fee }),
+        })
+      : Object.freeze({ ...state.balances }) as BorrowBalancesView,
     notice: state.notice === null ? null : Object.freeze({ ...state.notice }),
     flow,
   });

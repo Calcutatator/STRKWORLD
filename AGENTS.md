@@ -259,6 +259,10 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — "Max borrows nothing" was the counter waiting for a button, and Vault supply is never borrow collateral (D-102)
+
+The owner supplied in the Vault, opened BORROW and saw 0 available and a dead Max. Read in `borrow-machine.ts` and `BorrowPanel.tsx`: every borrow figure was gated on `loans.status === 'loaded'`, which only "Show my loans" set; once read, an empty collateral field fed `maxBorrow` zero collateral and the row printed "0 USDC" with no reason. The Vault's supply is on the `strkworld-vault` stand-in and never counts (D-083), and nothing on the form said so. Now the counter reads loans then pool balances on opening (one wallet request at a time; a decline falls back to the button), shows "Your collateral" and where collateral comes from, gives the collateral field a pool-balance Max less the 6 STRK fee, and `borrowCapacity` says why nothing can be borrowed. Verified by the borrow machine, preview and flow tests and by before/after renders of the form against the fake.
+
 ### 2026-10-02 — The plaza's total was already shown twice; it now has one face and one row, and the deposit count is gone from the client (D-098)
 
 The owner asked for the pool's total dollar value in place of "Deposits in the last 24 hours". The total was already on the monument (as the first frame of the die's cycling held face) and in the window (the "Held in the pool" row), so a plain swap would have shown it twice. The shaft face now carries the total ("TOTAL IN POOL"), the die cycles the top holdings alone, and the window's held row is the total row. `deposits24h` is out of `plaza:stats`, the web parser, the demo figures and the poller's incomplete check; the backend still computes it (removing it is a separate, safe change). The tests that read `deposits24h` or the old captions moved with it.
