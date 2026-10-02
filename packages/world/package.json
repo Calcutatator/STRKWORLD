@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "render:walker": "tsx tools/render-avatar-walker.ts"
+    "render:walker": "tsx tools/render-avatar-walker.ts",
+    "render:brand": "vite --config tools/brand-render/vite.config.mjs"
   },
   "dependencies": {
     "@strkworld/shared": "*",

@@ -279,6 +279,11 @@ project's CDN. Builders get them through an injected `ImageTextureLoader`
 (the texture twin of `LabelFactory`); without one, or while one loads or if it
 fails, each poster shows its procedural stand-in.
 
+The brand kit ([`docs/brand/`](../../docs/brand/README.md), D-113) is rendered
+from the same figures, street and lighting by `tools/brand-render/`
+(`npm run render:brand --workspace=@strkworld/world`), a local Vite page the
+game never bundles; its provenance is recorded in the brand guide.
+
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
 Vault, plus the Bridge. The Vault is locked by default so the world reads as
 complete (D-007); the Shell opens it on shadow accounts by passing
