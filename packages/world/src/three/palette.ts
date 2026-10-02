@@ -30,7 +30,7 @@ import {
 import type { ColorRepresentation, Material, Object3D, Texture } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingId, StationId } from '@strkworld/shared';
-import type { FixedRoomLevelId } from '../fixed-room.js';
+import { BUNKER_ELEVATOR_MESSAGE, type FixedRoomLevelId } from '../fixed-room.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { Occluder, OccluderBounds } from './types.js';
 
@@ -1226,7 +1226,7 @@ export const VESU_STATION_LOOKS: StationLooks = Object.freeze({
   }),
 });
 
-export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'vesu' | 'plain';
+export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'vesu' | 'netcafe' | 'plain';
 
 /**
  * The Degen floor's counter: hot pink when ready, brighter with a lime halo
@@ -1279,7 +1279,7 @@ export type StationPropStyle = RoomDecorStyle | 'endur' | 'vesu-borrow';
  * the state's colour, and a sign in the architecture that carries the
  * Shell's label (room-builder.ts).
  */
-export type StationFit = 'teller' | 'endur-booth' | 'vesu-desk' | 'vesu-booth';
+export type StationFit = 'teller' | 'endur-booth' | 'vesu-desk' | 'vesu-booth' | 'elevator';
 
 /**
  * How one station dresses: counter, props, label and state looks. A room's
@@ -1300,6 +1300,11 @@ export interface StationTheme {
   readonly fit?: StationFit;
   /** A built-in counter's sign, which carries the Shell's label in place of a floating one. */
   readonly sign?: SignStyleOptions;
+  /**
+   * D-107: a line that floats over a built-in counter only while the player
+   * stands at it (the hidden room's lift: "Out of order"), and nothing else.
+   */
+  readonly prompt?: { readonly text: string; readonly style: FloatingStyleOptions };
 }
 
 /** STRK20's floating label: white mono capitals on near-black (the Bank's room label). */
@@ -1532,6 +1537,166 @@ export interface RoomTheme {
   readonly stations?: Readonly<Partial<Record<StationId, StationTheme>>>;
 }
 
+// ---------------------------------------------------------------------------
+// The hidden room (D-107): a Tokyo net cafe, left years ago
+// ---------------------------------------------------------------------------
+
+/**
+ * Grime under neon: charcoal carpet tiles and concrete walls gone grey, warm
+ * laminate booths, and the light from what still runs: pink and cyan tubes,
+ * a few monitors, the drinks fridge. No brand and no money (D-024).
+ */
+export const NETCAFE = Object.freeze({
+  carpet: 0x30383c,
+  carpetAlt: 0x283034,
+  stain: 0x1a1f21,
+  dust: 0x7d7a72,
+  wall: 0x4a4d50,
+  wallLower: 0x34383b,
+  wallTop: 0x1f2124,
+  trim: 0x5d6064,
+  skirting: 0x1a1c1f,
+  cut: 0x15171a,
+  laminate: 0xd4ccbc,
+  partition: 0xb9b1a2,
+  partitionTrim: 0x5f584e,
+  desk: 0x8f7a63,
+  plastic: 0x23262a,
+  steel: 0xb6bdc4,
+  steelDark: 0x6f767d,
+  pink: 0xff3fa4,
+  cyan: 0x3ff0ff,
+  violet: 0x9a5cff,
+  amber: 0xffb547,
+  red: 0xff5a3c,
+  paper: 0xf4f0e4,
+});
+
+/** The lift's states: dark steel and a dim call button; at it, the button glows red-amber. */
+export const NETCAFE_ELEVATOR_LOOKS: StationLooks = Object.freeze({
+  available: Object.freeze({
+    color: NETCAFE.steelDark,
+    emissive: NETCAFE.amber,
+    emissiveIntensity: 0.3,
+    halo: NETCAFE.amber,
+    haloOpacity: 0.08,
+    edgeOpacity: 0.25,
+  }),
+  highlighted: Object.freeze({
+    color: NETCAFE.steelDark,
+    emissive: NETCAFE.amber,
+    emissiveIntensity: 0.6,
+    halo: NETCAFE.amber,
+    haloOpacity: 0.14,
+    edgeOpacity: 0.4,
+  }),
+  locked: Object.freeze({
+    color: NETCAFE.steelDark,
+    emissive: NETCAFE.amber,
+    emissiveIntensity: 0.22,
+    halo: NETCAFE.red,
+    haloOpacity: 0.04,
+    edgeOpacity: 0.14,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: NETCAFE.steelDark,
+    emissive: NETCAFE.red,
+    emissiveIntensity: 0.95,
+    halo: NETCAFE.red,
+    haloOpacity: 0.16,
+    edgeOpacity: 0.5,
+  }),
+});
+
+/** The hand-written paper taped across the lift's doors: black marker, the English in red. */
+export const NETCAFE_OUT_OF_ORDER_SIGN: SignStyleOptions = Object.freeze({
+  width: 0.64,
+  height: 0.46,
+  background: css(NETCAFE.paper),
+  foreground: '#1b1b1b',
+  accent: '#c9c2b0',
+  subtitleColor: '#c8352a',
+  cornerRadius: 0.02,
+  borderWidth: 0,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 900,
+  subtitleFont: 'sans',
+  subtitleWeight: 800,
+  titleTracking: 0.04,
+  subtitleTracking: 0.06,
+});
+
+/** The line over the lift while the player stands at it. */
+export const NETCAFE_ELEVATOR_PROMPT: FloatingStyleOptions = Object.freeze({
+  lineHeight: 0.26,
+  foreground: '#ffe2d6',
+  background: 'rgba(22,14,18,0.88)',
+  border: css(NETCAFE.red),
+  font: 'sans',
+  cornerRadius: 0.35,
+});
+
+/** A neon tube sign on a black board: the room's few words, all generic. */
+function netcafeNeon(width: number, height: number, colour: number, glow: number): SignStyleOptions {
+  return Object.freeze({
+    width,
+    height,
+    background: '#0d0a10',
+    foreground: css(colour),
+    accent: css(glow),
+    cornerRadius: 0.18,
+    borderWidth: 0.05,
+    hairline: false,
+    titleFont: 'display',
+    titleWeight: 900,
+    titleTracking: 0.12,
+    subtitleFont: 'mono',
+    subtitleColor: css(glow),
+  });
+}
+
+/** "Net cafe", in katakana, over the first corridor's booths. */
+export const NETCAFE_SIGN_TEXT = 'ネットカフェ';
+export const NETCAFE_SIGN: SignStyleOptions = netcafeNeon(2.3, 0.42, NETCAFE.pink, NETCAFE.violet);
+/** "Game", over the booth area. */
+export const NETCAFE_GAME_TEXT = 'ゲーム';
+export const NETCAFE_GAME_SIGN: SignStyleOptions = netcafeNeon(1.5, 0.42, NETCAFE.cyan, NETCAFE.cyan);
+/** "Reception · 24H", on the shelves behind the desk. */
+export const NETCAFE_RECEPTION_TEXT = '受付\n24H';
+export const NETCAFE_RECEPTION_SIGN: SignStyleOptions = netcafeNeon(0.92, 0.42, NETCAFE.amber, NETCAFE.pink);
+
+/** The lift: built into its shaft, the paper sign for its label, and the line it shows at it (D-107). */
+export const NETCAFE_ELEVATOR_STATION_THEME: StationTheme = Object.freeze({
+  props: 'netcafe',
+  kioskBase: NETCAFE.steelDark,
+  kioskTop: NETCAFE.steel,
+  label: NETCAFE_ELEVATOR_PROMPT,
+  looks: NETCAFE_ELEVATOR_LOOKS,
+  fit: 'elevator',
+  sign: NETCAFE_OUT_OF_ORDER_SIGN,
+  prompt: Object.freeze({ text: BUNKER_ELEVATOR_MESSAGE, style: NETCAFE_ELEVATOR_PROMPT }),
+});
+
+export const NETCAFE_ROOM_THEME: RoomTheme = Object.freeze({
+  decor: 'netcafe',
+  floorA: NETCAFE.carpet,
+  floorB: NETCAFE.carpetAlt,
+  floorAccent: NETCAFE.pink,
+  wall: NETCAFE.wall,
+  wallLower: NETCAFE.wallLower,
+  wallTop: NETCAFE.wallTop,
+  trim: NETCAFE.trim,
+  skirting: NETCAFE.skirting,
+  cut: NETCAFE.cut,
+  kioskBase: NETCAFE.laminate,
+  kioskTop: NETCAFE.desk,
+  exitGlow: NETCAFE.amber,
+  label: NETCAFE_ELEVATOR_PROMPT,
+  stationLooks: NETCAFE_ELEVATOR_LOOKS,
+  stations: Object.freeze({ 'bunker:elevator': NETCAFE_ELEVATOR_STATION_THEME }),
+});
+
 export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Object.freeze({
   bank: Object.freeze({
     decor: 'strk20',
@@ -1655,6 +1820,8 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
       'vault:repay': VESU_BOOTH_STATION_THEME,
     }),
   }),
+  // D-107: the hidden room's net cafe.
+  bunker: NETCAFE_ROOM_THEME,
 });
 
 export const DEFAULT_ROOM_THEME: RoomTheme = Object.freeze({

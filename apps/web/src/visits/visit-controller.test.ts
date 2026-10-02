@@ -168,6 +168,32 @@ describe('visit controller', () => {
     expect(owners).toHaveBeenCalledTimes(ownerCalls);
   });
 
+  it('opens nothing for the hidden room: no window, no stations, no control claim (D-107)', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const stations = vi.fn();
+    const owners = vi.fn();
+    const exits = vi.fn();
+    shell.on('world:stations', stations);
+    shell.on('world:control-owner', owners);
+    shell.on('world:exit-building', exits);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    const outside = controller.store.getState();
+
+    world.emit('building:entered', { building: 'bunker' });
+    expect(controller.store.getState()).toBe(outside);
+    // Even an activation from its lift (which the World never sends) opens nothing.
+    world.emit('station:activated', { building: 'bunker', station: 'bunker:elevator' });
+    expect(controller.store.getState()).toBe(outside);
+    world.emit('building:exited', { building: 'bunker' });
+    expect(controller.store.getState()).toBe(outside);
+    expect(stations).not.toHaveBeenCalled();
+    expect(exits).not.toHaveBeenCalled();
+    // At most it hands back controls the World might have suspended; it never claims them.
+    for (const [payload] of owners.mock.calls) expect(payload).toMatchObject({ owner: 'world' });
+  });
+
   it('opens and closes Menu Mode without ending the visit', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
