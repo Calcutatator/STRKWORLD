@@ -914,7 +914,7 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Space', effect: 'Jump. Works standing, walking or sprinting; not while a counter or Menu Mode is open, or in the Avatar Studio. Jump to climb onto a block one higher than you: walking into it just stops you.' },
+      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },

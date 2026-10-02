@@ -75,19 +75,34 @@ describe('the jump message (D-097)', () => {
     expect(registry.jump('a', Number.NaN)).toBe('throttled');
   });
 
-  it('is refused while suspended, in the Studio, and for an unknown session', () => {
+  it('is refused while suspended and for an unknown session', () => {
     const registry = new LobbyPresence();
     const a = join(registry, 'a', { x: 100, y: 100 });
-    const d = join(registry, 'd', { x: 100, y: 100 });
     expect(registry.jump('nobody', 1000)).toBe('absent');
     registry.suspend('a');
     expect(registry.jump('a', 1000)).toBe('absent');
-    expect(registry.enterArea('d', { area: 'studio', ...studio(6, 5) }, 1000)).toBe(true);
-    expect(registry.jump('d', 2000)).toBe('absent');
-    expect(jumpsOf(registry, d)).toBe(0);
     expect(registry.resume('a', { x: 100, y: 100, facing: 'down', sprite: 'avatar-1' }, 3000)).toBe(true);
     expect(registry.jump('a', 4000)).toBe('applied');
     expect(jumpsOf(registry, a)).toBe(1);
+  });
+
+  it('works in the Studio too (D-111), and a Studio jump stays in the Studio', () => {
+    const registry = new LobbyPresence();
+    const d1 = join(registry, 'd1', { x: 100, y: 100 });
+    join(registry, 'd2', { x: 100, y: 100 });
+    // A street player standing right on the Studio's coordinates.
+    join(registry, 'street', { x: studio(6, 5).x, y: studio(6, 5).y });
+    registry.suspend('d1');
+    registry.suspend('d2');
+    expect(registry.enterArea('d1', { area: 'studio', ...studio(6, 5) }, 1000)).toBe(true);
+    expect(registry.enterArea('d2', { area: 'studio', ...studio(7, 5) }, 1000)).toBe(true);
+    expect(registry.jump('d1', 2000)).toBe('applied');
+    expect(jumpsOf(registry, d1)).toBe(1);
+    // The same floor as anywhere else.
+    expect(registry.jump('d1', 2001)).toBe('throttled');
+    const sees = (observer: string) => registry.visibleTo(observer).map((entry) => entry.gameId);
+    expect(sees('d2')).toContain(d1);
+    expect(sees('street')).not.toContain(d1);
   });
 
   it('works on the roof, and a roof jump stays in views that already hold that player', () => {

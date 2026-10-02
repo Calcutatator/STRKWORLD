@@ -874,14 +874,14 @@ export class LobbyClient {
 
   /**
    * D-097: tell the room the avatar jumped, so peers who see it play the jump.
-   * The message carries nothing. Sent only while live on the street or the
-   * roof (never suspended, never from the Studio), and at most once per
+   * The message carries nothing. Sent only while live in a shared area: the
+   * street, the roof or the Studio (D-111; never suspended), and at most once per
    * `JUMP_CLIENT_INTERVAL_MS`; a jump inside the floor is dropped, not held,
    * since a late jump is a different jump. Returns whether it was sent.
    */
   jump(): boolean {
     if (this.#status !== 'connected' || this.#room === null) return false;
-    if (this.#area !== 'street' && this.#area !== 'roof') return false;
+    if (this.#area === null) return false;
     const now = performance.now();
     if (!isValidMonotonicTime(now)) return false;
     const last = this.#lastJumpAt;

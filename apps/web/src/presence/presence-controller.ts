@@ -27,7 +27,8 @@ export interface PresenceClient {
   enterArea?(area: PresenceArea, placement: { x: number; y: number; facing: Facing }, sprite: AvatarSpriteKey): void;
   /**
    * D-097: the avatar jumped. Optional: a client without it shows no one the
-   * jump. The client sends it only while live on the street or the roof.
+   * jump. The client sends it only while live in a shared area: the street,
+   * the roof or the Studio (D-111).
    */
   jump?(): boolean;
   disconnect(): Promise<void>;
@@ -483,7 +484,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     return true;
   };
   // D-097: a cosmetic jump, forwarded while connected. The client itself
-  // refuses while suspended (a private interior) and in the Studio.
+  // refuses while suspended (a private interior), where it plays solo.
   const onJumped = () => {
     const ownedClient = client;
     if (!ownedClient || state.status !== 'connected' || typeof ownedClient.jump !== 'function') return;

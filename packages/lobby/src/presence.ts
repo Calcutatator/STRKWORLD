@@ -670,14 +670,13 @@ export class LobbyPresence {
    * D-097: the session's avatar jumped. Bumps its `jumps` counter (mod 256),
    * which reaches exactly the observers whose view already holds the entry —
    * so only peers in the same presence area, inside the interest radius. Live
-   * on the street or the roof only: the Studio is for changing clothes, and a
-   * suspended session has no entry. Throttled strictly; every refusal is
-   * silent. An accepted jump opens the session's climb window (D-106); a
+   * in any shared area, the Studio included (D-111); a suspended session has
+   * no entry. Throttled strictly; every refusal is silent. An accepted jump opens the session's climb window (D-106); a
    * throttled one does not.
    */
   jump(sessionKey: string, now: number): JumpOutcome {
     const session = this.#sessions.get(sessionKey);
-    if (session === undefined || session.suspended || session.area === 'studio') return 'absent';
+    if (session === undefined || session.suspended) return 'absent';
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
     if (!this.#jumpThrottle.accept(sessionKey, now)) return 'throttled';
