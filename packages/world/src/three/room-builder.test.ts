@@ -161,18 +161,6 @@ function stationLabel(root: Object3D): Object3D {
   return found;
 }
 
-/** The tiles a player can stand on to open a station: its halo, less what is solid. */
-function walkableApproach(map: FixedRoomLevelMap, station: FixedRoomLevelMap['stations'][number]): { x: number; y: number }[] {
-  const found: { x: number; y: number }[] = [];
-  for (let y = station.y - 1; y <= station.y + station.height; y++) {
-    for (let x = station.x - 1; x <= station.x + station.width; x++) {
-      const inside = x >= station.x && x < station.x + station.width && y >= station.y && y < station.y + station.height;
-      if (!inside && !isFixedRoomSolidAt(map, x, y)) found.push({ x, y });
-    }
-  }
-  return found;
-}
-
 function floatingLabel(root: Object3D): Object3D {
   let found: Object3D | undefined;
   root.traverse((object) => {
@@ -183,39 +171,27 @@ function floatingLabel(root: Object3D): Object3D {
 }
 
 /**
- * D-103: one station's slice of the room's shared halo mesh: its colour (as
- * an sRGB hex), its fill's and edge's opacity, and the box it covers.
+ * D-123: one station's affordance shell in the room's one affordance mesh:
+ * the box its surface copy covers (world space), and whether it is usable
+ * (shimmering) and how far its glow has faded in.
  */
-function haloOf(room: RoomView, station: string): { colour: number; opacity: number; edge: number; box: Box3 } {
-  const { fill, edge } = stationGroup(room, station).userData['halo'] as { fill: [number, number]; edge: [number, number] };
-  const mesh = meshNamed(room.group, ':halos');
+function shellOf(room: RoomView, station: string): { box: Box3; usable: boolean; glow: number } {
+  const set = room.affordances;
+  if (!set) throw new Error('no affordance shells');
+  const slotIndex = set.ids.indexOf(station);
+  if (slotIndex < 0) throw new Error(`no shell for ${station}`);
+  const mesh = set.mesh;
   mesh.updateMatrixWorld(true);
-  const colour = mesh.geometry.getAttribute('color');
   const position = mesh.geometry.getAttribute('position');
+  const slot = mesh.geometry.getAttribute('aSlot');
+  const band = mesh.geometry.getAttribute('aBand');
   const box = new Box3();
   const vertex = new Vector3();
-  for (const [start, count] of [fill, edge]) {
-    for (let i = start; i < start + count; i++) box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
+  for (let i = 0; i < position.count; i++) {
+    if (slot.getX(i) !== slotIndex || band.getX(i) !== 0) continue;
+    box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
   }
-  // Every vertex of a slice carries the same colour; its fill and edge their own alpha.
-  const hex = new Color(colour.getX(fill[0]), colour.getY(fill[0]), colour.getZ(fill[0])).getHex();
-  for (const [start, count] of [fill, edge]) {
-    for (let i = start; i < start + count; i++) expect(new Color(colour.getX(i), colour.getY(i), colour.getZ(i)).getHex()).toBe(hex);
-  }
-  return { colour: hex, opacity: colour.getW(fill[0]), edge: colour.getW(edge[0]), box };
-}
-
-/** World-space vertices of one station's slice of the room's shared halo mesh, fill and edge. */
-function haloVertices(room: RoomView, station: string): Vector3[] {
-  const { fill, edge } = stationGroup(room, station).userData['halo'] as { fill: [number, number]; edge: [number, number] };
-  const mesh = meshNamed(room.group, ':halos');
-  mesh.updateMatrixWorld(true);
-  const position = mesh.geometry.getAttribute('position');
-  const found: Vector3[] = [];
-  for (const [start, count] of [fill, edge]) {
-    for (let i = start; i < start + count; i++) found.push(new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
-  }
-  return found;
+  return { box, usable: set.isUsable(station), glow: set.glowLevel(station) };
 }
 
 /**
@@ -276,10 +252,16 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it.each(FLOORS)('gives the $building $level floor one counter, label and halo per station', (map) => {
+  it.each(FLOORS)('gives the $building $level floor one counter, label and affordance shell per station, and no approach tiles (D-123)', (map) => {
     const room = buildFixedRoom(map, createNullLabelFactory());
     const stations = room.group.children.filter((child) => child.name.startsWith('station:'));
     expect(stations).toHaveLength(map.stations.length);
+    // D-123: the lit approach tiles are gone: no halo mesh, and nothing a station owns lies flat on the floor.
+    const meshNames: string[] = [];
+    room.group.traverse((object) => object instanceof Mesh && meshNames.push(object.name));
+    expect(meshNames.filter((name) => /halo/i.test(name))).toEqual([]);
+    expect(room.affordances?.ids).toEqual(map.stations.map((station) => station.station));
+    expect(room.affordances?.mesh.parent).toBe(room.group);
     room.group.updateMatrixWorld(true);
     for (const station of map.stations) {
       const group = stationGroup(room, station.station);
@@ -299,7 +281,7 @@ describe('buildFixedRoom', () => {
         expect(position.z).toBeLessThanOrEqual(OZ + station.y + station.height + 0.05);
         expect(floatingLabelsIn(group)).toEqual([]);
       } else if (builtIn) {
-        // D-104: a sign in the architecture, over the counter or its halo; never a floating pill.
+        // D-104: a sign in the architecture, over the counter or its approach; never a floating pill.
         expect(label.userData['kind']).toBe('sign');
         expect(position.x).toBeGreaterThanOrEqual(OX + station.x - 1);
         expect(position.x).toBeLessThanOrEqual(OX + station.x + station.width + 1);
@@ -311,20 +293,21 @@ describe('buildFixedRoom', () => {
         expect(position.z).toBeCloseTo(OZ + station.y + station.height / 2);
       }
       expect(position.y).toBeGreaterThan(1.2);
-      // The halo covers the tiles a player can stand on to open the counter:
-      // its whole ring when it stands free, the floor in front when built in.
-      const approach = walkableApproach(map, station);
-      const halo = haloOf(room, station.station).box;
-      expect(halo.min.x).toBeCloseTo(OX + Math.min(...approach.map((tile) => tile.x)), 1);
-      expect(halo.max.x).toBeCloseTo(OX + Math.max(...approach.map((tile) => tile.x)) + 1, 1);
-      expect(halo.min.z).toBeCloseTo(OZ + Math.min(...approach.map((tile) => tile.y)), 1);
-      expect(halo.max.z).toBeCloseTo(OZ + Math.max(...approach.map((tile) => tile.y)) + 1, 1);
-      expect(halo.max.y).toBeLessThan(0.05);
-      for (const vertex of haloVertices(room, station.station)) {
-        // Every vertex on an edge or inside a standing tile, never over furniture.
-        const inside = approach.some((tile) => vertex.x >= OX + tile.x - 1e-6 && vertex.x <= OX + tile.x + 1 + 1e-6 && vertex.z >= OZ + tile.y - 1e-6 && vertex.z <= OZ + tile.y + 1 + 1e-6);
-        expect(inside).toBe(true);
-      }
+      // The shell is the counter itself: standing up off the floor, over its
+      // own footprint (and the fixtures just round it), never across the room.
+      const shell = shellOf(room, station.station);
+      expect(shell.box.isEmpty()).toBe(false);
+      expect(shell.box.max.y).toBeGreaterThan(0.5);
+      const cx = (shell.box.min.x + shell.box.max.x) / 2 - OX;
+      const cz = (shell.box.min.z + shell.box.max.z) / 2 - OZ;
+      expect(cx).toBeGreaterThan(station.x - 1);
+      expect(cx).toBeLessThan(station.x + station.width + 1);
+      expect(cz).toBeGreaterThan(station.y - 1);
+      expect(cz).toBeLessThan(station.y + station.height + 1);
+      expect(shell.box.max.x - shell.box.min.x).toBeLessThan(station.width + 3);
+      // Locked until the Shell says otherwise: no shimmer, no glow.
+      expect(shell.usable).toBe(station.reserved === true);
+      expect(shell.glow).toBe(0);
     }
     room.dispose();
   });
@@ -333,32 +316,33 @@ describe('buildFixedRoom', () => {
     const { map, room } = build('bank');
     const group = stationGroup(room, 'bank:shielding');
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
-    const halo = { get opacity() { return haloOf(room, 'bank:shielding').opacity; } };
+    const shimmer = () => shellOf(room, 'bank:shielding').usable;
     const label = stationLabel(group);
-    const locked = { colour: accent.color.getHex(), halo: halo.opacity };
+    const locked = { colour: accent.color.getHex() };
     expect(accent.emissiveIntensity).toBe(0);
+    expect(shimmer()).toBe(false);
 
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
     expect(group.userData['status']).toBe('available');
     expect(group.userData['highlighted']).toBe(false);
     expect(accent.color.getHex()).not.toBe(locked.colour);
     expect(accent.emissiveIntensity).toBeGreaterThan(0);
-    expect(halo.opacity).toBeGreaterThan(locked.halo);
-    const available = { intensity: accent.emissiveIntensity, halo: halo.opacity };
+    // D-123: available, it shimmers.
+    expect(shimmer()).toBe(true);
+    const available = { intensity: accent.emissiveIntensity };
 
     room.setStations(
       fixedRoomStationPresentations(map, roomState(map, 'available', 'bank:shielding', 'SHIELD NOW')),
     );
     expect(group.userData['highlighted']).toBe(true);
     expect(accent.emissiveIntensity).toBeGreaterThan(available.intensity);
-    expect(halo.opacity).toBeGreaterThan(available.halo);
     expect(label.userData['text']).toBe('SHIELD NOW');
 
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'locked', null)));
     expect(group.userData['status']).toBe('locked');
     expect(accent.color.getHex()).toBe(locked.colour);
     expect(accent.emissiveIntensity).toBe(0);
-    expect(halo.opacity).toBeCloseTo(locked.halo);
+    expect(shimmer()).toBe(false);
     expect(label.userData['text']).toBe(map.stations[0]!.label);
 
     // Unknown stations and malformed input have no effect.
@@ -462,14 +446,14 @@ describe('buildFixedRoom', () => {
     // The station label heads the gateway's departure board, NEAR's uppercase mono in green on black.
     expect(stationLabel(group).userData['options']).toEqual(NEAR_DEPARTURE_HEADER);
     expect(NEAR_DEPARTURE_HEADER).toMatchObject({ titleFont: 'mono', uppercase: true, foreground: '#00ec97', background: '#000000' });
-    // Locked until the Shell says otherwise, then green; the highlight's halo in the tint.
+    // Locked until the Shell says otherwise, then green, and brighter stepped up to.
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
     expect(accent.emissiveIntensity).toBe(0);
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
     expect(accent.emissive.getHex()).toBe(new Color(NEAR.green).getHex());
-    expect(haloOf(room, 'bridge:deposit').colour).toBe(new Color(NEAR.green).getHex());
+    const ready = accent.emissiveIntensity;
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', 'bridge:deposit')));
-    expect(haloOf(room, 'bridge:deposit').colour).toBe(new Color(NEAR.greenTint).getHex());
+    expect(accent.emissiveIntensity).toBeGreaterThan(ready);
     // The route map on the north wall, self-lit in the measured green, with its
     // aurora and travelling pulse fading with that wall.
     const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
@@ -578,8 +562,7 @@ describe('buildFixedRoom', () => {
     const state = (group: Object3D) => ({
       colour: accent(group).color.getHex(),
       glow: accent(group).emissiveIntensity,
-      halo: haloOf(room, group.userData['station'] as string).colour,
-      opacity: haloOf(room, group.userData['station'] as string).opacity,
+      usable: shellOf(room, group.userData['station'] as string).usable,
     });
     const show = (status: 'available' | 'locked', highlighted: 'bank:staking' | null, label = 'STAKE') =>
       room.setStations(
@@ -606,9 +589,9 @@ describe('buildFixedRoom', () => {
     const highlighted = state(staking);
     expect(new Set([locked.colour, available.colour, highlighted.colour]).size).toBe(3);
     expect(highlighted.glow).toBeGreaterThan(available.glow);
-    expect(highlighted.halo).not.toBe(available.halo);
-    expect(locked.opacity).toBeLessThan(available.opacity);
-    expect(available.opacity).toBeLessThan(highlighted.opacity);
+    // D-123: locked, it does not shimmer; available, it does.
+    expect(locked.usable).toBe(false);
+    expect(available.usable).toBe(true);
     expect(accent(shielding).emissive.getHex()).toBe(new Color(STRK20.orange).getHex());
     // The Shell's label on a green blade hung from the booth, facing the
     // camera over the hall; Endur's name once, on the booth's south end.
@@ -632,11 +615,11 @@ describe('buildFixedRoom', () => {
 
     // D-103: the counter's own group holds only what its state changes, its
     // status light (D-104: one mesh, no beacon) and its label; its window
-    // and halo are in the room's shared meshes. All dispose with the room.
+    // and its affordance shell are in the room's shared meshes. All dispose with the room.
     const meshes: Mesh[] = [];
     staking.traverse((object) => object instanceof Mesh && meshes.push(object));
     expect(meshes.map((mesh) => mesh.name)).toEqual(['station:bank:staking:status']);
-    for (const suffix of [':counters', ':counter-screens', ':halos', ':glass']) meshes.push(meshNamed(room.group, suffix));
+    for (const suffix of [':counters', ':counter-screens', ':affordances', ':glass']) meshes.push(meshNamed(room.group, suffix));
     const spies = [...new Set(meshes.flatMap((mesh) => [mesh.geometry, mesh.material as Material]))].map((value) =>
       vi.spyOn(value, 'dispose'),
     );
@@ -701,24 +684,16 @@ describe('buildFixedRoom', () => {
       expect(hsl.l).toBeGreaterThan(0.85);
     }
     expect(inside).toBeGreaterThan(100);
-    // Locked is a calm grey; ready is the blue; stepping up glows brighter
-    // with a deeper halo, which reads on the white floor.
+    // Locked is a calm grey; ready is the blue; stepping up glows brighter.
     const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
-    const halo = {
-      get color() { return new Color(haloOf(room, VAULT_SUPPLY_STATION).colour); },
-      get opacity() { return haloOf(room, VAULT_SUPPLY_STATION).opacity; },
-    };
     accent.color.getHSL(hsl, SRGBColorSpace);
     expect(hsl.s).toBeLessThan(0.25);
     expect(accent.emissiveIntensity).toBe(0);
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
     expect(accent.emissive.getHex()).toBe(new Color(VESU.blue).getHex());
-    expect(halo.color.getHex()).toBe(new Color(VESU.blue).getHex());
-    const ready = { glow: accent.emissiveIntensity, halo: halo.opacity };
+    const ready = { glow: accent.emissiveIntensity };
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_SUPPLY_STATION)));
     expect(accent.emissiveIntensity).toBeGreaterThan(ready.glow);
-    expect(halo.opacity).toBeGreaterThan(ready.halo);
-    expect(halo.color.getHex()).toBe(new Color(VESU.blueText).getHex());
     // Behind the counter, self-lit on the north wall: Vesu's avatar (the V on
     // ink) between market boards in the app's white, page grey and blues.
     const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
@@ -864,12 +839,12 @@ describe('buildFixedRoom', () => {
       return Math.min(...xs);
     });
     expect([...segmentX].sort((a, b) => a - b)).toEqual(segmentX);
-    // It lights alone: highlighting borrowing leaves its neighbours' halos alone.
+    // It lights alone: highlighting borrowing leaves its neighbours' lights alone.
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_BORROW_STATION)));
-    const halo = (station: string): number => haloOf(room, station).opacity;
-    expect(halo(VAULT_BORROW_STATION)).toBeGreaterThan(halo(VAULT_SUPPLY_STATION));
-    expect(halo(VAULT_BORROW_STATION)).toBeGreaterThan(halo(VAULT_REPAY_STATION));
-    expect(halo(VAULT_REDEEM_STATION)).toBe(halo(VAULT_REPAY_STATION));
+    const light = (station: string): number => (meshNamed(stationGroup(room, station), ':status').material as MeshStandardMaterial).emissiveIntensity;
+    expect(light(VAULT_BORROW_STATION)).toBeGreaterThan(light(VAULT_SUPPLY_STATION));
+    expect(light(VAULT_BORROW_STATION)).toBeGreaterThan(light(VAULT_REPAY_STATION));
+    expect(light(VAULT_REDEEM_STATION)).toBe(light(VAULT_REPAY_STATION));
     // Each costs what the lending counter costs.
     const meshes = (group: Object3D): number => {
       let count = 0;
@@ -1095,7 +1070,7 @@ describe('the Exchange tower floors', () => {
     expect(stationLabel(counter).userData['options']).toEqual(DEGEN_COUNTER_HEADER);
     const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
     expect(accent.color.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.locked.color).getHex());
-    // Available and stepped up to: hot pink with a lime halo, and the Shell's label.
+    // Available and stepped up to: hot pink, and the Shell's label.
     room.setStations(fixedRoomStationPresentations(degenMap, roomState(degenMap, 'available', EXCHANGE_DEGEN_STATION, 'DEGEN')));
     expect(counter.userData['status']).toBe('available');
     expect(stationLabel(counter).userData['text']).toBe('DEGEN');
@@ -1322,12 +1297,12 @@ describe('the Exchange tower floors', () => {
     loading.dispose();
   });
 
-  it.each([BANK_ROOM_DEFINITION, VAULT_ROOM_DEFINITION])('shares the $building counters\' desks and halos, so each extra counter costs only its own state (D-103)', (definition) => {
+  it.each([BANK_ROOM_DEFINITION, VAULT_ROOM_DEFINITION])('shares the $building counters\' desks and affordance shells, so each extra counter costs only its own state (D-103, D-123)', (definition) => {
     const one = buildFixedRoom(createFixedRoom({ ...definition, stations: [definition.stations[0]!] }), createNullLabelFactory());
     const four = buildFixedRoom(createFixedRoom(definition), createNullLabelFactory());
     expect(definition.stations).toHaveLength(4);
-    // One desk mesh, one screen mesh and one halo mesh for the whole row.
-    for (const suffix of [':counters', ':counter-screens', ':halos']) {
+    // One desk mesh, one screen mesh and one affordance mesh for the whole row.
+    for (const suffix of [':counters', ':counter-screens', ':affordances']) {
       const found: string[] = [];
       four.group.traverse((object) => object instanceof Mesh && object.name.endsWith(suffix) && found.push(object.name));
       expect(found).toEqual([`room:${definition.building}${suffix}`]);

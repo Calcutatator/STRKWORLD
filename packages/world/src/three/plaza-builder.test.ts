@@ -256,16 +256,23 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     view.dispose();
   });
 
-  it('draws no prompt of its own: it says how high the shared E prompt floats over each station (D-117)', () => {
+  it('draws no prompt of its own; its monument and table carry their affordance shells instead (D-117, D-123)', () => {
     const { view, plazaLabels } = build();
     expect(plazaLabels.filter((child) => child.userData['plaza'] === 'prompt')).toEqual([]);
-    const monument = view.plaza!.promptHeight(PLAZA_MONUMENT_STATION)!;
-    const table = view.plaza!.promptHeight(PLAZA_SHELLS_STATION)!;
-    // Over the monument's tip, and just above the table.
-    expect(monument).toBeGreaterThan(5);
-    expect(table).toBeGreaterThan(1);
-    expect(table).toBeLessThan(2);
-    expect(view.plaza!.promptHeight('bank:shielding')).toBeNull();
+    const shells = view.plaza!.affordances!;
+    expect(shells.ids).toEqual([PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION]);
+    expect(shells.mesh.parent).toBe(view.ground);
+    // Both always answer E, so both always shimmer.
+    expect(shells.isUsable(PLAZA_MONUMENT_STATION)).toBe(true);
+    expect(shells.isUsable(PLAZA_SHELLS_STATION)).toBe(true);
+    // Each shell covers its own piece: the monument reaches its tip, the table stays low.
+    const slot = shells.mesh.geometry.getAttribute('aSlot');
+    const position = shells.mesh.geometry.getAttribute('position');
+    const top = [0, 0];
+    for (let i = 0; i < slot.count; i++) top[slot.getX(i)] = Math.max(top[slot.getX(i)]!, position.getY(i));
+    expect(top[0]).toBeGreaterThan(5);
+    expect(top[1]).toBeGreaterThan(0.7);
+    expect(top[1]).toBeLessThan(1.2);
     // The table carries its game's name all the time.
     expect(labelFor(plazaLabels, 'card').userData['text']).toBe("WHERE'S THE NOTE?");
     view.dispose();
@@ -307,15 +314,19 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     view.dispose();
   });
 
-  it('costs ten draw calls and a few thousand triangles, leaving the street well inside its budget', () => {
+  it('costs eleven draw calls and a few thousand triangles, leaving the street well inside its budget', () => {
     const { view, plazaLabels } = build();
     const plazaMeshes = view.ground.children.filter((child) => child.name.startsWith('plaza:'));
     const plaza = cost(plazaMeshes, plazaLabels);
-    // Five merged meshes, and five labels: the sign, three faces and the card
-    // (the E prompt is the World's shared one, D-117).
-    expect(plaza.calls).toBe(10);
+    // Five merged meshes, one affordance mesh for both stations' shimmer and
+    // glow (D-123), and five labels: the sign, three faces and the card.
+    expect(plaza.calls).toBe(11);
     expect(plaza.triangles).toBeGreaterThan(1_000);
-    expect(plaza.triangles).toBeLessThan(4_000);
+    // The shell copies the monument and the table twice (its surface and its
+    // band): about a thousand triangles, in that one additive call.
+    const shell = cost(plazaMeshes.filter((mesh) => mesh.name === 'plaza:affordances'), []);
+    expect(shell.triangles).toBeLessThan(1_500);
+    expect(plaza.triangles - shell.triangles).toBeLessThan(4_000);
     const street = cost([view.ground, view.doors, view.labels], view.labels.children);
     expect(street.calls).toBeLessThan(150);
     view.dispose();

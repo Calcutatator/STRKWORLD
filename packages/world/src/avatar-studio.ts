@@ -89,6 +89,15 @@ export interface AvatarStudioInteraction {
 export const AVATAR_STUDIO_PROMPT = 'WEAR';
 
 /**
+ * D-117: the interaction target id of Studio figure `figure`. The 3D view
+ * keys each figure's affordance shell by the same id (D-123), so the figure
+ * the interaction system chooses is the one that glows.
+ */
+export function studioFigureTargetId(figure: number): string {
+  return `studio:figure-${figure}`;
+}
+
+/**
  * D-117: the figure within reach of a Studio tile: the one the player
  * stands on, else one in the ring of tiles round it (the figures stand far
  * enough apart that rings never meet).

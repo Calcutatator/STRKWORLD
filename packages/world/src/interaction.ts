@@ -7,16 +7,23 @@
  * Vault and its Vesu counters, Exchange, Degen floor, Post Office, Bridge),
  * the Avatar Studio's figures and the bunker's out-of-order lift. Walking
  * near a station never opens it. The player stands within its range, roughly
- * facing it; one small prompt ("E · SHIELD") floats over it; E, or the touch
- * button that replaces the key prompt on a touch screen, uses it.
+ * facing it; E, or a tap on the key chip on a touch screen, uses it.
+ *
+ * What the player sees (D-123, amending D-117's floating "E · SHIELD" and the
+ * lit approach tiles): every usable station shimmers faintly from across the
+ * room; the one chosen here glows with a soft ember rim; and a quiet key chip
+ * low on the screen reads "[E] SHIELD" (interact-chip.ts). The chip is the
+ * tap button on a touch screen. All three follow `onPrompt`: nothing glows and
+ * no chip shows while the system is blocked or suspended.
  *
  * Renderer-free and engine-free. A station plugs in as an
  * `InteractionSource`: each update it lists the targets the player is in
  * range of by its own rule (the ring of tiles round a counter, D-033's
  * approach), and the system picks one. A future station (the gladiator ring
  * gate, the leaderboard stand) registers a source the same way and gets the
- * prompt, the touch button, the input-gate rules and the combat yield for
- * free.
+ * glow, the chip (and its tap), the input-gate rules and the combat yield for
+ * free. For the glow and the shimmer the 3D view must know the station's
+ * meshes: see `InteractionTarget.object`.
  *
  * Doors are not stations. Walking into a building's door enters it, the
  * bunker's stair takes the player down and a pit entrance will drop them in:
@@ -34,8 +41,8 @@
  * that rule. When a fight must own E outright (say the ring gate's own
  * prompt stands within reach of the fighters), the arena calls
  * `suspend('combat')` for the fight and the returned release when it ends:
- * while any suspension holds, no station is focused, no prompt shows, and E
- * goes straight to the actions.
+ * while any suspension holds, no station is focused, nothing glows, no chip
+ * shows, and E goes straight to the actions.
  */
 
 /** A World pixel point. */
@@ -56,10 +63,29 @@ export interface InteractionRect {
 export interface InteractionTarget {
   /** Unique among the targets offered at once: a station id, a figure. */
   readonly id: string;
-  /** The prompt's words after "E ·", e.g. "SHIELD". One line. */
+  /** The chip's words after its "E" key, e.g. "SHIELD". One line. */
   readonly label: string;
   /** The footprint, World pixels. Distance and facing are measured to its nearest point. */
   readonly rect: InteractionRect;
+  /**
+   * D-123: the station's 3D object (a three.js `Object3D` in the World's
+   * renderer), so the view can light its edges while it is the target. The
+   * system never reads it; it passes it to the view on the prompt.
+   *
+   * Optional, because the 3D view already knows the stock stations by `id`:
+   * room counters and the bunker's lift (their station id), the plaza's
+   * monument and table (their station id) and the Studio's figures
+   * (`studioFigureTargetId`). A new station (the gladiator ring gate, the
+   * leaderboard stand) gets its cues in one of three ways:
+   *  - built into merged meshes by a builder: record its pieces into that
+   *    builder's `AffordanceShells` under this target's `id` (as the plaza
+   *    does), and it shimmers from afar and glows when chosen;
+   *  - built as its own object: `presenter.registerAffordance(id, object)`
+   *    when it is built, with the same result;
+   *  - or simply set `object` here: it glows when chosen, and shimmers from
+   *    then on.
+   */
+  readonly object?: object;
   /**
    * Use it. Synchronous: a Shell handoff happens inside, and its error is
    * the caller's. What it returns is ignored: a focused target always takes
@@ -82,13 +108,15 @@ export interface InteractionAction {
   run(): boolean;
 }
 
-/** The prompt to draw: over the focused target's centre. */
+/** What to show for the focused target: its glow, and the chip's words. */
 export interface InteractionPrompt {
   readonly id: string;
   readonly label: string;
   /** World pixels: the target's centre. */
   readonly x: number;
   readonly y: number;
+  /** The target's 3D object, when it named one (`InteractionTarget.object`). */
+  readonly object?: object;
 }
 
 export interface InteractionPlayer {
@@ -128,7 +156,7 @@ export interface InteractionSystem {
 }
 
 export interface InteractionSystemOptions {
-  /** The focused target changed: draw its prompt, or none. */
+  /** The focused target changed: glow it and show its chip, or show none. */
   readonly onPrompt?: (prompt: InteractionPrompt | null) => void;
   /**
    * True while the World does not own the keyboard (a panel, Menu Mode, a
@@ -334,18 +362,20 @@ export function createInteractionSystem(options: InteractionSystemOptions = {}):
 }
 
 function promptOf(target: InteractionTarget): InteractionPrompt {
+  const object = typeof target.object === 'object' && target.object !== null ? target.object : undefined;
   return Object.freeze({
     id: target.id,
     label: target.label,
     x: target.rect.x + target.rect.width / 2,
     y: target.rect.y + target.rect.height / 2,
+    ...(object ? { object } : {}),
   });
 }
 
 function samePrompt(a: InteractionPrompt | null, b: InteractionPrompt | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.id === b.id && a.label === b.label && a.x === b.x && a.y === b.y;
+  return a.id === b.id && a.label === b.label && a.x === b.x && a.y === b.y && a.object === b.object;
 }
 
 function validTarget(target: unknown): target is InteractionTarget {

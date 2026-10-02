@@ -104,6 +104,9 @@ function inJumpColumn(root: Object3D, walkable: (x: number, z: number) => boolea
   const world = new Matrix4();
   root.traverse((object) => {
     if (!(object instanceof Mesh) || found.has(object.name)) return;
+    // D-123: an affordance shell is a light drawn over its counter's own
+    // pieces, not furniture; the counter itself is checked.
+    if (object.userData['affordance']) return;
     const position = object.geometry.getAttribute('position');
     const index = object.geometry.getIndex();
     const triangles = (index ? index.count : position.count) / 3;

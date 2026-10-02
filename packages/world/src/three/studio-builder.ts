@@ -1,7 +1,8 @@
-import { CircleGeometry, Color, Group, Mesh, RingGeometry } from 'three';
-import type { BufferGeometry, MeshBasicMaterial } from 'three';
+import { Color, Group, RingGeometry } from 'three';
+import type { MeshBasicMaterial } from 'three';
 import {
   avatarStudioTileColour,
+  studioFigureTargetId,
   isAvatarStudioSolidAt,
   type AvatarStudioDefinition,
   type AvatarStudioFigure,
@@ -9,7 +10,6 @@ import {
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import {
-  GeometryBin,
   ResourceBag,
   STUDIO_THEME,
   boxGeometry,
@@ -24,8 +24,8 @@ import {
   pick,
   shade,
   sphereGeometry,
-  unlitMaterial,
 } from './palette.js';
+import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 import {
   createInteriorShell,
   type InteriorOccluder,
@@ -47,10 +47,14 @@ import type {
  * A dressing room: Hollywood mirrors, rails of clothes, a rug, and one floor
  * pad per figure with the injected avatar standing on it. Pads are walked
  * onto (they are not solid), so they stay 4 cm tall. The return portal glows
- * in the top wall. `sync` keeps the 2D figure layer's contract — figures and
- * the single highlight follow `visible`, one highlight at most, rollback on a
- * failed sync, idempotent teardown with no late resurrection — and also shows
- * or hides the room itself, since StudioView has no other visibility control.
+ * in the top wall. `sync` keeps the 2D figure layer's contract — figures
+ * follow `visible`, rollback on a failed sync, idempotent teardown with no
+ * late resurrection — and also shows or hides the room itself, since
+ * StudioView has no other visibility control.
+ *
+ * D-123: the figure in reach no longer lights a ring on the floor. Every
+ * figure shimmers faintly and the one the interaction system chooses glows
+ * (three/affordance.ts), from one affordance mesh for the whole Studio.
  */
 
 /** Pad height; figures stand on it. */
@@ -61,7 +65,6 @@ const IDLE: AvatarMotion = Object.freeze({ moving: false, sprinting: false });
 interface FigureView {
   readonly def: AvatarStudioFigure;
   readonly figure: AvatarFigure;
-  readonly highlight: Group;
 }
 
 export function buildAvatarStudio(
@@ -83,7 +86,7 @@ export function buildAvatarStudio(
   const textLabels: TextLabel[] = [];
   let shell: InteriorShell | null = null;
   let occluders: readonly InteriorOccluder[] = [];
-  let ringMaterial: MeshBasicMaterial;
+  let affordances: AffordanceSet | null = null;
   let floorLight: MeshBasicMaterial | null = null;
   let floorGlow: MeshBasicMaterial | null = null;
   try {
@@ -113,32 +116,10 @@ export function buildAvatarStudio(
     rug(shell, definition);
     for (const figure of definition.figures) pad(shell, figure);
 
-    ringMaterial = res.material(
-      unlitMaterial({ color: STUDIO_THEME.highlight, vertexColors: false, transparent: true, opacity: 0.95 }),
-    );
-    const glowMaterial = res.material(unlitMaterial({ additive: true }));
-    const ringGeometry = res.geometry(new RingGeometry(0.44, 0.52, 36).rotateX(-Math.PI / 2));
-    const glowGeometry = res.geometry(radialGlow(0.62, STUDIO_THEME.highlight));
-
+    const shells = createAffordanceShells();
     for (const def of definition.figures) {
       const cx = def.x + def.width / 2;
       const cz = def.y + def.height / 2;
-      const highlight = new Group();
-      highlight.name = `studio:highlight-${def.figure}`;
-      highlight.userData['figure'] = def.figure;
-      highlight.position.set(cx, 0, cz);
-      highlight.visible = false;
-      const glow = new Mesh(glowGeometry, glowMaterial);
-      glow.name = `${highlight.name}:glow`;
-      glow.position.y = STUDIO_PAD_TOP + 0.004;
-      glow.renderOrder = 1;
-      const ring = new Mesh(ringGeometry, ringMaterial);
-      ring.name = `${highlight.name}:ring`;
-      ring.position.y = STUDIO_PAD_TOP + 0.008;
-      ring.renderOrder = 1;
-      highlight.add(glow, ring);
-      group.add(highlight);
-
       const figure = figures(def.sprite);
       created.push(figure);
       // Callers own a figure's position and yaw; it faces the camera (+Z) at 0.
@@ -146,7 +127,16 @@ export function buildAvatarStudio(
       figure.object.rotation.y = 0;
       figure.object.visible = false;
       group.add(figure.object);
-      views.push({ def, figure, highlight });
+      views.push({ def, figure });
+      // Its shell is the figure as it stands: the idle breath moves it by
+      // millimetres, well inside the glow's band.
+      shells.addObject(studioFigureTargetId(def.figure), figure.object, group);
+    }
+    affordances = shells.build('avatar-studio:affordances');
+    if (affordances) {
+      group.add(affordances.mesh);
+      // Every figure is always there to wear.
+      for (const id of affordances.ids) affordances.setUsable(id, true);
     }
 
     const north = shell.walls.north;
@@ -170,6 +160,7 @@ export function buildAvatarStudio(
   } catch (error) {
     // Preserve the construction error while releasing everything made so far.
     shell?.discard();
+    affordances?.dispose();
     for (const figure of created) {
       try {
         figure.dispose();
@@ -193,24 +184,21 @@ export function buildAvatarStudio(
   // visibility control (the presenter never toggles `group.visible` itself).
   group.visible = false;
   let figuresVisible = false;
-  let highlighted: FigureView | null = null;
   let elapsed = 0;
   let disposed = false;
   return {
     group,
     occluders,
+    affordances,
     sync(state) {
       if (disposed) return;
       const visible = state?.visible === true;
-      const selected = views.find((view) => view.def.figure === state?.highlightedFigure) ?? null;
       const groupBefore = group.visible;
-      const before = views.map((view) => [view.figure.object.visible, view.highlight.visible] as const);
+      const before = views.map((view) => view.figure.object.visible);
       try {
         group.visible = visible;
         for (const view of views) view.figure.object.visible = visible;
-        for (const view of views) view.highlight.visible = visible && view === selected;
         figuresVisible = visible;
-        highlighted = visible ? selected : null;
       } catch (error) {
         const rollbackErrors: unknown[] = [];
         try {
@@ -219,14 +207,9 @@ export function buildAvatarStudio(
           rollbackErrors.push(rollbackError);
         }
         views.forEach((view, index) => {
-          const [figureVisible, highlightVisible] = before[index]!;
+          const figureVisible = before[index]!;
           try {
             if (view.figure.object.visible !== figureVisible) view.figure.object.visible = figureVisible;
-          } catch (rollbackError) {
-            rollbackErrors.push(rollbackError);
-          }
-          try {
-            if (view.highlight.visible !== highlightVisible) view.highlight.visible = highlightVisible;
           } catch (rollbackError) {
             rollbackErrors.push(rollbackError);
           }
@@ -243,10 +226,6 @@ export function buildAvatarStudio(
       elapsed += dt;
       const t = elapsed / 1000;
       if (figuresVisible) for (const view of views) view.figure.update(dt, IDLE);
-      ringMaterial.opacity = 0.8 + 0.2 * Math.sin(t * 4);
-      for (const view of views) {
-        view.highlight.scale.setScalar(view === highlighted ? 1 + 0.04 * Math.sin(t * 4) : 1);
-      }
       if (floorLight) floorLight.opacity = 0.8 + 0.2 * Math.sin(t * 1.6);
       if (floorGlow) floorGlow.color.setScalar(0.85 + 0.15 * Math.sin(t * 2.2));
     },
@@ -254,8 +233,8 @@ export function buildAvatarStudio(
       if (disposed) return;
       disposed = true;
       figuresVisible = false;
-      highlighted = null;
       const errors: unknown[] = [];
+      affordances?.dispose();
       for (const view of views) {
         try {
           view.figure.dispose();
@@ -286,23 +265,6 @@ function studioFloorColor(definition: AvatarStudioDefinition, x: number, y: numb
   const border = x === 0 || y === 0 || x === definition.width - 1 || y === definition.height - 1;
   if (border) return shade(base, -0.02);
   return jitterColor(shade(base, (x + y) % 2 === 0 ? 0.018 : -0.012), hash01(x, y, 401), 0.012);
-}
-
-/** A soft disc of light, brightest at the centre. */
-function radialGlow(radius: number, colour: number): BufferGeometry {
-  const c = new Color(colour);
-  const bin = new GeometryBin();
-  try {
-    bin.addRGBA('glow', new CircleGeometry(radius, 28).rotateX(-Math.PI / 2), (x, _y, z) => [
-      c.r,
-      c.g,
-      c.b,
-      0.5 * Math.max(0, 1 - Math.hypot(x, z) / radius),
-    ]);
-    return bin.take('glow')!;
-  } finally {
-    bin.dispose();
-  }
 }
 
 /** The way back to the street (D-048): a lit arch in the top wall over the exit tiles. */

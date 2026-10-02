@@ -98,6 +98,7 @@ import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomVi
 import { elevatorBay, netcafeDecor, netcafeProp, netcafeStairs } from './bunker-room.js';
 import { buildArenaRoom } from './arena-room.js';
 import { degenCatStandee } from './degen-cat.js';
+import { createAffordanceShells, type AffordanceSet, type AffordanceShells } from './affordance.js';
 
 /**
  * Fixed-room interiors as lit dioramas (D-059).
@@ -105,7 +106,7 @@ import { degenCatStandee } from './degen-cat.js';
  * The follow camera looks in from the south, so the south wall is a low
  * ledge and the north, east and west walls stand full height, each its own
  * fadeable occluder. Every volume stays on wall, station or fixture tiles;
- * the floor the player walks on carries only flat inlays, halos and light.
+ * the floor the player walks on carries only flat inlays and light.
  * The room is drawn at `origin` (World pixels) over the hidden street.
  */
 
@@ -417,29 +418,13 @@ interface StationView {
   readonly prompt: TextLabel | null;
   readonly phase: number;
   readonly looks: StationLooks;
-  /** The station's approach halo inside the room's one shared halo mesh. */
-  halo: HaloSlice | null;
+  /** D-107: never opens a window, but E still uses it (the bunker's lift), so it counts as usable. */
+  readonly reserved: boolean;
+  /** D-123: the room's affordance shells, where this counter shimmers and glows. */
+  affordances: AffordanceSet | null;
   labelText: string;
   look: StationLook;
   highlighted: boolean;
-}
-
-/**
- * Where one station's halo sits in the room's shared halo mesh (D-103): its
- * fill's vertices and its edge's, coloured per vertex (linear RGB and alpha)
- * so a station's state still drives its own halo while every halo in the room
- * costs one draw call between them.
- */
-interface HaloSlice {
-  readonly colour: BufferAttribute;
-  readonly fill: readonly [number, number];
-  readonly edge: readonly [number, number];
-}
-
-/** One station's approach halo as flat quads: the fill ring and its edge line. */
-interface HaloQuads {
-  readonly fill: readonly BufferGeometry[];
-  readonly edge: readonly BufferGeometry[];
 }
 
 /**
@@ -474,6 +459,7 @@ export function buildFixedRoom(
   const animators: Animator[] = [];
   let shell: InteriorShell | null = null;
   let finished: InteriorShellMaterials;
+  let affordances: AffordanceSet | null = null;
   try {
     shell = createInteriorShell({
       name: group.name,
@@ -495,13 +481,14 @@ export function buildFixedRoom(
       group,
     });
     // D-103: every counter's static desk and props share one lit mesh and
-    // one self-lit mesh, and every approach halo one vertex-coloured mesh,
-    // so a room of four counters costs barely more than a room of one.
+    // one self-lit mesh, so a room of four counters costs barely more than a
+    // room of one. D-123: each counter's pieces are also copied into the
+    // room's one affordance mesh, which draws its shimmer and edge glow.
     // D-104: the fixtures the counters are built into (a teller wall, a
     // front desk, a booth) go into the same meshes, and their glass into one
     // more.
     const counters = new GeometryBin();
-    const halos: HaloQuads[] = [];
+    const shells = createAffordanceShells();
     try {
       decorateRoom(theme, shell, map, res, animators, labels, textLabels, images, roomFurniture(counters, labels, textLabels, group));
       if (theme.decor === 'netcafe') {
@@ -533,11 +520,10 @@ export function buildFixedRoom(
         // The Exchange's, Degen floor's, Post Office's and Bridge's counters
         // (D-105) dress their own fixtures; the rest go through `buildStation`.
         const counter = BUILT_IN_COUNTERS[station.station];
-        const built = counter
-          ? buildCounterInRoom(station, counter, map, theme, shell, labels, res, group, textLabels, counters)
-          : buildStation(station, map, theme, labels, res, group, textLabels, counters);
-        stations.push(built.view);
-        halos.push(built.halo);
+        const view = counter
+          ? buildCounterInRoom(station, counter, map, theme, shell, labels, res, group, textLabels, counters, shells)
+          : buildStation(station, map, theme, labels, res, group, textLabels, counters, shells);
+        stations.push(view);
       }
       flushBin(counters, 'body', res.material(standardMaterial({ roughness: 0.7 })), res, group, {
         name: `${group.name}:counters`,
@@ -553,13 +539,20 @@ export function buildFixedRoom(
           renderOrder: 1,
         });
       }
+      affordances = shells.build(`${group.name}:affordances`);
+      if (affordances) group.add(affordances.mesh);
     } finally {
       counters.dispose();
     }
-    buildHalos(stations, halos, res, group);
+    // Until the Shell reports otherwise a station is locked (fixed-room.ts).
+    for (const view of stations) {
+      view.affordances = affordances;
+      applyStation(view, { station: view.station, label: view.labelText, status: 'locked', highlighted: false, x: 0, y: 0, width: 0, height: 0 });
+    }
     finished = shell.finish();
   } catch (error) {
     shell?.discard();
+    affordances?.dispose();
     for (const label of textLabels) {
       try {
         label.dispose();
@@ -586,6 +579,7 @@ export function buildFixedRoom(
     building: map.building,
     group,
     occluders: finished.occluders,
+    affordances,
     setStations(presentations: readonly FixedRoomStationPresentation[]) {
       if (disposed || !Array.isArray(presentations)) return;
       for (const presentation of presentations) {
@@ -604,7 +598,6 @@ export function buildFixedRoom(
           view.beacon.position.y = STATION_BEACON_Y + Math.sin(t * 2 + view.phase) * 0.04;
         }
         const breathe = view.highlighted ? Math.sin(t * 4.5) : 0;
-        if (view.highlighted) paintHalo(view, view.look.haloOpacity * (1 + 0.18 * breathe), Math.min(1, view.look.edgeOpacity * (1 + 0.08 * breathe)));
         view.accent.emissiveIntensity = view.look.emissiveIntensity * (1 + 0.12 * breathe);
       }
       for (const animate of animators) animate(elapsed);
@@ -613,6 +606,7 @@ export function buildFixedRoom(
       if (disposed) return;
       disposed = true;
       const errors: unknown[] = [];
+      affordances?.dispose();
       for (const label of textLabels) {
         try {
           label.dispose();
@@ -649,7 +643,10 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
   view.accent.color.setHex(look.color);
   view.accent.emissive.setHex(look.emissive);
   view.accent.emissiveIntensity = look.emissiveIntensity;
-  paintHalo(view, look.haloOpacity, look.edgeOpacity);
+  // D-123: an available counter, or the lift E still answers at, shimmers
+  // and can glow; a locked one does neither (its status light still greys
+  // up when the player stands at it, which is all a locked counter says).
+  view.affordances?.setUsable(view.station, available || view.reserved);
   view.group.userData['status'] = available ? 'available' : 'locked';
   view.group.userData['highlighted'] = highlighted;
   const text =
@@ -663,13 +660,14 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
 }
 
 /**
- * A counter on the station rect, a status beacon, a floating label and the
- * approach halo, dressed in the station's own theme or else its room's.
+ * A counter on the station rect, a status beacon and a floating label,
+ * dressed in the station's own theme or else its room's.
  *
- * D-103: the desk and its props go into the room's shared `counters` bin and
- * the halo comes back as quads for the room's shared halo mesh; what stays on
- * the station's own group is what its state changes: the status panel, the
- * beacon, the label and any brand plate.
+ * D-103: the desk and its props go into the room's shared `counters` bin;
+ * what stays on the station's own group is what its state changes: the
+ * status panel, the beacon, the label and any brand plate. D-123: the desk,
+ * its props and the status panel are recorded into the room's affordance
+ * shells as they are added.
  */
 function buildStation(
   station: FixedRoomStationDefinition,
@@ -679,12 +677,14 @@ function buildStation(
   res: ResourceBag,
   parent: Group,
   textLabels: TextLabel[],
-  counters: GeometryBin,
-): { view: StationView; halo: HaloQuads } {
+  room: GeometryBin,
+  shells: AffordanceShells,
+): StationView {
   const group = new Group();
   group.name = `station:${station.station}`;
   group.userData['station'] = station.station;
   parent.add(group);
+  const counters = shells.record(station.station, room, onFootprint(station));
   const x0 = station.x + 0.1;
   const x1 = station.x + station.width - 0.1;
   const z0 = station.y + 0.14;
@@ -694,15 +694,14 @@ function buildStation(
   const dress = stationTheme(theme, station.station);
 
   const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
-  const halo = stationHalo(station, map);
-  if (dress.fit) return buildBuiltInStation(station, map, dress, dress.fit, labels, res, group, textLabels, counters, accent, halo);
+  if (dress.fit) return buildBuiltInStation(station, map, dress, dress.fit, labels, res, group, textLabels, counters, accent, shells);
   counters.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(dress.kioskBase, 0.1));
   counters.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), dress.kioskTop);
   counters.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), dress.kioskTrim ?? shade(dress.kioskBase, -0.12));
   stationProps(dress.props, theme, counters, x0, x1, z0, z1);
   const bin = new GeometryBin();
   try {
-    bin.add('accent', boxGeometry(x0 + 0.12, 0.3, z1, x1 - 0.12, 0.72, z1 + 0.03), 0xffffff);
+    shells.record(station.station, bin).add('accent', boxGeometry(x0 + 0.12, 0.3, z1, x1 - 0.12, 0.72, z1 + 0.03), 0xffffff);
     flushBin(bin, 'accent', accent, res, group, { name: `${group.name}:status` });
   } finally {
     bin.dispose();
@@ -740,68 +739,17 @@ function buildStation(
     prompt: null,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
-    halo: null,
+    reserved: station.reserved === true,
+    affordances: null,
     labelText: station.label,
     look: dress.looks.locked,
     highlighted: false,
   };
-  return { view, halo };
-}
-
-/** Vertices in one flat quad, as `flatQuad` builds it (two triangles, not indexed). */
-const QUAD_VERTICES = 6;
-
-/**
- * The room's approach halos as one mesh (D-103): every station's fill, then
- * every station's edge, so the edges blend over the fills exactly as the two
- * separate meshes did. Each station keeps a slice of the colour attribute and
- * paints its own state into it. Until the Shell reports otherwise a station
- * is locked (fixed-room.ts).
- */
-function buildHalos(stations: readonly StationView[], halos: readonly HaloQuads[], res: ResourceBag, group: Group): void {
-  if (stations.length === 0) return;
-  const bin = new GeometryBin();
-  try {
-    const transparent: readonly [number, number, number, number] = [1, 1, 1, 0];
-    for (const quads of halos) for (const quad of quads.fill) bin.addRGBA('halo', quad, () => transparent);
-    for (const quads of halos) for (const quad of quads.edge) bin.addRGBA('halo', quad, () => transparent);
-    const material = res.material(unlitMaterial({ transparent: true }));
-    const mesh = flushBin(bin, 'halo', material, res, group, { name: `${group.name}:halos`, renderOrder: 1 });
-    if (!mesh) return;
-    const colour = mesh.geometry.getAttribute('color') as BufferAttribute;
-    let fillAt = 0;
-    let edgeAt = halos.reduce((sum, quads) => sum + quads.fill.length * QUAD_VERTICES, 0);
-    stations.forEach((view, index) => {
-      const fill = halos[index]!.fill.length * QUAD_VERTICES;
-      const edge = halos[index]!.edge.length * QUAD_VERTICES;
-      view.halo = { colour, fill: [fillAt, fill], edge: [edgeAt, edge] };
-      fillAt += fill;
-      edgeAt += edge;
-      view.group.userData['halo'] = { fill: view.halo.fill, edge: view.halo.edge };
-      applyStation(view, { station: view.station, label: view.labelText, status: 'locked', highlighted: false, x: 0, y: 0, width: 0, height: 0 });
-    });
-  } finally {
-    bin.dispose();
-  }
-}
-
-const haloColour = new Color();
-
-/** Write a station's halo colour and its fill's and edge's opacity into the shared mesh. */
-function paintHalo(view: StationView, fillOpacity: number, edgeOpacity: number): void {
-  const slice = view.halo;
-  if (!slice) return;
-  haloColour.setHex(view.look.halo);
-  const write = ([start, count]: readonly [number, number], alpha: number): void => {
-    for (let i = start; i < start + count; i++) slice.colour.setXYZW(i, haloColour.r, haloColour.g, haloColour.b, alpha);
-  };
-  write(slice.fill, fillOpacity);
-  write(slice.edge, edgeOpacity);
-  slice.colour.needsUpdate = true;
+  return view;
 }
 
 // ---------------------------------------------------------------------------
-// Halos and built-in counters (D-104)
+// Affordance shells and built-in counters (D-104, D-123)
 // ---------------------------------------------------------------------------
 
 /** Whether a player can stand on a tile: not a wall, a counter or a fixture. */
@@ -811,73 +759,29 @@ function standable(map: FixedRoomLevelMap, x: number, y: number): boolean {
 }
 
 /**
- * A station's approach halo as flat quads. A free-standing counter's rings
- * it (D-059). A built-in one's (D-104) covers only the tiles a player can
- * stand on to open it, so it never lights the furniture or the floor behind
- * a teller wall: the fill over those tiles, inset where the region ends, and
- * its edge traced round the region's outside.
+ * D-123: which of a counter's pieces its affordance shell copies: those
+ * standing on or just round its own footprint, below the ceiling, and no
+ * longer than the footprint and a bit. A built-in counter's fixtures run on
+ * along a wall or up into a board of screens (D-104, D-105); the glow
+ * outlines the counter you would use, not the room.
  */
-function stationHalo(station: FixedRoomStationDefinition, map: FixedRoomLevelMap): HaloQuads {
-  const fillY = 0.012;
-  const e = 0.06;
-  const edgeY = 0.015;
-  const inset = 0.04;
-  const region: [number, number][] = [];
-  let ring = true;
-  for (let y = station.y - 1; y <= station.y + station.height; y++) {
-    for (let x = station.x - 1; x <= station.x + station.width; x++) {
-      if (x >= station.x && x < station.x + station.width && y >= station.y && y < station.y + station.height) continue;
-      if (standable(map, x, y)) region.push([x, y]);
-      else ring = false;
-    }
-  }
-  if (ring) {
-    const hx0 = station.x - 1 + inset;
-    const hx1 = station.x + station.width + 1 - inset;
-    const hz0 = station.y - 1 + inset;
-    const hz1 = station.y + station.height + 1 - inset;
-    const sx0 = station.x;
-    const sx1 = station.x + station.width;
-    const sz0 = station.y;
-    const sz1 = station.y + station.height;
-    return {
-      fill: [
-        flatQuad(hx0, hz0, hx1, sz0, fillY),
-        flatQuad(hx0, sz1, hx1, hz1, fillY),
-        flatQuad(hx0, sz0, sx0, sz1, fillY),
-        flatQuad(sx1, sz0, hx1, sz1, fillY),
-      ],
-      edge: [
-        flatQuad(hx0, hz0, hx1, hz0 + e, edgeY),
-        flatQuad(hx0, hz1 - e, hx1, hz1, edgeY),
-        flatQuad(hx0, hz0 + e, hx0 + e, hz1 - e, edgeY),
-        flatQuad(hx1 - e, hz0 + e, hx1, hz1 - e, edgeY),
-      ],
-    };
-  }
-  const inRegion = (x: number, y: number): boolean => region.some(([rx, ry]) => rx === x && ry === y);
-  const fill: BufferGeometry[] = [];
-  const edge: BufferGeometry[] = [];
-  for (const [x, y] of region) {
-    const west = !inRegion(x - 1, y);
-    const east = !inRegion(x + 1, y);
-    const north = !inRegion(x, y - 1);
-    const south = !inRegion(x, y + 1);
-    const x0 = x + (west ? inset : 0);
-    const x1 = x + 1 - (east ? inset : 0);
-    const z0 = y + (north ? inset : 0);
-    const z1 = y + 1 - (south ? inset : 0);
-    fill.push(flatQuad(x0, z0, x1, z1, fillY));
-    // Edges along x run the tile's full trimmed width; edges along z stop
-    // short of them, so no corner is painted twice.
-    if (north) edge.push(flatQuad(x0, z0, x1, z0 + e, edgeY));
-    if (south) edge.push(flatQuad(x0, z1 - e, x1, z1, edgeY));
-    const za = z0 + (north ? e : 0);
-    const zb = z1 - (south ? e : 0);
-    if (west && zb > za) edge.push(flatQuad(x0, za, x0 + e, zb, edgeY));
-    if (east && zb > za) edge.push(flatQuad(x1 - e, za, x1, zb, edgeY));
-  }
-  return { fill, edge };
+function onFootprint(station: FixedRoomStationDefinition, reach = 0.45): (geometry: BufferGeometry) => boolean {
+  const x0 = station.x - reach;
+  const x1 = station.x + station.width + reach;
+  const z0 = station.y - reach;
+  const z1 = station.y + station.height + reach;
+  return (geometry) => {
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    if (!box || box.isEmpty()) return false;
+    const cx = (box.min.x + box.max.x) / 2;
+    const cz = (box.min.z + box.max.z) / 2;
+    // A run of fixture (a long desk, a teller wall) that merely passes
+    // through the footprint is the room's, not the counter's.
+    const span = Math.max(station.width, station.height) + 2.6;
+    if (box.max.x - box.min.x > span || box.max.z - box.min.z > span) return false;
+    return cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 && box.min.y < 2.4;
+  };
 }
 
 /** What a built-in counter hands back: its status light, and where its sign hangs. */
@@ -907,12 +811,13 @@ function buildBuiltInStation(
   textLabels: TextLabel[],
   counters: GeometryBin,
   accent: MeshStandardMaterial,
-  halo: HaloQuads,
-): { view: StationView; halo: HaloQuads } {
+  shells: AffordanceShells,
+): StationView {
   const built = builtInCounter(fit, station, map, counters);
   const bin = new GeometryBin();
   try {
-    for (const geometry of built.status) bin.add('accent', geometry, 0xffffff);
+    const status = shells.record(station.station, bin);
+    for (const geometry of built.status) status.add('accent', geometry, 0xffffff);
     flushBin(bin, 'accent', accent, res, group, { name: `${group.name}:status` });
   } finally {
     bin.dispose();
@@ -946,12 +851,13 @@ function buildBuiltInStation(
     prompt,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
-    halo: null,
+    reserved: station.reserved === true,
+    affordances: null,
     labelText: station.label,
     look: dress.looks.locked,
     highlighted: false,
   };
-  return { view, halo };
+  return view;
 }
 
 /** A plain sign for a built-in counter whose theme names none. */
@@ -1698,9 +1604,9 @@ export const BUILT_IN_COUNTER_STATIONS: readonly StationId[] = Object.freeze(Obj
 
 /**
  * A counter built into its room (D-105): the room's furniture round the
- * station, its status lights, D-104's halo on the approach tiles a player can
- * stand on, and the Shell's label on the counter's own sign. No beacon, as
- * D-104's built-in counters.
+ * station, its status lights and the Shell's label on the counter's own
+ * sign. No beacon, as D-104's built-in counters. D-123: the pieces on its
+ * footprint and its status lights are its affordance shell.
  */
 function buildCounterInRoom(
   station: FixedRoomStationDefinition,
@@ -1713,7 +1619,8 @@ function buildCounterInRoom(
   parent: Group,
   textLabels: TextLabel[],
   counters: GeometryBin,
-): { view: StationView; halo: HaloQuads } {
+  shells: AffordanceShells,
+): StationView {
   const group = new Group();
   group.name = `station:${station.station}`;
   group.userData['station'] = station.station;
@@ -1723,7 +1630,18 @@ function buildCounterInRoom(
   const status = new GeometryBin();
   let header: CounterHeader;
   try {
-    header = build({ station, map, theme, dress, bin: counters, status, shell, group, labels, textLabels });
+    header = build({
+      station,
+      map,
+      theme,
+      dress,
+      bin: shells.record(station.station, counters, onFootprint(station)),
+      status: shells.record(station.station, status),
+      shell,
+      group,
+      labels,
+      textLabels,
+    });
     flushBin(status, 'accent', accent, res, group, { name: `${group.name}:status` });
   } finally {
     status.dispose();
@@ -1747,12 +1665,13 @@ function buildCounterInRoom(
     prompt: null,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
-    halo: null,
+    reserved: station.reserved === true,
+    affordances: null,
     labelText: station.label,
     look: dress.looks.locked,
     highlighted: false,
   };
-  return { view, halo: stationHalo(station, map) };
+  return view;
 }
 
 /** A screen on a face: a bezel and a self-lit card, rounded as avnu's cards are. */
@@ -3390,7 +3309,7 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
     }
   }
 
-  // Underfoot: a grey grid of crosshairs (clear of the desk's halo), and the
+  // Underfoot: a grey grid of crosshairs (clear of the desk's approach), and the
   // route from the exit to the desk, dashed in green.
   const station = map.stations[0];
   const exit = map.exit;

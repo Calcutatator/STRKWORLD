@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import {
+  Box3,
+  BoxGeometry,
   BufferGeometry,
   Group,
   InstancedMesh,
@@ -11,7 +13,7 @@ import {
   Vector3,
 } from 'three';
 import type { AvatarSpriteKey } from '@strkworld/shared';
-import { AVATAR_STUDIO_DEFINITION, isAvatarStudioSolidAt } from '../avatar-studio.js';
+import { AVATAR_STUDIO_DEFINITION, isAvatarStudioSolidAt, studioFigureTargetId } from '../avatar-studio.js';
 import { avatarSpriteForFigure } from '../avatar-state.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
@@ -29,7 +31,7 @@ interface FakeFigure extends AvatarFigure {
   readonly dispose: Mock<() => void>;
 }
 
-function fakeFigures(options: { failAt?: number; failDisposeAt?: readonly number[] } = {}) {
+function fakeFigures(options: { failAt?: number; failDisposeAt?: readonly number[]; body?: boolean } = {}) {
   const created: FakeFigure[] = [];
   const keys: AvatarSpriteKey[] = [];
   let count = 0;
@@ -37,8 +39,11 @@ function fakeFigures(options: { failAt?: number; failDisposeAt?: readonly number
     count += 1;
     keys.push(key);
     if (count === options.failAt) throw new Error('construction failed');
+    const object = new Group();
+    // A stand-in body, for the affordance shells to copy (D-123).
+    if (options.body) object.add(new Mesh(new BoxGeometry(0.5, 1.6, 0.3).translate(0, 0.8, 0), new MeshBasicMaterial()));
     const figure: FakeFigure = {
-      object: new Group(),
+      object,
       look: key,
       setLook: vi.fn<(key: AvatarSpriteKey) => void>(),
       update: vi.fn<(deltaMs: number, motion: AvatarMotion) => void>(),
@@ -55,14 +60,11 @@ function fakeFigures(options: { failAt?: number; failDisposeAt?: readonly number
   return { factory, created, keys };
 }
 
-function highlights(studio: StudioView): Object3D[] {
-  return studio.group.children.filter((child) => child.name.startsWith('studio:highlight-'));
-}
-
-function visibleHighlights(studio: StudioView): number[] {
-  return highlights(studio)
-    .filter((child) => child.visible)
-    .map((child) => child.userData['figure'] as number);
+/** D-117's floor rings under the figure in reach; D-123 removed them. */
+function floorRings(studio: StudioView): Object3D[] {
+  const found: Object3D[] = [];
+  studio.group.traverse((child) => child.name.startsWith('studio:highlight-') && found.push(child));
+  return found;
 }
 
 describe('buildAvatarStudio', () => {
@@ -72,7 +74,7 @@ describe('buildAvatarStudio', () => {
     const figures = AVATAR_STUDIO_DEFINITION.figures;
     // One pad per authored figure: the definition has eight (validateAvatarStudioDefinition).
     expect(figures).toHaveLength(8);
-    expect(highlights(studio)).toHaveLength(figures.length);
+    expect(floorRings(studio)).toEqual([]);
     expect(keys).toEqual(figures.map((figure) => avatarSpriteForFigure(figure.figure)));
     studio.group.updateMatrixWorld(true);
     // Same centres as the 2D layer: (144, 176) ... (528, 272) px.
@@ -94,11 +96,40 @@ describe('buildAvatarStudio', () => {
       expect(figure.object.rotation.y).toBe(0);
       expect(figure.object.visible).toBe(false);
     });
-    expect(visibleHighlights(studio)).toEqual([]);
     studio.dispose();
   });
 
-  it('mirrors visibility and moves the single highlight without touching avatar art', () => {
+  it('gives every figure an affordance shell that shimmers, and lights no ring on the floor (D-123)', () => {
+    const { factory, created } = fakeFigures({ body: true });
+    const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
+    const shells = studio.affordances!;
+    expect(shells.ids).toEqual(AVATAR_STUDIO_DEFINITION.figures.map((figure) => studioFigureTargetId(figure.figure)));
+    expect(shells.mesh.parent).toBe(studio.group);
+    for (const id of shells.ids) expect(shells.isUsable(id)).toBe(true);
+    // Figure 8's shell stands where figure 8 does, as tall as its body.
+    studio.group.updateMatrixWorld(true);
+    const slot = shells.mesh.geometry.getAttribute('aSlot');
+    const position = shells.mesh.geometry.getAttribute('position');
+    const box = new Box3();
+    const vertex = new Vector3();
+    for (let i = 0; i < slot.count; i++) {
+      if (slot.getX(i) === 7) box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(shells.mesh.matrixWorld));
+    }
+    const at = created[7]!.object.getWorldPosition(new Vector3());
+    expect((box.min.x + box.max.x) / 2).toBeCloseTo(at.x);
+    expect((box.min.z + box.max.z) / 2).toBeCloseTo(at.z);
+    expect(box.max.y).toBeCloseTo(STUDIO_PAD_TOP + 1.6);
+    // The figure in reach glows only once the interaction system chooses it.
+    studio.sync({ visible: true, highlightedFigure: 8 });
+    expect(floorRings(studio)).toEqual([]);
+    shells.focus(studioFigureTargetId(8));
+    shells.update(250);
+    expect(shells.glowLevel(studioFigureTargetId(8))).toBe(1);
+    expect(shells.glowLevel(studioFigureTargetId(1))).toBe(0);
+    studio.dispose();
+  });
+
+  it('mirrors visibility without touching avatar art', () => {
     const { factory, created } = fakeFigures();
     const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
     // The room itself is hidden until synced visible, like the figures.
@@ -107,22 +138,13 @@ describe('buildAvatarStudio', () => {
     studio.sync({ visible: true, highlightedFigure: 8 });
     expect(studio.group.visible).toBe(true);
     expect(created.every((figure) => figure.object.visible)).toBe(true);
-    expect(visibleHighlights(studio)).toEqual([8]);
-    const ring = highlights(studio).find((child) => child.userData['figure'] === 8)!;
-    expect(ring.position.x + OX).toBeCloseTo(528 / 32);
-    expect(ring.position.z + OZ).toBeCloseTo(272 / 32);
-
-    studio.sync({ visible: true, highlightedFigure: 1 });
-    expect(visibleHighlights(studio)).toEqual([1]);
 
     studio.sync({ visible: true, highlightedFigure: 99 });
     expect(created.every((figure) => figure.object.visible)).toBe(true);
-    expect(visibleHighlights(studio)).toEqual([]);
 
     studio.sync({ visible: false, highlightedFigure: 1 });
     expect(studio.group.visible).toBe(false);
     expect(created.every((figure) => !figure.object.visible)).toBe(true);
-    expect(visibleHighlights(studio)).toEqual([]);
 
     for (const figure of created) {
       expect(figure.setLook).not.toHaveBeenCalled();
@@ -153,7 +175,6 @@ describe('buildAvatarStudio', () => {
     expect(() => studio.sync({ visible: false, highlightedFigure: null })).toThrow('figure visibility failed');
     expect(studio.group.visible).toBe(true);
     expect(created.slice(0, 4).every((figure) => figure.object.visible)).toBe(true);
-    expect(visibleHighlights(studio)).toEqual([2]);
     studio.dispose();
   });
 
@@ -167,7 +188,7 @@ describe('buildAvatarStudio', () => {
     studio.sync({ visible: false, highlightedFigure: null });
     studio.sync({ visible: true, highlightedFigure: 8 });
     expect(keys).toHaveLength(8);
-    expect(visibleHighlights(studio)).toEqual([8]);
+    expect(created.every((figure) => figure.object.visible)).toBe(true);
 
     studio.dispose();
     studio.dispose();
@@ -209,21 +230,15 @@ describe('buildAvatarStudio', () => {
     for (const figure of created) expect(figure.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('idles visible figures and pulses the highlight', () => {
+  it('idles visible figures', () => {
     const { factory, created } = fakeFigures();
     const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
     studio.update(16);
     for (const figure of created) expect(figure.update).not.toHaveBeenCalled();
 
     studio.sync({ visible: true, highlightedFigure: 3 });
-    const ring = highlights(studio)
-      .find((child) => child.userData['figure'] === 3)!
-      .children.find((child) => child.name.endsWith(':ring')) as Mesh;
-    const material = ring.material as MeshBasicMaterial;
     studio.update(16);
-    const first = material.opacity;
     studio.update(300);
-    expect(material.opacity).not.toBe(first);
     for (const figure of created) {
       expect(figure.update).toHaveBeenCalledWith(16, { moving: false, sprinting: false });
       expect(figure.update).toHaveBeenCalledWith(250, { moving: false, sprinting: false });

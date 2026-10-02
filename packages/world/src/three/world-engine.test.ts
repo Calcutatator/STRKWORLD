@@ -38,10 +38,31 @@ function fakeDom() {
     performance: { now: () => 0 },
     setTimeout: vi.fn(),
   });
+  // D-123: the engine builds the key chip from these: a button with two spans.
+  const element = () => Object.assign(eventHost(), {
+    getContext: () => null,
+    style: {} as Record<string, string>,
+    dataset: {} as Record<string, string>,
+    attributes: {} as Record<string, string>,
+    children: [] as unknown[],
+    textContent: '',
+    parentNode: null as unknown,
+    setAttribute(name: string, value: string) {
+      this.attributes[name] = value;
+    },
+    removeAttribute(name: string) {
+      delete this.attributes[name];
+    },
+    append(...nodes: unknown[]) {
+      this.children.push(...nodes);
+    },
+    blur: () => undefined,
+  });
   const doc = Object.assign(eventHost(), {
     defaultView: win,
     visibilityState: 'visible',
-    createElement: () => ({ getContext: () => null, style: {} }),
+    activeElement: null,
+    createElement: element,
   });
   const children: unknown[] = [];
   const mount = {
@@ -121,6 +142,13 @@ function fakeBus() {
   return { bus, emitted };
 }
 
+/** D-123: the key chip the engine places over the canvas, on every screen. */
+function chipOf(world: { readonly dom: ReturnType<typeof fakeDom> }) {
+  const chip = world.dom.mount.children.find((node) => (node as { dataset?: Record<string, string> }).dataset?.['interaction'] === 'chip');
+  if (!chip) throw new Error('no key chip');
+  return chip;
+}
+
 function start(extra: { readonly vaultOpen?: boolean } = {}) {
   const dom = fakeDom();
   const gl = fakeRenderer();
@@ -174,7 +202,7 @@ describe('prefersReducedMotion (D-071)', () => {
 describe('world engine lifecycle', () => {
   it('mounts one canvas, sizes it, starts a session and a render loop', () => {
     const world = start();
-    expect(world.dom.mount.children).toEqual([world.gl.canvas]);
+    expect(world.dom.mount.children).toEqual([world.gl.canvas, chipOf(world)]);
     expect(world.gl.renderer.setSize).toHaveBeenCalledWith(800, 600, false);
     expect(world.gl.renderer.setPixelRatio).toHaveBeenCalledWith(2);
     expect(world.gl.looping).toBe(true);
@@ -203,7 +231,7 @@ describe('world engine lifecycle', () => {
     const world = start();
     const next = fakeBus();
     world.engine.rebind(next.bus);
-    expect(world.dom.mount.children).toEqual([world.gl.canvas]);
+    expect(world.dom.mount.children).toEqual([world.gl.canvas, chipOf(world)]);
     expect(next.emitted.some(({ event }) => event === 'player:moved')).toBe(true);
     expect(world.gl.renderer.dispose).not.toHaveBeenCalled();
     world.engine.destroy();
