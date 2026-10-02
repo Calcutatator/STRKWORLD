@@ -49,6 +49,21 @@ export type FootballDebugStep =
   | { readonly event: 'goal'; readonly side: 'west' | 'east' }
   | { readonly event: 'full-time'; readonly winner: 'west' | 'east' };
 
+/**
+ * One decision of the private placement (D-122, amended 2026-10-02). Either
+ * this tab's probe switch and why, or a receipt or DeFi tick the privacy seam
+ * reported (`@strkworld/privacy`'s `LeaderboardNotice`).
+ *
+ * Reason codes, route names and yes/no answers only. The season partial
+ * commitment `p`, a full commitment, a shadow-account address, the connected
+ * account, a nonce and a transaction hash are all out: the formatter admits
+ * each field from a fixed list, so a wrong value is dropped rather than written.
+ */
+export type LeaderboardDebugStep =
+  | { readonly event: 'probe'; readonly on: boolean; readonly reason: string; readonly build: boolean }
+  | { readonly event: 'receipt'; readonly attached: boolean; readonly reason?: string }
+  | { readonly event: 'tick'; readonly feature: string };
+
 export interface DebugTap {
   /** A privacy or wallet failure: its PrivacyError kind, wallet code and message. */
   failure(event: string, error: unknown): void;
@@ -73,6 +88,8 @@ export interface DebugTap {
   vault?(step: unknown): void;
   /** A football moment (D-078): a kick, a goal's side, full time's winner. Optional, like `vault`. */
   football?(step: unknown): void;
+  /** A private-placement decision (D-122), by code only. Optional, like `vault`. */
+  leaderboard?(step: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -189,6 +206,20 @@ export function debugFootball(step: FootballDebugStep): void {
   if (!tap) return;
   try {
     tap.football?.(step);
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * A private-placement decision (D-122): see `LeaderboardDebugStep`. The probe
+ * switch and why, a receipt attached or skipped with its reason code, a DeFi
+ * tick's route. Never `p`, a commitment, a shadow address or the account.
+ */
+export function debugLeaderboard(step: LeaderboardDebugStep): void {
+  if (!tap) return;
+  try {
+    tap.leaderboard?.(step);
   } catch {
     // As above.
   }

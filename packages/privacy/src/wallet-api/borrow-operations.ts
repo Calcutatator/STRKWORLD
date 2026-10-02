@@ -227,7 +227,7 @@ export class ShadowBorrow {
         throw new BorrowRefusedError('review-expired', refusalMessage('review-expired'));
       }
     };
-    const ticked = await withPlacementTick(actions, this.ledger, this.identity);
+    const ticked = await withPlacementTick(actions, this.ledger, this.identity, 'borrow');
     return preparedShadowBatch(this.batchDeps, action, ticked.actions, config, { after: assessed.after, ...ticked.extra }, guard);
   }
 
