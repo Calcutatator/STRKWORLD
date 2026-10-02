@@ -11,7 +11,7 @@ import {
   type SandboxChannel,
 } from '@strkworld/world';
 import { LobbyClient } from '@strkworld/lobby/client';
-import { ownMovementPayload } from '../bus/world-event-payload.js';
+import { ownMovementPayload, ownSharedAreaBuildingPayload } from '../bus/world-event-payload.js';
 
 export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'unavailable';
 export interface PresenceState { readonly status: PresenceAvailability; readonly canReconnect: boolean; }
@@ -28,7 +28,7 @@ export interface PresenceClient {
   /**
    * D-097: the avatar jumped. Optional: a client without it shows no one the
    * jump. The client sends it only while live in a shared area: the street,
-   * the roof or the Studio (D-111).
+   * the roof, the Studio (D-111) or the bunker (D-112).
    */
   jump?(): boolean;
   disconnect(): Promise<void>;
@@ -53,7 +53,10 @@ function freezePresenceState(next: PresenceState): PresenceState {
   return Object.freeze({ ...next });
 }
 
-/** D-087: the two shared rooms. Every other interior is a private solo instance. */
+/**
+ * D-087: the shared rooms, the roof and the Studio, and since D-112 the
+ * bunker. Every other interior is a private solo instance.
+ */
 type SharedArea = Exclude<PresenceArea, 'street'>;
 
 export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel }): PresenceController {
@@ -449,8 +452,8 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     return client === ownedClient && clientArea === area;
   };
   /**
-   * D-087: leave a shared room. To the street (the Studio's portal, or a
-   * release from the roof that skipped its exit) the client goes live there
+   * D-087: leave a shared room. To the street (the Studio's portal, the
+   * bunker's stair, or a release from the roof that skipped its exit) the client goes live there
    * at the street placement; back into a private interior (the lift down from
    * the roof) it suspends.
    */
@@ -510,7 +513,17 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const ownedClient = client;
     if (ownedClient && joinSharedArea(ownedClient)) return;
     // No placement yet, or a client that cannot share: solo until it can.
-    if (area === 'studio') onEntered();
+    // (The roof's building entry has already suspended.)
+    if (area !== 'roof') onEntered();
+  };
+  /**
+   * Any building's door. D-112: the bunker's whole interior is a shared
+   * area, so the client goes live there; every other building suspends.
+   */
+  const onBuildingEntered = (value: WorldEvents['building:entered']) => {
+    const area = ownSharedAreaBuildingPayload(value);
+    if (area !== null && area !== 'street') onSharedEntered(area);
+    else onEntered();
   };
   const onEntered = () => {
     inside = true;
@@ -584,8 +597,9 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     onExited();
   };
   const onBuildingExited = () => {
-    // A release from the roof that did not announce leaving it (D-087).
-    if (sharedArea === 'roof' && clientArea === 'roof') {
+    // Up the bunker's stair (D-112), or a release from the roof that did not
+    // announce leaving it (D-087): straight back live on the street.
+    if (sharedArea !== null && sharedArea !== 'studio' && clientArea === sharedArea) {
       inside = false;
       if (leaveSharedArea('street')) return;
     }
@@ -680,10 +694,11 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       };
       try {
         stops.push(world.on('player:moved', onMoved));
-        stops.push(world.on('building:entered', onEntered));
+        stops.push(world.on('building:entered', onBuildingEntered));
         stops.push(world.on('building:exited', onBuildingExited));
-        // D-087: the Studio and the Exchange roof are shared presence areas;
-        // every other interior suspends.
+        // D-087: the Studio and the Exchange roof are shared presence areas,
+        // and the bunker (D-112, through its building events); every other
+        // interior suspends.
         stops.push(world.on('avatar-studio:entered', () => onSharedEntered('studio')));
         stops.push(world.on('avatar-studio:exited', onStudioExited));
         stops.push(world.on('rooftop:entered', () => onSharedEntered('roof')));

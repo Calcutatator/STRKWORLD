@@ -5,7 +5,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID, type WorldEvents } from '@strkworld/shared';
+import { BUNKER_PRESENCE_GRID, ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID, type WorldEvents } from '@strkworld/shared';
 import { startPresenceServer, type PresenceServer } from '@strkworld/lobby/server';
 import { createEventBus } from '../bus/event-bus.js';
 import { createPresenceController, type PresenceController } from './presence-controller.js';
@@ -41,6 +41,7 @@ afterAll(async () => {
 });
 
 const studio = (x: number, y: number) => ({ x: STUDIO_PRESENCE_GRID.originX + x * 32 + 16, y: STUDIO_PRESENCE_GRID.originY + y * 32 + 16 });
+const bunker = (x: number, y: number) => ({ x: BUNKER_PRESENCE_GRID.originX + x * 32 + 16, y: BUNKER_PRESENCE_GRID.originY + y * 32 + 16 });
 const roof = (x: number, y: number) => ({ x: ROOF_PRESENCE_GRID.originX + x * 32 + 16, y: ROOF_PRESENCE_GRID.originY + y * 32 + 16 });
 
 function player() {
@@ -123,5 +124,44 @@ describe('real shell presence across shared areas (D-087)', () => {
     await count(a, 1, 'B below again, seen from the roof');
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(b.peers()).toEqual([]);
+  }, 30_000);
+
+  it('shares the bunker (D-112) through its building events, and keeps it off the street', async () => {
+    // A clean lobby: the players above would otherwise share the street.
+    for (const { presence, stop } of opened.splice(0)) {
+      stop();
+      await presence.destroy().catch(() => undefined);
+    }
+    const a = player();
+    const b = player();
+    const c = player();
+    a.world.emit('player:moved', { position: { x: 400, y: 380 }, facing: 'down' });
+    b.world.emit('player:moved', { position: { x: 440, y: 380 }, facing: 'down' });
+    c.world.emit('player:moved', { position: { x: 480, y: 380 }, facing: 'down' });
+    await count(c, 2, 'everyone on the street');
+
+    // A goes down the stair: the spawn first, then the door's entry, as the World emits them.
+    a.world.emit('area:moved', { position: bunker(2, 8), facing: 'up' });
+    a.world.emit('building:entered', { building: 'bunker' });
+    await waitFor(() => a.presence.getState().status, (status) => status === 'connected', 'A live in the bunker');
+    await count(c, 1, 'A gone from the street');
+    await count(a, 0, 'A alone in the bunker');
+
+    // B follows: they see each other move there, and the street sees neither.
+    b.world.emit('area:moved', { position: bunker(2, 8), facing: 'up' });
+    b.world.emit('building:entered', { building: 'bunker' });
+    await count(a, 1, 'B with A in the bunker');
+    await count(b, 1, 'A with B in the bunker');
+    await count(c, 0, 'the street to empty');
+    // One tile east along the lobby (the room refuses a step through the booths).
+    b.world.emit('area:moved', { position: bunker(3, 8), facing: 'right' });
+    await waitFor(() => a.peers()[0]?.x, (x) => x === bunker(3, 8).x, 'B to walk in the bunker');
+
+    // A goes back up the stair: live on the street beside C, gone from the bunker.
+    a.world.emit('player:moved', { position: { x: 400, y: 380 }, facing: 'down' });
+    a.world.emit('building:exited', { building: 'bunker' });
+    await count(c, 1, 'A back on the street');
+    await count(b, 0, 'A gone from the bunker');
+    expect(a.presence.getState().status).toBe('connected');
   }, 30_000);
 });

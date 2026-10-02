@@ -138,9 +138,10 @@ export type AvatarSpriteKey =
  * hash, token symbol, building occupancy, and any financial action. On entry
  * the client leaves or suspends lobby presence, so other players see the
  * avatar disappear but the lobby never receives a building event or ID. That
- * presence leak is accepted for v1 by D-019. D-087's two shared rooms (the
- * Exchange roof and the Avatar Studio) are presence areas the lobby keeps on
- * its side only: no field here says which area a player is in.
+ * presence leak is accepted for v1 by D-019. D-087's shared rooms (the
+ * Exchange roof and the Avatar Studio, and the hidden bunker since D-112) are
+ * presence areas the lobby keeps on its side only: no field here says which
+ * area a player is in.
  */
 export interface PresenceState {
   gameId: GameId;
@@ -402,23 +403,37 @@ export interface FootballGoal {
 // Presence areas — D-087
 // ---------------------------------------------------------------------------
 //
-// Only the overworld and two approved rooms are multiplayer. Every other
-// interior is a private solo instance: entering it suspends presence (D-019).
-// A live player is in exactly one area, and sees and is seen by players in the
-// same area. One view is one-way on top of that: a roof player also sees the
-// street below, and no street player sees the roof. The area is the lobby's
-// server-side bookkeeping, never a field of `PresenceState`, so no player's
-// area is ever broadcast.
+// Only the overworld and an approved list of rooms are multiplayer: the
+// Exchange roof and the Avatar Studio (D-087), and the hidden bunker (D-112).
+// Every other interior is a private solo instance: entering it suspends
+// presence (D-019). A live player is in exactly one area, and sees and is seen
+// by players in the same area. One view is one-way on top of that: a roof
+// player also sees the street below, and no street player sees the roof. The
+// area is the lobby's server-side bookkeeping, never a field of
+// `PresenceState`, so no player's area is ever broadcast.
 
 /**
  * Where a live player is. `street` is the overworld (the road, the sandbox,
  * the pitch and the plaza); `roof` is the Exchange tower's roof, reached by
- * lift; `studio` is the Avatar Studio. A suspended player is in none.
+ * lift; `studio` is the Avatar Studio; `bunker` is the hidden room under the
+ * alley (D-107, shared since D-112). A suspended player is in none.
  */
-export type PresenceArea = 'street' | 'roof' | 'studio';
+export type PresenceArea = 'street' | 'roof' | 'studio' | 'bunker';
 
 /** Every presence area, street first. */
-export const PRESENCE_AREAS: readonly PresenceArea[] = Object.freeze(['street', 'roof', 'studio'] as const);
+export const PRESENCE_AREAS: readonly PresenceArea[] = Object.freeze(['street', 'roof', 'studio', 'bunker'] as const);
+
+/**
+ * D-112: the presence area a building's whole interior is, or null for a
+ * private one. Only the hidden bunker: its door is a building door, so the
+ * World announces it with `building:entered` / `building:exited`, and the
+ * Shell goes live in this area instead of suspending. (The roof is one floor
+ * of the Exchange and has its own events; the Studio is not a building.)
+ * Takes anything, so an untrusted payload can be asked directly.
+ */
+export function presenceAreaOfBuilding(building: unknown): PresenceArea | null {
+  return building === 'bunker' ? 'bunker' : null;
+}
 
 /**
  * A shared room's walkable grid, as the lobby checks a position against it.
@@ -471,6 +486,41 @@ export const STUDIO_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
   ]),
 });
 
+/**
+ * D-112: the hidden bunker (D-107), drawn at the interiors' origin like every
+ * fixed room: the 16 by 10 net cafe's floor between its booths, shelves and
+ * counters, and the two-tile stair back up in the bottom wall. The lift's
+ * doors (`bunker:elevator`, out of order) and every fixture are solid.
+ * Mirrors the World's `BUNKER_ROOM_DEFINITION`, and a World test fails if
+ * the two drift.
+ */
+export const BUNKER_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
+  originX: 2 * 32,
+  originY: 2 * 32,
+  tileSize: 32,
+  width: 16,
+  height: 10,
+  walkable: Object.freeze([
+    // The spine north from the landing, past the lift's shaft.
+    Object.freeze({ x: 3, y: 1, width: 1, height: 8 }),
+    // The landing at the stair's foot, the lift's approach and the stair.
+    Object.freeze({ x: 1, y: 7, width: 2, height: 3 }),
+    // The north corridor, into the booth area.
+    Object.freeze({ x: 4, y: 2, width: 11, height: 1 }),
+    // The booth area, between its booths and the toppled chairs.
+    Object.freeze({ x: 9, y: 3, width: 5, height: 1 }),
+    Object.freeze({ x: 9, y: 4, width: 2, height: 1 }),
+    Object.freeze({ x: 12, y: 4, width: 2, height: 1 }),
+    // The south corridor.
+    Object.freeze({ x: 4, y: 5, width: 10, height: 1 }),
+    Object.freeze({ x: 9, y: 6, width: 3, height: 1 }),
+    Object.freeze({ x: 13, y: 6, width: 1, height: 1 }),
+    // The gap between the fridge and the manga shelves, and the lobby.
+    Object.freeze({ x: 9, y: 7, width: 1, height: 1 }),
+    Object.freeze({ x: 4, y: 8, width: 11, height: 1 }),
+  ]),
+});
+
 // ---------------------------------------------------------------------------
 // The event bus — world ↔ shell
 // ---------------------------------------------------------------------------
@@ -512,9 +562,10 @@ export type WorldEvents = {
   'rooftop:entered': Record<string, never>;
   'rooftop:exited': Record<string, never>;
   /**
-   * D-087: where the player stands inside a shared area (the roof or the
-   * Avatar Studio), in that area's World pixels. Emitted on arrival, before
-   * the area's entered event, and on every frame the player moves there.
+   * D-087: where the player stands inside a shared area (the roof, the
+   * Avatar Studio or, since D-112, the bunker), in that area's World pixels.
+   * Emitted on arrival, before the area's entered event (for the bunker,
+   * its `building:entered`), and on every frame the player moves there.
    * Never on the street (that is `player:moved`) and never in a private
    * interior, so a street consumer never reads a room's coordinates.
    */

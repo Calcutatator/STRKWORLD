@@ -6,8 +6,8 @@
  * Colyseus, so the rules are unit-testable without a transport.
  *
  * The street keeps its existing rule: any finite coordinate, rounded and
- * clamped to the world (see `normalizeCoordinate`). The two shared rooms are
- * small, closed grids, so the server holds them to their walkable tiles: a
+ * clamped to the world (see `normalizeCoordinate`). The shared rooms (the
+ * roof, the Studio and, since D-112, the bunker) are small, closed grids, so the server holds them to their walkable tiles: a
  * placement must land on one, and a move must land on one without crossing a
  * solid tile on the way. A position the rules refuse is refused whole, never
  * repaired — a position that is almost right is still somewhere the player is
@@ -15,6 +15,7 @@
  */
 
 import {
+  BUNKER_PRESENCE_GRID,
   PRESENCE_AREAS,
   ROOF_PRESENCE_GRID,
   STUDIO_PRESENCE_GRID,
@@ -30,6 +31,7 @@ export type SharedPresenceArea = Exclude<PresenceArea, 'street'>;
 export const SHARED_AREA_GRIDS: Readonly<Record<SharedPresenceArea, PresenceAreaGrid>> = Object.freeze({
   roof: ROOF_PRESENCE_GRID,
   studio: STUDIO_PRESENCE_GRID,
+  bunker: BUNKER_PRESENCE_GRID,
 });
 
 /**
@@ -37,7 +39,7 @@ export const SHARED_AREA_GRIDS: Readonly<Record<SharedPresenceArea, PresenceArea
  * one tile. A real client moves axis by axis around a corner, but two of its
  * positions a patch apart can still lie either side of one, so the straight
  * line between them clips a solid tile it never entered. Within a tile that
- * is harmless — no wall in either room is thinner than a tile, so nothing can
+ * is harmless — no wall in any shared room is thinner than a tile, so nothing can
  * be crossed — and refusing it would strand the player, whose client resends
  * the same refused position until it moves on.
  */

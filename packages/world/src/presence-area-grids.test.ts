@@ -5,17 +5,26 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID, type PresenceAreaGrid } from '@strkworld/shared';
+import {
+  BUNKER_PRESENCE_GRID,
+  ROOF_PRESENCE_GRID,
+  STUDIO_PRESENCE_GRID,
+  presenceAreaOfBuilding,
+  type PresenceAreaGrid,
+} from '@strkworld/shared';
 import {
   AVATAR_STUDIO_DEFINITION,
   AVATAR_STUDIO_TILE_SIZE,
   isAvatarStudioSolidAt,
 } from './avatar-studio.js';
 import {
+  BUNKER_ROOM_DEFINITION,
   EXCHANGE_ROOF_LEVEL,
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
+  createFixedRoom,
   createFixedRoomLevel,
+  fixedRoomDefinitionsFor,
   isFixedRoomSolidAt,
 } from './fixed-room.js';
 import { TILE_SIZE, createStreetMap, isSolidAt } from './map/street.js';
@@ -74,6 +83,40 @@ describe('shared presence-area grids match the World (D-087)', () => {
           !isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
         );
       }
+    }
+  });
+
+  it('the bunker grid is the hidden room (D-112), at the interiors’ origin, tile for tile', () => {
+    const room = createFixedRoom(BUNKER_ROOM_DEFINITION);
+    expect(BUNKER_PRESENCE_GRID.originX).toBe(ROOM_ORIGIN.x);
+    expect(BUNKER_PRESENCE_GRID.originY).toBe(ROOM_ORIGIN.y);
+    expect(BUNKER_PRESENCE_GRID.tileSize).toBe(FIXED_ROOM_TILE_SIZE);
+    expect([BUNKER_PRESENCE_GRID.width, BUNKER_PRESENCE_GRID.height]).toEqual([room.width, room.height]);
+    for (let y = -1; y <= room.height; y += 1) {
+      for (let x = -1; x <= room.width; x += 1) {
+        expect(walkable(BUNKER_PRESENCE_GRID, x, y), `bunker tile ${x},${y}`).toBe(!isFixedRoomSolidAt(room, x, y));
+      }
+    }
+    // The out-of-order lift's doors stay solid: nobody stands in them.
+    const lift = BUNKER_ROOM_DEFINITION.stations[0];
+    for (let x = lift.x; x < lift.x + lift.width; x += 1) expect(walkable(BUNKER_PRESENCE_GRID, x, lift.y)).toBe(false);
+    // No two walkable rectangles overlap, so the list reads as the floor plan.
+    const seen = new Set<string>();
+    for (const rect of BUNKER_PRESENCE_GRID.walkable) {
+      for (let y = rect.y; y < rect.y + rect.height; y += 1) {
+        for (let x = rect.x; x < rect.x + rect.width; x += 1) {
+          expect(seen.has(`${x},${y}`), `overlap at ${x},${y}`).toBe(false);
+          seen.add(`${x},${y}`);
+        }
+      }
+    }
+  });
+
+  it('the bunker is the only building whose interior is shared; every other ground floor stays private', () => {
+    for (const definition of fixedRoomDefinitionsFor({ vaultOpen: true })) {
+      expect(presenceAreaOfBuilding(definition.building), definition.building).toBe(
+        definition.building === 'bunker' ? 'bunker' : null,
+      );
     }
   });
 });

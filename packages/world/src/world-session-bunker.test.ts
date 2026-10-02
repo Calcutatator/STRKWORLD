@@ -9,9 +9,10 @@ import { createWorldSession, type WorldKeyboard, type WorldSessionView } from '.
 
 /**
  * The hidden room inside the gameplay session (D-107): the stair's top step
- * is a door like any other, the room is a private interior (the Shell hears
- * `building:entered` and suspends presence, D-019, D-087), the lift only
- * says it is out of order, and the stair leads back up to the alley's mouth.
+ * is a door like any other, the room is a shared presence area since D-112
+ * (its spawn and every move are published with `area:moved`, and its peers
+ * are drawn), the lift only says it is out of order, and the stair leads back
+ * up to the alley's mouth.
  */
 
 const NO_KEYS: MovementInput = Object.freeze({ left: false, right: false, up: false, down: false });
@@ -88,30 +89,48 @@ describe('the hidden room in the session (D-107)', () => {
     const world = setup();
     world.onStreet(BUNKER_DOOR.x, BUNKER_DOOR.y + 1);
     expect(world.session.area).toBe('street');
+    const before = world.emitted.length;
     world.onStreet(BUNKER_DOOR.x, BUNKER_DOOR.y);
     expect(world.events('building:entered')).toEqual([{ building: 'bunker' }]);
     expect(world.session.area).toBe('bunker');
     expect(world.session.level).toBe('ground');
     expect(world.last('showRoom')).toEqual(['bunker']);
-    // A private interior: the street, its passers-by and its signs are hidden.
+    // The street and its signs are hidden; the remote layer stays on, for the
+    // bunker's own players (D-112: the lobby sends no one else).
     expect(world.last('setStreetVisible')).toEqual([false]);
-    expect(world.last('setRemoteVisible')).toEqual([false]);
+    expect(world.last('setRemoteVisible')).toEqual([true]);
     expect(world.last('setLabelsVisible')).toEqual([false]);
     // The player is at the foot of the stair.
     const spawn = BUNKER_ROOM_DEFINITION.spawn;
-    expect(world.position()).toEqual({
+    const spawnAt = {
       x: ROOM_ORIGIN.x + spawn.x * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
       y: ROOM_ORIGIN.y + spawn.y * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
-    });
-    // Nothing shared is announced from inside (D-087).
+    };
+    expect(world.position()).toEqual(spawnAt);
+    // D-112: the spawn is published before the entry, so the Shell has a
+    // placement when it goes live in the bunker's area.
+    const entry = world.emitted.slice(before).filter((e) => e.event !== 'player:moved');
+    expect(entry.map((e) => e.event)).toEqual(['area:moved', 'building:entered']);
+    expect(entry[0]!.payload).toEqual({ position: spawnAt, facing: 'up' });
+    // Every move inside is published in the room's own World pixels.
     const insideFrom = world.emitted.length;
     world.inRoom(5, 8);
     world.inRoom(9, 5);
-    expect(world.emitted.slice(insideFrom).map((entry) => entry.event)).toEqual([]);
+    const inside = world.emitted.slice(insideFrom);
+    expect(new Set(inside.map((e) => e.event))).toEqual(new Set(['area:moved']));
+    expect((inside.at(-1)!.payload as WorldEvents['area:moved']).position.y).toBeLessThan(
+      ROOM_ORIGIN.y + 6 * FIXED_ROOM_TILE_SIZE,
+    );
 
     const exit = BUNKER_ROOM_DEFINITION.exit;
+    const exitFrom = world.emitted.length;
     world.inRoom(exit.x, exit.y);
     expect(world.events('building:exited')).toEqual([{ building: 'bunker' }]);
+    // The street placement comes before the exit, as the Shell needs it.
+    const leaving = world.emitted.slice(exitFrom).map((e) => e.event).filter((e) => e !== 'area:moved');
+    expect(leaving.slice(0, leaving.indexOf('building:exited') + 1)).toEqual(['player:moved', 'building:exited']);
+    // Back on the street the remote layer still shows the street's players.
+    expect(world.last('setRemoteVisible')).toEqual([true]);
     expect(world.session.area).toBe('street');
     expect(world.last('showRoom')).toEqual([null]);
     expect(world.position()).toEqual({

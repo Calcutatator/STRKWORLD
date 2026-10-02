@@ -1,4 +1,4 @@
-import { BUILDINGS, type BuildingId, type Facing, type StationId } from '@strkworld/shared';
+import { BUILDINGS, presenceAreaOfBuilding, type BuildingId, type Facing, type PresenceArea, type StationId } from '@strkworld/shared';
 
 const FACINGS = new Set<unknown>(['up', 'down', 'left', 'right']);
 
@@ -20,6 +20,15 @@ function building(value: unknown): BuildingId | null {
 export function ownBuildingPayload(value: unknown): { readonly building: BuildingId } | null {
   const ownedBuilding = building(value);
   return ownedBuilding ? Object.freeze({ building: ownedBuilding }) : null;
+}
+
+/**
+ * D-112: the shared presence area a `building:entered` / `building:exited`
+ * payload's building is (the bunker), or null for every other building and
+ * for anything malformed. Reads only an own data property.
+ */
+export function ownSharedAreaBuildingPayload(value: unknown): PresenceArea | null {
+  return presenceAreaOfBuilding(ownData(value, 'building'));
 }
 
 export function ownLockedBuildingPayload(

@@ -1,8 +1,8 @@
 /**
  * D-087: how the presence controller maps the World's events onto presence
- * areas. The Avatar Studio and the Exchange roof switch the client's area;
- * every other interior (and the Exchange's ground and degen floors) still
- * suspends it.
+ * areas. The Avatar Studio, the Exchange roof and the bunker (D-112) switch
+ * the client's area; every other interior (and the Exchange's ground and
+ * degen floors) still suspends it.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -58,6 +58,8 @@ function areaClient(options: { shares?: boolean } = {}) {
 const street: WorldEvents['player:moved'] = { position: { x: 1400, y: 400 }, facing: 'up' };
 const studioSpawn: WorldEvents['area:moved'] = { position: { x: 368, y: 112 }, facing: 'down' };
 const roofArrival: WorldEvents['area:moved'] = { position: { x: 1488, y: 272 }, facing: 'up' };
+/** D-112: the bunker's spawn, room tile (2, 8) at the interiors' origin. */
+const bunkerSpawn: WorldEvents['area:moved'] = { position: { x: 144, y: 336 }, facing: 'up' };
 
 async function connectedOnStreet(shares = true) {
   const world = createEventBus<WorldEvents>();
@@ -155,8 +157,8 @@ describe('presence areas in the controller (D-087)', () => {
     stop();
   });
 
-  // D-107: the hidden room under the alley is a private interior like every building's.
-  it.each([...BUILDINGS, 'bunker' as const])('still suspends inside %s, and never switches area there', async (building) => {
+  // D-112: the hidden room under the alley (D-107) is shared; every building's interior stays private.
+  it.each([...BUILDINGS])('still suspends inside %s, and never switches area there', async (building) => {
     const { world, made, presence, stop } = await connectedOnStreet();
     world.emit('building:entered', { building });
     // Walking about inside a private interior publishes no area moves; even
@@ -168,6 +170,74 @@ describe('presence areas in the controller (D-087)', () => {
     expect(presence.getState().status).toBe('suspended');
     world.emit('building:exited', { building });
     expect(made.calls.at(-1)).toEqual(['resume', { x: 1400, y: 400, facing: 'up' }, 'avatar-9']);
+    stop();
+  });
+
+  it('goes live in the bunker on its door instead of suspending, and straight back to the street up its stair (D-112)', async () => {
+    const { world, made, presence, stop } = await connectedOnStreet();
+    // As the World emits it: the spawn first, then the door's entry.
+    world.emit('area:moved', bunkerSpawn);
+    expect(made.calls).toEqual([]);
+    world.emit('building:entered', { building: 'bunker' });
+    expect(made.calls).toEqual([['enterArea', 'bunker', { x: 144, y: 336, facing: 'up' }, 'avatar-1']]);
+    expect(made.client.suspend).not.toHaveBeenCalled();
+    expect(presence.getState().status).toBe('connected');
+
+    world.emit('area:moved', { position: { x: 176, y: 336 }, facing: 'right' });
+    expect(made.calls.at(-1)).toEqual(['updatePosition', 176, 336, 'right']);
+    // A look change is shown to the bunker's other players at once.
+    world.emit('avatar:selected', { sprite: 'avatar-4' });
+    expect(made.calls.at(-1)).toEqual(['enterArea', 'bunker', { x: 176, y: 336, facing: 'right' }, 'avatar-4']);
+
+    world.emit('player:moved', street);
+    expect(made.calls.at(-1)?.[0]).not.toBe('updatePosition');
+    world.emit('building:exited', { building: 'bunker' });
+    expect(made.calls.at(-1)).toEqual(['enterArea', 'street', { x: 1400, y: 400, facing: 'up' }, 'avatar-4']);
+    expect(made.client.suspend).not.toHaveBeenCalled();
+    expect(made.client.resume).not.toHaveBeenCalled();
+    expect(presence.getState().status).toBe('connected');
+    // Back on the street, a stray area move sends nothing.
+    world.emit('area:moved', bunkerSpawn);
+    expect(made.calls.at(-1)?.[0]).toBe('enterArea');
+    world.emit('player:moved', { position: { x: 1410, y: 400 }, facing: 'right' });
+    expect(made.calls.at(-1)).toEqual(['updatePosition', 1410, 400, 'right']);
+    stop();
+  });
+
+  it('suspends in the bunker until its first placement arrives, then goes live there', async () => {
+    const { world, made, presence, stop } = await connectedOnStreet();
+    world.emit('building:entered', { building: 'bunker' });
+    expect(made.calls).toEqual([['suspend']]);
+    expect(presence.getState().status).toBe('suspended');
+    world.emit('area:moved', bunkerSpawn);
+    expect(made.calls.at(-1)).toEqual(['enterArea', 'bunker', { x: 144, y: 336, facing: 'up' }, 'avatar-1']);
+    expect(presence.getState().status).toBe('connected');
+    stop();
+  });
+
+  it('keeps the player solo in the bunker with a client that cannot share', async () => {
+    const { world, made, presence, stop } = await connectedOnStreet(false);
+    world.emit('area:moved', bunkerSpawn);
+    world.emit('building:entered', { building: 'bunker' });
+    expect(made.calls).toEqual([['suspend']]);
+    expect(presence.getState().status).toBe('suspended');
+    world.emit('area:moved', { position: { x: 176, y: 336 }, facing: 'right' });
+    expect(made.calls).toEqual([['suspend']]);
+    world.emit('building:exited', { building: 'bunker' });
+    expect(made.calls.at(-1)).toEqual(['resume', { x: 1400, y: 400, facing: 'up' }, 'avatar-1']);
+    stop();
+  });
+
+  it('reads the bunker only from an own building field: anything else is a private interior', async () => {
+    const { world, made, stop } = await connectedOnStreet();
+    world.emit('area:moved', bunkerSpawn);
+    let read = false;
+    const hostile = {};
+    Object.defineProperty(hostile, 'building', { get() { read = true; return 'bunker'; } });
+    world.emit('building:entered', hostile as never);
+    expect(read).toBe(false);
+    expect(made.calls).toEqual([['suspend']]);
+    expect(made.client.enterArea).not.toHaveBeenCalled();
     stop();
   });
 

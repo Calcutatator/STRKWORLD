@@ -153,6 +153,15 @@ street's peers below (never one over the tower's footprint), and no street
 session receives the roof. It validates room positions against
 `ROOF_PRESENCE_GRID` / `STUDIO_PRESENCE_GRID` in `@strkworld/shared`.
 
+D-112 adds the hidden bunker (D-107) as a third shared room. Its door is a
+building door, so it needs no event of its own: the World publishes
+`area:moved` for the spawn before `building:entered { building: 'bunker' }`
+and for every move inside, and keeps the remote layer drawn there. The Shell
+asks `presenceAreaOfBuilding` (shared) and goes live in `bunker` instead of
+suspending; `building:exited` takes it straight back to the street. The lobby
+validates its positions against `BUNKER_PRESENCE_GRID`, with the same move
+floor, jump floor, interest radius and view cap as every other area.
+
 The D-047 Avatar Studio foundation is implemented and user-rendered-accepted
 on localhost as a hidden, non-financial 18×12 room outside `BuildingId` and
 `BUILDINGS`. The south path still ends at a bottom-edge trigger with no facade

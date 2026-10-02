@@ -561,7 +561,7 @@ export class LobbyClient {
    * Go live in a presence area at a placement in it (D-087): from a suspend,
    * from another area, or within the current one to refresh the placement
    * and the sprite. The shell calls it when the player reaches a shared room
-   * (the Exchange roof, the Avatar Studio) and, with `street`, when they walk
+   * (the Exchange roof, the Avatar Studio, the bunker) and, with `street`, when they walk
    * out of one.
    *
    * The room checks the placement against the area: anywhere for the street,
@@ -875,7 +875,7 @@ export class LobbyClient {
   /**
    * D-097: tell the room the avatar jumped, so peers who see it play the jump.
    * The message carries nothing. Sent only while live in a shared area: the
-   * street, the roof or the Studio (D-111; never suspended), and at most once per
+   * street, the roof, the Studio (D-111) or the bunker (D-112); never suspended, and at most once per
    * `JUMP_CLIENT_INTERVAL_MS`; a jump inside the floor is dropped, not held,
    * since a late jump is a different jump. Returns whether it was sent.
    */

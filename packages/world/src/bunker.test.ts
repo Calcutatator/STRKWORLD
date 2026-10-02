@@ -4,6 +4,7 @@ import {
   BUILDINGS,
   PITCH_AREA,
   PRESENCE_AREAS,
+  presenceAreaOfBuilding,
   SANDBOX_AREA,
   SHIELDED_BUILDINGS,
   STREET_ORIGIN_X,
@@ -144,12 +145,15 @@ describe('the hidden stair on the street (D-107)', () => {
     expect(map.exteriorLabels.some((label) => label.building === BUNKER_BUILDING)).toBe(false);
   });
 
-  it('is no building, no shared area and nothing financial', () => {
+  it('is no building and nothing financial, and is a shared presence area (D-112)', () => {
     expect(BUILDINGS).not.toContain(BUNKER_BUILDING);
     expect(ACTIVE_BUILDINGS).not.toContain(BUNKER_BUILDING);
     expect(SHIELDED_BUILDINGS).not.toContain(BUNKER_BUILDING);
-    // Solo: it is no presence area, so entering it suspends presence (D-019, D-087).
-    expect(PRESENCE_AREAS as readonly string[]).not.toContain(BUNKER_BUILDING);
+    // Public since D-112: its own presence area, so entering it goes live there.
+    expect(PRESENCE_AREAS as readonly string[]).toContain(BUNKER_BUILDING);
+    expect(presenceAreaOfBuilding(BUNKER_BUILDING)).toBe('bunker');
+    // Every other building's interior stays private (D-019, D-087).
+    for (const building of BUILDINGS) expect(presenceAreaOfBuilding(building), building).toBeNull();
   });
 });
 
