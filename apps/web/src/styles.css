@@ -3763,6 +3763,42 @@ button.shell-start {
   display: none;
 }
 
+.ui-recipient-own {
+  justify-content: space-between;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.ui-recipient-own-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--ui-number-font);
+  font-size: 0.95rem;
+}
+
+/* A plain text link for a secondary switch, such as "Use my wallet". It
+ * re-points the shared button variables to nothing, so the theme's raised
+ * button, hover lift and press never draw on it. */
+button.ui-link-button {
+  --btn-bg: transparent;
+  --btn-bg-hover: transparent;
+  --btn-border: transparent;
+  --btn-border-hover: transparent;
+  --btn-edge: transparent;
+  --btn-inset: 0 0 0 transparent;
+  --btn-glow: 0 0 0 transparent;
+  --btn-drop: 0 0 0 transparent;
+  --btn-drop-active: 0 0 0 transparent;
+  --btn-depth: 0px;
+  --btn-lift: 0px;
+  --btn-press: 0px;
+  --btn-text: var(--ui-text-dim);
+  justify-self: start;
+  padding: 0;
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
 .ui-token-select {
   display: block;
 }

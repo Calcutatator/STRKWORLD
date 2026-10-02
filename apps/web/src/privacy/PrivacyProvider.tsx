@@ -61,6 +61,13 @@ export interface ShellPrivacy {
   noteOperationError(error: unknown): void;
   /** Optional channel into the world for HUD pushes. */
   shellBus: EventBus<ShellEvents> | null;
+  /**
+   * The connected wallet's own address, read from the session the shell
+   * already holds, or null when no wallet session is connected (demo, or
+   * before connect). React-side only: it is never sent anywhere new, and the
+   * world never receives it (D-010, invariant 2).
+   */
+  account: string | null;
 }
 
 const PrivacyContext = createContext<ShellPrivacy | null>(null);
@@ -223,6 +230,7 @@ function PrivacyRuntime({
     [operations, initialConnectState],
   );
   const connectState = useStore(connect.store);
+  const account = useSessionAccount(walletSession);
   // Deliberately not keyed to `operations`: a receipt is evidence about the
   // chain, and it must not be discarded because the shell swapped seams.
   const receipts = useMemo(() => createReceiptLedger(), []);
@@ -257,6 +265,7 @@ function PrivacyRuntime({
       submissionUncertainty,
       noteOperationError,
       shellBus,
+      account,
     }),
     [
       operations,
@@ -266,6 +275,7 @@ function PrivacyRuntime({
       submissionUncertainty,
       noteOperationError,
       shellBus,
+      account,
     ],
   );
 
@@ -273,6 +283,22 @@ function PrivacyRuntime({
     {walletSession ? <WalletSessionConnectSync session={walletSession} connect={connect} /> : null}
     {children}
   </PrivacyContext.Provider>;
+}
+
+const NO_SUBSCRIPTION = () => () => {};
+
+/** The session's connected account, or null. A subscription to the session, not a poll. */
+function useSessionAccount(session: WalletSession | undefined): string | null {
+  const subscribe = useMemo(() => (session ? (listener: () => void) => session.subscribe(listener) : NO_SUBSCRIPTION), [session]);
+  const read = useMemo(
+    () => () => {
+      if (!session) return null;
+      const snapshot = session.getSnapshot();
+      return snapshot.phase === 'connected' ? snapshot.account : null;
+    },
+    [session],
+  );
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 function WalletSessionConnectSync({

@@ -414,6 +414,16 @@ function ComposeBlock({
 }) {
   const busy = state.flow.name === 'preparing' || state.adding;
   const needsRecipient = modeNeedsRecipient(state.mode);
+  // An unshield goes to the connected wallet unless the player chooses
+  // another address. The address is the session's own, already in the shell;
+  // it is written into the machine's recipient and goes nowhere new. Without
+  // a connected session (demo) there is no own address, so the field shows.
+  const { account } = usePrivacy();
+  const [otherAddress, setOtherAddress] = useState(false);
+  const toOwnWallet = state.mode === 'unshield' && account !== null && !otherAddress;
+  useEffect(() => {
+    if (toOwnWallet && state.recipientText !== account) panel.setRecipient(account);
+  }, [toOwnWallet, account, state.recipientText, panel]);
   // D-022: a Max only where the spendable figure is known and costed. The
   // shipped wallet reports one total per token, so in production there is
   // none, and the button is not drawn rather than drawn dead.
@@ -437,7 +447,7 @@ function ComposeBlock({
     ? wallet
     : balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
   const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : balance });
-  const recipient = state.recipientText.trim();
+  const recipient = toOwnWallet ? account : state.recipientText.trim();
   const ready = singleAction ? COPY.gameMode.reviewAction : COPY.batch.add;
   const action = needsRecipient && recipient === ''
     ? { label: COPY.bank.enterRecipient, disabled: true }
@@ -461,14 +471,40 @@ function ComposeBlock({
         void panel.addToBatch();
       }}
     >
-      {needsRecipient ? (
-        <RecipientField
-          label={COPY.bank.recipient}
-          value={state.recipientText}
-          onChange={(text) => panel.setRecipient(text)}
-          validate={(text) => (looksLikeAddress(text) ? null : COPY.notices.badRecipient)}
-          disabled={busy}
-        />
+      {toOwnWallet ? (
+        <div className="ui-recipient">
+          <div className="ui-recipient-box ui-recipient-own">
+            <span className="ui-recipient-own-text" data-testid="unshield-own-wallet">
+              {COPY.bank.toYourWallet} ({shortenAddress(account)})
+            </span>
+            <button
+              type="button"
+              className="ui-chip"
+              disabled={busy}
+              onClick={() => {
+                setOtherAddress(true);
+                panel.setRecipient('');
+              }}
+            >
+              {COPY.bank.sendToAnother}
+            </button>
+          </div>
+        </div>
+      ) : needsRecipient ? (
+        <>
+          <RecipientField
+            label={COPY.bank.recipient}
+            value={state.recipientText}
+            onChange={(text) => panel.setRecipient(text)}
+            validate={(text) => (looksLikeAddress(text) ? null : COPY.notices.badRecipient)}
+            disabled={busy}
+          />
+          {state.mode === 'unshield' && account !== null ? (
+            <button type="button" className="ui-link-button" disabled={busy} onClick={() => setOtherAddress(false)}>
+              {COPY.bank.useMyWallet}
+            </button>
+          ) : null}
+        </>
       ) : null}
 
       <AmountField
