@@ -32,6 +32,8 @@ import {
 import { angleDelta, directionToYaw, pixelToGround, PIXELS_PER_UNIT, type GroundPoint } from './coords.js';
 import type { CameraBounds, CameraPresetId } from './camera-rig.js';
 import { segmentHitsBox } from './occlusion.js';
+import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
+import { createJumpShadow } from './jump-shadow.js';
 import { EMPTY_PLAZA_STATS } from '../plaza-stations.js';
 import type {
   AvatarFigure,
@@ -65,6 +67,8 @@ export interface PresenterOptions {
    * Whether the player asked for less motion (`prefers-reduced-motion`),
    * read at each sandbox burst: its blocks then pop out instead of flying.
    * The football's GOAL! and FULL TIME read it too, and hold still (D-078).
+   * A jump reads it at take-off: a smaller hop, and the body keeps its shape
+   * (D-097).
    */
   readonly reducedMotion?: () => boolean;
   /**
@@ -87,6 +91,11 @@ export interface Presenter {
    * height of the blocks it stands on (D-060), which the camera follows.
    */
   readonly player: { readonly ground: GroundPoint; readonly yaw: number; readonly elevation: number };
+  /**
+   * D-097: how high the local avatar is in a jump right now, world units; 0
+   * on the ground. The camera does not follow it, so the hop reads.
+   */
+  readonly jumpLift: number;
   readonly cameraBounds: CameraBounds | null;
   /** How the camera frames the player: level with the street, or looking down from a roof. */
   readonly cameraPreset: CameraPresetId;
@@ -226,6 +235,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
     carried.dispose();
   });
 
+  // D-097: the local avatar's jump shadow, on the ground under it.
+  const jumpShadow = createJumpShadow();
+  root.add(jumpShadow.object);
+  disposers.push(() => jumpShadow.dispose());
+
   options.parent.add(root);
 
   let ground: GroundPoint = { x: 0, z: 0 };
@@ -236,6 +250,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let elevationShown = 0;
   let fallSpeed = 0;
   let hop: { from: number; to: number; elapsed: number } | null = null;
+  /** D-097: time since the local avatar took off, or null on the ground. */
+  let jumpElapsed: number | null = null;
+  let jumpHeight = JUMP_HEIGHT;
+  let jumpSquash = true;
+  let lift = 0;
   let targetYaw = 0;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -281,6 +300,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     elevationShown = 0;
     fallSpeed = 0;
     hop = null;
+    jumpElapsed = null;
+    lift = 0;
+    jumpShadow.place(0, 0, 0, 0);
   };
 
   const retireRemote = (): void => {
@@ -302,6 +324,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
   return {
     get player() {
       return { ground, yaw, elevation: elevationShown };
+    },
+    get jumpLift() {
+      return lift;
     },
     get cameraBounds() {
       return cameraBounds;
@@ -325,6 +350,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
           source: remotePeers,
           figures: options.figures,
           surfaceHeight: remoteHeight,
+          ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
         });
         remote = layer;
         root.add(layer.group);
@@ -454,6 +480,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
           if (!live()) return;
           football.celebrate(moment);
         },
+        playerJump() {
+          if (!live()) return;
+          // The session allows one jump at a time; a call mid-air restarts it.
+          let reduced = false;
+          try {
+            reduced = options.reducedMotion?.() === true;
+          } catch {
+            reduced = false;
+          }
+          jumpHeight = reduced ? REDUCED_JUMP_HEIGHT : JUMP_HEIGHT;
+          jumpSquash = !reduced;
+          jumpElapsed = 0;
+        },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;
           cameraBounds = {
@@ -503,8 +542,22 @@ export function createPresenter(options: PresenterOptions): Presenter {
       const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
       const kerb = streetVisible && !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0;
       feet = pendingSnap ? kerb : feet + (kerb - feet) * (1 - Math.exp(-dt / 45));
-      avatar.object.position.y = feet + (streetVisible ? elevationShown : 0);
-      avatar.update(dt, { moving, sprinting: moving && motion.sprinting });
+      // D-097: the jump rides on top of whatever the feet stand on. It never
+      // moves the avatar across the ground: the session does that, as ever.
+      let pose = null;
+      if (jumpElapsed !== null) {
+        jumpElapsed += dt;
+        pose = jumpPose(jumpElapsed, jumpSquash);
+        lift = jumpLift(jumpElapsed, jumpHeight);
+        if (jumpElapsed >= JUMP_TOTAL_MS) {
+          jumpElapsed = null;
+          lift = 0;
+        }
+      }
+      const standOn = feet + (streetVisible ? elevationShown : 0);
+      avatar.object.position.y = standOn + lift;
+      jumpShadow.place(ground.x, standOn, ground.z, lift, jumpHeight);
+      avatar.update(dt, { moving, sprinting: moving && motion.sprinting, jump: pose });
       if (streetVisible) {
         street.update(dt);
         sandbox.update(dt);

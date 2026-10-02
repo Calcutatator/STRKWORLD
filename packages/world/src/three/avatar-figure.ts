@@ -104,6 +104,9 @@ const BLINK_SECONDS = 0.12;
 const WEAPON_ARM_SWING = 0.7;
 const STEADY_ARM_SWING = 0.35;
 const GOLDEN_RATIO_FRACTION = 0.618033988749895;
+/** D-097: at the top of a jump the legs swing up this far and the arms rise this far, radians. */
+const JUMP_LEG_TUCK = 0.42;
+const JUMP_ARM_RISE = 0.55;
 
 /** Body proportions per size class, in world units (1 unit = 1 tile). */
 interface BuildDims {
@@ -1872,6 +1875,9 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   let swingLeft = 1;
   let swingRight = 1;
   let strideScale = 1;
+  /** D-097: this frame's jump shape. */
+  let jumpStretch = 1;
+  let jumpTuck = 0;
   let disposed = false;
 
   const applyLook = (): void => {
@@ -1879,7 +1885,7 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     const next = lookParts(current);
     dims = BUILDS[look.character.build];
     // Scaling about the feet keeps them on y = 0; pairs share a build, so F-toggling keeps size.
-    body.scale.setScalar(dims.scale);
+    applyBodyScale();
     torso.geometry = next.torso;
     head.geometry = next.head;
     armLeft.geometry = next.armLeft;
@@ -1902,6 +1908,12 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
         ? STEADY_ARM_SWING
         : WEAPON_ARM_SWING;
   };
+
+  /** The build's scale, stretched or squashed by a jump about the feet, volume kept roughly. */
+  function applyBodyScale(): void {
+    const side = dims.scale / Math.sqrt(jumpStretch);
+    body.scale.set(side, dims.scale * jumpStretch, side);
+  }
 
   const applyPose = (): void => {
     const swing = Math.sin(stridePhase);
@@ -1931,6 +1943,15 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     headPivot.rotation.x = -lean * HEAD_COUNTER_LEAN;
     headPivot.rotation.y = TORSO_TWIST * 0.5 * walkWeight * swing;
     eyes.scale.y = blinkClock < BLINK_SECONDS ? 0.15 : 1;
+    // D-097: in the air the legs tuck forward and the arms lift out. Applied
+    // after the hips are placed, so the feet rise off the ground with the
+    // tuck rather than the hips dropping to keep them planted.
+    if (jumpTuck > 0) {
+      legLeftPivot.rotation.x = lerp(legLeftPivot.rotation.x, -JUMP_LEG_TUCK, jumpTuck);
+      legRightPivot.rotation.x = lerp(legRightPivot.rotation.x, -JUMP_LEG_TUCK * 0.6, jumpTuck);
+      armLeftPivot.rotation.z = spread + JUMP_ARM_RISE * jumpTuck;
+      armRightPivot.rotation.z = -spread - JUMP_ARM_RISE * jumpTuck;
+    }
   };
 
   applyLook();
@@ -1963,6 +1984,14 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       stridePhase = (stridePhase + seconds * cadence * TAU) % TAU;
       breathPhase = (breathPhase + seconds * BREATH_PER_SECOND * TAU) % TAU;
       blinkClock = (blinkClock + seconds) % BLINK_PERIOD_SECONDS;
+      const jump = motion?.jump;
+      const stretch = jump && Number.isFinite(jump.stretch) ? Math.min(1.3, Math.max(0.7, jump.stretch)) : 1;
+      const tuck = jump && Number.isFinite(jump.tuck) ? Math.min(1, Math.max(0, jump.tuck)) : 0;
+      if (stretch !== jumpStretch) {
+        jumpStretch = stretch;
+        applyBodyScale();
+      }
+      jumpTuck = tuck;
       applyPose();
     },
     dispose(): void {

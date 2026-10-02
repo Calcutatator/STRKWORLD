@@ -34,10 +34,14 @@ const CAPTURED_CODES: ReadonlySet<string> = new Set([
   ...SPRINT_CODES,
   'Space',
 ]);
-/** One-shot action keys: the outfit toggle (D-053) and the sandbox block key (D-060). */
-const ACTION_EVENTS: Readonly<Record<string, 'keydown-F' | 'keydown-E'>> = Object.freeze({
+/**
+ * One-shot action keys: the outfit toggle (D-053), the sandbox, plaza and
+ * kick key (D-060, D-076, D-078) and the jump (D-097).
+ */
+const ACTION_EVENTS: Readonly<Record<string, 'keydown-F' | 'keydown-E' | 'keydown-Space'>> = Object.freeze({
   KeyF: 'keydown-F',
   KeyE: 'keydown-E',
+  Space: 'keydown-Space',
 });
 
 const NO_MOVEMENT: MovementInput = Object.freeze({
@@ -88,6 +92,7 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   const actionHandlers: Record<ActionEvent, Set<ActionHandler>> = {
     'keydown-F': new Set(),
     'keydown-E': new Set(),
+    'keydown-Space': new Set(),
   };
   let enabled = true;
   let capture = true;

@@ -17,6 +17,7 @@ import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
 import { createRemotePeerSource } from '../remote-peer.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
+import { JUMP_AIR_MS, JUMP_HEIGHT, REDUCED_JUMP_HEIGHT } from '../jump.js';
 
 /**
  * The presenter in node (D-059): real builders and the null label factory,
@@ -500,4 +501,101 @@ describe('remote peers in shared areas (D-087)', () => {
     world.presenter.update(16);
     expect(world.remote()?.object.position.y).toBe(0);
   });
+
+  it('plays a peer\'s jump when its counter changes, not the counter it arrived with (D-097)', () => {
+    const at = tile(6, 20);
+    const parent = new Group();
+    const figures = fakeFigures();
+    const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: figures.factory });
+    const peers = createRemotePeerSource([{ id: 'peer', x: at.x, y: at.y, facing: 'down', sprite: 'avatar-3', jumps: 7 }]);
+    presenter.bindSession(peers.source);
+    const remote = figures.created.find((figure) => figure.object.parent?.name === 'remote-avatars')!;
+    presenter.update(16);
+    const standing = remote.object.position.y;
+    // Met mid-session with 7 jumps behind it: it does not jump on sight.
+    presenter.update(JUMP_AIR_MS / 4);
+    expect(remote.object.position.y).toBe(standing);
+
+    peers.publish([{ id: 'peer', x: at.x, y: at.y, facing: 'down', sprite: 'avatar-3', jumps: 8 }]);
+    for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) presenter.update(25);
+    expect(remote.object.position.y).toBeCloseTo(standing + JUMP_HEIGHT, 1);
+    const motion = remote.update.mock.calls.at(-1)![1];
+    expect(motion.jump?.tuck).toBeGreaterThan(0.9);
+    const shadow = remote.object.parent!.children.find((child) => child.name === 'avatar:jump-shadow')!;
+    expect(shadow.visible).toBe(true);
+    expect(shadow.position.y).toBeLessThan(standing + 0.05);
+    expect(shadow.scale.x).toBeLessThan(1);
+    for (let ms = 0; ms < JUMP_AIR_MS; ms += 25) presenter.update(25);
+    expect(remote.object.position.y).toBe(standing);
+    expect(shadow.visible).toBe(false);
+  });
 });
+
+describe('presenter: the local jump (D-097)', () => {
+  const shadowOf = (world: ReturnType<typeof setup>) =>
+    world.avatar.object.parent!.children.find((child) => child.name === 'avatar:jump-shadow')!;
+
+  it('lifts the avatar in an arc over the ground it stands on, and lands', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.presenter.update(16);
+    const ground = world.avatar.object.position.y;
+    expect(shadowOf(world).visible).toBe(false);
+
+    world.view.playerJump();
+    for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) world.presenter.update(25);
+    expect(world.presenter.jumpLift).toBeCloseTo(JUMP_HEIGHT, 1);
+    expect(world.avatar.object.position.y).toBeCloseTo(ground + world.presenter.jumpLift, 5);
+    // The camera follows the feet's surface, not the hop, so the hop reads.
+    expect(world.presenter.player.elevation).toBe(0);
+    const motion = world.avatar.update.mock.calls.at(-1)![1];
+    expect(motion.jump?.tuck).toBeGreaterThan(0.9);
+
+    // The shadow stays on the ground and shrinks.
+    const shadow = shadowOf(world);
+    expect(shadow.visible).toBe(true);
+    expect(shadow.position.y).toBeLessThan(ground + 0.05);
+    expect(shadow.scale.x).toBeLessThan(0.7);
+
+    for (let ms = 0; ms < JUMP_AIR_MS; ms += 25) world.presenter.update(25);
+    expect(world.presenter.jumpLift).toBe(0);
+    expect(world.avatar.object.position.y).toBe(ground);
+    expect(shadow.visible).toBe(false);
+    expect(world.avatar.update.mock.calls.at(-1)![1].jump).toBeNull();
+  });
+
+  it('keeps walking through a jump: the ground position is the session\'s alone', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.view.setPlayerMotion({ vx: 160, vy: 0, sprinting: true });
+    world.view.playerJump();
+    world.view.setPlayerPosition(tile(25, 15), false);
+    world.presenter.update(100);
+    expect(world.avatar.object.position.x).toBeCloseTo(25.5);
+    expect(world.avatar.update.mock.calls.at(-1)![1]).toMatchObject({ moving: true, sprinting: true });
+    expect(world.avatar.object.position.y).toBeGreaterThan(0);
+  });
+
+  it('hops smaller and keeps the body its shape under reduced motion', () => {
+    const world = setup(() => true);
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.presenter.update(16);
+    world.view.playerJump();
+    world.presenter.update(20);
+    expect(world.avatar.update.mock.calls.at(-1)![1].jump?.stretch).toBe(1);
+    for (let ms = 20; ms < JUMP_AIR_MS / 2; ms += 20) world.presenter.update(20);
+    expect(world.presenter.jumpLift).toBeCloseTo(REDUCED_JUMP_HEIGHT, 1);
+  });
+
+  it('starts a new session on the ground', () => {
+    const world = setup();
+    world.view.playerJump();
+    world.presenter.update(100);
+    expect(world.presenter.jumpLift).toBeGreaterThan(0);
+    world.presenter.bindSession();
+    world.presenter.update(16);
+    expect(world.presenter.jumpLift).toBe(0);
+    expect(shadowOf(world).visible).toBe(false);
+  });
+});
+

@@ -7,7 +7,7 @@ import {
   type RemotePeerSnapshot,
 } from './remote-peer.js';
 
-// Validated snapshots always state `carrying`, so the fixture does too.
+// Validated snapshots always state `carrying` and `jumps`, so the fixture does too.
 const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot => ({
   id: 'peer-1',
   x: 40,
@@ -15,6 +15,7 @@ const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot =
   facing: 'down',
   sprite: 'avatar-1',
   carrying: null,
+  jumps: 0,
   ...overrides,
 });
 
@@ -94,6 +95,18 @@ describe('RemotePeerSource', () => {
     controller.publish([peer({ carrying: 3 }), peer({ id: 'peer-2', carrying: -1 })]);
 
     expect(seen.at(-1)).toEqual([peer({ carrying: 3 }), peer({ id: 'peer-2', carrying: null })]);
+  });
+
+  it('delivers the jump counter as a byte, anything else as 0 (D-097)', () => {
+    const controller = createRemotePeerSource();
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+    const junk: unknown[] = [-1, 256, 1.5, '3', null, Number.NaN, { valueOf: () => 4 }];
+    controller.publish([
+      peer({ jumps: 255 }),
+      ...junk.map((jumps, index) => ({ ...peer({ id: `junk-${index}` }), jumps }) as RemotePeerSnapshot),
+    ]);
+    expect(seen.at(-1)?.map((entry) => entry.jumps)).toEqual([255, ...junk.map(() => 0)]);
   });
 
   it('makes unsubscribe idempotent and stops later delivery', () => {

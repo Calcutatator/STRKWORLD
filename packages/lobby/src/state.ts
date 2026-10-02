@@ -53,6 +53,12 @@ export type PositionSchema = SchemaType<typeof PositionSchema>;
  * `carrying` (D-060) is an `int8`: a sandbox palette index, or -1 for empty
  * hands. Only the room writes it, from the sandbox authority's own record, so
  * a client has no way to put a value of its choosing there.
+ *
+ * `jumps` (D-097) is a `uint8` counter that wraps at 256: peers play a jump
+ * when it changes. Only the room writes it, one step per accepted `jump`
+ * message, so a client cannot choose its value either, and a byte holds
+ * nothing else. It rides the same per-observer view as the rest of the entry,
+ * so only peers that already see this player are told it jumped.
  */
 export const PresenceEntry = schema(
   {
@@ -61,6 +67,7 @@ export const PresenceEntry = schema(
     facing: 'string',
     sprite: 'string',
     carrying: { type: 'int8', default: -1 },
+    jumps: { type: 'uint8', default: 0 },
   },
   'PresenceEntry',
 );

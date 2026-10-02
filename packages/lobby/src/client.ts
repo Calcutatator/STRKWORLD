@@ -101,6 +101,7 @@ import {
   DEFAULT_ROOM_NAME,
   DEFAULT_SPRITE,
   FOOTBALL_CLIENT_KICK_INTERVAL_MS,
+  JUMP_CLIENT_INTERVAL_MS,
   MESSAGE,
   MIN_CLIENT_SEND_INTERVAL_MS,
   SANDBOX_CLIENT_ACTION_INTERVAL_MS,
@@ -169,6 +170,12 @@ export interface PeerSnapshot {
    * to an integer palette index; anything else from the server is null.
    */
   readonly carrying: number | null;
+  /**
+   * D-097: how many times this player has jumped, modulo 256. Only a change
+   * means anything: the World plays a jump when it moves. Anything that is
+   * not a byte from the server reads as 0.
+   */
+  readonly jumps: number;
 }
 
 export interface Placement {
@@ -339,6 +346,8 @@ export class LobbyClient {
   #footballPublished: FootballSnapshot | null = null;
   /** When the last kick left this client, for the client-side floor. */
   #lastKickAt: number | null = null;
+  /** When the last jump left this client, for the client-side floor (D-097). */
+  #lastJumpAt: number | null = null;
   /** A kick waiting only for a newer position to go first. */
   #kickHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -844,6 +853,27 @@ export class LobbyClient {
     return this.#sendKick(unsent);
   }
 
+  /**
+   * D-097: tell the room the avatar jumped, so peers who see it play the jump.
+   * The message carries nothing. Sent only while live on the street or the
+   * roof (never suspended, never from the Studio), and at most once per
+   * `JUMP_CLIENT_INTERVAL_MS`; a jump inside the floor is dropped, not held,
+   * since a late jump is a different jump. Returns whether it was sent.
+   */
+  jump(): boolean {
+    if (this.#status !== 'connected' || this.#room === null) return false;
+    if (this.#area !== 'street' && this.#area !== 'roof') return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastJumpAt;
+    if (last !== null && now - last < JUMP_CLIENT_INTERVAL_MS) return false;
+    const room = this.#room;
+    room.send(MESSAGE.jump);
+    if (this.#room !== room || this.#status !== 'connected') return false;
+    this.#lastJumpAt = now;
+    return true;
+  }
+
   /** Send the kick, after the waiting position if `moveFirst`. */
   #sendKick(moveFirst: boolean): boolean {
     if (!this.#onStreet() || this.#room === null) return false;
@@ -1006,6 +1036,7 @@ export class LobbyClient {
       this.#lastSentPlacement = null;
       this.#lastSandboxActionAt = null;
       this.#lastKickAt = null;
+      this.#lastJumpAt = null;
       this.#cancelSandboxAction();
       this.#cancelKick();
       this.#setStatus('connected');
@@ -1653,10 +1684,16 @@ function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
       facing: entry.facing as Facing,
       sprite: entry.sprite,
       carrying: normalizeSandboxColour(entry.carrying),
+      jumps: normalizeJumps(entry.jumps),
     };
   } catch {
     return null;
   }
+}
+
+/** D-097: a byte counter, or 0. */
+function normalizeJumps(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xff ? value : 0;
 }
 
 /**

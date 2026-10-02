@@ -17,7 +17,7 @@ const source = (path: string): string =>
 describe('Getting started card', () => {
   it("matches the World's real bindings", () => {
     const inputs = COPY.guide.controls.map(({ input }) => input);
-    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'F', 'E', 'Esc']);
+    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'Space', 'F', 'E', 'Esc']);
 
     const keyboard = source('../../../../packages/world/src/dom-keyboard.ts');
     for (const binding of [
@@ -28,6 +28,7 @@ describe('Getting started card', () => {
       "Object.freeze(['ShiftLeft', 'ShiftRight'])",
       "KeyF: 'keydown-F'",
       "KeyE: 'keydown-E'",
+      "Space: 'keydown-Space'",
     ]) {
       expect(keyboard).toContain(binding);
     }

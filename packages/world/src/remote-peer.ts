@@ -25,6 +25,13 @@ export interface RemotePeerSnapshot {
    * for producers; every validated snapshot states it explicitly.
    */
   readonly carrying?: number | null;
+  /**
+   * D-097: the peer's jump counter, a byte that wraps at 256. Only a change
+   * means anything: the figure plays a jump when it moves. Cosmetic, so a bad
+   * value reads as 0. Optional for producers; every validated snapshot states
+   * it explicitly.
+   */
+  readonly jumps?: number;
 }
 
 export type RemotePeerListener = (snapshot: readonly RemotePeerSnapshot[]) => void;
@@ -82,6 +89,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
 
   const sprite = ownDataField(value, 'sprite');
   const carrying = ownDataField(value, 'carrying');
+  const jumps = ownDataField(value, 'jumps');
   return Object.freeze({
     id,
     x,
@@ -89,6 +97,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
     facing: facing as Facing,
     sprite: validateAvatarSprite(sprite),
     carrying: validateCarriedColour(carrying),
+    jumps: validateJumpCounter(jumps),
   });
 }
 
@@ -100,6 +109,11 @@ function validateCarriedColour(value: unknown): number | null {
     value < SANDBOX_COLOURS
     ? value
     : null;
+}
+
+/** D-097: a byte counter, or 0. */
+function validateJumpCounter(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xff ? value : 0;
 }
 
 function ownDataField(value: Record<string, unknown>, key: string): unknown {

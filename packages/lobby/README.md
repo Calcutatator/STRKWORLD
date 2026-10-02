@@ -272,6 +272,15 @@ validated and fails closed: a tick that is not a whole uint32, a ball off the
 pitch square or faster than the rules allow, a score past 5 or a phase byte
 the rules do not have is no ball at all.
 
+- **`jump()`** (D-097) sends `jump` with no payload. The room bumps the
+  sender's own `jumps` byte (it wraps at 256) at most once per 400 ms
+  (`JUMP_MIN_INTERVAL_MS`, strict), on the street or the roof only; the
+  client holds itself to 450 ms (`JUMP_CLIENT_INTERVAL_MS`) and sends
+  nothing while suspended or in the Studio. The counter rides the presence
+  entry, so only observers whose view already holds the jumper (same area,
+  inside the interest radius) are told: 4 bytes in one patch.
+  `PeerSnapshot.jumps` is that byte, or 0; a peer plays a jump when it
+  changes, never on first sight.
 - **`kick()`** sends `football:kick` with no payload: the room kicks from the
   position and facing it holds. It returns false unless connected (not
   suspended) and outside the client floor, `FOOTBALL_CLIENT_KICK_INTERVAL_MS`

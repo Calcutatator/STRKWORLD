@@ -14,6 +14,8 @@ import {
 import { avatarFigureHeight } from './avatar-figure.js';
 import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coords.js';
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
+import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
+import { createJumpShadow, type JumpShadow } from './jump-shadow.js';
 import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
 
 /**
@@ -92,6 +94,13 @@ export interface RemoteAvatarLayer3DOptions {
   readonly surfaceHeight?: (x: number, z: number) => number;
   /** Builds the block a peer carries overhead; the sandbox view's by default. */
   readonly carriedBlocks?: (colour: number | null) => CarriedBlock;
+  /**
+   * D-097: whether the player asked for less motion, read as each peer's jump
+   * starts: a smaller hop, and the body keeps its shape.
+   */
+  readonly reducedMotion?: () => boolean;
+  /** Builds a jumping peer's contact shadow; the shared one by default. */
+  readonly jumpShadows?: () => JumpShadow;
 }
 
 export interface RemoteAvatarLayer3D {
@@ -135,6 +144,17 @@ interface RemoteAvatar {
   carried: CarriedBlock | null;
   /** The colour the block last accepted; a failed change leaves it for retry. */
   carrying: number | null;
+  /**
+   * D-097: the jump counter last seen. A change plays a jump; the first value
+   * seen is only a baseline, so a peer met mid-session does not jump on sight.
+   */
+  jumps: number;
+  /** Time since this peer's jump took off, ms, or null on the ground. */
+  jumpElapsed: number | null;
+  jumpHeight: number;
+  jumpSquash: boolean;
+  /** Built on the first jump, then kept (hidden) until retirement. */
+  jumpShadow: JumpShadow | null;
   /** Set once figure.update has thrown: the figure stops animating, the loop does not. */
   frozen: boolean;
   /** Set while dispose() runs and once it has returned; cleared if it throws. */
@@ -161,6 +181,8 @@ export function createRemoteAvatarLayer3D({
   figures,
   surfaceHeight,
   carriedBlocks = createCarriedBlock,
+  reducedMotion,
+  jumpShadows = createJumpShadow,
 }: RemoteAvatarLayer3DOptions): RemoteAvatarLayer3D {
   const group = new Group();
   group.name = 'remote-avatars';
@@ -197,6 +219,12 @@ export function createRemoteAvatarLayer3D({
       avatar.carried = null;
       if (!attempt(errors, () => block.dispose())) avatar.carried = block;
     }
+    // D-097: the jump shadow lives in the layer's group, not on the figure.
+    const shadow = avatar.jumpShadow;
+    if (shadow !== null) {
+      avatar.jumpShadow = null;
+      if (!attempt(errors, () => shadow.dispose())) avatar.jumpShadow = shadow;
+    }
     // Three detaches before it dispatches 'removed', so a throwing listener
     // still leaves the object out of the group. Only the parent says whether
     // the detach needs a retry.
@@ -207,7 +235,7 @@ export function createRemoteAvatarLayer3D({
       avatar.disposed = true;
       if (!attempt(errors, () => avatar.figure.dispose())) avatar.disposed = false;
     }
-    return avatar.carried === null && avatar.disposed && object.parent !== group;
+    return avatar.carried === null && avatar.jumpShadow === null && avatar.disposed && object.parent !== group;
   };
 
   /**
@@ -273,6 +301,8 @@ export function createRemoteAvatarLayer3D({
     // default; this narrows the type without a cast.
     const look = validateAvatarSprite(peer.sprite);
     const avatar = standingAvatar(id, figures(look), look, peer);
+    // A peer first seen mid-session takes its counter as a baseline.
+    avatar.jumps = peer.jumps ?? 0;
     // First appearance lands at once on whatever the peer stands on.
     landOn(avatar, surfaceGoal(avatar));
     if (destroyed) {
@@ -315,6 +345,44 @@ export function createRemoteAvatarLayer3D({
     if (destroyed) return;
     const colour = peer.carrying ?? null;
     if (colour !== avatar.carrying) attempt(errors, () => showCarried(avatar, colour));
+    if (destroyed) return;
+    const jumps = peer.jumps ?? 0;
+    if (jumps !== avatar.jumps) {
+      avatar.jumps = jumps;
+      startJump(avatar);
+    }
+  };
+
+  /** D-097: play one jump from where the peer is drawn; a jump mid-air restarts it. */
+  const startJump = (avatar: RemoteAvatar): void => {
+    let reduced = false;
+    try {
+      reduced = reducedMotion?.() === true;
+    } catch {
+      reduced = false;
+    }
+    avatar.jumpHeight = reduced ? REDUCED_JUMP_HEIGHT : JUMP_HEIGHT;
+    avatar.jumpSquash = !reduced;
+    avatar.jumpElapsed = 0;
+  };
+
+  /** D-097: the peer's jump this frame: lift, pose and shadow. Returns the pose. */
+  const stepJump = (avatar: RemoteAvatar, deltaMs: number): AvatarMotion['jump'] => {
+    if (avatar.jumpElapsed === null) return null;
+    avatar.jumpElapsed += deltaMs;
+    const elapsed = avatar.jumpElapsed;
+    const pose = jumpPose(elapsed, avatar.jumpSquash);
+    const lift = jumpLift(elapsed, avatar.jumpHeight);
+    if (elapsed >= JUMP_TOTAL_MS) avatar.jumpElapsed = null;
+    avatar.figure.object.position.y = avatar.elevation + lift;
+    let shadow = avatar.jumpShadow;
+    if (shadow === null && lift > 0) {
+      shadow = jumpShadows();
+      avatar.jumpShadow = shadow;
+      group.add(shadow.object);
+    }
+    shadow?.place(avatar.x / PIXELS_PER_UNIT, avatar.elevation, avatar.y / PIXELS_PER_UNIT, lift, avatar.jumpHeight);
+    return pose;
   };
 
   const renderSnapshot = (snapshot: readonly RemotePeerSnapshot[]): void => {
@@ -467,9 +535,14 @@ export function createRemoteAvatarLayer3D({
           stepElevation(avatar, dt, goal);
           place(avatar);
         }
+        const jump = dt > 0 ? stepJump(avatar, dt) : null;
+        if (destroyed) break;
         if (avatar.frozen) continue;
         try {
-          avatar.figure.update(dt, moving ? WALKING : STANDING);
+          avatar.figure.update(
+            dt,
+            jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING,
+          );
         } catch (error) {
           // Frozen after one report instead of rethrowing every frame: a
           // figure that always throws would otherwise report 60 times a second
@@ -511,6 +584,11 @@ function standingAvatar(
     airElapsed: 0,
     carried: null,
     carrying: null,
+    jumps: 0,
+    jumpElapsed: null,
+    jumpHeight: JUMP_HEIGHT,
+    jumpSquash: true,
+    jumpShadow: null,
     frozen: false,
     disposed: false,
   };

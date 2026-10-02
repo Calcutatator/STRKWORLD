@@ -97,6 +97,7 @@ import {
   type FootballMoment,
 } from './football-channel.js';
 import { withinKickRange } from './map/pitch.js';
+import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
 
 /**
  * The World's gameplay session, independent of any renderer (D-059).
@@ -187,7 +188,13 @@ export interface WorldSessionView {
   setKickPrompt?(visible: boolean): void;
   /** A goal or full time: the pitch celebrates it. */
   footballMoment?(moment: FootballMoment): void;
+  // The jump (D-097). Optional: a view without it simply does not jump.
+  /** The local avatar takes off: play one cosmetic jump from where it stands. */
+  playerJump?(): void;
 }
+
+/** The World's one-shot action keys. */
+export type WorldActionKey = 'keydown-F' | 'keydown-E' | 'keydown-Space';
 
 interface OutfitKeyEvent {
   readonly repeat: boolean;
@@ -205,10 +212,10 @@ export interface WorldKeyboard extends KeyboardLike {
   /**
    * `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a
    * block (D-060), uses a Privacy Plaza station (D-076), or kicks the ball
-   * (D-078).
+   * (D-078); `keydown-Space` jumps (D-097).
    */
-  on(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
-  off(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
+  on(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
+  off(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
 }
 
 export interface WorldSessionOptions {
@@ -260,6 +267,8 @@ export interface WorldSession {
    * under them (D-060), or a roof; 0 anywhere else.
    */
   readonly elevation: number;
+  /** D-097: the local avatar's cosmetic jump: ready, in the air, or cooling down. */
+  readonly jump: JumpPhase;
   update(deltaMs: number, frame?: WorldFrame): void;
   destroy(): void;
 }
@@ -382,6 +391,9 @@ class Session implements WorldSession {
   private ballShown = false;
   /** D-077: the Shell opened the Vault, so its door and room exist. */
   private readonly vaultOpen: boolean;
+  /** D-097: one jump at a time, then a short cooldown. */
+  private readonly jumpState: JumpState = createJumpState();
+  private jumpKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -409,6 +421,7 @@ class Session implements WorldSession {
       this.createSandbox();
       this.createPlaza();
       this.createFootball();
+      this.createJump();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -452,6 +465,10 @@ class Session implements WorldSession {
     return this.elevationLevel;
   }
 
+  get jump(): JumpPhase {
+    return this.jumpState.phase;
+  }
+
   get inputSuspended(): boolean {
     try {
       return this.inputGate.suspended === true;
@@ -463,6 +480,7 @@ class Session implements WorldSession {
   update(deltaMs: number, frame?: WorldFrame): void {
     if (this.cleanedUp) return;
     const delta = clampFrame(deltaMs);
+    this.jumpState.advance(delta);
     const cameraYaw = Number.isFinite(frame?.cameraYaw) ? (frame!.cameraYaw as number) : 0;
     const room = this.activeRoomController();
     if (this.avatarStudioActive) {
@@ -548,6 +566,13 @@ class Session implements WorldSession {
       const keyboard = this.keyboard;
       attempt(() => keyboard.off('keydown-E', footballKey));
     }
+    const jumpKey = this.jumpKey;
+    this.jumpKey = undefined;
+    if (jumpKey && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('keydown-Space', jumpKey));
+    }
+    this.jumpState.reset();
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
     attempt(() => inputGate.resume());
@@ -1132,6 +1157,40 @@ class Session implements WorldSession {
     };
     keyboard.on('keydown-E', onKey);
     this.plazaKey = onKey;
+  }
+
+  // -- the jump (D-097) --------------------------------------------------------
+
+  /**
+   * Space jumps: a short cosmetic hop that never touches movement or
+   * collision. Ignored, never queued, while a panel or Shell claim owns the
+   * keyboard (the gate; the keyboard also never reads a keystroke aimed at a
+   * text field), while a room's counter holds the controls ('shell'), and in
+   * the Avatar Studio. A held key's repeats do nothing, and a press in the
+   * air or in the cooldown is dropped: no double jump, no buffered jump.
+   */
+  private createJump(): void {
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat) return;
+      if (!this.canJump()) return;
+      if (!this.jumpState.tryStart()) return;
+      this.view.playerJump?.();
+      if (this.cleanedUp) return;
+      // The Shell decides whether anyone is told: only in a shared area.
+      this.config?.out.emit('player:jumped', Object.freeze({}) as Record<string, never>);
+    };
+    keyboard.on('keydown-Space', onKey);
+    this.jumpKey = onKey;
+  }
+
+  /** Whether Space may jump right now. */
+  private canJump(): boolean {
+    if (this.inputSuspended || this.avatarStudioActive) return false;
+    const room = this.activeRoomController();
+    if (room?.state.inRoom && room.state.controlOwner !== 'world') return false;
+    return true;
   }
 
   // -- the football pitch (D-078) ---------------------------------------------

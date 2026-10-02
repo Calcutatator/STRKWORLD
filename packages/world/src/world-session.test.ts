@@ -307,6 +307,7 @@ function createRecordingView(journal: Journal) {
     setFootball: (frame) => record('setFootball', [frame]),
     setKickPrompt: (visible) => record('setKickPrompt', [visible]),
     footballMoment: (moment) => record('footballMoment', [moment]),
+    playerJump: () => record('playerJump', []),
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>
