@@ -309,6 +309,10 @@ function createRecordingView(journal: Journal) {
     setKickPrompt: (visible) => record('setKickPrompt', [visible]),
     footballMoment: (moment) => record('footballMoment', [moment]),
     playerJump: () => record('playerJump', []),
+    syncArena: (frame) => record('syncArena', [frame]),
+    setArenaPrompt: (text) => record('setArenaPrompt', [text]),
+    playerSwing: () => record('playerSwing', []),
+    setPlayerFacing: (facing) => record('setPlayerFacing', [facing]),
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>
@@ -1003,9 +1007,9 @@ describe('WorldSession lifecycle', () => {
     enterBuilding(world, 'bank');
     const staleBank = world.room('bank');
     expect(staleBank.state.inRoom).toBe(true);
-    // Three per room (the hidden room's too, D-107), and the Privacy Plaza's
-    // control claim and figures (D-076).
-    expect(world.bus.shellListenerCount()).toBe(17);
+    // Three per room (the hidden room's too, D-107, and the arena's, D-114),
+    // and the Privacy Plaza's control claim and figures (D-076).
+    expect(world.bus.shellListenerCount()).toBe(20);
 
     stale.destroy();
     const replacement = world.start();
@@ -1013,7 +1017,7 @@ describe('WorldSession lifecycle', () => {
     expect(world.cycles).toHaveLength(2);
     expect(world.keyboard.listenerCount()).toBe(1);
     expect(staleBank.state.inRoom).toBe(false);
-    expect(world.bus.shellListenerCount()).toBe(17);
+    expect(world.bus.shellListenerCount()).toBe(20);
 
     // A late Shell exit reaches only the current, outside controller. The
     // retired Bank must not move the new session or publish a stale exit.
@@ -1119,7 +1123,7 @@ describe('WorldSession lifecycle', () => {
 
     const partial = world.cycle(0);
     expect(partial.session).toBeUndefined();
-    expect(countEntries(world.journal, 'shell.off:')).toBe(15);
+    expect(countEntries(world.journal, 'shell.off:')).toBe(18);
     expect(world.bus.shellListenerCount()).toBe(0);
     expect(world.keyboard.listenerCount()).toBe(0);
     expectCompleteCleanup(partial);
@@ -2394,7 +2398,7 @@ describe('WorldSession: shared presence areas (D-087)', () => {
     expect(eventsSince(world, before)).toEqual(['rooftop:exited', 'player:moved', 'building:exited']);
   });
 
-  it('never announces a roof for any other floor or building, and publishes area moves only from the bunker', () => {
+  it('never announces a roof for any other floor or building, and publishes area moves only from the bunker and the arena', () => {
     for (const building of ROOM_BUILDINGS) {
       const world = createWorld();
       world.start();
@@ -2402,8 +2406,8 @@ describe('WorldSession: shared presence areas (D-087)', () => {
       for (let i = 0; i < 5; i++) tickHolding(world, { up: true });
       if (building === 'exchange') ride(world, 'degen');
       expect(world.bus.count('rooftop:entered'), building).toBe(0);
-      // D-112: the bunker is a shared room; every other interior is private.
-      if (building === 'bunker') expect(world.bus.count('area:moved'), building).toBeGreaterThan(0);
+      // D-112: the bunker is a shared room, and the arena (D-114); every other interior is private.
+      if (building === 'bunker' || building === 'arena') expect(world.bus.count('area:moved'), building).toBeGreaterThan(0);
       else expect(world.bus.count('area:moved'), building).toBe(0);
     }
   });

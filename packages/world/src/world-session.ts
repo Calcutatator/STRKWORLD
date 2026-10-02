@@ -10,7 +10,13 @@ import type {
   StationId,
   WorldEvents,
 } from '@strkworld/shared';
-import { SANDBOX_STEP_HEIGHT, presenceAreaOfBuilding } from '@strkworld/shared';
+import {
+  ARENA_BUILDING,
+  SANDBOX_STEP_HEIGHT,
+  arenaTileAt,
+  arenaTileCentre,
+  presenceAreaOfBuilding,
+} from '@strkworld/shared';
 import {
   createStreetMap,
   isAvatarStudioEntrance,
@@ -39,7 +45,7 @@ import {
   type AvatarOutfitSelection,
   type AvatarOutfitToggleBinding,
 } from './avatar-outfit.js';
-import { DEFAULT_AVATAR_SPRITE } from './avatar-state.js';
+import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
 import { createDoorTrigger, type DoorTrigger } from './door-trigger.js';
 import {
@@ -99,6 +105,9 @@ import {
 } from './football-channel.js';
 import { withinKickRange } from './map/pitch.js';
 import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
+import { ARENA_PIT_RETURN, ARENA_PIT_RETURN_FACING } from './map/arena-pit.js';
+import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
+import { createArenaSession } from './arena-session.js';
 
 /**
  * The World's gameplay session, independent of any renderer (D-059).
@@ -192,10 +201,19 @@ export interface WorldSessionView {
   // The jump (D-097). Optional: a view without it simply does not jump.
   /** The local avatar takes off: play one cosmetic jump from where it stands. */
   playerJump?(): void;
+  // The gladiator pit's arena (D-114). Optional: a view without it draws no ring.
+  /** The ring as the arena session sees it this frame (gate, dummy, swings), or none. */
+  syncArena?(frame: ArenaViewFrame | null): void;
+  /** The arena prompt over the local avatar ("E · ENTER THE RING", "IN USE"), or none. */
+  setArenaPrompt?(text: string | null): void;
+  /** The local avatar swings once, at once (cosmetic prediction). */
+  playerSwing?(): void;
+  /** Turn the local avatar to a facing at once (a leap's landing, a street return). */
+  setPlayerFacing?(facing: Facing): void;
 }
 
 /** The World's one-shot action keys. */
-export type WorldActionKey = 'keydown-F' | 'keydown-E' | 'keydown-Space';
+export type WorldActionKey = 'keydown-F' | 'keydown-E' | 'keydown-Space' | 'pointerdown-primary';
 
 interface OutfitKeyEvent {
   readonly repeat: boolean;
@@ -213,7 +231,8 @@ export interface WorldKeyboard extends KeyboardLike {
   /**
    * `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a
    * block (D-060), uses a Privacy Plaza station (D-076), or kicks the ball
-   * (D-078); `keydown-Space` jumps (D-097).
+   * (D-078); `keydown-Space` jumps (D-097); `pointerdown-primary`, a
+   * primary click or tap on the World's canvas, strikes in the arena (D-114).
    */
   on(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
@@ -230,6 +249,13 @@ export interface WorldSessionOptions {
   readonly sandbox?: SandboxChannel;
   /** The shared football (D-078); absent means no ball is drawn or kicked. */
   readonly football?: FootballChannel;
+  /**
+   * The gladiator pit's ring (D-114); absent means the arena is a room to
+   * walk round and watch from, with no ring to claim.
+   */
+  readonly arena?: ArenaChannel;
+  /** `prefers-reduced-motion`: arena leaps become cuts (D-114). Absent reads as false. */
+  readonly reducedMotion?: () => boolean;
   /**
    * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its
    * door opens onto its room. Absent or false, it is D-007's locked facade.
@@ -396,6 +422,18 @@ class Session implements WorldSession {
   /** D-097: one jump at a time, then a short cooldown. */
   private readonly jumpState: JumpState = createJumpState();
   private jumpKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-114: the ring's combat session (C's arena-session.ts), only with a channel. */
+  private readonly arenaChannel?: ArenaChannel;
+  private arenaSession?: ArenaSession;
+  private arenaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  private arenaPrimary?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** Whether the view was last given a ring frame, so leaving clears it once. */
+  private arenaShown = false;
+  /** D-114: F is locked while the player fights. */
+  private outfitLocked = false;
+  /** D-114: the look to put back after a fight, if the ring switched it. */
+  private lookBeforeFight: AvatarSpriteKey | null = null;
+  private readonly reducedMotion?: () => boolean;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -404,6 +442,8 @@ class Session implements WorldSession {
     this.onTileChanged = options.onTileChanged;
     this.sandbox = options.sandbox;
     this.football = options.football;
+    this.arenaChannel = options.arena;
+    this.reducedMotion = options.reducedMotion;
     this.vaultOpen = options.vaultOpen === true;
     try {
       this.map = createStreetMap({ vaultOpen: this.vaultOpen });
@@ -424,6 +464,7 @@ class Session implements WorldSession {
       this.createPlaza();
       this.createFootball();
       this.createJump();
+      this.createArena();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -492,8 +533,10 @@ class Session implements WorldSession {
     if (room?.state.inRoom) {
       this.moveRoomPlayer(delta, cameraYaw);
       this.movement.interiorUpdate(() => this.reportRoomTile());
+      if (!this.cleanedUp) this.presentArena(delta);
       return;
     }
+    if (this.arenaShown) this.clearArena();
     const input = this.moveStreetPlayer(delta, cameraYaw);
     this.movement.streetUpdate({ x: this.position.x, y: this.position.y }, input, () => {
       if (this.cleanedUp) return;
@@ -578,6 +621,21 @@ class Session implements WorldSession {
       attempt(() => keyboard.off('keydown-Space', jumpKey));
     }
     this.jumpState.reset();
+    const arenaKey = this.arenaKey;
+    this.arenaKey = undefined;
+    if (arenaKey && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('keydown-E', arenaKey));
+    }
+    const arenaPrimary = this.arenaPrimary;
+    this.arenaPrimary = undefined;
+    if (arenaPrimary && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('pointerdown-primary', arenaPrimary));
+    }
+    const arenaSession = this.arenaSession;
+    this.arenaSession = undefined;
+    if (arenaSession) attempt(() => arenaSession.destroy());
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
     attempt(() => inputGate.resume());
@@ -655,7 +713,8 @@ class Session implements WorldSession {
       // Playable wherever the avatar is. The one thing that silences F is the
       // gate: a panel or Shell control claim owns the keyboard, and stealing a
       // keystroke back from a focused input is the bug input-gate.ts prevents.
-      isActive: () => this.inputGate?.suspended !== true,
+      // The ring locks it while the player fights (D-114).
+      isActive: () => this.inputGate?.suspended !== true && !this.outfitLocked,
       toggle: () => this.avatarOutfit.toggle(),
     });
   }
@@ -813,12 +872,23 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).enter();
     this.lastTile = { x: -1, y: -1 };
     this.renderRoom();
+    // D-114: through the pit's arch you drop into the arena's tunnel with a
+    // leap; under reduced motion it is a plain handoff.
+    if (definition.building === ARENA_BUILDING) {
+      this.view.setPlayerFacing?.('up');
+      if (!this.prefersReducedMotion()) this.view.playerJump?.();
+    }
   }
 
   private exitRoom(definition: FixedRoomDefinition): void {
     this.fixedRoomPresentation(definition).exit();
     this.lastTile = { x: -1, y: -1 };
     this.activeRoom = undefined;
+    // D-114: back on the pit's path, facing north, away from the arch.
+    if (definition.building === ARENA_BUILDING) {
+      this.clearArena();
+      this.view.setPlayerFacing?.(ARENA_PIT_RETURN_FACING);
+    }
   }
 
   /**
@@ -992,6 +1062,8 @@ class Session implements WorldSession {
   }
 
   private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
+    // D-114: the tile below the pit's door is its bowl; the return is the path.
+    if (building === ARENA_BUILDING) return { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
     const door = this.map.doors.find((candidate) => candidate.building === building);
     return {
       x: door?.x ?? this.map.spawn.x,
@@ -1041,10 +1113,15 @@ class Session implements WorldSession {
       return;
     }
     const velocity = this.intendedVelocity(keyboard, cameraYaw);
+    const arena = map.building === ARENA_BUILDING && map.level === 'ground';
     const moved = this.stepPlayer(velocity, delta, {
       tileSize: FIXED_ROOM_TILE_SIZE,
       toTile: (x, y) => worldToFloorTile(map, x, y),
-      isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
+      // D-114: the ring's interior is solid unless the arena session says
+      // the local player is its fighter; the dummy never opens.
+      isSolidAt: arena
+        ? (x, y) => isFixedRoomSolidAt(map, x, y) && !this.ringTileOpen(x, y)
+        : (x, y) => isFixedRoomSolidAt(map, x, y),
     });
     // D-087: the roof is shared, and the bunker (D-112); every other floor is private.
     if (moved && map.rooftop && this.rooftopAnnounced) this.publishAreaPosition(velocity);
@@ -1240,6 +1317,149 @@ class Session implements WorldSession {
     const room = this.activeRoomController();
     if (room?.state.inRoom && room.state.controlOwner !== 'world') return false;
     return true;
+  }
+
+  // -- the gladiator pit's arena (D-114) ------------------------------------------
+
+  /**
+   * The ring's combat session (C's `arena-session.ts`), with this session as
+   * its host, and its two inputs: E (claim, strike) and a primary click or
+   * tap on the canvas (strike). Both work only in the arena, only while the
+   * World owns the keyboard and the room's controls; the session decides
+   * whether they do anything. Built only with a channel: without one the
+   * arena is a room to walk and watch from.
+   */
+  private createArena(): void {
+    const channel = this.arenaChannel;
+    if (!channel) return;
+    this.arenaSession = createArenaSession(channel, this.arenaHost());
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
+      this.arenaSession?.onInteract();
+    };
+    const onPrimary = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
+      this.arenaSession?.onPrimary();
+    };
+    keyboard.on('keydown-E', onKey);
+    this.arenaKey = onKey;
+    keyboard.on('pointerdown-primary', onPrimary);
+    this.arenaPrimary = onPrimary;
+  }
+
+  /** Whether arena input may act: in the arena, the World owning the keyboard and the room's controls. */
+  private arenaInputLive(): boolean {
+    if (this.inputSuspended || this.area !== ARENA_BUILDING) return false;
+    return this.activeRoomController()?.state.controlOwner === 'world';
+  }
+
+  /** D-114: a ring tile the arena session opens for the local fighter. Never the dummy. */
+  private ringTileOpen(x: number, y: number): boolean {
+    if (arenaTileAt(x, y) !== 'ring') return false;
+    try {
+      return this.arenaSession?.isRingTileWalkable(x, y) === true;
+    } catch {
+      // A failing session opens nothing.
+      return false;
+    }
+  }
+
+  /** Advance the arena session and hand the view its frame, in the arena only. */
+  private presentArena(delta: number): void {
+    if (this.area !== ARENA_BUILDING) {
+      if (this.arenaShown) this.clearArena();
+      return;
+    }
+    const session = this.arenaSession;
+    if (!session) return;
+    let frame: ArenaViewFrame | null = null;
+    try {
+      session.update(delta);
+      if (this.cleanedUp) return;
+      frame = session.frame();
+    } catch {
+      // A failing session draws an idle ring; the arena carries on.
+      frame = null;
+    }
+    if (frame || this.arenaShown) this.view.syncArena?.(frame);
+    this.arenaShown = frame !== null;
+  }
+
+  /** Leaving the arena: no ring frame and no prompt are left on the view. */
+  private clearArena(): void {
+    if (this.arenaShown) this.view.syncArena?.(null);
+    this.arenaShown = false;
+    this.view.setArenaPrompt?.(null);
+  }
+
+  private prefersReducedMotion(): boolean {
+    try {
+      return this.reducedMotion?.() === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** What the arena session may ask of the World (`ArenaSessionHost`). */
+  private arenaHost(): ArenaSessionHost {
+    return Object.freeze({
+      // World pixels, the room origin included: the same frame as
+      // `arenaTileCentre` and the lobby's held positions.
+      position: () => Object.freeze({ x: this.position.x, y: this.position.y, facing: this.areaFacing }),
+      leapTo: (tile: { readonly x: number; readonly y: number }, facing: Facing) => this.leapTo(tile, facing),
+      setPrompt: (text: string | null) => {
+        if (this.cleanedUp) return;
+        this.view.setArenaPrompt?.(this.area === ARENA_BUILDING ? text : null);
+      },
+      playLocalSwing: () => {
+        if (!this.cleanedUp && this.area === ARENA_BUILDING) this.view.playerSwing?.();
+      },
+      setOutfitLocked: (locked: boolean) => {
+        this.outfitLocked = locked === true;
+      },
+      selectLook: (mode: 'fighting' | 'restore') => this.selectArenaLook(mode),
+      reducedMotion: () => this.prefersReducedMotion(),
+    });
+  }
+
+  /**
+   * D-114: the server moved the fighter (the ring spawn on a claim, the
+   * return tile when the fight closes); stand there too, with a leap (a cut
+   * under reduced motion), facing the way the server says, and publish the
+   * new place. Arena-local tile; ignored outside the arena or off its grid.
+   */
+  private leapTo(tile: { readonly x: number; readonly y: number }, facing: Facing): void {
+    if (this.cleanedUp || this.area !== ARENA_BUILDING) return;
+    if (!tile || !Number.isInteger(tile.x) || !Number.isInteger(tile.y)) return;
+    if (arenaTileAt(tile.x, tile.y) === 'void') return;
+    const target = arenaTileCentre(tile);
+    this.position = { x: target.x, y: target.y };
+    this.view.setPlayerPosition(this.position, false);
+    this.view.setPlayerFacing?.(facing);
+    if (!this.prefersReducedMotion()) this.view.playerJump?.();
+    if (this.cleanedUp) return;
+    this.areaFacing = facing;
+    this.publishAreaPosition();
+    if (this.cleanedUp) return;
+    this.reportRoomTile();
+  }
+
+  /** D-114: into the paired fighting look for the ring if in a cosy one; back to it after. */
+  private selectArenaLook(mode: 'fighting' | 'restore'): void {
+    if (this.cleanedUp) return;
+    const current = this.avatarOutfit.selected;
+    if (mode === 'fighting') {
+      const number = Number(current.slice('avatar-'.length));
+      if (!(number >= 1 && number <= 8)) return;
+      this.lookBeforeFight = current;
+      this.avatarOutfit.select(pairedAvatarSprite(current));
+      return;
+    }
+    const before = this.lookBeforeFight;
+    this.lookBeforeFight = null;
+    if (before && before !== current) this.avatarOutfit.select(before);
   }
 
   // -- the football pitch (D-078) ---------------------------------------------

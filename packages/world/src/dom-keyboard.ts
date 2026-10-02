@@ -78,6 +78,21 @@ export interface DomKeyboardOptions {
   readonly window: DomEventHost;
   /** Receives visibilitychange; normally `document`. */
   readonly document?: DomEventHost & { readonly visibilityState?: string };
+  /**
+   * D-114: the World's canvas. A primary-button press on it (a left click or
+   * a tap) is the `pointerdown-primary` action, which strikes in the arena.
+   * Only presses aimed at the canvas itself count, so a HUD button over it
+   * never reaches the World. Absent: there is no pointer action.
+   */
+  readonly canvas?: DomEventHost;
+}
+
+interface PointerEventLike {
+  readonly button?: unknown;
+  readonly isPrimary?: unknown;
+  readonly target?: unknown;
+  readonly currentTarget?: unknown;
+  readonly defaultPrevented?: unknown;
 }
 
 export interface DomKeyboard extends WorldKeyboard {
@@ -93,6 +108,7 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     'keydown-F': new Set(),
     'keydown-E': new Set(),
     'keydown-Space': new Set(),
+    'pointerdown-primary': new Set(),
   };
   let enabled = true;
   let capture = true;
@@ -117,6 +133,14 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     const code = typeof event.code === 'string' ? event.code : '';
     if (code) held.delete(code);
   };
+
+  // D-114: a primary press on the canvas itself, never on a control over it.
+  const onPointerDown = ((event: PointerEventLike) => {
+    if (destroyed || !enabled || event.defaultPrevented === true) return;
+    if (event.button !== 0 || event.isPrimary === false) return;
+    if (options.canvas && event.target !== options.canvas) return;
+    emitAction('pointerdown-primary', { repeat: false, target: event.target });
+  }) as Listener;
 
   const onBlur: Listener = () => {
     held.clear();
@@ -146,6 +170,7 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   options.window.addEventListener('keyup', onKeyUp);
   options.window.addEventListener('blur', onBlur);
   options.document?.addEventListener('visibilitychange', onVisibilityChange);
+  options.canvas?.addEventListener('pointerdown', onPointerDown);
 
   const isHeld = (codes: readonly string[]): boolean => codes.some((code) => held.has(code));
 
@@ -196,6 +221,7 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
       options.window.removeEventListener('keyup', onKeyUp);
       options.window.removeEventListener('blur', onBlur);
       options.document?.removeEventListener('visibilitychange', onVisibilityChange);
+      options.canvas?.removeEventListener('pointerdown', onPointerDown);
     },
   };
 }

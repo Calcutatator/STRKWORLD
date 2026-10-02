@@ -4,7 +4,21 @@
  * handoff and the renderer only draws its map and state (D-059).
  */
 
-import { STREET_ORIGIN_X, type BuildingId, type EventBus, type ShellEvents, type StationId, type WorldEvents } from '@strkworld/shared';
+import {
+  ARENA_BOX,
+  ARENA_EXIT,
+  ARENA_HEIGHT,
+  ARENA_SPAWN,
+  ARENA_WIDTH,
+  STREET_ORIGIN_X,
+  arenaTileAt,
+  isArenaFloorKind,
+  type BuildingId,
+  type EventBus,
+  type ShellEvents,
+  type StationId,
+  type WorldEvents,
+} from '@strkworld/shared';
 
 export const FIXED_ROOM_TILE_SIZE = 32;
 
@@ -684,12 +698,68 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
   ],
 } as const satisfies FixedRoomDefinition);
 
+/**
+ * D-114: the arena's one station, the emperor's box in the north podium. A
+ * ground floor needs a station; this one is reserved like the bunker's lift,
+ * so it is always locked and walking up to it only says it is closed.
+ */
+export const ARENA_BOX_STATION: StationId = 'arena:box';
+
+/**
+ * The solid tiles strictly inside the arena's border, as row runs: every tile
+ * `arenaTileAt` does not call floor (void, arcade, podium, fence, gate, the
+ * dummy, the tunnel walls) and the ring interior, which only the current
+ * fighter walks (the session's ring hook opens it, D-114). The box is the
+ * station, so it is left out. Generated from the shared classifier, so the
+ * room and `ARENA_PRESENCE_GRID` cannot drift (presence-area-grids.test.ts).
+ */
+function arenaFixtures(): FixedRoomFixture[] {
+  const runs: FixedRoomFixture[] = [];
+  for (let y = 1; y < ARENA_HEIGHT - 1; y++) {
+    let start = -1;
+    for (let x = 1; x <= ARENA_WIDTH - 1; x++) {
+      const solid =
+        x < ARENA_WIDTH - 1 &&
+        !(x === ARENA_BOX.x && y === ARENA_BOX.y) &&
+        !isArenaFloorKind(arenaTileAt(x, y));
+      if (solid && start < 0) start = x;
+      if (!solid && start >= 0) {
+        runs.push({ x: start, y, width: x - start, height: 1 });
+        start = -1;
+      }
+    }
+  }
+  return runs;
+}
+
+/**
+ * D-114: the gladiator pit's arena, a 41 x 33 stadium oval drawn at the
+ * interiors' origin (see `@strkworld/shared`'s arena.ts for the geometry).
+ * The pit's arch on the street opens onto the south tunnel; the sand, the
+ * podium stairs and five tiers are walkable, the ring interior only for the
+ * fighter. A shared presence area like the bunker (D-112), so everyone in
+ * it is drawn. No money anywhere (D-024), and the one station is reserved.
+ * Its builder is three/arena-room.ts.
+ */
+export const ARENA_ROOM_DEFINITION = freezeAuthoredRoom({
+  building: 'arena',
+  width: ARENA_WIDTH,
+  height: ARENA_HEIGHT,
+  spawn: { x: ARENA_SPAWN.x, y: ARENA_SPAWN.y },
+  exit: { x: ARENA_EXIT.x, y: ARENA_EXIT.y, width: ARENA_EXIT.width, height: ARENA_EXIT.height },
+  stations: [
+    { station: 'arena:box', label: "EMPEROR'S BOX\nCLOSED", x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true },
+  ],
+  fixtures: arenaFixtures(),
+} satisfies FixedRoomDefinition);
+
 export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
   exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
   bunker: BUNKER_ROOM_DEFINITION,
+  arena: ARENA_ROOM_DEFINITION,
 } as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>);
 
 /** Floors above the ground floor, by building. Only the Exchange tower has any. */

@@ -3,6 +3,7 @@ import { createHost, type Host } from './host.js';
 import type { RemotePeerSource } from './remote-peer.js';
 import type { SandboxChannel } from './sandbox-channel.js';
 import type { FootballChannel } from './football-channel.js';
+import type { ArenaChannel } from './arena-channel.js';
 
 /**
  * World wiring. The Shell loads this module dynamically, and it in turn loads
@@ -29,6 +30,8 @@ export interface WorldConfig {
   sandbox?: SandboxChannel;
   /** Optional shared football (D-078), supplied by the Shell. */
   football?: FootballChannel;
+  /** Optional gladiator pit ring (D-114), supplied by the Shell. */
+  arena?: ArenaChannel;
   /**
    * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its
    * door opens onto its room. Absent or false, it is D-007's locked facade.
@@ -174,6 +177,7 @@ function sameBinding(
     current.config.remotePeers === config.remotePeers &&
     current.config.sandbox === config.sandbox &&
     current.config.football === config.football &&
+    current.config.arena === config.arena &&
     // Absent and false are the same locked Vault (D-077).
     (current.config.vaultOpen === true) === (config.vaultOpen === true);
 }

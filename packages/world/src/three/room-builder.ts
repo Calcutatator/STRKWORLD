@@ -96,6 +96,7 @@ import {
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
 import { elevatorBay, netcafeDecor, netcafeProp, netcafeStairs } from './bunker-room.js';
+import { buildArenaRoom } from './arena-room.js';
 
 /**
  * Fixed-room interiors as lit dioramas (D-059).
@@ -452,6 +453,9 @@ export function buildFixedRoom(
   images: ImageTextureLoader | null = null,
   options: { readonly reducedMotion?: () => boolean } = {},
 ): RoomView {
+  // D-114: the arena is a 41 x 33 open-air stadium oval, not four walls round
+  // a flat floor, so its own builder draws all of it.
+  if (map.building === 'arena' && map.level === 'ground') return buildArenaRoom(map, labels, origin, options);
   const res = new ResourceBag();
   const theme = roomTheme(map.building, map.level);
   // Copy the origin now: a caller mutating its object later must not move the room.
