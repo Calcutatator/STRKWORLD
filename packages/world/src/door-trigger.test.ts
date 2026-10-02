@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldEvents } from '@strkworld/shared';
-import { createDoorTrigger } from './door-trigger.js';
+import { createDoorTrigger, DOOR_REENTRY_HOLD_MS } from './door-trigger.js';
+import { ARENA_PIT_DOOR, ARENA_PIT_RETURN } from './map/arena-pit.js';
 import { createStreetMap, type DoorZone } from './map/street.js';
 
 /**
@@ -199,5 +200,70 @@ describe('door triggers', () => {
       { event: 'building:exited', payload: { building: 'post-office' } },
     ]);
     expect(trigger.inside).toBeNull();
+  });
+});
+
+describe('the re-entry hold after a room exit (D-114, 2026-10-02)', () => {
+  const ARCH = { x: ARENA_PIT_DOOR.x, y: ARENA_PIT_DOOR.y };
+  const PATH = { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
+
+  it('never fires while the player stands where the exit put them, however long', () => {
+    const bus = fakeBus();
+    const trigger = createDoorTrigger(map, bus);
+    trigger.update(ARCH);
+    expect(trigger.inside).toBe('arena');
+    trigger.reset({ holdMs: DOOR_REENTRY_HOLD_MS });
+    for (let t = 0; t < 5_000; t += 16) {
+      trigger.advance(16);
+      trigger.update(PATH);
+    }
+    expect(bus.events).toEqual([{ event: 'building:entered', payload: { building: 'arena' } }]);
+    expect(trigger.inside).toBeNull();
+  });
+
+  it('swallows a door reached during the hold until the player steps off it, then enters as usual', () => {
+    const bus = fakeBus();
+    const trigger = createDoorTrigger(map, bus);
+    trigger.reset({ holdMs: DOOR_REENTRY_HOLD_MS });
+    trigger.update(PATH);
+    // A key held through the handoff carries them straight back onto the arch.
+    trigger.advance(DOOR_REENTRY_HOLD_MS - 1);
+    trigger.update(ARCH);
+    trigger.update({ x: ARCH.x + 1, y: ARCH.y });
+    // The hold runs out while they are still on it: it stays shut.
+    trigger.advance(1_000);
+    trigger.update(ARCH);
+    expect(bus.events).toEqual([]);
+    expect(trigger.inside).toBeNull();
+    // Off it and back on: in, as any door.
+    trigger.update(PATH);
+    trigger.update(ARCH);
+    expect(bus.events).toEqual([{ event: 'building:entered', payload: { building: 'arena' } }]);
+    expect(trigger.inside).toBe('arena');
+  });
+
+  it('lets a door fire once the hold has run out, and a plain reset holds nothing', () => {
+    const held = fakeBus();
+    const trigger = createDoorTrigger(map, held);
+    trigger.reset({ holdMs: DOOR_REENTRY_HOLD_MS });
+    trigger.update(PATH);
+    trigger.advance(DOOR_REENTRY_HOLD_MS);
+    trigger.update(ARCH);
+    expect(held.events).toEqual([{ event: 'building:entered', payload: { building: 'arena' } }]);
+
+    const plain = fakeBus();
+    const other = createDoorTrigger(map, plain);
+    other.reset();
+    other.update(doorTile('bank'));
+    expect(plain.events).toEqual([{ event: 'building:entered', payload: { building: 'bank' } }]);
+    // Junk holds and frames are ignored.
+    for (const junk of [Number.NaN, -5, Number.POSITIVE_INFINITY]) {
+      const bus = fakeBus();
+      const t = createDoorTrigger(map, bus);
+      t.reset({ holdMs: junk });
+      t.advance(junk);
+      t.update(doorTile('bank'));
+      expect(bus.events).toHaveLength(1);
+    }
   });
 });

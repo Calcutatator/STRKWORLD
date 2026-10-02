@@ -740,7 +740,7 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
 } as const satisfies FixedRoomDefinition);
 
 /**
- * D-114: the arena's one station, the emperor's box in the north podium. A
+ * D-114: the arena's one station, the emperor's box in the south podium. A
  * ground floor needs a station; this one is reserved like the bunker's lift,
  * so it is always locked and walking up to it only says it is closed.
  */
@@ -796,7 +796,7 @@ function arenaFixtures(): FixedRoomFixture[] {
 /**
  * D-114: the gladiator pit's arena, a 41 x 33 stadium oval drawn at the
  * interiors' origin (see `@strkworld/shared`'s arena.ts for the geometry).
- * The pit's arch on the street opens onto the south tunnel; the sand, the
+ * The pit's arch on the street opens onto the north tunnel; the sand, the
  * podium stairs and five tiers are walkable, the ring interior only for the
  * fighter. A shared presence area like the bunker (D-112), so everyone in
  * it is drawn. No money anywhere (D-024), and the one station is reserved.

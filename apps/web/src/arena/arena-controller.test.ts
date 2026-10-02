@@ -10,7 +10,7 @@ import {
 } from './arena-controller.js';
 
 const SELF = 'g-self' as GameId;
-const APPROACH = arenaTileCentre({ x: 20, y: 21 });
+const APPROACH = arenaTileCentre({ x: 20, y: 11 });
 
 function ring(phase: ArenaRingSnapshot['phase'] = 'idle', over: Partial<{ round: number; hp: number; gameId: GameId; seconds: number }> = {}): ArenaRingSnapshot {
   const busy = phase !== 'idle';
@@ -207,7 +207,7 @@ describe('arena controller: solo play runs the injected authority', () => {
       advance(now) {
         if (phase === 'countdown' && now - claimedAt >= SOLO_ARENA_TICK_MS) {
           phase = 'fighting';
-          return [{ kind: 'place', key: 'local', tile: { x: 20, y: 18 }, facing: 'up' }];
+          return [{ kind: 'place', key: 'local', tile: { x: 20, y: 14 }, facing: 'down' }];
         }
         return [];
       },
@@ -222,7 +222,7 @@ describe('arena controller: solo play runs the injected authority', () => {
     const world = createEventBus<WorldEvents>();
     controller.listen(world);
     expect(controller.channel.ring()).toBeNull();
-    world.emit('area:moved', { position: APPROACH, facing: 'up' });
+    world.emit('area:moved', { position: APPROACH, facing: 'down' });
     world.emit('building:entered', { building: 'arena' });
     expect(controller.channel.inArena()).toBe(true);
     expect(controller.channel.ring()?.phase).toBe('idle');
@@ -237,7 +237,7 @@ describe('arena controller: solo play runs the injected authority', () => {
     const controller = createArenaController({ solo: () => authority, ...time });
     const world = createEventBus<WorldEvents>();
     controller.listen(world);
-    world.emit('area:moved', { position: APPROACH, facing: 'up' });
+    world.emit('area:moved', { position: APPROACH, facing: 'down' });
     world.emit('building:entered', { building: 'arena' });
     const seen: string[] = [];
     controller.channel.subscribe((r) => seen.push(r?.phase ?? 'none'));
@@ -247,7 +247,7 @@ describe('arena controller: solo play runs the injected authority', () => {
     time.advance(SOLO_ARENA_TICK_MS);
     expect(seen.at(-1)).toBe('fighting');
     controller.channel.attack();
-    expect(calls.at(-1)).toBe('attack local up');
+    expect(calls.at(-1)).toBe('attack local down');
     expect(controller.channel.ring()?.opponent.hp).toBe(90);
   });
 
@@ -257,7 +257,7 @@ describe('arena controller: solo play runs the injected authority', () => {
     const controller = createArenaController({ solo: () => authority, ...time });
     const world = createEventBus<WorldEvents>();
     controller.listen(world);
-    world.emit('area:moved', { position: APPROACH, facing: 'up' });
+    world.emit('area:moved', { position: APPROACH, facing: 'down' });
     world.emit('building:entered', { building: 'arena' });
     controller.channel.claim();
     world.emit('building:exited', { building: 'arena' });
@@ -271,7 +271,7 @@ describe('arena controller: solo play runs the injected authority', () => {
     const controller = createArenaController({ solo: () => authority, ...time });
     const world = createEventBus<WorldEvents>();
     controller.listen(world);
-    world.emit('area:moved', { position: APPROACH, facing: 'up' });
+    world.emit('area:moved', { position: APPROACH, facing: 'down' });
     world.emit('building:entered', { building: 'arena' });
     const lobby = fakeClient();
     controller.adopt(lobby.client);

@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Material, type Object3D } from 'three';
 import {
+  ARENA_BOX,
   ARENA_DUMMY_TILE,
+  ARENA_DUMMY_YAW,
   ARENA_HEIGHT,
+  ARENA_RING_FENCE,
   ARENA_RING_GATE,
+  ARENA_TUNNEL,
   ARENA_SWING_MS,
   ARENA_WIDTH,
   arenaTierAt,
@@ -14,6 +18,7 @@ import {
 import { ARENA_ROOM_DEFINITION, createFixedRoom, fixedRoomStationPresentations } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import {
+  ARENA_FADE_ROW,
   ARENA_GATE_LAMP,
   ARENA_SURFACE,
   arenaSurfaceHeightAt,
@@ -204,7 +209,7 @@ describe('the arena in 3D (D-114)', () => {
 
   it('stands feet on sand, stairs and five tiers at the design\'s heights', () => {
     expect(arenaSurfaceHeightAt(20, 16)).toBe(0);
-    expect(arenaSurfaceHeightAt(20, 30)).toBe(0);
+    expect(arenaSurfaceHeightAt(20, 2)).toBe(0);
     expect(arenaSurfaceHeightAt(6, 16)).toBe(ARENA_SURFACE.stair);
     expect(ARENA_SURFACE.stair).toBe(0.4);
     const byTier = new Map<number, Set<number>>();
@@ -218,7 +223,7 @@ describe('the arena in 3D (D-114)', () => {
     expect([1, 2, 3, 4, 5].map((tier) => [...byTier.get(tier)!])).toEqual([[0.8], [1.25], [1.7], [2.15], [2.6]]);
     // The podium's top is a parapet in front of tier 1, and the arcade stands behind tier 5.
     expect(ARENA_SURFACE.podium).toBe(1.0);
-    expect(arenaSurfaceHeightAt(20, 1)).toBe(ARENA_SURFACE.arcade);
+    expect(arenaSurfaceHeightAt(20, 31)).toBe(ARENA_SURFACE.arcade);
     // Every step a walker can take between walkable tiles is a stair's or a tier's, never a climb.
     for (const { x, y } of tiles((x, y) => isArenaFloorKind(arenaTileAt(x, y)))) {
       for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
@@ -242,7 +247,9 @@ describe('the arena in 3D (D-114)', () => {
     const room = build();
     expect(room.occluders).toHaveLength(1);
     const occluder = room.occluders[0]!;
-    expect(occluder.bounds.minZ).toBe(OZ + ARENA_RING_GATE.y + 1);
+    // South of the ring's fence: the camera always looks north, so these are the near stands.
+    expect(ARENA_FADE_ROW).toBe(ARENA_RING_FENCE.y + ARENA_RING_FENCE.height);
+    expect(occluder.bounds.minZ).toBe(OZ + ARENA_FADE_ROW);
     expect(occluder.bounds.maxZ).toBe(OZ + ARENA_HEIGHT);
     expect(occluder.bounds.height).toBeGreaterThan(ARENA_SURFACE.arcade);
     const south = named(room.group, 'arena:stone-south');
@@ -257,12 +264,31 @@ describe('the arena in 3D (D-114)', () => {
     expect(others.map((material) => material.opacity)).toEqual(before);
     occluder.setOpacity(1);
     for (const material of own) expect(material.opacity).toBe(1);
-    // Everything in the south mesh lies south of the gate row; the north mesh, north of it.
+    // Everything in the south mesh lies south of the fade row, the box among
+    // it; the north mesh, the tunnel and its doorway among it, north of it.
     south.geometry.computeBoundingBox();
-    expect(south.geometry.boundingBox!.min.z).toBeGreaterThanOrEqual(ARENA_RING_GATE.y + 1 - 0.05);
+    expect(south.geometry.boundingBox!.min.z).toBeGreaterThanOrEqual(ARENA_FADE_ROW - 0.05);
+    expect(ARENA_BOX.y).toBeGreaterThanOrEqual(ARENA_FADE_ROW);
     const north = named(room.group, 'arena:stone');
     north.geometry.computeBoundingBox();
-    expect(north.geometry.boundingBox!.max.z).toBeLessThanOrEqual(ARENA_RING_GATE.y + 1 + 0.05);
+    expect(north.geometry.boundingBox!.max.z).toBeLessThanOrEqual(ARENA_FADE_ROW + 0.05);
+    room.dispose();
+  });
+
+  it('closes the north tunnel with the doorway out, the way the camera looks down it, and keeps it off the exit tiles', () => {
+    const room = build();
+    const north = named(room.group, 'arena:stone');
+    const position = north.geometry.getAttribute('position');
+    // Stone stands north of the arena's edge, across the tunnel's mouth to the street.
+    let wall = 0;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const z = position.getZ(i);
+      if (z < ARENA_TUNNEL.y && x >= ARENA_TUNNEL.x - 1 && x <= ARENA_TUNNEL.x + ARENA_TUNNEL.width + 1) wall += 1;
+      // Nothing of it stands any further out than the wall itself.
+      expect(z).toBeGreaterThan(ARENA_TUNNEL.y - 0.5);
+    }
+    expect(wall).toBeGreaterThan(0);
     room.dispose();
   });
 
@@ -272,6 +298,15 @@ describe('the arena in 3D (D-114)', () => {
     const lamp = named(room.group, 'arena:gate-lamp').material as MeshBasicMaterial;
     expect(gate.count).toBe(2);
     expect(gate.userData['open']).toBe(1);
+    // Open, both leaves swing in, into the ring south of the gate.
+    for (let n = 0; n < 2; n++) {
+      const m = new Matrix4();
+      const q = new Quaternion();
+      gate.getMatrixAt(n, m);
+      m.decompose(new Vector3(), q, new Vector3());
+      expect(new Vector3(1, 0, 0).applyQuaternion(q).z).toBeGreaterThan(0.99);
+    }
+    expect(ARENA_RING_GATE.y).toBe(ARENA_RING_FENCE.y);
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.open);
     room.setGate('busy');
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.busy);
@@ -307,6 +342,15 @@ describe('the arena in 3D (D-114)', () => {
     expect(room.dummy.position.x).toBe(ARENA_DUMMY_TILE.x + 0.5);
     expect(room.dummy.position.z).toBe(ARENA_DUMMY_TILE.y + 0.5);
     expect(room.dummy.position.y).toBe(0);
+    // Turned to face the gate (north), the yaw applied before the fx's topple
+    // about local x, so a knockout still falls away from the gate (south).
+    expect(room.dummy.rotation.y).toBe(ARENA_DUMMY_YAW);
+    expect(room.dummy.rotation.order).toBe('YXZ');
+    room.dummy.rotation.x = -Math.PI / 2;
+    room.dummy.updateMatrixWorld(true);
+    const head = new Vector3(0, 1, 0).applyQuaternion(room.dummy.quaternion);
+    expect(head.z).toBeGreaterThan(0.99);
+    room.dummy.rotation.x = 0;
     const body = named(room.dummy, 'arena:dummy-body');
     body.geometry.computeBoundingBox();
     const box = body.geometry.boundingBox!;

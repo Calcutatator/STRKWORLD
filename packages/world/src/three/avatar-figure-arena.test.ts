@@ -68,7 +68,7 @@ describe('the swing timeline (arena-swing.ts)', () => {
   });
 
   it('seats a figure after 1.5 s still on a tier, and stands it at the first step', () => {
-    const tier = arenaTileCentre({ x: 20, y: 3 });
+    const tier = arenaTileCentre({ x: 20, y: 29 });
     const sand = arenaTileCentre({ x: 10, y: 16 });
     expect(isArenaSeatAt(tier.x, tier.y)).toBe(true);
     expect(isArenaSeatAt(sand.x, sand.y)).toBe(false);

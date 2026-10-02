@@ -6,7 +6,7 @@ import { ARENA_SEAT_IDLE_MS, isArenaSeatAt } from '../arena-swing.js';
 import { createRemoteAvatarLayer3D } from './remote-avatars.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
 
-const TIER = arenaTileCentre({ x: 20, y: 3 });
+const TIER = arenaTileCentre({ x: 20, y: 29 });
 const SAND = arenaTileCentre({ x: 10, y: 16 });
 
 function fakeFigures() {

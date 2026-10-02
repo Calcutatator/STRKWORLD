@@ -11,9 +11,12 @@ import {
   ARENA_RING_GATE,
   ARENA_RING_INTERIOR,
   ARENA_RING_RETURN,
+  ARENA_RING_RETURN_FACING,
   ARENA_RING_SPAWN,
+  ARENA_RING_SPAWN_FACING,
   ARENA_RING_WALKABLE,
   ARENA_SPAWN,
+  ARENA_SPAWN_FACING,
   ARENA_STAIRS,
   ARENA_TILE_SIZE,
   ARENA_TUNNEL,
@@ -125,9 +128,42 @@ describe('the arena grid (D-114)', () => {
       // Nobody but the challenger stands anywhere inside the fence.
       expect(gridWalkable(x, y), `${x},${y}`).toBe(false);
     }
-    // The gate is in the fence's south side, and the approach is just outside it.
-    expect(ARENA_RING_GATE.y).toBe(f.y + f.height - 1);
-    expect(ARENA_GATE_APPROACH.y).toBe(ARENA_RING_GATE.y + 1);
+    // The gate is in the fence's north side, facing the tunnel, and the
+    // approach is the two rows just outside it.
+    expect(ARENA_RING_GATE.y).toBe(f.y);
+    expect(ARENA_GATE_APPROACH.y + ARENA_GATE_APPROACH.height).toBe(ARENA_RING_GATE.y);
+  });
+
+  it('runs north to south: in through the north tunnel facing south, out walking north, the box facing it', () => {
+    // The tunnel's far end is the arena's north edge, and the exit is its row there.
+    expect(ARENA_TUNNEL.y).toBe(0);
+    expect(ARENA_EXIT).toEqual({ x: ARENA_TUNNEL.x, y: 0, width: ARENA_TUNNEL.width, height: 1 });
+    // The spawn is in the tunnel, facing south, into the arena; nothing south
+    // of it is an exit, so walking on never leaves.
+    expect(arenaTileAt(ARENA_SPAWN.x, ARENA_SPAWN.y)).toBe('tunnel');
+    expect(ARENA_SPAWN_FACING).toBe('down');
+    expect(ARENA_SPAWN.y).toBeGreaterThan(ARENA_EXIT.y);
+    // The mouth (the tunnel's sand end) has no walls; every row behind it does.
+    const mouth = ARENA_TUNNEL.y + ARENA_TUNNEL.height - 1;
+    expect(arenaTileAt(ARENA_TUNNEL.x - 1, mouth)).not.toBe('tunnel-wall');
+    for (let y = ARENA_TUNNEL.y; y < mouth; y += 1) {
+      expect(arenaTileAt(ARENA_TUNNEL.x - 1, y)).toBe('tunnel-wall');
+      expect(arenaTileAt(ARENA_TUNNEL.x + ARENA_TUNNEL.width, y)).toBe('tunnel-wall');
+    }
+    // Straight down the tunnel to the gate approach, all floor.
+    for (let y = ARENA_SPAWN.y; y < ARENA_GATE_APPROACH.y + ARENA_GATE_APPROACH.height; y += 1) {
+      expect(gridWalkable(ARENA_SPAWN.x, y), `${ARENA_SPAWN.x},${y}`).toBe(true);
+    }
+    // The box is on the south podium, across the ring from the tunnel.
+    expect(ARENA_BOX.y).toBeGreaterThan(ARENA_RING_FENCE.y + ARENA_RING_FENCE.height);
+    expect(arenaTileAt(ARENA_BOX.x, ARENA_BOX.y - 1)).toBe('sand');
+    // In the ring: the fighter lands inside the gate facing the dummy, and
+    // comes back out onto the approach facing the tunnel.
+    expect(ARENA_RING_SPAWN.y).toBe(ARENA_RING_GATE.y + 2);
+    expect(ARENA_RING_SPAWN_FACING).toBe('down');
+    expect(ARENA_DUMMY_TILE.y).toBeGreaterThan(ARENA_RING_SPAWN.y);
+    expect(ARENA_RING_RETURN.y).toBe(ARENA_GATE_APPROACH.y);
+    expect(ARENA_RING_RETURN_FACING).toBe('up');
   });
 
   it('makes the dummy tile solid for everyone and the rest of the interior the challenger’s', () => {
@@ -188,7 +224,7 @@ describe('the arena grid (D-114)', () => {
   });
 
   it('centres a tile in World pixels, room origin included', () => {
-    expect(arenaTileCentre(ARENA_DUMMY_TILE)).toEqual({ x: 64 + 20.5 * 32, y: 64 + 14.5 * 32 });
+    expect(arenaTileCentre(ARENA_DUMMY_TILE)).toEqual({ x: 64 + 20.5 * 32, y: 64 + 18.5 * 32 });
     expect(Object.isFrozen(arenaTileCentre(ARENA_SPAWN))).toBe(true);
   });
 });

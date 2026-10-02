@@ -156,7 +156,8 @@ export interface StreetMovementAdapter {
   initial(position: Position): void;
   streetUpdate(position: Position, input: MovementInput, afterMovement: () => void): void;
   interiorUpdate(afterMovement: () => void): void;
-  exit(position: Position, afterPlacement: () => void): void;
+  /** Back on the street, idle; `facing` turns the published facing (the arena's return faces north). */
+  exit(position: Position, afterPlacement: () => void, facing?: Facing): void;
 }
 
 export function createStreetMovementReporter(
@@ -228,9 +229,16 @@ export function createStreetMovementAdapter(
     interiorUpdate(afterMovement) {
       afterMovement();
     },
-    exit(position, afterPlacement) {
+    exit(position, afterPlacement, facing) {
       const ownRevision = ++transitionRevision;
-      reporter.update(position, { left: false, right: false, up: false, down: false });
+      // Idle: no key moves the player. A given facing is published as if
+      // its key were tapped, which is how the reporter turns.
+      reporter.update(position, {
+        left: facing === 'left',
+        right: facing === 'right',
+        up: facing === 'up',
+        down: facing === 'down',
+      });
       if (transitionRevision !== ownRevision) return;
       afterPlacement();
     },

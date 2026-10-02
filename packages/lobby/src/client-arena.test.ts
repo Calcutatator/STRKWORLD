@@ -54,9 +54,9 @@ async function joined(): Promise<LobbyClient> {
   return client;
 }
 
-async function inArena(tile = { x: 20, y: 22 }): Promise<LobbyClient> {
+async function inArena(tile = { x: 20, y: 10 }): Promise<LobbyClient> {
   const client = await joined();
-  client.enterArea('arena', { ...at(tile.x, tile.y), facing: 'up' }, 'avatar-3');
+  client.enterArea('arena', { ...at(tile.x, tile.y), facing: 'down' }, 'avatar-3');
   await waitFor(() => client.arena(), (ring) => ring !== null, 'the ring');
   return client;
 }
@@ -142,12 +142,12 @@ describe('the arena intents (D-114)', () => {
     const room = await roomOf(client);
     const held = () => room.state.peers.get(client.gameId as string);
     // Beside the dummy, facing away from it.
-    client.updatePosition(at(20, 15).x, at(20, 15).y, 'down');
-    await waitFor(() => held()?.facing, (facing) => facing === 'down' && held()?.position.y === at(20, 15).y, 'facing away');
+    client.updatePosition(at(20, 17).x, at(20, 17).y, 'up');
+    await waitFor(() => held()?.facing, (facing) => facing === 'up' && held()?.position.y === at(20, 17).y, 'facing away');
     await waitFor(() => client.arena(), (ring) => ring?.phase === 'fighting', 'the fight', 5000);
     const send = vi.spyOn(SdkRoom.prototype, 'send');
     // Turn to face it and swing in the same frame.
-    client.updatePosition(at(20, 15).x, at(20, 15).y, 'up');
+    client.updatePosition(at(20, 17).x, at(20, 17).y, 'down');
     expect(client.arenaAttack()).toBe(true);
     const ring = await waitFor(() => client.arena(), (value) => (value?.challenger.swings ?? 0) >= 1, 'the swing');
     const order = send.mock.calls.map(([type]) => type).filter((type) => type === MESSAGE.move || type === MESSAGE.arenaAttack);
@@ -199,7 +199,7 @@ describe('the ring snapshot (D-114)', () => {
     expect(seen.at(-1)).toBeNull();
     stop();
     const count = seen.length;
-    client.enterArea('arena', { ...at(12, 16), facing: 'up' });
+    client.enterArea('arena', { ...at(12, 16), facing: 'down' });
     await sleep(200);
     expect(seen).toHaveLength(count);
   }, WIRE_TIMEOUT_MS);
