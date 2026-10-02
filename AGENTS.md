@@ -280,7 +280,7 @@ empty shell to fetchers, so a 200 there means nothing.
   Without the system, the session draws its own prompt.
 - **Fonts.** The brand guide says to self-host Jersey 15, VT323 and Silkscreen, but `styles.test.ts` pins "loads no font": no `@font-face`. The HUD names the brand faces first and falls back to system stacks.
 
-*Verified:* the C line of D-114's tests; the full suite and typecheck on this branch, and again with streams A and B merged locally (A, B and C together: 283 files, 6012 tests). Renders of a mid-fight frame from the offline rasterizer, with A's real room, are `renders/arena-fight.png` and `renders/arena-fight-close.png` in the working scratchpad, not committed. Not verified: a real browser.
+*Verified:* the C line of D-114's tests; the full suite and typecheck with streams A and B merged (A, B and C together on main: 286 files, 6056 tests). One swing timeline (`arena-swing.ts` `attackPoseAt`), one seat rule (`isArenaSeatAt` behind the presenter's room gate, since the Studio and bunker share the arena's pixels) and one attack path (E, a click and STRIKE all reach the session's single floor) serve both streams. Renders of a mid-fight frame from the offline rasterizer, with A's real room, are `renders/arena-fight.png` and `renders/arena-fight-close.png` in the working scratchpad, not committed. Not verified: a real browser.
 
 ### 2026-10-02 — No disclosure is mandatory any more: approval is the whole privacy gate, and every player-facing line is product copy (D-118)
 
