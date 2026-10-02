@@ -78,6 +78,7 @@ describe('buildStreet', () => {
   it('splits the district into ground, door and label groups', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
+    // One portal per building; the hidden stair has none (D-107).
     expect(view.doors.children).toHaveLength(5);
     // Five facade signs, four brand plates, the sandbox square's sign and its
     // gate's, and the label on the Exchange tower's roof lift; then the Privacy
@@ -339,7 +340,8 @@ describe('buildStreet', () => {
   it('positions a door portal over each door zone, the Vault marked locked', () => {
     const { map, view } = build();
     view.doors.updateMatrixWorld(true);
-    for (const door of map.doors) {
+    // The hidden stair's door has no portal (D-107); its test is below.
+    for (const door of map.doors.filter((candidate) => candidate.building !== 'bunker')) {
       const portal = view.doors.children.find((child) => child.userData['building'] === door.building);
       expect(portal, door.building).toBeDefined();
       expect(portal!.position.x).toBeCloseTo(door.x + door.width / 2);

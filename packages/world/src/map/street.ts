@@ -1,5 +1,6 @@
 import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, STREET_ORIGIN_X, type BuildingId } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
+import { BUNKER_BUILDING, BUNKER_DOOR, paintBunker } from './bunker.js';
 import { paintPitch } from './pitch.js';
 import { paintPlaza } from './plaza.js';
 
@@ -31,7 +32,9 @@ export type TileKind =
   | 'turf'
   | 'walkway'
   | 'footing'
-  | 'railing';
+  | 'railing'
+  | 'stairhead'
+  | 'service';
 
 export interface TileSpec {
   kind: TileKind;
@@ -80,6 +83,16 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    * through the gate, where the road runs through it.
    */
   railing: Object.freeze({ kind: 'railing', solid: true, colour: 0x8e959c }),
+  /**
+   * The hidden stair's top step, in the alley between the Bank and the
+   * Exchange (D-107). Walkable: it carries the stair's door.
+   */
+  stairhead: Object.freeze({ kind: 'stairhead', solid: false, colour: 0x8f8a84 }),
+  /**
+   * Under the hidden stair's flight and the vending machine beside it
+   * (D-107). Solid; the renderer stands both on these.
+   */
+  service: Object.freeze({ kind: 'service', solid: true, colour: 0x6f6a66 }),
 });
 
 /**
@@ -273,6 +286,11 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // street's west end, clear of the Studio path and the spawn (see plaza.ts).
   paintPlaza(tiles);
 
+  // The hidden stair (D-107): two tiles of stair and a vending machine in the
+  // alley mouth between the Bank and the Exchange, across from the plaza.
+  // Unmarked: no facade, no sign, no label (see bunker.ts).
+  paintBunker(tiles);
+
   // The football pitch square where the road begins (D-078): its walkway,
   // field and furniture, and the fence on its street side with a gate where
   // the road and both pavements run in (see pitch.ts).
@@ -295,7 +313,13 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     width,
     height,
     tiles,
-    doors: objectLayerToDoors(doorObjects, { width, height }),
+    // The hidden stair's top step is a door like the others, so entering and
+    // leaving reuse the rooms' machinery; it is added here rather than in the
+    // Tiled layer, whose loader admits only `BUILDINGS` (D-107).
+    doors: [
+      ...objectLayerToDoors(doorObjects, { width, height }),
+      { building: BUNKER_BUILDING, ...BUNKER_DOOR, locked: false },
+    ],
     exteriorLabels,
     avatarStudioEntrance: { x: X + 23, y: height - 1, width: 2, height: 1 },
     spawn: { x: X + 24, y: 15 },

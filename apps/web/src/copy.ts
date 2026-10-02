@@ -31,6 +31,12 @@ export const COPY = freezeCopy({
     vault: 'The Vault',
     /** D-076: not a building, an open square; its windows use no money and no wallet. */
     plaza: 'The Privacy Plaza',
+    /**
+     * D-107: the hidden room has no name in the game. The Shell opens no
+     * window for it (it is not in `BUILDINGS`); were one ever titled, it
+     * would read as this ellipsis, never as a name.
+     */
+    bunker: '…',
   },
 
   connect: {

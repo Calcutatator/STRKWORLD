@@ -155,7 +155,8 @@ describe('presence areas in the controller (D-087)', () => {
     stop();
   });
 
-  it.each(BUILDINGS)('still suspends inside %s, and never switches area there', async (building) => {
+  // D-107: the hidden room under the alley is a private interior like every building's.
+  it.each([...BUILDINGS, 'bunker' as const])('still suspends inside %s, and never switches area there', async (building) => {
     const { world, made, presence, stop } = await connectedOnStreet();
     world.emit('building:entered', { building });
     // Walking about inside a private interior publishes no area moves; even

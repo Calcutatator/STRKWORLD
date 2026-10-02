@@ -95,6 +95,7 @@ import {
 } from './palette.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
+import { elevatorBay, netcafeDecor, netcafeProp, netcafeStairs } from './bunker-room.js';
 
 /**
  * Fixed-room interiors as lit dioramas (D-059).
@@ -410,6 +411,8 @@ interface StationView {
   /** A free-standing counter's spinning status beacon; a built-in one's light is part of its status mesh (D-104). */
   readonly beacon: Mesh | null;
   readonly label: TextLabel;
+  /** D-107: a line shown only while the player stands at the counter (the hidden room's lift), or none. */
+  readonly prompt: TextLabel | null;
   readonly phase: number;
   readonly looks: StationLooks;
   /** The station's approach halo inside the room's one shared halo mesh. */
@@ -447,6 +450,7 @@ export function buildFixedRoom(
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
   images: ImageTextureLoader | null = null,
+  options: { readonly reducedMotion?: () => boolean } = {},
 ): RoomView {
   const res = new ResourceBag();
   const theme = roomTheme(map.building, map.level);
@@ -495,6 +499,28 @@ export function buildFixedRoom(
     const halos: HaloQuads[] = [];
     try {
       decorateRoom(theme, shell, map, res, animators, labels, textLabels, images, roomFurniture(counters, labels, textLabels, group));
+      if (theme.decor === 'netcafe') {
+        // D-107: the hidden room's dressing, which also owns one flickering tube.
+        const reducedMotion = options.reducedMotion;
+        netcafeDecor({
+          theme,
+          map,
+          floor: shell.floor,
+          walls: shell.walls,
+          res,
+          group,
+          animators,
+          labels,
+          textLabels,
+          reducedMotion: () => {
+            try {
+              return reducedMotion?.() === true;
+            } catch {
+              return false;
+            }
+          },
+        });
+      }
       fixtureProps(map, theme, shell);
       exitDecor(map, theme, shell);
       liftDecor(map, theme, shell, labels, textLabels, group);
@@ -612,6 +638,7 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
       : looks.locked;
   view.look = look;
   view.highlighted = highlighted;
+  if (view.prompt) view.prompt.object.visible = highlighted;
   view.accent.color.setHex(look.color);
   view.accent.emissive.setHex(look.emissive);
   view.accent.emissiveIntensity = look.emissiveIntensity;
@@ -703,6 +730,7 @@ function buildStation(
     accent,
     beacon,
     label,
+    prompt: null,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
     halo: null,
@@ -849,7 +877,10 @@ function stationHalo(station: FixedRoomStationDefinition, map: FixedRoomLevelMap
 interface BuiltCounter {
   /** Painted in the station's accent: the light that shows its state. */
   readonly status: readonly BufferGeometry[];
-  readonly sign: { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number };
+  /** `roll` tilts the sign in its own plane (a paper taped on askew). */
+  readonly sign: { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly roll?: number };
+  /** D-107: where the theme's prompt floats while the player stands at it. */
+  readonly prompt?: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**
@@ -883,8 +914,20 @@ function buildBuiltInStation(
   textLabels.push(label);
   label.object.position.set(built.sign.x, built.sign.y, built.sign.z);
   label.object.rotation.y = built.sign.yaw;
+  label.object.rotation.z = built.sign.roll ?? 0;
   label.object.userData['station'] = station.station;
   group.add(label.object);
+  // D-107: a line that floats over the counter only while the player stands
+  // at it (the lift's "Out of order"); hidden otherwise.
+  let prompt: TextLabel | null = null;
+  if (built.prompt && dress.prompt) {
+    prompt = labels.floating(dress.prompt.text, dress.prompt.style);
+    textLabels.push(prompt);
+    prompt.object.position.set(built.prompt.x, built.prompt.y, built.prompt.z);
+    prompt.object.visible = false;
+    prompt.object.userData['prompt'] = station.station;
+    group.add(prompt.object);
+  }
   const cx = station.x + station.width / 2;
   const cz = station.y + station.height / 2;
   const view: StationView = {
@@ -893,6 +936,7 @@ function buildBuiltInStation(
     accent,
     beacon: null,
     label,
+    prompt,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
     halo: null,
@@ -916,6 +960,8 @@ function builtInCounter(fit: StationFit, station: FixedRoomStationDefinition, ma
       return vesuDeskPlace(station, bin);
     case 'vesu-booth':
       return vesuLoanBooth(station, map.width - INTERIOR_WALL_THICKNESS, bin);
+    case 'elevator':
+      return elevatorBay(station, map, bin);
   }
 }
 
@@ -1688,6 +1734,7 @@ function buildCounterInRoom(
     // As D-104's built-in counters: the architecture shows the state, no beacon.
     beacon: null,
     label,
+    prompt: null,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
     halo: null,
@@ -2139,6 +2186,16 @@ function fixtureProps(map: FixedRoomLevelMap, theme: RoomTheme, shell: InteriorS
       case 'bench':
         loungeSeats(shell.floor, fixture, theme);
         break;
+      // D-107: the hidden room's net cafe furniture.
+      case 'pc-booth':
+      case 'reception':
+      case 'snack-shelf':
+      case 'drinks-fridge':
+      case 'manga-shelf':
+      case 'toppled-chair':
+      case 'storage':
+        netcafeProp(fixture, map, shell.floor);
+        break;
       case undefined:
         break;
     }
@@ -2315,6 +2372,7 @@ function stationProps(
     case 'endur':
       endurCounter(bin, x0, x1, z0, z1, top);
       break;
+    case 'netcafe':
     case 'plain':
       break;
   }
@@ -2442,6 +2500,11 @@ function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y
 function exitDecor(map: FixedRoomLevelMap, theme: RoomTheme, shell: InteriorShell): void {
   const exit = map.exit;
   if (!exit) return;
+  // D-107: the hidden room's way out is the stair back up, not a lit mat.
+  if (theme.decor === 'netcafe') {
+    netcafeStairs(map, shell.floor, shell.south);
+    return;
+  }
   const x0 = exit.x;
   const x1 = exit.x + exit.width;
   const z0 = exit.y;
@@ -2618,6 +2681,8 @@ function decorateRoom(
       vesuDecor(theme, shell, map, res, labels, textLabels);
       if (map.fixtures.length > 0) vesuLounge(theme, map, furniture);
       return;
+    // D-107: dressed by `netcafeDecor`, which needs the room's motion setting.
+    case 'netcafe':
     case 'plain':
       return;
   }

@@ -98,6 +98,8 @@ describe('the street is walkable', () => {
       ['post-office', 23, 10],
       ['bridge', 32, 10],
       ['vault', 41, 10],
+      // The hidden stair's top step in the alley across from the plaza (D-107).
+      ['bunker', 10, 10],
     ]);
   });
 
@@ -176,9 +178,9 @@ describe('the sandbox square has one way in (D-060)', () => {
 });
 
 describe('every building is present and reachable', () => {
-  it('has a door for all five buildings', () => {
+  it('has a door for all five buildings, and the hidden stair\'s (D-107)', () => {
     const withDoors = map.doors.map((d) => d.building).sort();
-    expect(withDoors).toEqual([...BUILDINGS].sort());
+    expect(withDoors).toEqual([...BUILDINGS, 'bunker'].sort());
   });
 
   it('locks the Vault and only the Vault', () => {
@@ -187,7 +189,8 @@ describe('every building is present and reachable', () => {
     expect(locked).toEqual(['vault']);
 
     const unlocked = map.doors.filter((d) => !d.locked).map((d) => d.building).sort();
-    expect(unlocked).toEqual([...ACTIVE_BUILDINGS].sort());
+    // The hidden stair is never locked: it is found, not opened (D-107).
+    expect(unlocked).toEqual([...ACTIVE_BUILDINGS, 'bunker'].sort());
   });
 
   it('places every door on a tile the player can stand on', () => {
@@ -441,7 +444,9 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
   it('produces exactly one door per known building for the procedural map', () => {
     // The real map's doors are the adapter's output — the parsing path a Tiled
     // export will use is already the one under test.
-    expect(map.doors.map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
+    // The hidden stair's door is added after the layer, which admits only
+    // `BUILDINGS` (D-107).
+    expect(map.doors.filter((d) => d.building !== 'bunker').map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
   });
 
   // Regression: the facade row was filled solid and the door was only a trigger

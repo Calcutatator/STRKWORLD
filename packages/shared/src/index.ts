@@ -31,9 +31,19 @@ export type BuildingId =
    * so its two stations share the station vocabulary (`plaza:monument`,
    * `plaza:shells`), and `BUILDINGS` below leaves it out.
    */
-  | 'plaza';
+  | 'plaza'
+  /**
+   * D-107: a hidden room under the street, down a service stair in the alley
+   * across the road from the Privacy Plaza. A codename only: the game never
+   * shows it, and the room has no facade, sign, name, route or money. It is
+   * an id so its door and room reuse the fixed rooms' machinery. `BUILDINGS`
+   * leaves it out, so the Shell opens no window for it, while its
+   * `building:entered` suspends presence like any private interior's
+   * (D-019, D-087).
+   */
+  | 'bunker';
 
-/** The five buildings with a street door. The Privacy Plaza has none (D-076). */
+/** The five buildings with a street door. The Privacy Plaza has none (D-076); the bunker's door is hidden (D-107). */
 export const BUILDINGS: readonly BuildingId[] = [
   'bank',
   'exchange',

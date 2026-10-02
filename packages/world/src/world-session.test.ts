@@ -1003,8 +1003,9 @@ describe('WorldSession lifecycle', () => {
     enterBuilding(world, 'bank');
     const staleBank = world.room('bank');
     expect(staleBank.state.inRoom).toBe(true);
-    // Three per room, and the Privacy Plaza's control claim and figures (D-076).
-    expect(world.bus.shellListenerCount()).toBe(14);
+    // Three per room (the hidden room's too, D-107), and the Privacy Plaza's
+    // control claim and figures (D-076).
+    expect(world.bus.shellListenerCount()).toBe(17);
 
     stale.destroy();
     const replacement = world.start();
@@ -1012,7 +1013,7 @@ describe('WorldSession lifecycle', () => {
     expect(world.cycles).toHaveLength(2);
     expect(world.keyboard.listenerCount()).toBe(1);
     expect(staleBank.state.inRoom).toBe(false);
-    expect(world.bus.shellListenerCount()).toBe(14);
+    expect(world.bus.shellListenerCount()).toBe(17);
 
     // A late Shell exit reaches only the current, outside controller. The
     // retired Bank must not move the new session or publish a stale exit.
@@ -1118,7 +1119,7 @@ describe('WorldSession lifecycle', () => {
 
     const partial = world.cycle(0);
     expect(partial.session).toBeUndefined();
-    expect(countEntries(world.journal, 'shell.off:')).toBe(12);
+    expect(countEntries(world.journal, 'shell.off:')).toBe(15);
     expect(world.bus.shellListenerCount()).toBe(0);
     expect(world.keyboard.listenerCount()).toBe(0);
     expectCompleteCleanup(partial);

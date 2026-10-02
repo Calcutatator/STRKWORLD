@@ -196,13 +196,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
     disposers.push(() => room.dispose());
   };
   const images = options.images ?? null;
+  // D-107: the hidden room's flickering tube holds steady for reduced motion.
+  const roomOptions = options.reducedMotion ? { reducedMotion: options.reducedMotion } : {};
   for (const definition of fixedRoomDefinitionsFor({ vaultOpen })) {
-    addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images));
+    addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images, roomOptions));
     for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
       if (level.rooftop) continue;
       addRoom(
         roomKey(definition.building, level.level),
-        buildFixedRoom(createFixedRoomLevel(level), options.labels, ROOM_ORIGIN, images),
+        buildFixedRoom(createFixedRoomLevel(level), options.labels, ROOM_ORIGIN, images, roomOptions),
       );
     }
   }

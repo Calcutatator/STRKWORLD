@@ -87,6 +87,8 @@ import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, l
 import { bevelledBlockGeometry } from './sandbox-view.js';
 import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
+import { buildBunkerEntrance } from './bunker-builder.js';
+import { BUNKER_BUILDING } from '../map/bunker.js';
 import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
@@ -177,7 +179,9 @@ export interface GateOccluder extends Occluder {
  */
 export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: number): number {
   const kind = classifyTile(map, Math.floor(tileX), Math.floor(tileY));
-  // The Privacy Plaza's paving is level with the pavement (D-076).
+  // The Privacy Plaza's paving is level with the pavement (D-076), and so is
+  // the hidden stair's top step (D-107).
+  if (kind === 'bunker') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'stairhead' ? PAVEMENT_HEIGHT : 0;
   return kind === 'sidewalk' || kind === 'plaza' ? PAVEMENT_HEIGHT : 0;
 }
 
@@ -210,6 +214,8 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     }
 
     for (const door of map.doors) {
+      // The hidden stair has no portal: nothing marks it (D-107).
+      if (door.building === BUNKER_BUILDING) continue;
       const footprint = footprints.find((candidate) => doorInside(candidate, door));
       const portal = buildDoorPortal(door, footprint ? built.get(footprint) : undefined, res);
       doors.add(portal.group);
@@ -293,6 +299,11 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     });
     occluders.push(...plazaOccluders);
 
+    // The hidden stair (D-107), in its own module: the cut, the door ajar at
+    // its foot, the vending machine and the cat, merged into the street's
+    // ground. No label and no sign: nothing here names it.
+    buildBunkerEntrance(map, res, { ground, animators, floorHeight: PAVEMENT_HEIGHT });
+
     // The football pitch (D-078), likewise in its own module and merged into
     // the street's groups: its field, stands, goals, fence and scoreboard.
     const pitchOccluders: PitchOccluder[] = [];
@@ -367,7 +378,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
  * tiles are laid by pitch-builder.ts (D-078), as the plaza's are by
  * plaza-builder.ts.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch' | 'bunker';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -389,6 +400,8 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   if (kind === 'plaza' || kind === 'plinth') return 'plaza';
   // So does the pitch square, its field, walkway and footings (D-078).
   if (kind === 'turf' || kind === 'walkway' || kind === 'footing') return 'pitch';
+  // And the hidden stair, its cut and the vending machine's pad (D-107).
+  if (kind === 'stairhead' || kind === 'service') return 'bunker';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
   if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
@@ -632,6 +645,9 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
           case 'pitch':
             // Laid by pitch-builder.ts: turf, walkway and footings (D-078).
             break;
+          case 'bunker':
+            // Laid by bunker-builder.ts: the stair's slab and cut (D-107).
+            break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'
             // bevels like a contact shadow; under the pitch fence its kerb
@@ -701,7 +717,8 @@ function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: num
     const neighbour = kinds[y + dy]?.[x + dx];
     // Off-map pavement continues into the outskirts; walls cover their own
     // edge; the Privacy Plaza's paving is level with the pavement (D-076).
-    if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid' || neighbour === 'plaza') continue;
+    // The hidden stair's slab is flush with it too (D-107).
+    if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid' || neighbour === 'plaza' || neighbour === 'bunker') continue;
     const dropped = neighbour === 'crossing';
     // Pavement meets the gate's threshold at a flush kerb: you walk straight in.
     const flush = dropped || neighbour === 'threshold';

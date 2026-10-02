@@ -26,9 +26,35 @@ export interface FixedRoomRect {
  * Free-standing furniture the room builder draws on a fixture (D-105). A
  * fixture without one belongs to a counter: what it is built into.
  */
-export type FixedRoomProp = 'trading-pod' | 'high-table' | 'pillar-box' | 'writing-desk' | 'bench';
+export type FixedRoomProp =
+  | 'trading-pod'
+  | 'high-table'
+  | 'pillar-box'
+  | 'writing-desk'
+  | 'bench'
+  // D-107: the hidden room's net cafe furniture.
+  | 'pc-booth'
+  | 'reception'
+  | 'snack-shelf'
+  | 'drinks-fridge'
+  | 'manga-shelf'
+  | 'toppled-chair'
+  | 'storage';
 
-const FIXED_ROOM_PROPS: readonly FixedRoomProp[] = ['trading-pod', 'high-table', 'pillar-box', 'writing-desk', 'bench'];
+const FIXED_ROOM_PROPS: readonly FixedRoomProp[] = [
+  'trading-pod',
+  'high-table',
+  'pillar-box',
+  'writing-desk',
+  'bench',
+  'pc-booth',
+  'reception',
+  'snack-shelf',
+  'drinks-fridge',
+  'manga-shelf',
+  'toppled-chair',
+  'storage',
+];
 
 /** Built-in furniture on the floor (`fixture` tiles), optionally a named free-standing prop. */
 export interface FixedRoomFixture extends FixedRoomRect {
@@ -38,6 +64,13 @@ export interface FixedRoomFixture extends FixedRoomRect {
 export interface FixedRoomStationDefinition extends FixedRoomRect {
   readonly station: StationId;
   readonly label: string;
+  /**
+   * D-107: an id held for a counter that does not open yet (the hidden
+   * room's lift, for floors to come). It stands, highlights and draws like
+   * any station, but it is always locked, whatever a `world:stations`
+   * snapshot says, so walking up to it never activates anything.
+   */
+  readonly reserved?: true;
 }
 
 /**
@@ -593,11 +626,70 @@ export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
   ],
 } as const satisfies FixedRoomDefinition);
 
+/**
+ * D-107: the hidden room's lift, out of order. Its id is held for the floors
+ * it will one day ride to; until then it is reserved, so it is always locked
+ * and walking up to it only shows that it is out of order.
+ */
+export const BUNKER_ELEVATOR_STATION: StationId = 'bunker:elevator';
+
+/** What walking up to the lift says, and nothing else happens. */
+export const BUNKER_ELEVATOR_MESSAGE = 'Out of order';
+
+/**
+ * D-107: the room under the alley's stair, a Tokyo net cafe left years ago.
+ * A solo private instance like every interior (D-087): entering suspends
+ * presence. No station opens a window: the one station is the lift, and it is
+ * reserved. No money anywhere (D-024): the reception is a check-in desk.
+ *
+ * The stair comes down in the south-west corner (the exit) onto a landing
+ * with the lift right beside it: its doors face the landing, its shaft
+ * behind them along the west wall, and junk stored behind that. A one-tile spine runs north
+ * past the shaft, and two one-tile corridors run east from it between rows of
+ * PC booths, into the one slightly larger booth area in the east, with booths
+ * along its north and east walls and two chairs knocked over. Along the
+ * south, a one-tile lobby passes the reception (snack shelves and the drinks
+ * fridge behind and beside it) and the manga shelves. Every booth faces a
+ * tile the spawn can walk to, so does the lift.
+ */
+export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
+  building: 'bunker',
+  width: 16,
+  height: 10,
+  spawn: { x: 2, y: 8 },
+  exit: { x: 1, y: 9, width: 2, height: 1 },
+  stations: [
+    { station: 'bunker:elevator', label: '故障中\nOUT OF ORDER', x: 1, y: 6, width: 2, height: 1, reserved: true },
+  ],
+  fixtures: [
+    // The lift's shaft, behind its doors, and the junk stored behind that.
+    { x: 1, y: 4, width: 2, height: 2 },
+    { x: 1, y: 1, width: 2, height: 3, prop: 'storage' },
+    // Booths along the north wall, from the first corridor into the big area.
+    { x: 4, y: 1, width: 11, height: 1, prop: 'pc-booth' },
+    // Two rows back to back between the corridors: the first faces north, the second south.
+    { x: 4, y: 3, width: 5, height: 1, prop: 'pc-booth' },
+    { x: 4, y: 4, width: 5, height: 1, prop: 'pc-booth' },
+    // Booths along the big area's east wall, facing west.
+    { x: 14, y: 3, width: 1, height: 4, prop: 'pc-booth' },
+    // Two chairs knocked over in the big area.
+    { x: 11, y: 4, width: 1, height: 1, prop: 'toppled-chair' },
+    { x: 12, y: 6, width: 1, height: 1, prop: 'toppled-chair' },
+    // The reception: snack shelves behind the desk, the drinks fridge at its end.
+    { x: 4, y: 6, width: 5, height: 1, prop: 'snack-shelf' },
+    { x: 4, y: 7, width: 4, height: 1, prop: 'reception' },
+    { x: 8, y: 7, width: 1, height: 1, prop: 'drinks-fridge' },
+    // Waist-high manga shelves along the lobby.
+    { x: 10, y: 7, width: 5, height: 1, prop: 'manga-shelf' },
+  ],
+} as const satisfies FixedRoomDefinition);
+
 export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
   exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
+  bunker: BUNKER_ROOM_DEFINITION,
 } as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>);
 
 /** Floors above the ground floor, by building. Only the Exchange tower has any. */
@@ -1052,6 +1144,10 @@ export function normalizeFixedRoomStations(
     const status = ownDataField(candidate, 'status');
     const validLabel = typeof label === 'string' && label.trim().length > 0;
     const validStatus = status === 'available' || status === 'locked';
+    // D-107: a reserved id keeps its own label and stays locked.
+    if (known.reserved === true) {
+      return Object.freeze({ station: known.station, label: known.label, status: 'locked' as const });
+    }
     return Object.freeze({
       station: known.station,
       label: validLabel ? label : known.label,
