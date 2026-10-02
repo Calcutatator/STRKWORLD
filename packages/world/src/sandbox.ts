@@ -65,9 +65,10 @@ function bodyTileRange(
 }
 
 /**
- * The level a body stands on: the tallest stack it overlaps. Touching a stack
- * one block higher therefore lifts you onto it — the "bounce up" — and you
- * only come down once you have fully left it.
+ * The level a body stands on: the tallest stack it overlaps, so you only come
+ * down once you have fully left a stack. Since D-106 a body reaches a higher
+ * stack only by climbing it with a jump (`stepOnHeightmap`); one can still
+ * rise under a standing body, and lifts it.
  */
 export function levelUnderBody(
   heights: SandboxHeights,
@@ -103,16 +104,32 @@ export function bodyNearSandbox(
   return false;
 }
 
+/** What a step over the heightmap allows and did (D-106). */
+export interface HeightmapStepOptions extends CollisionSubstepOptions {
+  readonly heights: SandboxHeights;
+  /**
+   * D-106: how many blocks this move may step up, once: 0 while walking (any
+   * higher stack is a wall), `SANDBOX_STEP_HEIGHT` inside a jump's climb
+   * window. Never more than `SANDBOX_STEP_HEIGHT`.
+   */
+  readonly climb?: number;
+}
+
+export interface HeightmapStep {
+  readonly position: MovementPosition;
+  /** Whether the body stepped up onto a higher stack during this move. */
+  readonly climbed: boolean;
+}
+
 /**
- * Move through tile collision plus stacks. A stack more than one block above
- * the level the body stands on is a wall; anything lower is walkable, so
- * stepping down is free and stepping up is one block at a time. The level is
- * re-read before every substep, and each substep is exactly one step of
- * `moveWithCollisionSubsteps`, so with no blocks the result is identical.
+ * Move through tile collision plus stacks (D-060, D-106). Walking never steps
+ * up: a stack higher than the level the body stands on is a wall. With
+ * `climb`, one step up of at most that many blocks is allowed, once per call;
+ * after it, higher stacks are walls again. Stepping down is always free. The
+ * level is re-read before every substep, and each substep is exactly one step
+ * of `moveWithCollisionSubsteps`, so with no blocks the result is identical.
  */
-export function moveOnHeightmap(
-  options: CollisionSubstepOptions & { readonly heights: SandboxHeights },
-): MovementPosition {
+export function stepOnHeightmap(options: HeightmapStepOptions): HeightmapStep {
   const { position, velocity, delta, tileSize } = options;
   const halfSize = options.collisionHalfSize ?? 0;
   if (
@@ -123,10 +140,13 @@ export function moveOnHeightmap(
     !Number.isFinite(tileSize) || tileSize <= 0
   ) {
     // Defer the exact invalid-input contract to the shared mover.
-    return moveWithCollisionSubsteps(options);
+    return { position: moveWithCollisionSubsteps(options), climbed: false };
   }
   const speed = Math.hypot(velocity.x, velocity.y);
-  if (speed === 0) return { x: position.x, y: position.y };
+  if (speed === 0) return { position: { x: position.x, y: position.y }, climbed: false };
+  const allowance = Number.isFinite(options.climb)
+    ? Math.max(0, Math.min(SANDBOX_STEP_HEIGHT, Math.floor(options.climb as number)))
+    : 0;
   // Mirror moveWithCollisionSubsteps' partition so each call below is one substep.
   const maxStep = Math.min(tileSize / 2, 16);
   const maxTravel = maxStep * 256;
@@ -135,19 +155,26 @@ export function moveOnHeightmap(
   const steps = Math.max(1, Math.ceil(travel / maxStep));
   const stepDelta = ((travel / speed) * 1000) / steps;
   let current: MovementPosition = { x: position.x, y: position.y };
+  let climbed = false;
   for (let step = 0; step < steps; step += 1) {
     const level = levelUnderBody(options.heights, current, halfSize, tileSize);
+    const top = level + (climbed ? 0 : allowance);
     current = moveWithCollisionSubsteps({
       ...options,
       position: current,
       delta: stepDelta,
       isSolidAt: (tileX, tileY) =>
         options.isSolidAt(tileX, tileY) ||
-        (isSandboxTile(tileX, tileY) &&
-          options.heights.heightAt(tileX, tileY) > level + SANDBOX_STEP_HEIGHT),
+        (isSandboxTile(tileX, tileY) && options.heights.heightAt(tileX, tileY) > top),
     });
+    if (!climbed && levelUnderBody(options.heights, current, halfSize, tileSize) > level) climbed = true;
   }
-  return current;
+  return { position: current, climbed };
+}
+
+/** `stepOnHeightmap`'s position alone: a move that may climb `climb` blocks (0, walking, by default). */
+export function moveOnHeightmap(options: HeightmapStepOptions): MovementPosition {
+  return stepOnHeightmap(options).position;
 }
 
 const FACING_OFFSET: Readonly<Record<Facing, { x: number; y: number }>> = Object.freeze({

@@ -1,12 +1,16 @@
 /**
  * The cosmetic jump on Space (D-097), engine-agnostic.
  *
- * A jump is presentation only: it never changes tile movement, collision or
- * the position the lobby holds. Horizontal movement carries on through it.
- * The session owns the state machine (one jump at a time, a short cooldown);
- * the presenter and the remote layer own the arc and the pose, from the same
- * numbers here.
+ * The jump never moves the avatar across the ground: horizontal movement
+ * carries on through it unchanged. Since D-106 it does one thing for
+ * movement: from `CLIMB_FROM_PHASE` of its air time until it lands, it may
+ * step up onto a surface one block higher, once (`JumpState.canClimb`).
+ * Walking alone never steps up. The session owns the state machine (one jump
+ * at a time, a short cooldown); the presenter and the remote layer own the
+ * arc and the pose, from the same numbers here.
  */
+
+import { CLIMB_FROM_PHASE } from '@strkworld/shared';
 
 /** Time in the air, ms. */
 export const JUMP_AIR_MS = 500;
@@ -33,8 +37,15 @@ export interface JumpState {
   readonly phase: JumpPhase;
   /** Time since take-off, ms; 0 while ready. */
   readonly elapsed: number;
+  /**
+   * D-106: whether this jump may step up onto a surface one block higher
+   * right now: airborne, inside the climb window, and not yet climbed.
+   */
+  readonly canClimb: boolean;
   /** Take off if ready. Returns whether a jump started: no double jump, no jump in cooldown. */
   tryStart(): boolean;
+  /** D-106: this jump has stepped up (or been refused one); no second climb until the next jump. */
+  climbed(): void;
   /** Advance by one frame. */
   advance(deltaMs: number): void;
   /** Back to ready at once: a teleport, a room change, teardown. */
@@ -42,9 +53,10 @@ export interface JumpState {
 }
 
 /** The session's jump: airborne for `JUMP_AIR_MS`, then cooling down for `JUMP_COOLDOWN_MS`. */
-export function createJumpState(): JumpState {
+export function createJumpState(airMs = JUMP_AIR_MS): JumpState {
   let phase: JumpPhase = 'ready';
   let elapsed = 0;
+  let climbUsed = false;
   return {
     get phase() {
       return phase;
@@ -52,27 +64,57 @@ export function createJumpState(): JumpState {
     get elapsed() {
       return elapsed;
     },
+    get canClimb() {
+      return phase === 'airborne' && !climbUsed && inClimbWindow(elapsed, airMs);
+    },
     tryStart() {
       if (phase !== 'ready') return false;
       phase = 'airborne';
       elapsed = 0;
+      climbUsed = false;
       return true;
+    },
+    climbed() {
+      if (phase === 'airborne') climbUsed = true;
     },
     advance(deltaMs) {
       if (phase === 'ready' || !(deltaMs > 0) || !Number.isFinite(deltaMs)) return;
       elapsed += deltaMs;
-      if (elapsed >= JUMP_AIR_MS + JUMP_COOLDOWN_MS) {
+      if (elapsed >= airMs + JUMP_COOLDOWN_MS) {
         phase = 'ready';
         elapsed = 0;
-      } else if (elapsed >= JUMP_AIR_MS) {
+      } else if (elapsed >= airMs) {
         phase = 'cooldown';
       }
     },
     reset() {
       phase = 'ready';
       elapsed = 0;
+      climbUsed = false;
     },
   };
+}
+
+/**
+ * D-106: how far through its air time a jump is, 0 at take-off and 1 on
+ * landing. Normalised, so every jump, high or low, long or short, is judged on
+ * the same scale. NaN for a meaningless input.
+ */
+export function jumpAirPhase(elapsedMs: number, airMs = JUMP_AIR_MS): number {
+  if (!Number.isFinite(elapsedMs) || !(airMs > 0) || !Number.isFinite(airMs)) return Number.NaN;
+  return elapsedMs / airMs;
+}
+
+/**
+ * D-106: whether a jump `elapsedMs` after take-off may step up a block: from
+ * `CLIMB_FROM_PHASE` of its air time (just before the peak) until it lands.
+ * The jump's height is never read, so a smaller hop (reduced motion's 0.3
+ * units, or any future shorter jump) clears the same block: the landing is
+ * rounded up onto it.
+ */
+export function inClimbWindow(elapsedMs: number, airMs = JUMP_AIR_MS): boolean {
+  const phase = jumpAirPhase(elapsedMs, airMs);
+  return phase >= CLIMB_FROM_PHASE && phase < 1;
 }
 
 /**

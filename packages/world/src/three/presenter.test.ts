@@ -587,6 +587,33 @@ describe('presenter: the local jump (D-097)', () => {
     expect(world.presenter.jumpLift).toBeCloseTo(REDUCED_JUMP_HEIGHT, 1);
   });
 
+  it('carries a climb mid-jump from the top of the arc onto the block, with no lift left over (D-106)', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);
+    world.presenter.update(16);
+    world.presenter.consumeSnap();
+    world.view.playerJump();
+    for (let ms = 0; ms < JUMP_AIR_MS * 0.4; ms += 20) world.presenter.update(20);
+    const atClimb = world.avatar.object.position.y;
+    expect(atClimb).toBeGreaterThan(0.5);
+    world.view.setPlayerElevation(1);
+    // Never dips: the hop starts where the arc had the feet.
+    let lowest = Number.POSITIVE_INFINITY;
+    for (let ms = 0; ms < 300; ms += 10) {
+      world.presenter.update(10);
+      lowest = Math.min(lowest, world.avatar.object.position.y);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(atClimb - 0.05);
+    expect(world.presenter.jumpLift).toBe(0);
+    expect(world.avatar.object.position.y).toBeCloseTo(1);
+    for (let ms = 0; ms < JUMP_AIR_MS; ms += 25) world.presenter.update(25);
+    expect(world.avatar.object.position.y).toBeCloseTo(1);
+    // The next jump lifts again from the block.
+    world.view.playerJump();
+    for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) world.presenter.update(25);
+    expect(world.presenter.jumpLift).toBeCloseTo(JUMP_HEIGHT, 1);
+  });
+
   it('starts a new session on the ground', () => {
     const world = setup();
     world.view.playerJump();

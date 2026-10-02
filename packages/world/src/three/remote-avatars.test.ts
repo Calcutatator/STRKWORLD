@@ -1134,6 +1134,28 @@ describe('remote avatar layer 3D: standing on stacks (D-060)', () => {
     expect(heights.at(-1)).toBe(1);
   });
 
+  it('carries a peer that climbs mid-jump from the top of its arc onto the block, never dipping (D-106)', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(0);
+    const peers = createRemotePeerSource([peer({ jumps: 0 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight: surface.surfaceHeight });
+    const figure = at(created, 0);
+    layer.update(16);
+    peers.publish([peer({ jumps: 1 })]);
+    for (let elapsed = 0; elapsed < 200; elapsed += 10) layer.update(10);
+    const atClimb = figure.object.position.y;
+    expect(atClimb).toBeGreaterThan(0.5);
+    surface.state.level = 1;
+    let lowest = Number.POSITIVE_INFINITY;
+    for (let elapsed = 0; elapsed < 300; elapsed += 10) {
+      layer.update(10);
+      lowest = Math.min(lowest, figure.object.position.y);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(atClimb - 0.05);
+    for (let elapsed = 0; elapsed < 400; elapsed += 10) layer.update(10);
+    expect(figure.object.position.y).toBeCloseTo(1);
+  });
+
   it('falls off a stack under gravity, frame-rate independent, and lands exactly', () => {
     const fall = (frames: readonly number[]): number => {
       const { factory, created } = fakeFigures();

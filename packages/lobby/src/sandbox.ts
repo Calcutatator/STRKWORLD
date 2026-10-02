@@ -14,10 +14,11 @@
  */
 
 import type { MapSchema } from '@colyseus/schema';
-import type { SandboxColumn, SandboxTile } from '@strkworld/shared';
+import type { Position, SandboxColumn, SandboxTile } from '@strkworld/shared';
 import { resolveRoomConfig } from './config.js';
 import { UpdateThrottle, normalizeSandboxTile } from './policy.js';
 import {
+  bodyLevelAt,
   createSandboxAuthority,
   isSandboxBurst,
   sandboxTileKey,
@@ -99,6 +100,16 @@ export class LobbySandbox {
 
   carrying(key: string): number | null {
     return this.#authority.carrying(key);
+  }
+
+  /**
+   * D-106: how many blocks higher the body stands at `to` than at `from`, on
+   * the stacks as they are now. Positive is a step up; 0 or less is level
+   * ground or a step down.
+   */
+  rise(from: Position, to: Position): number {
+    const heightAt = (tileX: number, tileY: number) => this.#authority.heightAt(tileX, tileY);
+    return bodyLevelAt(heightAt, to.x, to.y) - bodyLevelAt(heightAt, from.x, from.y);
   }
 
   /**

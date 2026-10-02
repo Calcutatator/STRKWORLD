@@ -14,6 +14,7 @@ import {
   levelUnderBody,
   moveOnHeightmap,
   sandboxAim,
+  stepOnHeightmap,
   withinReach,
 } from './sandbox.js';
 import { moveWithCollisionSubsteps } from './street-movement.js';
@@ -38,6 +39,10 @@ const street = {
 /** Walk east for `ms` at walking speed from `from`. */
 const walkEast = (heights: ReturnType<typeof createSandboxHeights>, from: { x: number; y: number }, ms: number) =>
   moveOnHeightmap({ ...street, heights, position: from, velocity: { x: 160, y: 0 }, delta: ms });
+
+/** Walk east as `walkEast`, allowed one climb of a block (a jump in its window, D-106). */
+const climbEast = (heights: ReturnType<typeof createSandboxHeights>, from: { x: number; y: number }, ms: number) =>
+  stepOnHeightmap({ ...street, heights, position: from, velocity: { x: 160, y: 0 }, delta: ms, climb: 1 });
 
 const X = SANDBOX_AREA.x + 4;
 const Y = 14;
@@ -87,31 +92,77 @@ describe('walking on stacks', () => {
     }
   });
 
-  it('steps up onto a stack one block higher', () => {
+  it('never steps up while walking: a stack one block higher is a wall (D-106)', () => {
     const heights = createSandboxHeights([stack(X + 1, Y, 1)]);
-    // One tile at walking speed: 32 px in 200 ms lands on the stack's centre.
-    const end = walkEast(heights, centre(X, Y), 200);
-    expect(Math.floor(end.x / TILE_SIZE)).toBe(X + 1);
-    expect(levelUnderBody(heights, end, HALF, TILE_SIZE)).toBe(1);
-  });
-
-  it('treats a stack two blocks higher as a wall', () => {
-    const heights = createSandboxHeights([stack(X + 1, Y, 2)]);
     const end = walkEast(heights, centre(X, Y), 1000);
     expect(end.x + HALF).toBeLessThanOrEqual((X + 1) * TILE_SIZE);
     expect(levelUnderBody(heights, end, HALF, TILE_SIZE)).toBe(0);
+    expect(stepOnHeightmap({ ...street, heights, position: centre(X, Y), velocity: { x: 160, y: 0 }, delta: 1000 }).climbed)
+      .toBe(false);
   });
 
-  it('climbs a staircase one step at a time but never skips a step', () => {
+  it('steps up onto a stack one block higher with a climb allowance, and says so', () => {
+    const heights = createSandboxHeights([stack(X + 1, Y, 1)]);
+    // One tile at walking speed: 32 px in 200 ms lands on the stack's centre.
+    const step = climbEast(heights, centre(X, Y), 200);
+    expect(step.climbed).toBe(true);
+    expect(Math.floor(step.position.x / TILE_SIZE)).toBe(X + 1);
+    expect(levelUnderBody(heights, step.position, HALF, TILE_SIZE)).toBe(1);
+  });
+
+  it('treats a stack two blocks higher as a wall, climb or not', () => {
+    const heights = createSandboxHeights([stack(X + 1, Y, 2)]);
+    for (const step of [
+      { position: walkEast(heights, centre(X, Y), 1000), climbed: false },
+      climbEast(heights, centre(X, Y), 1000),
+    ]) {
+      expect(step.climbed).toBe(false);
+      expect(step.position.x + HALF).toBeLessThanOrEqual((X + 1) * TILE_SIZE);
+      expect(levelUnderBody(heights, step.position, HALF, TILE_SIZE)).toBe(0);
+    }
+  });
+
+  it('climbs once per allowance: a staircase takes one climb per step and never skips one', () => {
     const stairs = createSandboxHeights([stack(X + 1, Y, 1), stack(X + 2, Y, 2), stack(X + 3, Y, 3)]);
-    // Three tiles in 600 ms: stop on the top step rather than walking off it.
-    const top = walkEast(stairs, centre(X, Y), 600);
-    expect(Math.floor(top.x / TILE_SIZE)).toBe(X + 3);
-    expect(levelUnderBody(stairs, top, HALF, TILE_SIZE)).toBe(3);
+    // One allowance walks onto the first step and stops at the second.
+    const first = climbEast(stairs, centre(X, Y), 2000);
+    expect(first.climbed).toBe(true);
+    expect(levelUnderBody(stairs, first.position, HALF, TILE_SIZE)).toBe(1);
+    expect(first.position.x + HALF).toBeLessThanOrEqual((X + 2) * TILE_SIZE);
+    // A climb allowance larger than one block is clamped to one.
+    const greedy = stepOnHeightmap({
+      ...street, heights: stairs, position: centre(X, Y), velocity: { x: 160, y: 0 }, delta: 2000, climb: 5,
+    });
+    expect(levelUnderBody(stairs, greedy.position, HALF, TILE_SIZE)).toBe(1);
+    // Each further allowance climbs exactly one more step.
+    const second = climbEast(stairs, first.position, 2000);
+    expect(levelUnderBody(stairs, second.position, HALF, TILE_SIZE)).toBe(2);
+    // A short walk, so the climber stops on the top step rather than walking off it.
+    const third = climbEast(stairs, second.position, 200);
+    expect(levelUnderBody(stairs, third.position, HALF, TILE_SIZE)).toBe(3);
+    // From one block up, a stack three high is two steps: still a wall.
     const gap = createSandboxHeights([stack(X + 1, Y, 1), stack(X + 2, Y, 3)]);
-    const stuck = walkEast(gap, centre(X, Y), 2000);
-    expect(levelUnderBody(gap, stuck, HALF, TILE_SIZE)).toBe(1);
-    expect(stuck.x + HALF).toBeLessThanOrEqual((X + 2) * TILE_SIZE);
+    const onFirst = climbEast(gap, centre(X, Y), 200).position;
+    const stuck = climbEast(gap, onFirst, 2000);
+    expect(stuck.climbed).toBe(false);
+    expect(levelUnderBody(gap, stuck.position, HALF, TILE_SIZE)).toBe(1);
+    expect(stuck.position.x + HALF).toBeLessThanOrEqual((X + 2) * TILE_SIZE);
+  });
+
+  it('walks freely across stacks of its own height', () => {
+    const heights = createSandboxHeights([stack(X, Y, 1), stack(X + 1, Y, 1), stack(X + 2, Y, 1)]);
+    const end = walkEast(heights, centre(X, Y), 400);
+    expect(Math.floor(end.x / TILE_SIZE)).toBe(X + 2);
+    expect(levelUnderBody(heights, end, HALF, TILE_SIZE)).toBe(1);
+  });
+
+  it('steps down without a climb, and cannot walk back up', () => {
+    const heights = createSandboxHeights([stack(X, Y, 1)]);
+    const down = walkEast(heights, centre(X, Y), 400);
+    expect(levelUnderBody(heights, down, HALF, TILE_SIZE)).toBe(0);
+    const back = moveOnHeightmap({ ...street, heights, position: down, velocity: { x: -160, y: 0 }, delta: 1000 });
+    expect(levelUnderBody(heights, back, HALF, TILE_SIZE)).toBe(0);
+    expect(back.x - HALF).toBeGreaterThanOrEqual((X + 1) * TILE_SIZE);
   });
 
   it('steps down any height', () => {
