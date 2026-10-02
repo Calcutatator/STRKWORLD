@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ARENA_PRESENCE_GRID,
+  ARENA_RING_INTERIOR,
   BUNKER_PRESENCE_GRID,
   ROOF_PRESENCE_GRID,
   STUDIO_PRESENCE_GRID,
@@ -18,6 +20,7 @@ import {
   isAvatarStudioSolidAt,
 } from './avatar-studio.js';
 import {
+  ARENA_ROOM_DEFINITION,
   BUNKER_ROOM_DEFINITION,
   EXCHANGE_ROOF_LEVEL,
   FIXED_ROOM_LEVELS,
@@ -112,11 +115,34 @@ describe('shared presence-area grids match the World (D-087)', () => {
     }
   });
 
-  it('the bunker is the only building whose interior is shared; every other ground floor stays private', () => {
+  it('the arena grid is the gladiator pit\'s arena (D-114), at the interiors\' origin, tile for tile', () => {
+    const room = createFixedRoom(ARENA_ROOM_DEFINITION);
+    expect(ARENA_PRESENCE_GRID.originX).toBe(ROOM_ORIGIN.x);
+    expect(ARENA_PRESENCE_GRID.originY).toBe(ROOM_ORIGIN.y);
+    expect(ARENA_PRESENCE_GRID.tileSize).toBe(FIXED_ROOM_TILE_SIZE);
+    expect([ARENA_PRESENCE_GRID.width, ARENA_PRESENCE_GRID.height]).toEqual([room.width, room.height]);
+    for (let y = -1; y <= room.height; y += 1) {
+      for (let x = -1; x <= room.width; x += 1) {
+        expect(walkable(ARENA_PRESENCE_GRID, x, y), `arena tile ${x},${y}`).toBe(!isFixedRoomSolidAt(room, x, y));
+      }
+    }
+    // The ring's interior is solid for everyone in both: only the fighter's
+    // own session opens it (the World's ring hook, the lobby's extra rects).
+    for (let y = ARENA_RING_INTERIOR.y; y < ARENA_RING_INTERIOR.y + ARENA_RING_INTERIOR.height; y += 1) {
+      for (let x = ARENA_RING_INTERIOR.x; x < ARENA_RING_INTERIOR.x + ARENA_RING_INTERIOR.width; x += 1) {
+        expect(walkable(ARENA_PRESENCE_GRID, x, y)).toBe(false);
+        expect(isFixedRoomSolidAt(room, x, y)).toBe(true);
+      }
+    }
+    // The emperor's box is the reserved station: solid in both.
+    const box = ARENA_ROOM_DEFINITION.stations[0]!;
+    expect(walkable(ARENA_PRESENCE_GRID, box.x, box.y)).toBe(false);
+  });
+
+  it('the bunker and the arena are the only buildings whose interiors are shared; every other ground floor stays private', () => {
     for (const definition of fixedRoomDefinitionsFor({ vaultOpen: true })) {
-      expect(presenceAreaOfBuilding(definition.building), definition.building).toBe(
-        definition.building === 'bunker' ? 'bunker' : null,
-      );
+      const shared = definition.building === 'bunker' || definition.building === 'arena';
+      expect(presenceAreaOfBuilding(definition.building), definition.building).toBe(shared ? definition.building : null);
     }
   });
 });

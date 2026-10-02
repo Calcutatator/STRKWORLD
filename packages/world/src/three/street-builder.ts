@@ -88,7 +88,9 @@ import { bevelledBlockGeometry } from './sandbox-view.js';
 import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
 import { buildBunkerEntrance } from './bunker-builder.js';
+import { buildArenaPit, type ArenaPitOccluder } from './arena-pit-builder.js';
 import { BUNKER_BUILDING } from '../map/bunker.js';
+import { ARENA_PIT_BUILDING } from '../map/arena-pit.js';
 import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
@@ -150,9 +152,10 @@ type Animator = (elapsedMs: number) => void;
 
 /**
  * A street occluder, naming what it fades: a building, the sandbox gate, a
- * Privacy Plaza piece (D-076) or the pitch gate (D-078).
+ * Privacy Plaza piece (D-076), the pitch gate (D-078) or the gladiator
+ * pit's arch (D-114).
  */
-export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder | PitchOccluder;
+export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder | PitchOccluder | ArenaPitOccluder;
 
 /** A street occluder that also names the building it fades. */
 export interface BuildingOccluder extends Occluder {
@@ -182,10 +185,18 @@ export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: nu
   // The Privacy Plaza's paving is level with the pavement (D-076), and so is
   // the hidden stair's top step (D-107).
   if (kind === 'bunker') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'stairhead' ? PAVEMENT_HEIGHT : 0;
+  // The gladiator pit's threshold too (D-114); its rim and bowl are solid.
+  if (kind === 'pit') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'pitstep' ? PAVEMENT_HEIGHT : 0;
   return kind === 'sidewalk' || kind === 'plaza' ? PAVEMENT_HEIGHT : 0;
 }
 
-export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView {
+/** What the street reads from its host beyond the map and labels. */
+export interface StreetBuildOptions {
+  /** Reduced motion: the pit's braziers flicker slowly (D-114). Never off either way. */
+  readonly reducedMotion?: () => boolean;
+}
+
+export function buildStreet(map: DistrictMap, labels: LabelFactory, options: StreetBuildOptions = {}): StreetView {
   const res = new ResourceBag();
   const ground = new Group();
   ground.name = 'street:ground';
@@ -214,8 +225,9 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     }
 
     for (const door of map.doors) {
-      // The hidden stair has no portal: nothing marks it (D-107).
-      if (door.building === BUNKER_BUILDING) continue;
+      // The hidden stair has no portal: nothing marks it (D-107). The
+      // gladiator pit's door is its own arch (D-114).
+      if (door.building === BUNKER_BUILDING || door.building === ARENA_PIT_BUILDING) continue;
       const footprint = footprints.find((candidate) => doorInside(candidate, door));
       const portal = buildDoorPortal(door, footprint ? built.get(footprint) : undefined, res);
       doors.add(portal.group);
@@ -304,6 +316,21 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     // ground. No label and no sign: nothing here names it.
     buildBunkerEntrance(map, res, { ground, animators, floorHeight: PAVEMENT_HEIGHT });
 
+    // The gladiator pit (D-114), in its own module: the sunken bowl, the rim
+    // and its braziers, the steps, and the arch with its banners and sign,
+    // merged into the street's groups. The arch fades like the plaza gateway.
+    const pitOccluders: ArenaPitOccluder[] = [];
+    buildArenaPit(map, labels, res, {
+      ground,
+      labels: signs,
+      textLabels,
+      animators,
+      occluders: pitOccluders,
+      floorHeight: PAVEMENT_HEIGHT,
+      ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+    });
+    occluders.push(...pitOccluders);
+
     // The football pitch (D-078), likewise in its own module and merged into
     // the street's groups: its field, stands, goals, fence and scoreboard.
     const pitchOccluders: PitchOccluder[] = [];
@@ -378,7 +405,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
  * tiles are laid by pitch-builder.ts (D-078), as the plaza's are by
  * plaza-builder.ts.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch' | 'bunker';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch' | 'bunker' | 'pit';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -402,6 +429,8 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   if (kind === 'turf' || kind === 'walkway' || kind === 'footing') return 'pitch';
   // And the hidden stair, its cut and the vending machine's pad (D-107).
   if (kind === 'stairhead' || kind === 'service') return 'bunker';
+  // And the gladiator pit, its rim, sunken bowl and threshold (D-114).
+  if (kind === 'pitrim' || kind === 'pitbowl' || kind === 'pitstep') return 'pit';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
   if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
@@ -647,6 +676,10 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
             break;
           case 'bunker':
             // Laid by bunker-builder.ts: the stair's slab and cut (D-107).
+            break;
+          case 'pit':
+            // Laid by arena-pit-builder.ts: the rim, the bowl below the lawn
+            // and the threshold (D-114).
             break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'

@@ -333,7 +333,7 @@ describe('the jump in the session (D-097)', () => {
 
 describe('the jump everywhere the avatar walks (D-111)', () => {
   it('covers every ground floor a World can build, the bunker and the opened Vault included', () => {
-    expect(GROUND_FLOORS).toEqual(expect.arrayContaining(['bank', 'bridge', 'exchange', 'post-office', 'bunker', 'vault']));
+    expect(GROUND_FLOORS).toEqual(expect.arrayContaining(['bank', 'bridge', 'exchange', 'post-office', 'bunker', 'arena', 'vault']));
   });
 
   it.each(SCENES)('takes off in $name (shared: $shared), the same jump, without moving the player', (scene) => {
@@ -342,9 +342,11 @@ describe('the jump everywhere the avatar walks (D-111)', () => {
     expect(world.session.area).toBe(scene.area);
     if (scene.level !== undefined) expect(world.session.level).toBe(scene.level);
     const before = world.session.player;
+    // The arena's arrival leap down from the pit's arch is the view's jump too (D-114).
+    const leaps = world.jumps();
     world.keyboard.space();
     expect(world.session.jump).toBe('airborne');
-    expect(world.jumps()).toBe(1);
+    expect(world.jumps()).toBe(leaps + 1);
     // The World always tells the Shell; the Shell forwards it to the lobby
     // only from a shared area (the presence controller and LobbyClient.jump).
     expect(world.jumpEvents()).toBe(1);
@@ -353,27 +355,29 @@ describe('the jump everywhere the avatar walks (D-111)', () => {
     expect(world.session.area).toBe(scene.area);
     expect(world.session.jump).toBe('ready');
     world.keyboard.space();
-    expect(world.jumps()).toBe(2);
+    expect(world.jumps()).toBe(leaps + 2);
   });
 
   it.each(SCENES)('yields in $name while a panel or Shell claim holds the keyboard', (scene) => {
     const world = setup(scene.options);
     scene.arrive(world);
+    const leaps = world.jumps();
     world.internals.inputGate.suspend();
     world.keyboard.space();
-    expect(world.jumps()).toBe(0);
+    expect(world.jumps()).toBe(leaps);
     expect(world.jumpEvents()).toBe(0);
   });
 
   it.each(GROUND_FLOORS)('yields in the %s while its counter holds the controls', (building) => {
     const world = setup({ vaultOpen: true });
     enter(world, building);
+    const leaps = world.jumps();
     world.shellEmit('world:control-owner', { building, owner: 'shell' });
     world.keyboard.space();
-    expect(world.jumps()).toBe(0);
+    expect(world.jumps()).toBe(leaps);
     world.shellEmit('world:control-owner', { building, owner: 'world' });
     world.keyboard.space();
-    expect(world.jumps()).toBe(1);
+    expect(world.jumps()).toBe(leaps + 1);
   });
 
   /**
@@ -424,5 +428,7 @@ describe('the jump everywhere the avatar walks (D-111)', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
-  });
+    // The arena (D-114) is a 41 x 33 room with a long front of solid tiles:
+    // the same check, with the time it needs under a loaded suite.
+  }, 60_000);
 });

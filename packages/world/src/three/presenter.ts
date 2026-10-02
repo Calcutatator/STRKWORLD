@@ -1,5 +1,5 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import type { AvatarSpriteKey, BuildingId, SandboxColumn, StationId } from '@strkworld/shared';
+import { ARENA_SWING_MS, arenaTileAt, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_LEVELS,
@@ -21,6 +21,9 @@ import { buildFootball, type FootballView } from './football-view.js';
 import { avatarFigureHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
+import { arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
+import { createArenaFx, type ArenaFx, type RemoteSwingPort } from './arena-fx.js';
+import type { ArenaViewFrame } from '../arena-channel.js';
 import { buildAvatarStudio } from './studio-builder.js';
 import {
   REMOTE_FALL_GRAVITY,
@@ -37,6 +40,7 @@ import { createJumpShadow } from './jump-shadow.js';
 import { EMPTY_PLAZA_STATS } from '../plaza-stations.js';
 import { createInteractionPromptView } from './interaction-prompt.js';
 import type {
+  AttackPose,
   AvatarFigure,
   AvatarFigureFactory,
   ImageTextureLoader,
@@ -45,6 +49,7 @@ import type {
   RoomView,
   StreetView,
   StudioView,
+  TextLabel,
 } from './types.js';
 
 /**
@@ -126,6 +131,49 @@ const MAX_HOP_RISE = 1.5;
 const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
+/** D-114: an arena swing's stages (`ARENA_SWING_MS` in all): wind-up, strike, recover. */
+const SWING_WINDUP_MS = 100;
+const SWING_STRIKE_MS = 120;
+/** D-114: idle this long on an arena tier and the local avatar sits down. */
+export const ARENA_SIT_AFTER_MS = 1500;
+/** D-114: the arena prompt over the local avatar ("E · ENTER THE RING"). */
+const ARENA_PROMPT_STYLE = Object.freeze({
+  lineHeight: 0.26,
+  foreground: '#FFF6E6',
+  background: 'rgba(36,18,10,0.9)',
+  border: '#F56A16',
+  font: 'sans',
+  cornerRadius: 0.35,
+} as const);
+const FACING_YAW: Readonly<Record<Facing, number>> = Object.freeze({
+  down: 0,
+  up: Math.PI,
+  left: -Math.PI / 2,
+  right: Math.PI / 2,
+});
+
+/**
+ * D-114: the walking-surface height inside a room, in world units, at `x`,
+ * `z` (world units). Interiors are flat except the arena, whose stairs and
+ * tiers are walkable surfaces at a height (`arenaSurfaceHeightAt`).
+ */
+export function roomSurfaceHeightAt(room: string | null, x: number, z: number): number {
+  if (room !== 'arena') return 0;
+  const tileX = Math.floor(x - ROOM_ORIGIN.x / PIXELS_PER_UNIT);
+  const tileY = Math.floor(z - ROOM_ORIGIN.y / PIXELS_PER_UNIT);
+  return arenaSurfaceHeightAt(tileX, tileY);
+}
+
+/** D-114: the arena swing pose `elapsed` ms after the swing began, or null once it is over. */
+export function arenaSwingPose(elapsed: number): AttackPose | null {
+  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= ARENA_SWING_MS) return null;
+  if (elapsed < SWING_WINDUP_MS) return { stage: 'windup', progress: elapsed / SWING_WINDUP_MS };
+  if (elapsed < SWING_WINDUP_MS + SWING_STRIKE_MS) {
+    return { stage: 'strike', progress: (elapsed - SWING_WINDUP_MS) / SWING_STRIKE_MS };
+  }
+  const recover = ARENA_SWING_MS - SWING_WINDUP_MS - SWING_STRIKE_MS;
+  return { stage: 'recover', progress: Math.min(1, (elapsed - SWING_WINDUP_MS - SWING_STRIKE_MS) / recover) };
+}
 
 /**
  * A building's roof deck height above the street, in world units, if `x`, `z`
@@ -154,9 +202,14 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   const vaultOpen = options.vaultOpen === true;
   const streetMap = createStreetMap({ vaultOpen });
-  const street: StreetView = buildStreet(streetMap, options.labels);
+  const street: StreetView = buildStreet(
+    streetMap,
+    options.labels,
+    options.reducedMotion ? { reducedMotion: options.reducedMotion } : {},
+  );
   // Pavement is raised; stand feet on it. Interiors and the Studio floor are
-  // flat. On the sandbox, anyone stands on the tallest stack their body
+  // flat, except the arena's stairs and tiers (D-114, `roomSurfaceHeightAt`).
+  // On the sandbox, anyone stands on the tallest stack their body
   // overlaps — the same rule the session applies to the local player.
   // Reused probe: the remote layer asks this every frame for every peer.
   const probe = { x: 0, y: 0 };
@@ -175,15 +228,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
    * players and the street's passers-by below, and never a street player
    * over the tower's footprint, so a peer over the footprint is on the deck
    * and any other is on the street. Off a roof the lobby sends only the
-   * player's own area: the street's surface, or a flat floor indoors and in
-   * the Studio.
+   * player's own area: the street's surface, a flat floor indoors and in
+   * the Studio, or the arena's sand, stairs and tiers (D-114).
    */
   const remoteHeight = (x: number, z: number): number => {
     if (rooftop !== null) {
       const deck = rooftopHeightAt(rooftop, x, z);
       if (deck !== null) return deck;
     }
-    return streetVisible ? streetHeight(x, z) : 0;
+    return streetVisible ? streetHeight(x, z) : roomSurfaceHeightAt(visibleRoom, x, z);
   };
 
   // Every interior, keyed by `roomKey`: each ground floor (the Vault's only
@@ -199,7 +252,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const images = options.images ?? null;
   // D-107: the hidden room's flickering tube holds steady for reduced motion.
   const roomOptions = options.reducedMotion ? { reducedMotion: options.reducedMotion } : {};
+  // D-114: the arena is a big room most sessions never enter, so it is built
+  // the first time it is shown, not with the street.
+  const lazyRooms = new Map<string, () => RoomView>();
   for (const definition of fixedRoomDefinitionsFor({ vaultOpen })) {
+    if (definition.building === 'arena') {
+      lazyRooms.set(roomKey(definition.building), () =>
+        buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images, roomOptions),
+      );
+      continue;
+    }
     addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images, roomOptions));
     for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
       if (level.rooftop) continue;
@@ -209,6 +271,45 @@ export function createPresenter(options: PresenterOptions): Presenter {
       );
     }
   }
+
+  // D-114: the arena's combat feedback (C's arena-fx.ts), mounted in the
+  // arena's room once that is built, so it shows and hides with it.
+  let arenaRoom: ArenaRoomView | null = null;
+  const arenaFx: ArenaFx = createArenaFx({
+    reducedMotion: () => {
+      try {
+        return options.reducedMotion?.() === true;
+      } catch {
+        return false;
+      }
+    },
+  });
+  disposers.push(() => {
+    arenaFx.group.removeFromParent();
+    arenaFx.dispose();
+  });
+
+  /** The last stations each building was drawn with, for a room built later. */
+  const lastStations = new Map<BuildingId, readonly FixedRoomStationPresentation[]>();
+  let arenaGate: 'open' | 'busy' = 'open';
+  /** A room's view, building a lazy one (the arena) on first use. */
+  const ensureRoom = (key: string): RoomView | undefined => {
+    const existing = rooms.get(key);
+    if (existing) return existing;
+    const build = lazyRooms.get(key);
+    if (!build) return undefined;
+    lazyRooms.delete(key);
+    const room = build();
+    addRoom(key, room);
+    const stations = lastStations.get(room.building);
+    if (stations) room.setStations(stations);
+    if (key === 'arena') {
+      arenaRoom = room as ArenaRoomView;
+      arenaRoom.fxMount?.add(arenaFx.group);
+      arenaRoom.setGate?.(arenaGate);
+    }
+    return room;
+  };
 
   const studio: StudioView = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, options.figures, options.labels);
   studio.sync({ visible: false, highlightedFigure: null });
@@ -277,6 +378,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
    */
   let jumpRaise = 0;
   let targetYaw = 0;
+  /** D-114: time since the local avatar's arena swing began, or null. */
+  let swingElapsed: number | null = null;
+  /** D-114: the last ring frame: the fighter holds the battle stance. */
+  let arenaFrame: ArenaViewFrame | null = null;
+  /** D-114: how long the local avatar has stood still on an arena tier. */
+  let idleOnTier = 0;
+  let arenaPrompt: TextLabel | null = null;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
   let cameraBounds: CameraBounds | null = null;
@@ -327,6 +435,47 @@ export function createPresenter(options: PresenterOptions): Presenter {
     jumpClimbed = false;
     jumpRaise = 0;
     jumpShadow.place(0, 0, 0, 0);
+    // The arena's frame, prompt and swing belong to the session that set them (D-114).
+    swingElapsed = null;
+    arenaFrame = null;
+    idleOnTier = 0;
+    if (arenaPrompt) arenaPrompt.object.visible = false;
+    arenaGate = 'open';
+    arenaRoom?.setGate('open');
+    arenaFx.sync(null, null);
+  };
+
+  /** D-114: peers' swings, through the remote layer once it can play them (C). */
+  /**
+   * D-114: peers' swings and the fighter's battle stance, through the remote
+   * layer once it can show them (C's remote-avatars.ts). Optional members are
+   * read at call time, so the port works with any layer.
+   */
+  const remoteSwings = (): RemoteSwingPort | null => {
+    const layer = remote as
+      | (RemoteAvatarLayer3D & { playSwing?: (gameId: GameId) => void; setFighter?: (gameId: GameId | null) => void })
+      | null;
+    if (!layer) return null;
+    const port = {
+      playSwing(gameId: GameId) {
+        layer.playSwing?.(gameId);
+      },
+      setFighter(gameId: GameId | null) {
+        layer.setFighter?.(gameId);
+      },
+    };
+    return port;
+  };
+
+  /**
+   * D-114: whether a World pixel point is an arena seat (a tier tile), while
+   * the arena is the room shown: remote spectators standing still there sit.
+   */
+  const arenaSeatAt = (xPx: number, yPx: number): boolean => {
+    if (streetVisible || visibleRoom !== 'arena' || !Number.isFinite(xPx) || !Number.isFinite(yPx)) return false;
+    const tileX = Math.floor((xPx - ROOM_ORIGIN.x) / PIXELS_PER_UNIT);
+    const tileY = Math.floor((yPx - ROOM_ORIGIN.y) / PIXELS_PER_UNIT);
+    return arenaTileAt(tileX, tileY) === 'tier';
   };
 
   const retireRemote = (): void => {
@@ -336,6 +485,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     root.remove(layer.group);
     layer.destroy();
   };
+
+  /** Where the local avatar's feet stand in the room it is in: 0 except on the arena's stairs and tiers. */
+  const roomFeet = (): number => (streetVisible ? 0 : roomSurfaceHeightAt(visibleRoom, ground.x, ground.z));
 
   const visibleOccluders = (): readonly Occluder[] => {
     const active: Occluder[] = [];
@@ -347,7 +499,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   return {
     get player() {
-      return { ground, yaw, elevation: elevationShown };
+      // Indoors the camera follows the feet up the arena's tiers (D-114).
+      return { ground, yaw, elevation: streetVisible ? elevationShown : feet };
     },
     get jumpLift() {
       return lift;
@@ -370,11 +523,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
       retireRemote();
       resetPresentation();
       if (remotePeers) {
+        // D-114: remote spectators sit on the arena's tiers (the layer reads
+        // `seatAt` once C's remote-avatars.ts takes it; others ignore it).
+        const seats: Record<string, unknown> = { seatAt: arenaSeatAt };
         const layer = createRemoteAvatarLayer3D({
           source: remotePeers,
           figures: options.figures,
           surfaceHeight: remoteHeight,
           ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+          ...seats,
         });
         remote = layer;
         root.add(layer.group);
@@ -423,11 +580,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
         showRoom(building, level) {
           if (!live()) return;
           visibleRoom = building === null ? null : roomKey(building, level);
+          if (visibleRoom !== null) ensureRoom(visibleRoom);
           for (const [key, room] of rooms) room.group.visible = key === visibleRoom;
         },
         renderRoom(building, stations: readonly FixedRoomStationPresentation[]) {
           if (!live()) return;
           // Every floor of the building: each view draws only its own stations.
+          lastStations.set(building, stations);
           for (const room of rooms.values()) if (room.building === building) room.setStations(stations);
         },
         showRooftop(building) {
@@ -532,6 +691,52 @@ export function createPresenter(options: PresenterOptions): Presenter {
           if (!live()) return;
           football.celebrate(moment);
         },
+        arenaGateObject() {
+          if (!live()) return null;
+          ensureRoom('arena');
+          return arenaRoom?.gate ?? null;
+        },
+        syncArena(frame) {
+          if (!live()) return;
+          arenaFrame = frame;
+          arenaGate = frame?.gate === 'busy' ? 'busy' : 'open';
+          arenaRoom?.setGate(arenaGate);
+          arenaFx.sync(frame, remoteSwings());
+        },
+        setArenaPrompt(text) {
+          if (!live()) return;
+          const shown = typeof text === 'string' && text.trim().length > 0 ? text : null;
+          if (shown === null) {
+            if (arenaPrompt) arenaPrompt.object.visible = false;
+            return;
+          }
+          if (!arenaPrompt) {
+            arenaPrompt = options.labels.floating(shown, ARENA_PROMPT_STYLE);
+            arenaPrompt.object.userData['arena'] = 'prompt';
+            avatar.object.add(arenaPrompt.object);
+            const label = arenaPrompt;
+            disposers.push(() => {
+              label.object.removeFromParent();
+              label.dispose();
+            });
+          } else {
+            arenaPrompt.setText(shown);
+          }
+          arenaPrompt.object.position.set(0, avatarFigureHeight(avatar.look) + 0.55, 0);
+          arenaPrompt.object.visible = true;
+        },
+        playerSwing() {
+          if (!live()) return;
+          swingElapsed = 0;
+        },
+        setPlayerFacing(facing) {
+          if (!live()) return;
+          const turned = FACING_YAW[facing];
+          if (turned === undefined) return;
+          targetYaw = turned;
+          yaw = turned;
+          avatar.object.rotation.y = yaw;
+        },
         playerJump() {
           if (!live()) return;
           // The session allows one jump at a time; a call mid-air restarts it.
@@ -594,7 +799,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
       }
       // Step up and down kerbs quickly rather than popping 8 cm in one frame.
       const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
-      const kerb = streetVisible && !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0;
+      // Indoors, the arena's stairs and tiers ease the same way (D-114).
+      const kerb = streetVisible
+        ? !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0
+        : roomFeet();
       feet = pendingSnap ? kerb : feet + (kerb - feet) * (1 - Math.exp(-dt / 45));
       // D-097: the jump rides on top of whatever the feet stand on. It never
       // moves the avatar across the ground: the session does that, as ever.
@@ -613,13 +821,33 @@ export function createPresenter(options: PresenterOptions): Presenter {
       const standOn = feet + (streetVisible ? elevationShown : 0);
       avatar.object.position.y = standOn + lift;
       jumpShadow.place(ground.x, standOn, ground.z, lift, jumpHeight);
-      avatar.update(dt, { moving, sprinting: moving && motion.sprinting, jump: pose });
+      // D-114: the arena swing, the fighter's battle stance, and sitting on a tier.
+      let attack: AttackPose | null = null;
+      if (swingElapsed !== null) {
+        swingElapsed += dt;
+        attack = arenaSwingPose(swingElapsed);
+        if (attack === null) swingElapsed = null;
+      }
+      const inArena = !streetVisible && visibleRoom === 'arena';
+      const onTier = inArena && roomFeet() >= 0.8 - 1e-6;
+      idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
+      const guard = inArena && arenaFrame?.selfIsChallenger === true &&
+        (arenaFrame.phase === 'countdown' || arenaFrame.phase === 'fighting');
+      avatar.update(dt, {
+        moving,
+        sprinting: moving && motion.sprinting,
+        jump: pose,
+        attack,
+        guard,
+        seated: idleOnTier >= ARENA_SIT_AFTER_MS,
+      });
       if (streetVisible) {
         street.update(dt);
         sandbox.update(dt);
         football.update(dt);
       }
       if (visibleRoom) rooms.get(visibleRoom)?.update(dt);
+      if (visibleRoom === 'arena') arenaFx.update(dt);
       if (studioVisible) studio.update(dt);
       interactionPrompt.update(dt);
       remote?.update(dt);
@@ -636,8 +864,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
         if (value !== 1) occluder.setOpacity(1);
         opacity.delete(occluder);
       }
-      // Sight lines start from where the avatar is drawn, sandbox height included.
-      const base = streetVisible ? elevationShown : 0;
+      // Sight lines start from where the avatar is drawn, sandbox height
+      // included, and the arena's tiers indoors (D-114).
+      const base = streetVisible ? elevationShown : feet;
       for (const occluder of active) {
         const blocked = SIGHT_HEIGHTS.some((height) =>
           segmentHitsBox(camera, { x: ground.x, y: base + height, z: ground.z }, occluder),

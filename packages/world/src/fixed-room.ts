@@ -5,7 +5,21 @@
  */
 
 import { promptLabel } from './interaction.js';
-import { STREET_ORIGIN_X, type BuildingId, type EventBus, type ShellEvents, type StationId, type WorldEvents } from '@strkworld/shared';
+import {
+  ARENA_BOX,
+  ARENA_EXIT,
+  ARENA_HEIGHT,
+  ARENA_SPAWN,
+  ARENA_WIDTH,
+  STREET_ORIGIN_X,
+  arenaTileAt,
+  isArenaFloorKind,
+  type BuildingId,
+  type EventBus,
+  type ShellEvents,
+  type StationId,
+  type WorldEvents,
+} from '@strkworld/shared';
 
 export const FIXED_ROOM_TILE_SIZE = 32;
 
@@ -725,12 +739,88 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
   ],
 } as const satisfies FixedRoomDefinition);
 
+/**
+ * D-114: the arena's one station, the emperor's box in the north podium. A
+ * ground floor needs a station; this one is reserved like the bunker's lift,
+ * so it is always locked and walking up to it only says it is closed.
+ */
+export const ARENA_BOX_STATION: StationId = 'arena:box';
+
+/** D-117: the box's one-line prompt ("E · EMPEROR'S BOX"); E only shows it is closed. */
+export const ARENA_BOX_PROMPT = "EMPEROR'S BOX";
+
+/**
+ * The solid tiles strictly inside the arena's border, as rectangles: every
+ * tile `arenaTileAt` does not call floor (void, arcade, podium, fence, gate,
+ * the dummy, the tunnel walls) and the ring interior, which only the current
+ * fighter walks (the session's ring hook opens it, D-114). The box is the
+ * station, so it is left out. Row runs, each merged down into the rows below
+ * that repeat it exactly, so the room's checks walk a few dozen rectangles,
+ * not hundreds. Generated from the shared classifier, so the room and
+ * `ARENA_PRESENCE_GRID` cannot drift (presence-area-grids.test.ts).
+ */
+function arenaFixtures(): FixedRoomFixture[] {
+  const done: { x: number; y: number; width: number; height: number }[] = [];
+  let open: { x: number; y: number; width: number; height: number }[] = [];
+  for (let y = 1; y < ARENA_HEIGHT - 1; y++) {
+    const row: { x: number; width: number }[] = [];
+    let start = -1;
+    for (let x = 1; x <= ARENA_WIDTH - 1; x++) {
+      const solid =
+        x < ARENA_WIDTH - 1 &&
+        !(x === ARENA_BOX.x && y === ARENA_BOX.y) &&
+        !isArenaFloorKind(arenaTileAt(x, y));
+      if (solid && start < 0) start = x;
+      if (!solid && start >= 0) {
+        row.push({ x: start, width: x - start });
+        start = -1;
+      }
+    }
+    const next: typeof open = [];
+    for (const run of row) {
+      const above = open.find((rect) => rect.x === run.x && rect.width === run.width);
+      if (above) {
+        above.height += 1;
+        next.push(above);
+      } else {
+        next.push({ x: run.x, y, width: run.width, height: 1 });
+      }
+    }
+    for (const rect of open) if (!next.includes(rect)) done.push(rect);
+    open = next;
+  }
+  done.push(...open);
+  return done.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+/**
+ * D-114: the gladiator pit's arena, a 41 x 33 stadium oval drawn at the
+ * interiors' origin (see `@strkworld/shared`'s arena.ts for the geometry).
+ * The pit's arch on the street opens onto the south tunnel; the sand, the
+ * podium stairs and five tiers are walkable, the ring interior only for the
+ * fighter. A shared presence area like the bunker (D-112), so everyone in
+ * it is drawn. No money anywhere (D-024), and the one station is reserved.
+ * Its builder is three/arena-room.ts.
+ */
+export const ARENA_ROOM_DEFINITION = freezeAuthoredRoom({
+  building: 'arena',
+  width: ARENA_WIDTH,
+  height: ARENA_HEIGHT,
+  spawn: { x: ARENA_SPAWN.x, y: ARENA_SPAWN.y },
+  exit: { x: ARENA_EXIT.x, y: ARENA_EXIT.y, width: ARENA_EXIT.width, height: ARENA_EXIT.height },
+  stations: [
+    { station: 'arena:box', label: "EMPEROR'S BOX\nCLOSED", x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true, prompt: ARENA_BOX_PROMPT },
+  ],
+  fixtures: arenaFixtures(),
+} satisfies FixedRoomDefinition);
+
 export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
   exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
   bunker: BUNKER_ROOM_DEFINITION,
+  arena: ARENA_ROOM_DEFINITION,
 } as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>);
 
 /** Floors above the ground floor, by building. Only the Exchange tower has any. */
@@ -965,13 +1055,16 @@ function validateFixtures(definition: FixedRoomFloorDefinition, exit: FixedRoomR
     }
   }
   if (fixtures.length === 0) return;
+  // Blocked cells, laid once: a big room (the arena, D-114) has thousands of
+  // tiles and dozens of fixtures, and the walk asks about each tile 4 times.
+  const blocked = new Uint8Array(width * height);
+  for (const rect of [...definition.stations, ...fixtures]) {
+    forEachCell(rect, (x, y) => {
+      if (x >= 0 && y >= 0 && x < width && y < height) blocked[y * width + x] = 1;
+    });
+  }
   const open = (x: number, y: number): boolean =>
-    x > 0 &&
-    y > 0 &&
-    x < width - 1 &&
-    y < height - 1 &&
-    !definition.stations.some((station) => isInside(station, x, y)) &&
-    !fixtures.some((fixture) => isInside(fixture, x, y));
+    x > 0 && y > 0 && x < width - 1 && y < height - 1 && blocked[y * width + x] === 0;
   const reached = new Set<number>([definition.spawn.y * width + definition.spawn.x]);
   const queue: [number, number][] = [[definition.spawn.x, definition.spawn.y]];
   while (queue.length > 0) {

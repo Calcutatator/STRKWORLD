@@ -79,14 +79,17 @@ describe('buildStreet', () => {
   it('splits the district into ground, door and label groups', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
-    // One portal per building; the hidden stair has none (D-107).
+    // One portal per building; the hidden stair has none (D-107), and the
+    // gladiator pit's door is its own arch (D-114).
     expect(view.doors.children).toHaveLength(5);
     // Five facade signs, four brand plates, the sandbox square's sign and its
     // gate's, and the label on the Exchange tower's roof lift; then the Privacy
     // Plaza's (D-076): its gateway sign, the monument's three faces, the
     // table's card (its E prompt is the World's shared one, D-117); then the
-    // football pitch's (D-078): its scoreboard and its gate's board.
-    expect(view.labels.children).toHaveLength(19);
+    // football pitch's (D-078): its scoreboard and its gate's board; then the
+    // gladiator pit's arch sign (D-114).
+    expect(view.labels.children).toHaveLength(20);
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'arena-pit')).toHaveLength(1);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(5);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'pitch').map((child) => child.userData['pitch'])).toEqual(['scoreboard', 'gate']);
     const names = view.ground.children.map((child) => child.name);
@@ -200,8 +203,8 @@ describe('buildStreet', () => {
     const gates = occluders.filter((occluder): occluder is GateOccluder => occluder.kind === 'sandbox-gate');
     expect(gates).toHaveLength(1);
     // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts)
-    // and the pitch gate (D-078, pitch-builder.test.ts).
-    expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch')).toHaveLength(PLAN.length + 1);
+    // the pitch gate (D-078, pitch-builder.test.ts) and the pit's arch (D-114, arena-pit-builder.test.ts).
+    expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch' && occluder.kind !== 'arena-pit')).toHaveLength(PLAN.length + 1);
     const gate = gates[0]!;
     const mesh = meshNamed(view.ground, 'street:sandbox-gate');
     expect(gate.object).toBe(mesh);
@@ -341,8 +344,9 @@ describe('buildStreet', () => {
   it('positions a door portal over each door zone, the Vault marked locked', () => {
     const { map, view } = build();
     view.doors.updateMatrixWorld(true);
-    // The hidden stair's door has no portal (D-107); its test is below.
-    for (const door of map.doors.filter((candidate) => candidate.building !== 'bunker')) {
+    // The hidden stair's door has no portal (D-107); its test is below. The
+    // pit's arch is its door (D-114, arena-pit-builder.test.ts).
+    for (const door of map.doors.filter((candidate) => candidate.building !== 'bunker' && candidate.building !== 'arena')) {
       const portal = view.doors.children.find((child) => child.userData['building'] === door.building);
       expect(portal, door.building).toBeDefined();
       expect(portal!.position.x).toBeCloseTo(door.x + door.width / 2);

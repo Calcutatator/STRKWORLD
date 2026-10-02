@@ -101,6 +101,8 @@ describe('the street is walkable', () => {
       ['vault', 41, 10],
       // The hidden stair's top step in the alley across from the plaza (D-107).
       ['bunker', 10, 10],
+      // The gladiator pit's arch on the south lawn (D-114).
+      ['arena', 38, 20],
     ]);
   });
 
@@ -179,9 +181,9 @@ describe('the sandbox square has one way in (D-060)', () => {
 });
 
 describe('every building is present and reachable', () => {
-  it('has a door for all five buildings, and the hidden stair\'s (D-107)', () => {
+  it('has a door for all five buildings, the hidden stair\'s (D-107) and the pit\'s arch (D-114)', () => {
     const withDoors = map.doors.map((d) => d.building).sort();
-    expect(withDoors).toEqual([...BUILDINGS, 'bunker'].sort());
+    expect(withDoors).toEqual([...BUILDINGS, 'bunker', 'arena'].sort());
   });
 
   it('locks the Vault and only the Vault', () => {
@@ -190,15 +192,16 @@ describe('every building is present and reachable', () => {
     expect(locked).toEqual(['vault']);
 
     const unlocked = map.doors.filter((d) => !d.locked).map((d) => d.building).sort();
-    // The hidden stair is never locked: it is found, not opened (D-107).
-    expect(unlocked).toEqual([...ACTIVE_BUILDINGS, 'bunker'].sort());
+    // The hidden stair is never locked: it is found, not opened (D-107); nor is the pit (D-114).
+    expect(unlocked).toEqual([...ACTIVE_BUILDINGS, 'bunker', 'arena'].sort());
   });
 
   it('places every door on a tile the player can stand on', () => {
     // A door embedded in a solid facade is unreachable, and it looks fine on
     // screen — which is why this is a test rather than a look.
     for (const door of map.doors) {
-      const approach = { x: door.x, y: door.y + 1 };
+      // The pit's arch is approached from the path north of it (D-114).
+      const approach = door.building === 'arena' ? { x: door.x, y: door.y - 1 } : { x: door.x, y: door.y + 1 };
       expect(isSolidAt(map, approach.x, approach.y)).toBe(false);
     }
   });
@@ -447,7 +450,8 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
     // export will use is already the one under test.
     // The hidden stair's door is added after the layer, which admits only
     // `BUILDINGS` (D-107).
-    expect(map.doors.filter((d) => d.building !== 'bunker').map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
+    // So is the gladiator pit's arch (D-114).
+    expect(map.doors.filter((d) => d.building !== 'bunker' && d.building !== 'arena').map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
   });
 
   // Regression: the facade row was filled solid and the door was only a trigger
