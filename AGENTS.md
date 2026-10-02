@@ -259,6 +259,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — The arena's combat client renders the server's counters and nothing else; the swing had to be tuned per look to pass the clipping check (D-114, stream C)
+
+- **No guessing.** The damage number is the dummy's HP delta between two ring frames, split across the hits counter's delta (two hits coalesced in one 50 ms patch are two numbers). A counted miss (swings up, HP unchanged) shows nothing. The fighter's own swing is a cosmetic prediction; the server's swing counter plays it for spectators, and the fighter's client skips that echo within 400 ms. The first frame after a join, and a new fight, are baselines, so nobody sees a burst of numbers on arrival.
+- **Stable snapshots for React.** `useSyncExternalStore` needs `getSnapshot` to return the same object while nothing changed. `normalizeArenaRing` builds a fresh frozen object on every call, so the arena controller caches its last reading and returns it while the ring reads the same. Without that the HUD re-renders forever.
+- **Clipping decides the swing.** The chibi head is wider than the shoulders and the arms are 0.31 long, so an overhead chop drives the weapon through the head. The swing draws the arm back and out, then drives it forward past level. The limits by look:
+  - A pole (staff, halberd, bow) is thrust, never drawn back or spread, because its top tilts into the head when the hand moves.
+  - Shoulder gear (a mantle, pauldrons) caps the forward angle at -0.6.
+  - The upper-body twist shrinks while walking, because a coat's tail sweeps into the striding leg.
+  - The head never counter-turns, because a beard pierces a fur collar.
+  - Rigid one-piece legs cannot sit on a bench, so "seated" is a perch: thighs 0.7 forward (a robe's legs 0.58 of that) and the body lowered 0.12.
+
+  Every look passes in the stance, at every swing stage standing and walking, and seated (`tools/avatar-clipping.ts` `arenaPoses`).
+- **The dummy is the room's.** Stream A builds the dummy in the arena room: a group named `arena:dummy`, its origin at the post's foot, next to `arena:fx-mount`. The fx adopts it by dep, or by name once it is mounted beside it. It flashes cloned materials, because the room's materials are shared and the whole stand would otherwise flash.
+- **E is shared.** With the press-E system (D-117):
+  - the gate is a station target (`gateTargets`: CLAIM, or IN USE, which sends nothing);
+  - the attack is an action (`onAttack`);
+  - the session holds `suspend('combat')` from the new round to idle, so E always attacks in a fight.
+
+  Without the system, the session draws its own prompt.
+- **Fonts.** The brand guide says to self-host Jersey 15, VT323 and Silkscreen, but `styles.test.ts` pins "loads no font": no `@font-face`. The HUD names the brand faces first and falls back to system stacks.
+
+*Verified:* the C line of D-114's tests; the full suite and typecheck on this branch, and again with streams A and B merged locally (A, B and C together: 283 files, 6012 tests). Renders of a mid-fight frame from the offline rasterizer, with A's real room, are `renders/arena-fight.png` and `renders/arena-fight-close.png` in the working scratchpad, not committed. Not verified: a real browser.
+
 ### 2026-10-02 — Every `.ts` under the repo is typechecked by the root tsconfig, tools included; a Vite dev page there must pass strict mode (D-113)
 
 The root `tsconfig.json` has no `include`, and `packages/world` has no tsconfig of its own, so the World's `tsc --noEmit` checks every `.ts` file below the repo root, including `packages/world/tools/`. A loose Vite dev page (the brand render tool) dropped there failed with about two dozen errors, almost all `noUncheckedIndexedAccess`. It was made to typecheck rather than excluded. Its `vite.config.mjs` is `.mjs`, so `tsc` skips it. Vitest collects only `*.test.*`, so a tool with no tests adds nothing to the suite. The tool's dev server needs `server.fs.allow` at the repo root (`../../../..`) to serve `src/` and the hoisted `three`.
