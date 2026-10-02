@@ -4,6 +4,7 @@ import {
   Box3,
   BufferGeometry,
   Color,
+  Float32BufferAttribute,
   InstancedMesh,
   LinearFilter,
   LinearMipmapLinearFilter,
@@ -20,12 +21,15 @@ import {
   Vector3,
 } from 'three';
 import {
+  BANK_ROOM_DEFINITION,
   EXCHANGE_DEGEN_LEVEL,
   EXCHANGE_DEGEN_STATION,
   FIXED_ROOM_DEFINITIONS,
   VAULT_BORROW_STATION,
-  VAULT_LENDING_STATION,
+  VAULT_REDEEM_STATION,
+  VAULT_REPAY_STATION,
   VAULT_ROOM_DEFINITION,
+  VAULT_SUPPLY_STATION,
   createFixedRoom,
   createFixedRoomLevel,
   fixedRoomDefinitionsFor,
@@ -161,6 +165,74 @@ function standingApproach(map: FixedRoomLevelMap, station: FixedRoomLevelMap['st
   return tiles;
 }
 
+/**
+ * D-103: one station's slice of the room's shared halo mesh: its colour (as
+ * an sRGB hex), its fill's and edge's opacity, and the box it covers.
+ */
+function haloOf(room: RoomView, station: string): { colour: number; opacity: number; edge: number; box: Box3 } {
+  const { fill, edge } = stationGroup(room, station).userData['halo'] as { fill: [number, number]; edge: [number, number] };
+  const mesh = meshNamed(room.group, ':halos');
+  mesh.updateMatrixWorld(true);
+  const colour = mesh.geometry.getAttribute('color');
+  const position = mesh.geometry.getAttribute('position');
+  const box = new Box3();
+  const vertex = new Vector3();
+  for (const [start, count] of [fill, edge]) {
+    for (let i = start; i < start + count; i++) box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
+  }
+  // Every vertex of a slice carries the same colour; its fill and edge their own alpha.
+  const hex = new Color(colour.getX(fill[0]), colour.getY(fill[0]), colour.getZ(fill[0])).getHex();
+  for (const [start, count] of [fill, edge]) {
+    for (let i = start; i < start + count; i++) expect(new Color(colour.getX(i), colour.getY(i), colour.getZ(i)).getHex()).toBe(hex);
+  }
+  return { colour: hex, opacity: colour.getW(fill[0]), edge: colour.getW(edge[0]), box };
+}
+
+/** World-space vertices of one station's slice of the room's shared halo mesh, fill and edge. */
+function haloVertices(room: RoomView, station: string): Vector3[] {
+  const { fill, edge } = stationGroup(room, station).userData['halo'] as { fill: [number, number]; edge: [number, number] };
+  const mesh = meshNamed(room.group, ':halos');
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const found: Vector3[] = [];
+  for (const [start, count] of [fill, edge]) {
+    for (let i = start; i < start + count; i++) found.push(new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));
+  }
+  return found;
+}
+
+/**
+ * D-103: one counter's share of a room-wide mesh (`:counters` or
+ * `:counter-screens`): the triangles standing over its own tiles, as a mesh
+ * in the same place, so its colours and extent read as before.
+ */
+function counterPart(room: RoomView, map: FixedRoomLevelMap, station: string, suffix = ':counters'): Mesh {
+  const rect = map.stations.find((candidate) => candidate.station === station)!;
+  const source = meshNamed(room.group, suffix);
+  source.updateMatrixWorld(true);
+  const position = source.geometry.getAttribute('position');
+  const colour = source.geometry.getAttribute('color');
+  const positions: number[] = [];
+  const colours: number[] = [];
+  for (let t = 0; t < position.count; t += 3) {
+    const cx = (position.getX(t) + position.getX(t + 1) + position.getX(t + 2)) / 3;
+    const cz = (position.getZ(t) + position.getZ(t + 1) + position.getZ(t + 2)) / 3;
+    if (cx < rect.x || cx > rect.x + rect.width || cz < rect.y - 0.1 || cz > rect.y + rect.height + 0.1) continue;
+    for (let i = t; i < t + 3; i++) {
+      positions.push(position.getX(i), position.getY(i), position.getZ(i));
+      colours.push(colour.getX(i), colour.getY(i), colour.getZ(i));
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colours, 3));
+  const part = new Mesh(geometry, source.material);
+  part.matrixAutoUpdate = false;
+  part.matrix.copy(source.matrixWorld);
+  part.matrixWorld.copy(source.matrixWorld);
+  return part;
+}
+
 /** An image loader whose every request waits until the test settles it: node decodes no images. */
 function deferredImages() {
   const requests: { url: string; resolve(texture: Texture): void; reject(error: unknown): void }[] = [];
@@ -214,17 +286,13 @@ describe('buildFixedRoom', () => {
       }
       // The halo lies on the approach tiles a player can stand on, and only there.
       const tiles = standingApproach(map, station);
-      const halo = new Box3().setFromObject(meshNamed(group, ':halo'));
+      const halo = haloOf(room, station.station).box;
       expect(halo.min.x).toBeCloseTo(OX + Math.min(...tiles.map((tile) => tile.x)), 1);
       expect(halo.max.x).toBeCloseTo(OX + Math.max(...tiles.map((tile) => tile.x)) + 1, 1);
       expect(halo.min.z).toBeCloseTo(OZ + Math.min(...tiles.map((tile) => tile.y)), 1);
       expect(halo.max.z).toBeCloseTo(OZ + Math.max(...tiles.map((tile) => tile.y)) + 1, 1);
       expect(halo.max.y).toBeLessThan(0.05);
-      const fill = meshNamed(group, ':halo');
-      const position2 = fill.geometry.getAttribute('position');
-      const vertex = new Vector3();
-      for (let i = 0; i < position2.count; i++) {
-        vertex.fromBufferAttribute(position2, i).applyMatrix4(fill.matrixWorld);
+      for (const vertex of haloVertices(room, station.station)) {
         // Every vertex on an edge or inside a standing tile, never over furniture.
         const inside = tiles.some((tile) => vertex.x >= OX + tile.x - 1e-6 && vertex.x <= OX + tile.x + 1 + 1e-6 && vertex.z >= OZ + tile.y - 1e-6 && vertex.z <= OZ + tile.y + 1 + 1e-6);
         expect(inside).toBe(true);
@@ -237,7 +305,7 @@ describe('buildFixedRoom', () => {
     const { map, room } = build('bank');
     const group = stationGroup(room, 'bank:shielding');
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
-    const halo = meshNamed(group, ':halo').material as MeshBasicMaterial;
+    const halo = { get opacity() { return haloOf(room, 'bank:shielding').opacity; } };
     const label = floatingLabel(group);
     const locked = { colour: accent.color.getHex(), halo: halo.opacity };
     expect(accent.emissiveIntensity).toBe(0);
@@ -368,13 +436,12 @@ describe('buildFixedRoom', () => {
     expect(NEAR_DEPARTURE_HEADER).toMatchObject({ titleFont: 'mono', uppercase: true, foreground: '#00ec97', background: '#000000' });
     // Locked until the Shell says otherwise, then green; the highlight's halo in the tint.
     const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
-    const halo = meshNamed(group, ':halo').material as MeshBasicMaterial;
     expect(accent.emissiveIntensity).toBe(0);
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
     expect(accent.emissive.getHex()).toBe(new Color(NEAR.green).getHex());
-    expect(halo.color.getHex()).toBe(new Color(NEAR.green).getHex());
+    expect(haloOf(room, 'bridge:deposit').colour).toBe(new Color(NEAR.green).getHex());
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', 'bridge:deposit')));
-    expect(halo.color.getHex()).toBe(new Color(NEAR.greenTint).getHex());
+    expect(haloOf(room, 'bridge:deposit').colour).toBe(new Color(NEAR.greenTint).getHex());
     // The route map on the north wall, self-lit in the measured green, with its
     // aurora and travelling pulse fading with that wall.
     const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
@@ -396,43 +463,47 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it('dresses the Bank staking counter in Endur while the room and its shielding counter keep STRK20', () => {
+  it('dresses the Bank\'s staking and unstaking counters in Endur while the room and its shielding counters keep STRK20', () => {
     const { map, room } = build('bank');
     const staking = stationGroup(room, 'bank:staking');
     const shielding = stationGroup(room, 'bank:shielding');
-    // Its own counter, on its own tiles east of shielding.
+    // Its own counter, on its own tiles east of shielding and unshielding (D-103).
     room.group.updateMatrixWorld(true);
-    const counter = new Box3().setFromObject(meshNamed(staking, ':counter'));
-    expect(counter.min.x).toBeGreaterThanOrEqual(OX + 13);
-    expect(counter.max.x).toBeLessThanOrEqual(OX + 15);
+    const counter = new Box3().setFromObject(counterPart(room, map, 'bank:staking'));
+    expect(counter.min.x).toBeGreaterThanOrEqual(OX + 10);
+    expect(counter.max.x).toBeLessThanOrEqual(OX + 12);
     expect(counter.min.z).toBeGreaterThanOrEqual(OZ + 3);
     expect(counter.max.z).toBeLessThanOrEqual(OZ + 4);
     // A light Endur kiosk (white top and card, mint field, green pill and
     // droplet, dark-green trim and wave), none of which reaches shielding.
     const endur = [ENDUR.card, ENDUR.band, ENDUR.green, ENDUR.greenDeep, ENDUR.dark].map((hex) => new Color(hex).getHex());
-    const stakingColours = coloursOf(meshNamed(staking, ':counter'));
-    for (const hex of endur) expect(stakingColours).toContain(hex);
-    const shieldingColours = coloursOf(meshNamed(shielding, ':counter'));
-    for (const hex of endur) expect(shieldingColours).not.toContain(hex);
+    for (const station of ['bank:staking', 'bank:unstaking']) {
+      const colours = coloursOf(counterPart(room, map, station));
+      for (const hex of endur) expect(colours).toContain(hex);
+    }
+    for (const station of ['bank:shielding', 'bank:unshielding']) {
+      const colours = coloursOf(counterPart(room, map, station));
+      for (const hex of endur) expect(colours).not.toContain(hex);
+    }
     expect(counter.max.y).toBeGreaterThan(1.25);
 
     // Three distinct states in Endur's looks: locked is a calm grey.
     const accent = (group: Object3D) => meshNamed(group, ':status').material as MeshStandardMaterial;
-    const halo = (group: Object3D) => meshNamed(group, ':halo').material as MeshBasicMaterial;
     const state = (group: Object3D) => ({
       colour: accent(group).color.getHex(),
       glow: accent(group).emissiveIntensity,
-      halo: halo(group).color.getHex(),
-      opacity: halo(group).opacity,
+      halo: haloOf(room, group.userData['station'] as string).colour,
+      opacity: haloOf(room, group.userData['station'] as string).opacity,
     });
     const show = (status: 'available' | 'locked', highlighted: 'bank:staking' | null, label = 'STAKE') =>
       room.setStations(
         fixedRoomStationPresentations(map, {
           ...roomState(map, status, highlighted),
-          stations: [
-            { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status },
-            { station: 'bank:staking', label, status },
-          ],
+          stations: map.stations.map((station) => ({
+            station: station.station,
+            label: station.station === 'bank:staking' ? label : station.label,
+            status,
+          })),
         }),
       );
     const locked = state(staking);
@@ -466,10 +537,18 @@ describe('buildFixedRoom', () => {
     expect(floatingLabel(staking).userData['options']).toMatchObject({ foreground: '#0d1a17', font: 'sans', cornerRadius: 0.5 });
     expect(floatingLabel(shielding).userData['options']).toMatchObject({ font: 'mono', uppercase: true });
 
-    // The counter costs five draw calls, and disposes with the room.
+    const unstaking = stationGroup(room, 'bank:unstaking');
+    expect(unstaking.children.find((child) => child.userData['brand'] === 'bank:unstaking')?.userData['text']).toBe('Endur');
+    expect(floatingLabel(unstaking).userData['options']).toEqual(floatingLabel(staking).userData['options']);
+    expect(stationGroup(room, 'bank:unshielding').children.some((child) => child.userData['brand'])).toBe(false);
+
+    // D-103: the counter's own group holds only what its state changes, the
+    // status panel and the beacon (two meshes) with its label and plate; its
+    // desk and halo are in the room's shared meshes. All dispose with the room.
     const meshes: Mesh[] = [];
     staking.traverse((object) => object instanceof Mesh && meshes.push(object));
-    expect(meshes).toHaveLength(5);
+    expect(meshes.map((mesh) => mesh.name)).toEqual(['station:bank:staking:status', 'station:bank:staking:beacon']);
+    for (const suffix of [':counters', ':counter-screens', ':halos']) meshes.push(meshNamed(room.group, suffix));
     const spies = [...new Set(meshes.flatMap((mesh) => [mesh.geometry, mesh.material as Material]))].map((value) =>
       vi.spyOn(value, 'dispose'),
     );
@@ -495,19 +574,21 @@ describe('buildFixedRoom', () => {
       stationLooks: VESU_STATION_LOOKS,
     });
     // Its counters wear Vesu's own look, as the Bank's staking counter wears
-    // Endur's: lending, and borrowing as its twin (D-083).
-    expect(stationTheme(theme, VAULT_LENDING_STATION)).toBe(VESU_STATION_THEME);
+    // Endur's: lending's two, and borrowing's two as their twins (D-083, D-103).
+    expect(stationTheme(theme, VAULT_SUPPLY_STATION)).toBe(VESU_STATION_THEME);
+    expect(stationTheme(theme, VAULT_REDEEM_STATION)).toBe(VESU_STATION_THEME);
     expect(stationTheme(theme, VAULT_BORROW_STATION)).toBe(VESU_BORROW_STATION_THEME);
+    expect(stationTheme(theme, VAULT_REPAY_STATION)).toBe(VESU_BORROW_STATION_THEME);
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
     expect(room.building).toBe('vault');
     expect(room.group.name).toBe('room:vault');
-    // Its lending counter, locked until the Shell opens it, under a label in
+    // Its SUPPLY counter, locked until the Shell opens it, under a label in
     // the style of Vesu's secondary button.
-    const counter = stationGroup(room, VAULT_LENDING_STATION);
+    const counter = stationGroup(room, VAULT_SUPPLY_STATION);
     expect(counter.userData['status']).toBe('locked');
     const label = floatingLabel(counter);
-    expect(label.userData['text']).toBe('SUPPLY / REDEEM');
+    expect(label.userData['text']).toBe('SUPPLY');
     expect(label.userData['options']).toMatchObject({
       font: 'sans',
       cornerRadius: 0.22,
@@ -535,7 +616,10 @@ describe('buildFixedRoom', () => {
     // Locked is a calm grey; ready is the blue; stepping up glows brighter
     // with a deeper halo, which reads on the white floor.
     const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
-    const halo = meshNamed(counter, ':halo').material as MeshBasicMaterial;
+    const halo = {
+      get color() { return new Color(haloOf(room, VAULT_SUPPLY_STATION).colour); },
+      get opacity() { return haloOf(room, VAULT_SUPPLY_STATION).opacity; },
+    };
     accent.color.getHSL(hsl, SRGBColorSpace);
     expect(hsl.s).toBeLessThan(0.25);
     expect(accent.emissiveIntensity).toBe(0);
@@ -543,7 +627,7 @@ describe('buildFixedRoom', () => {
     expect(accent.emissive.getHex()).toBe(new Color(VESU.blue).getHex());
     expect(halo.color.getHex()).toBe(new Color(VESU.blue).getHex());
     const ready = { glow: accent.emissiveIntensity, halo: halo.opacity };
-    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_LENDING_STATION)));
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_SUPPLY_STATION)));
     expect(accent.emissiveIntensity).toBeGreaterThan(ready.glow);
     expect(halo.opacity).toBeGreaterThan(ready.halo);
     expect(halo.color.getHex()).toBe(new Color(VESU.blueText).getHex());
@@ -563,14 +647,14 @@ describe('buildFixedRoom', () => {
     north.setOpacity(1);
     // The counter: a white desk under an ink top, the supply card and the V on
     // it, and Vesu's name on its status panel, as Endur's is on its own.
-    const desk = coloursOf(meshNamed(counter, ':counter'));
+    const desk = coloursOf(counterPart(room, map, VAULT_SUPPLY_STATION));
     for (const hex of [VESU_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
     // Its body is white, shaded towards the floor.
     expect(Math.max(...desk.map((hex) => new Color(hex).getHSL(hsl, SRGBColorSpace).l))).toBeGreaterThan(0.95);
-    const card = coloursOf(meshNamed(counter, ':screen'));
+    const card = coloursOf(counterPart(room, map, VAULT_SUPPLY_STATION, ':counter-screens'));
     for (const hex of [VESU.white, VESU.page, VESU.blueSoft, VESU.blue]) expect(card).toContain(new Color(hex).getHex());
     for (const [, hex] of VESU_MARK.light.bar) expect(card).toContain(new Color(hex).getHex());
-    const plate = counter.children.find((child) => child.userData['brand'] === VAULT_LENDING_STATION)!;
+    const plate = counter.children.find((child) => child.userData['brand'] === VAULT_SUPPLY_STATION)!;
     expect(plate.userData['text']).toBe('vesu');
     expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
     expect(plate.position.z).toBeGreaterThan(meshNamed(counter, ':status').geometry.boundingBox!.max.z);
@@ -581,25 +665,32 @@ describe('buildFixedRoom', () => {
       if (object.userData['kind']) labels.push(object);
     });
     expect(labels.filter((object) => object.userData['kind'] === 'floating').map((object) => object.userData['text'])).toEqual([
-      'SUPPLY / REDEEM',
+      'SUPPLY',
+      'REDEEM',
       'BORROW',
+      'REPAY',
     ]);
-    expect(labels.filter((object) => object.userData['kind'] !== 'floating').map((object) => object.userData['text'])).toEqual([
-      'vesu',
-      'vesu',
-      'vesu',
-      'vesu',
-    ]);
+    // Two wordmarks over the lockers, and one plate per counter.
+    expect(labels.filter((object) => object.userData['kind'] !== 'floating').map((object) => object.userData['text'])).toEqual(
+      Array(6).fill('vesu'),
+    );
     const wordmarks = labels.filter((object) => object.userData['area'] === 'vesu-wordmark');
     expect(wordmarks).toHaveLength(2);
     for (const wordmark of wordmarks) expect(wordmark.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', borderWidth: 0 });
     // Blue leads. Orange and green, the Bank's and the Bridge's and Endur's,
-    // appear only in Vesu's V: the avatar, the desk's mark and the floor's inlay.
-    const anchor = map.stations[0]!.x + map.stations[0]!.width / 2;
+    // appear only in Vesu's V: the avatar behind the middle of the counters,
+    // the marks on the two supply-card desks and the floor's inlay.
+    const anchor = map.width / 2;
     const exit = map.exit!;
+    const deskMark = (station: string) => {
+      const rect = map.stations.find((candidate) => candidate.station === station)!;
+      const cx = rect.x + rect.width / 2;
+      return { x0: cx + 0.4, x1: cx + 0.95, y0: 0.99, y1: 1.4, z0: 3.3, z1: 3.8 };
+    };
     const marks = [
       { x0: anchor - 1, x1: anchor + 1, y0: 0.3, y1: 2, z0: 0.5, z1: 0.8 },
-      { x0: anchor + 0.4, x1: anchor + 0.95, y0: 0.99, y1: 1.4, z0: 3.3, z1: 3.8 },
+      deskMark(VAULT_SUPPLY_STATION),
+      deskMark(VAULT_REDEEM_STATION),
       { x0: exit.x + exit.width / 2 - 0.7, x1: exit.x + exit.width / 2 + 0.7, y0: -0.01, y1: 0.02, z0: exit.y - 2.6, z1: exit.y - 1.2 },
     ];
     const outside: string[] = [];
@@ -625,17 +716,22 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it('gives the Vault\'s borrowing its own counter in Vesu\'s look, a loan card on it (D-083)', () => {
+  it('gives the Vault\'s borrowing and repaying their own counters in Vesu\'s look, a loan card on each (D-083, D-103)', () => {
     const map = createFixedRoom(VAULT_ROOM_DEFINITION);
     const room = buildFixedRoom(map, createNullLabelFactory());
-    const lending = stationGroup(room, VAULT_LENDING_STATION);
+    const lending = stationGroup(room, VAULT_SUPPLY_STATION);
     const borrow = stationGroup(room, VAULT_BORROW_STATION);
+    const repay = stationGroup(room, VAULT_REPAY_STATION);
     expect(borrow.userData['status']).toBe('locked');
-    // The lending counter stays where it was; borrowing stands east of it.
+    // West to east: SUPPLY, REDEEM, BORROW, REPAY, each desk over its own tiles.
     room.group.updateMatrixWorld(true);
-    const centre = (group: Object3D): Vector3 => new Box3().setFromObject(meshNamed(group, ':counter')).getCenter(new Vector3());
-    expect(centre(lending).x - OX).toBeCloseTo(9, 0);
-    expect(centre(borrow).x - OX).toBeCloseTo(15, 0);
+    const centre = (station: string): Vector3 => new Box3().setFromObject(counterPart(room, map, station)).getCenter(new Vector3());
+    expect([VAULT_SUPPLY_STATION, VAULT_REDEEM_STATION, VAULT_BORROW_STATION, VAULT_REPAY_STATION].map((station) => Math.round(centre(station).x - OX))).toEqual([3, 7, 11, 15]);
+    expect(floatingLabel(repay).userData['text']).toBe('REPAY');
+    expect(floatingLabel(repay).userData['options']).toEqual(floatingLabel(borrow).userData['options']);
+    expect(coloursOf(counterPart(room, map, VAULT_REPAY_STATION, ':counter-screens')).sort()).toEqual(
+      coloursOf(counterPart(room, map, VAULT_BORROW_STATION, ':counter-screens')).sort(),
+    );
     // The same label and plate as lending, so the two read as one brand.
     const label = floatingLabel(borrow);
     expect(label.userData['text']).toBe('BORROW');
@@ -645,18 +741,18 @@ describe('buildFixedRoom', () => {
     expect(plate.userData['options']).toMatchObject({ lowercase: true, foreground: '#0a0a0a', background: '#ffffff', titleStretch: 1.4 });
     expect(plate.position.z).toBeGreaterThan(meshNamed(borrow, ':status').geometry.boundingBox!.max.z);
     // The same desk: white under an ink top.
-    const desk = coloursOf(meshNamed(borrow, ':counter'));
+    const desk = coloursOf(counterPart(room, map, VAULT_BORROW_STATION));
     for (const hex of [VESU_BORROW_STATION_THEME.kioskTop, VESU.ink, VESU.fill]) expect(desk).toContain(new Color(hex).getHex());
     // The loan card: two token fields (a night and a blue disc), the health
     // bar's blues from pale to night with its ink marker, the primary button.
     // Only Vesu's own tokens: no V on this desk, and no orange or green.
-    const card = coloursOf(meshNamed(borrow, ':screen'));
+    const card = coloursOf(counterPart(room, map, VAULT_BORROW_STATION, ':counter-screens'));
     const tokens = [VESU.white, VESU.page, VESU.muted, VESU.ink, VESU.blueSoft, VESU.blue, VESU.blueText, VESU.night];
     for (const hex of tokens) expect(card).toContain(new Color(hex).getHex());
     expect(card.filter((hex) => !tokens.some((token) => new Color(token).getHex() === hex))).toEqual([]);
-    expect(coloursOf(meshNamed(lending, ':screen'))).not.toContain(new Color(VESU.night).getHex());
+    expect(coloursOf(counterPart(room, map, VAULT_SUPPLY_STATION, ':counter-screens'))).not.toContain(new Color(VESU.night).getHex());
     // The health bar runs left to right from pale to night along the card's top.
-    const screen = meshNamed(borrow, ':screen');
+    const screen = counterPart(room, map, VAULT_BORROW_STATION, ':counter-screens');
     const position = screen.geometry.getAttribute('position');
     const paint = screen.geometry.getAttribute('color');
     const colour = new Color();
@@ -670,17 +766,20 @@ describe('buildFixedRoom', () => {
       return Math.min(...xs);
     });
     expect([...segmentX].sort((a, b) => a - b)).toEqual(segmentX);
-    // It lights alone: highlighting borrowing leaves lending's halo alone.
+    // It lights alone: highlighting borrowing leaves its neighbours' halos alone.
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_BORROW_STATION)));
-    const halo = (group: Object3D): number => (meshNamed(group, ':halo').material as MeshBasicMaterial).opacity;
-    expect(halo(borrow)).toBeGreaterThan(halo(lending));
-    // It costs what the lending counter costs.
+    const halo = (station: string): number => haloOf(room, station).opacity;
+    expect(halo(VAULT_BORROW_STATION)).toBeGreaterThan(halo(VAULT_SUPPLY_STATION));
+    expect(halo(VAULT_BORROW_STATION)).toBeGreaterThan(halo(VAULT_REPAY_STATION));
+    expect(halo(VAULT_REDEEM_STATION)).toBe(halo(VAULT_REPAY_STATION));
+    // Each costs what the lending counter costs.
     const meshes = (group: Object3D): number => {
       let count = 0;
       group.traverse((object) => object instanceof Mesh && (count += 1));
       return count;
     };
     expect(meshes(borrow)).toBe(meshes(lending));
+    expect(meshes(repay)).toBe(meshes(lending));
     room.dispose();
   });
 
@@ -777,7 +876,8 @@ describe('counters built into their rooms', () => {
     const room = buildFixedRoom(map, createNullLabelFactory());
     room.group.updateMatrixWorld(true);
     const station = map.stations[0]!;
-    const counter = meshNamed(stationGroup(room, station.station), ':counter');
+    // D-103: the room's counters share one lit mesh; these rooms hold one counter each.
+    const counter = meshNamed(room.group, ':counters');
     // Each piece of furniture round the counter stands at least table-high, and the counter desk-high.
     for (const fixture of map.fixtures.filter((candidate) => candidate.prop === undefined)) {
       expect(heightOver(counter, fixture), JSON.stringify(fixture)).toBeGreaterThan(0.75);
@@ -835,8 +935,7 @@ describe('counters built into their rooms', () => {
     const counterColours = (building: string, level = 'ground'): number[] => {
       const map = builtIn.find((candidate) => candidate.building === building && candidate.level === level)!;
       const room = buildFixedRoom(map, createNullLabelFactory());
-      const group = stationGroup(room, map.stations[0]!.station);
-      const colours = [...coloursOf(meshNamed(group, ':counter')), ...coloursOf(meshNamed(group, ':screen'))];
+      const colours = [...coloursOf(meshNamed(room.group, ':counters')), ...coloursOf(meshNamed(room.group, ':counter-screens'))];
       room.dispose();
       return colours;
     };
@@ -1121,6 +1220,25 @@ describe('the Exchange tower floors', () => {
     await settle();
     expect(drawCalls(loading.group)).toBeLessThan(40);
     loading.dispose();
+  });
+
+  it.each([BANK_ROOM_DEFINITION, VAULT_ROOM_DEFINITION])('shares the $building counters\' desks and halos, so each extra counter costs only its own state (D-103)', (definition) => {
+    const one = buildFixedRoom(createFixedRoom({ ...definition, stations: [definition.stations[0]!] }), createNullLabelFactory());
+    const four = buildFixedRoom(createFixedRoom(definition), createNullLabelFactory());
+    expect(definition.stations).toHaveLength(4);
+    // One desk mesh, one screen mesh and one halo mesh for the whole row.
+    for (const suffix of [':counters', ':counter-screens', ':halos']) {
+      const found: string[] = [];
+      four.group.traverse((object) => object instanceof Mesh && object.name.endsWith(suffix) && found.push(object.name));
+      expect(found).toEqual([`room:${definition.building}${suffix}`]);
+    }
+    // Each counter beyond the first adds its status panel, beacon, label and
+    // at most one brand plate, and the room stays inside its budget.
+    const extra = drawCalls(four.group) - drawCalls(one.group);
+    expect(extra).toBeLessThanOrEqual(3 * 4);
+    expect(drawCalls(four.group)).toBeLessThan(40);
+    one.dispose();
+    four.dispose();
   });
 
   it('disposes the Degen floor completely: every poster, sign and lift label once', () => {

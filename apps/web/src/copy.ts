@@ -204,15 +204,6 @@ export const COPY = freezeCopy({
     receiptWaiting: 'This settled while the room was shut.',
   },
 
-  batch: {
-    title: 'This visit',
-    empty: 'Nothing queued yet. Add what you want to do, then confirm once.',
-    add: 'Add to this visit',
-    clear: 'Clear',
-    remove: 'Remove',
-    why: 'Everything queued here settles as one action, so you pay the pool fee once and your wallet asks you once.',
-  },
-
   bank: {
     title: 'The Bank',
     shield: 'Shield',
@@ -238,6 +229,9 @@ export const COPY = freezeCopy({
      * balance, and the pool fee goes on top of it.
      */
     youShield: 'You shield',
+    /** D-103: the other Bank-machine counters name what is entered the same way. */
+    youUnshield: 'You unshield',
+    youSend: 'You send',
     totalFromWallet: 'Total from your wallet',
     shieldFeeOnTop: 'The pool fee is added on top, so all of what you shield reaches your pool balance.',
     shieldFeeNudge: 'The pool fee is the same on every shield, so it costs proportionally less on a larger one.',
@@ -336,13 +330,9 @@ export const COPY = freezeCopy({
   stake: {
     eyebrow: 'Liquid staking with Endur',
     intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
-    /** D-085: unstaking is a counter of its own; D-091 puts it behind the Unstake tab. */
+    /** D-085: unstaking is a counter of its own (D-103: UNSTAKE, beside STAKE). */
     unstaking:
-      "To unstake, use the Unstake tab. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
-    /** D-091: the counter's two tabs, as Endur's own app names them. */
-    tabStake: 'Stake',
-    tabUnstake: 'Unstake',
-    tabsLabel: 'Stake or unstake',
+      "To unstake, use the Unstake counter. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
     /** D-091: the preview rows. Estimates at xSTRK's live rate, never shown at review. */
     willReceive: 'You will receive',
     exchangeRate: 'Exchange rate',
@@ -399,6 +389,10 @@ export const COPY = freezeCopy({
     standInTail: 'is public: anyone can look up its requests and what it holds. It is not your wallet, and not your Vault address.',
     feeNote: 'Each request and claim pays the pool fee from your pool balance, so keep some STRK there.',
     reviewRequest: 'You send to Endur',
+    /** D-103: the standard's first row, at the form and the review. */
+    youUnstake: 'You unstake',
+    /** D-103: a request's STRK is named, never numbered, at the review (D-041). */
+    receiveLater: 'STRK, when Endur releases it',
     reviewRequestTail: "Nothing comes back yet: Endur fixes the STRK it owes when the request runs, and you claim it once Endur releases it.",
     reviewLeftover: 'Also returns to your pool balance',
     reviewClaim: 'You claim',
@@ -462,6 +456,8 @@ export const COPY = freezeCopy({
       payoutLead: 'Vesu can pay out',
       payoutTail: 'of it right now.',
       willSupply: 'You will supply',
+      /** D-103: what a supply gets out directly: the same amount, now in Vesu. */
+      inVesu: 'Supplied to Vesu',
       willReceive: 'You will receive',
       /** D-089: the wallet refused a supply that counted a note still maturing (about ten blocks). */
       settling: 'Funds you just added are still settling; try again in a few seconds.',
@@ -604,6 +600,9 @@ export const COPY = freezeCopy({
       available: 'Available to borrow',
       health: 'Health factor',
       remaining: 'Remaining debt',
+      /** D-103: what adding collateral and repaying get out directly. */
+      addedToLoan: 'Added to your loan',
+      paidOff: 'Debt paid off',
       owed: 'Owed',
       held: 'Collateral',
       noDebt: '∞',
@@ -859,7 +858,8 @@ export const COPY = freezeCopy({
   gameMode: {
     menu: 'Menu Mode',
     exit: 'Leave building',
-    singleAction: 'This station confirms one action at a time.',
+    /** D-103: every counter does one action and confirms it, and each pays its own pool fee. */
+    singleAction: 'This counter confirms one action at a time, and each action pays its own pool fee.',
     reviewAction: 'Review this action',
     /** D-088: names Menu Mode's row of counter tabs for assistive tech. */
     counters: 'Counters',
@@ -1108,6 +1108,17 @@ export const COPY = freezeCopy({
     paste: 'Paste',
     pasteLabel: 'Paste an address',
     addressPlaceholder: 'Enter address',
+    /**
+     * D-103, the owner's standard: every counter's amounts read as what you
+     * enter, what you receive, the fees on top, and the total.
+     */
+    youReceive: 'You receive',
+    theyReceive: 'They receive',
+    /** D-103: the amount fits the balance, but not with the pool fee on top. */
+    exceedsWithFee: 'More than your pool balance once the pool fee is added',
+    totalFromPool: 'Total from your pool',
+    totalFromWallet: 'Total from your wallet',
+    amountsLabel: 'Amounts',
   },
 
   submissionUncertainty: {

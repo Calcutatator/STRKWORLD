@@ -345,6 +345,8 @@ Session keys are absent from the dapp surface and blocked at the contract level:
 
 **Design answer:** the `actions` array is atomic. Accumulate player intent off-chain inside a building and settle one batch on exit — one proof, one fee, and as few prompts as the wallet will render (whether a multi-action array shows one confirmation or several is a Phase 0 measurement, not a guarantee — see §8). This converts cost from per-move to per-session. Architect it from day one; retrofitting is expensive.
 
+> **Superseded for the shipped counters by D-103 (2026-10-02).** The product owner chose one action per counter: every Bank and Vault counter, in Game Mode and Menu Mode alike, reviews and confirms one action, and each action pays its own pool fee. The accumulator remains as the gate that validates each intent's shape (D-018); the seam still prepares an `Intent[]`.
+
 ### Registration happens in the wallet, not the game
 
 No `wallet_strk20Register` method exists. Every method returns 118 until the player has registered a viewing key inside their wallet. The game cannot register them and cannot probe registration without making a call.

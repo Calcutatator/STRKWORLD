@@ -405,15 +405,33 @@ interface StationView {
   readonly station: StationId;
   readonly group: Group;
   readonly accent: MeshStandardMaterial;
-  readonly haloFill: MeshBasicMaterial;
-  readonly haloEdge: MeshBasicMaterial;
   readonly beacon: Mesh;
   readonly label: TextLabel;
   readonly phase: number;
   readonly looks: StationLooks;
+  /** The station's approach halo inside the room's one shared halo mesh. */
+  halo: HaloSlice | null;
   labelText: string;
   look: StationLook;
   highlighted: boolean;
+}
+
+/**
+ * Where one station's halo sits in the room's shared halo mesh (D-103): its
+ * fill's vertices and its edge's, coloured per vertex (linear RGB and alpha)
+ * so a station's state still drives its own halo while every halo in the room
+ * costs one draw call between them.
+ */
+interface HaloSlice {
+  readonly colour: BufferAttribute;
+  readonly fill: readonly [number, number];
+  readonly edge: readonly [number, number];
+}
+
+/** One station's approach halo as flat quads: the fill ring and its edge line. */
+interface HaloQuads {
+  readonly fill: readonly BufferGeometry[];
+  readonly edge: readonly BufferGeometry[];
 }
 
 /**
@@ -468,14 +486,33 @@ export function buildFixedRoom(
     fixtureProps(map, theme, shell);
     exitDecor(map, theme, shell);
     liftDecor(map, theme, shell, labels, textLabels, group);
-    for (const station of map.stations) {
-      const counter = BUILT_IN_COUNTERS[station.station];
-      stations.push(
-        counter
-          ? buildBuiltInStation(station, counter, map, theme, shell, labels, res, group, textLabels)
-          : buildStation(station, theme, labels, res, group, textLabels),
-      );
+    // D-103: every counter's static desk and props share one lit mesh and
+    // one self-lit mesh, and every approach halo one vertex-coloured mesh,
+    // so a room of four counters costs barely more than a room of one.
+    const counters = new GeometryBin();
+    const halos: HaloQuads[] = [];
+    try {
+      for (const station of map.stations) {
+        // Counters built into their rooms (D-104) dress their own fixtures; the rest stand on the floor.
+        const counter = BUILT_IN_COUNTERS[station.station];
+        const built = counter
+          ? buildBuiltInStation(station, counter, map, theme, shell, labels, res, group, textLabels, counters)
+          : buildStation(station, theme, labels, res, group, textLabels, counters);
+        stations.push(built.view);
+        halos.push(built.halo);
+      }
+      flushBin(counters, 'body', res.material(standardMaterial({ roughness: 0.7 })), res, group, {
+        name: `${group.name}:counters`,
+        cast: true,
+        receive: true,
+      });
+      if (counters.has('unlit')) {
+        flushBin(counters, 'unlit', res.material(unlitMaterial()), res, group, { name: `${group.name}:counter-screens` });
+      }
+    } finally {
+      counters.dispose();
     }
+    buildHalos(stations, halos, res, group);
     finished = shell.finish();
   } catch (error) {
     shell?.discard();
@@ -521,8 +558,7 @@ export function buildFixedRoom(
         view.beacon.rotation.y = t * (view.highlighted ? 2.4 : 0.8) + view.phase;
         view.beacon.position.y = STATION_BEACON_Y + Math.sin(t * 2 + view.phase) * 0.04;
         const breathe = view.highlighted ? Math.sin(t * 4.5) : 0;
-        view.haloFill.opacity = view.look.haloOpacity * (1 + 0.18 * breathe);
-        view.haloEdge.opacity = Math.min(1, view.look.edgeOpacity * (1 + 0.08 * breathe));
+        if (view.highlighted) paintHalo(view, view.look.haloOpacity * (1 + 0.18 * breathe), Math.min(1, view.look.edgeOpacity * (1 + 0.08 * breathe)));
         view.accent.emissiveIntensity = view.look.emissiveIntensity * (1 + 0.12 * breathe);
       }
       for (const animate of animators) animate(elapsed);
@@ -564,10 +600,7 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
   view.accent.color.setHex(look.color);
   view.accent.emissive.setHex(look.emissive);
   view.accent.emissiveIntensity = look.emissiveIntensity;
-  view.haloFill.color.setHex(look.halo);
-  view.haloFill.opacity = look.haloOpacity;
-  view.haloEdge.color.setHex(look.halo);
-  view.haloEdge.opacity = look.edgeOpacity;
+  paintHalo(view, look.haloOpacity, look.edgeOpacity);
   view.group.userData['status'] = available ? 'available' : 'locked';
   view.group.userData['highlighted'] = highlighted;
   const text =
@@ -583,6 +616,11 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
 /**
  * A counter on the station rect, a status beacon, a floating label and the
  * approach halo, dressed in the station's own theme or else its room's.
+ *
+ * D-103: the desk and its props go into the room's shared `counters` bin and
+ * the halo comes back as quads for the room's shared halo mesh; what stays on
+ * the station's own group is what its state changes: the status panel, the
+ * beacon, the label and any brand plate.
  */
 function buildStation(
   station: FixedRoomStationDefinition,
@@ -591,7 +629,8 @@ function buildStation(
   res: ResourceBag,
   parent: Group,
   textLabels: TextLabel[],
-): StationView {
+  counters: GeometryBin,
+): { view: StationView; halo: HaloQuads } {
   const group = new Group();
   group.name = `station:${station.station}`;
   group.userData['station'] = station.station;
@@ -605,45 +644,44 @@ function buildStation(
   const dress = stationTheme(theme, station.station);
 
   const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
-  const haloFill = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
-  const haloEdge = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
+  counters.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(dress.kioskBase, 0.1));
+  counters.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), dress.kioskTop);
+  counters.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), dress.kioskTrim ?? shade(dress.kioskBase, -0.12));
+  stationProps(dress.props, theme, counters, x0, x1, z0, z1);
   const bin = new GeometryBin();
   try {
-    bin.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(dress.kioskBase, 0.1));
-    bin.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), dress.kioskTop);
-    bin.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), dress.kioskTrim ?? shade(dress.kioskBase, -0.12));
     bin.add('accent', boxGeometry(x0 + 0.12, 0.3, z1, x1 - 0.12, 0.72, z1 + 0.03), 0xffffff);
-    stationProps(dress.props, theme, bin, x0, x1, z0, z1);
-
-    const hx0 = station.x - 1 + 0.04;
-    const hx1 = station.x + station.width + 1 - 0.04;
-    const hz0 = station.y - 1 + 0.04;
-    const hz1 = station.y + station.height + 1 - 0.04;
-    const sx0 = station.x;
-    const sx1 = station.x + station.width;
-    const sz0 = station.y;
-    const sz1 = station.y + station.height;
-    const fillY = 0.012;
-    bin.add('fill', flatQuad(hx0, hz0, hx1, sz0, fillY), 0xffffff);
-    bin.add('fill', flatQuad(hx0, sz1, hx1, hz1, fillY), 0xffffff);
-    bin.add('fill', flatQuad(hx0, sz0, sx0, sz1, fillY), 0xffffff);
-    bin.add('fill', flatQuad(sx1, sz0, hx1, sz1, fillY), 0xffffff);
-    const e = 0.06;
-    const edgeY = 0.015;
-    bin.add('edge', flatQuad(hx0, hz0, hx1, hz0 + e, edgeY), 0xffffff);
-    bin.add('edge', flatQuad(hx0, hz1 - e, hx1, hz1, edgeY), 0xffffff);
-    bin.add('edge', flatQuad(hx0, hz0 + e, hx0 + e, hz1 - e, edgeY), 0xffffff);
-    bin.add('edge', flatQuad(hx1 - e, hz0 + e, hx1, hz1 - e, edgeY), 0xffffff);
-
-    const body = res.material(standardMaterial({ roughness: 0.7 }));
-    flushBin(bin, 'body', body, res, group, { name: `${group.name}:counter`, cast: true, receive: true });
-    if (bin.has('unlit')) flushBin(bin, 'unlit', res.material(unlitMaterial()), res, group, { name: `${group.name}:screen` });
     flushBin(bin, 'accent', accent, res, group, { name: `${group.name}:status` });
-    flushBin(bin, 'fill', haloFill, res, group, { name: `${group.name}:halo`, renderOrder: 1 });
-    flushBin(bin, 'edge', haloEdge, res, group, { name: `${group.name}:halo-edge`, renderOrder: 1 });
   } finally {
     bin.dispose();
   }
+
+  const hx0 = station.x - 1 + 0.04;
+  const hx1 = station.x + station.width + 1 - 0.04;
+  const hz0 = station.y - 1 + 0.04;
+  const hz1 = station.y + station.height + 1 - 0.04;
+  const sx0 = station.x;
+  const sx1 = station.x + station.width;
+  const sz0 = station.y;
+  const sz1 = station.y + station.height;
+  const fillY = 0.012;
+  const e = 0.06;
+  const edgeY = 0.015;
+  const halo: HaloQuads = {
+    fill: [
+      flatQuad(hx0, hz0, hx1, sz0, fillY),
+      flatQuad(hx0, sz1, hx1, hz1, fillY),
+      flatQuad(hx0, sz0, sx0, sz1, fillY),
+      flatQuad(sx1, sz0, hx1, sz1, fillY),
+    ],
+    edge: [
+      flatQuad(hx0, hz0, hx1, hz0 + e, edgeY),
+      flatQuad(hx0, hz1 - e, hx1, hz1, edgeY),
+      flatQuad(hx0, hz0 + e, hx0 + e, hz1 - e, edgeY),
+      flatQuad(hx1 - e, hz0 + e, hx1, hz1 - e, edgeY),
+    ],
+  };
+
   const beacon = new Mesh(res.geometry(new OctahedronGeometry(0.14, 0)), accent);
   beacon.name = `${group.name}:beacon`;
   beacon.position.set(cx, STATION_BEACON_Y, cz);
@@ -671,19 +709,68 @@ function buildStation(
     station: station.station,
     group,
     accent,
-    haloFill,
-    haloEdge,
     beacon,
     label,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
+    halo: null,
     labelText: station.label,
     look: dress.looks.locked,
     highlighted: false,
   };
-  // Until the Shell reports otherwise a station is locked (fixed-room.ts).
-  applyStation(view, { ...station, status: 'locked', highlighted: false });
-  return view;
+  return { view, halo };
+}
+
+/** Vertices in one flat quad, as `flatQuad` builds it (two triangles, not indexed). */
+const QUAD_VERTICES = 6;
+
+/**
+ * The room's approach halos as one mesh (D-103): every station's fill, then
+ * every station's edge, so the edges blend over the fills exactly as the two
+ * separate meshes did. Each station keeps a slice of the colour attribute and
+ * paints its own state into it. Until the Shell reports otherwise a station
+ * is locked (fixed-room.ts).
+ */
+function buildHalos(stations: readonly StationView[], halos: readonly HaloQuads[], res: ResourceBag, group: Group): void {
+  if (stations.length === 0) return;
+  const bin = new GeometryBin();
+  try {
+    const transparent: readonly [number, number, number, number] = [1, 1, 1, 0];
+    for (const quads of halos) for (const quad of quads.fill) bin.addRGBA('halo', quad, () => transparent);
+    for (const quads of halos) for (const quad of quads.edge) bin.addRGBA('halo', quad, () => transparent);
+    const material = res.material(unlitMaterial({ transparent: true }));
+    const mesh = flushBin(bin, 'halo', material, res, group, { name: `${group.name}:halos`, renderOrder: 1 });
+    if (!mesh) return;
+    const colour = mesh.geometry.getAttribute('color') as BufferAttribute;
+    let fillAt = 0;
+    let edgeAt = halos.reduce((sum, quads) => sum + quads.fill.length * QUAD_VERTICES, 0);
+    stations.forEach((view, index) => {
+      const fill = halos[index]!.fill.length * QUAD_VERTICES;
+      const edge = halos[index]!.edge.length * QUAD_VERTICES;
+      view.halo = { colour, fill: [fillAt, fill], edge: [edgeAt, edge] };
+      fillAt += fill;
+      edgeAt += edge;
+      view.group.userData['halo'] = { fill: view.halo.fill, edge: view.halo.edge };
+      applyStation(view, { station: view.station, label: view.labelText, status: 'locked', highlighted: false, x: 0, y: 0, width: 0, height: 0 });
+    });
+  } finally {
+    bin.dispose();
+  }
+}
+
+const haloColour = new Color();
+
+/** Write a station's halo colour and its fill's and edge's opacity into the shared mesh. */
+function paintHalo(view: StationView, fillOpacity: number, edgeOpacity: number): void {
+  const slice = view.halo;
+  if (!slice) return;
+  haloColour.setHex(view.look.halo);
+  const write = ([start, count]: readonly [number, number], alpha: number): void => {
+    for (let i = start; i < start + count; i++) slice.colour.setXYZW(i, haloColour.r, haloColour.g, haloColour.b, alpha);
+  };
+  write(slice.fill, fillOpacity);
+  write(slice.edge, edgeOpacity);
+  slice.colour.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -701,8 +788,10 @@ interface CounterContext {
   readonly map: FixedRoomLevelMap;
   readonly theme: RoomTheme;
   readonly dress: StationTheme;
-  /** Keys: 'body' (lit, vertex coloured), 'unlit' (self-lit) and 'accent' (the station's state colour). */
+  /** The room's shared counters bin (D-103): 'body' (lit, vertex coloured) and 'unlit' (self-lit). */
   readonly bin: GeometryBin;
+  /** The station's own 'accent' key: whatever lights in its state colour. */
+  readonly status: GeometryBin;
   readonly shell: InteriorShell;
   readonly group: Group;
   readonly labels: LabelFactory;
@@ -742,31 +831,21 @@ function buildBuiltInStation(
   res: ResourceBag,
   parent: Group,
   textLabels: TextLabel[],
-): StationView {
+  counters: GeometryBin,
+): { view: StationView; halo: HaloQuads } {
   const group = new Group();
   group.name = `station:${station.station}`;
   group.userData['station'] = station.station;
   parent.add(group);
   const dress = stationTheme(theme, station.station);
   const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
-  const haloFill = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
-  const haloEdge = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
-  const bin = new GeometryBin();
+  const status = new GeometryBin();
   let header: CounterHeader;
   try {
-    header = build({ station, map, theme, dress, bin, shell, group, labels, textLabels });
-    approachHalo(bin, station, map);
-    flushBin(bin, 'body', res.material(standardMaterial({ roughness: 0.7 })), res, group, {
-      name: `${group.name}:counter`,
-      cast: true,
-      receive: true,
-    });
-    if (bin.has('unlit')) flushBin(bin, 'unlit', res.material(unlitMaterial()), res, group, { name: `${group.name}:screen` });
-    flushBin(bin, 'accent', accent, res, group, { name: `${group.name}:status` });
-    flushBin(bin, 'fill', haloFill, res, group, { name: `${group.name}:halo`, renderOrder: 1 });
-    flushBin(bin, 'edge', haloEdge, res, group, { name: `${group.name}:halo-edge`, renderOrder: 1 });
+    header = build({ station, map, theme, dress, bin: counters, status, shell, group, labels, textLabels });
+    flushBin(status, 'accent', accent, res, group, { name: `${group.name}:status` });
   } finally {
-    bin.dispose();
+    status.dispose();
   }
   const cx = station.x + station.width / 2;
   const cz = station.y + station.height / 2;
@@ -785,18 +864,16 @@ function buildBuiltInStation(
     station: station.station,
     group,
     accent,
-    haloFill,
-    haloEdge,
     beacon,
     label,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
     looks: dress.looks,
+    halo: null,
     labelText: station.label,
     look: dress.looks.locked,
     highlighted: false,
   };
-  applyStation(view, { ...station, status: 'locked', highlighted: false });
-  return view;
+  return { view, halo: approachHalo(station, map) };
 }
 
 /**
@@ -804,7 +881,9 @@ function buildBuiltInStation(
  * a built-in counter's furniture fills the rest of its ring. Each tile is
  * inset and edged only where the region ends, so the pad reads as one.
  */
-function approachHalo(bin: GeometryBin, station: FixedRoomStationDefinition, map: FixedRoomLevelMap): void {
+function approachHalo(station: FixedRoomStationDefinition, map: FixedRoomLevelMap): HaloQuads {
+  const fill: BufferGeometry[] = [];
+  const edge: BufferGeometry[] = [];
   const onPad = (x: number, y: number): boolean =>
     x >= station.x - 1 &&
     x < station.x + station.width + 1 &&
@@ -821,13 +900,14 @@ function approachHalo(bin: GeometryBin, station: FixedRoomStationDefinition, map
       const x1 = x + 1 - (east ? inset : 0);
       const z0 = y + (north ? inset : 0);
       const z1 = y + 1 - (south ? inset : 0);
-      bin.add('fill', flatQuad(x0, z0, x1, z1, 0.012), 0xffffff);
-      if (north) bin.add('edge', flatQuad(x0, z0, x1, z0 + e, 0.015), 0xffffff);
-      if (south) bin.add('edge', flatQuad(x0, z1 - e, x1, z1, 0.015), 0xffffff);
-      if (west) bin.add('edge', flatQuad(x0, z0 + (north ? e : 0), x0 + e, z1 - (south ? e : 0), 0.015), 0xffffff);
-      if (east) bin.add('edge', flatQuad(x1 - e, z0 + (north ? e : 0), x1, z1 - (south ? e : 0), 0.015), 0xffffff);
+      fill.push(flatQuad(x0, z0, x1, z1, 0.012));
+      if (north) edge.push(flatQuad(x0, z0, x1, z0 + e, 0.015));
+      if (south) edge.push(flatQuad(x0, z1 - e, x1, z1, 0.015));
+      if (west) edge.push(flatQuad(x0, z0 + (north ? e : 0), x0 + e, z1 - (south ? e : 0), 0.015));
+      if (east) edge.push(flatQuad(x1 - e, z0 + (north ? e : 0), x1, z1 - (south ? e : 0), 0.015));
     }
   }
+  return { fill, edge };
 }
 
 /** A screen on a face: a bezel and a self-lit card, rounded as avnu's cards are. */
@@ -861,7 +941,7 @@ function quoteRows(bin: GeometryBin, face: Face, u0: number, v0: number, u1: num
  * along the north wall just above the boards.
  */
 function tradingDesk(ctx: CounterContext): CounterHeader {
-  const { station: s, bin, theme } = ctx;
+  const { station: s, bin, status, theme } = ctx;
   const bx0 = s.x;
   const bx1 = s.x + s.width;
   const x0 = s.x - 2 + 0.06;
@@ -934,14 +1014,14 @@ function tradingDesk(ctx: CounterContext): CounterHeader {
     }
   }
   // The counter: the status panel in the bay, avnu's swap card on the desk.
-  bin.add('accent', boxGeometry(bx0 + 0.14, 0.28, z1, bx1 - 0.14, 0.72, z1 + 0.03), 0xffffff);
+  status.add('accent', boxGeometry(bx0 + 0.14, 0.28, z1, bx1 - 0.14, 0.72, z1 + 0.03), 0xffffff);
   stationProps('avnu', theme, bin, bx0 + 0.1, bx1 - 0.1, s.y + 0.14, s.y + s.height - 0.1);
 
   // The gantry over the bay: two posts, lit in the state colour, and a crossbar.
   const gz = s.y + 0.5;
   for (const u of [bx0, bx1]) {
     bin.add('body', boxGeometry(u - 0.05, top, gz - 0.05, u + 0.05, 2.1, gz + 0.05), AVNU.navy);
-    bin.add('accent', boxGeometry(u - 0.022, top + 0.04, gz + 0.05, u + 0.022, 1.68, gz + 0.062), 0xffffff);
+    status.add('accent', boxGeometry(u - 0.022, top + 0.04, gz + 0.05, u + 0.022, 1.68, gz + 0.062), 0xffffff);
   }
   bin.add('body', boxGeometry(bx0 - 0.08, 1.7, gz - 0.07, bx1 + 0.08, 2.12, gz + 0.07), AVNU.navy);
   bin.add('unlit', boxGeometry(bx0 - 0.08, 2.12, gz - 0.07, bx1 + 0.08, 2.135, gz + 0.07), AVNU.blue);
@@ -957,7 +1037,7 @@ function tradingDesk(ctx: CounterContext): CounterHeader {
  * tube sign on the lintel, underlined in the station's state colour.
  */
 function degenBar(ctx: CounterContext): CounterHeader {
-  const { station: s, bin, theme } = ctx;
+  const { station: s, bin, status, theme } = ctx;
   const left = s.x - 1;
   const right = s.x + s.width + 1;
   const back = INTERIOR_WALL_THICKNESS;
@@ -972,7 +1052,7 @@ function degenBar(ctx: CounterContext): CounterHeader {
   }
   // The lintel across the mouth, its underline in the state colour.
   bin.add('body', boxGeometry(left + 0.18, 1.84, front - 0.24, right - 0.18, height, front), AVNU.navy);
-  bin.add('accent', boxGeometry(left + 0.22, 1.81, front - 0.03, right - 0.22, 1.845, front + 0.02), 0xffffff);
+  status.add('accent', boxGeometry(left + 0.22, 1.81, front - 0.03, right - 0.22, 1.845, front + 0.02), 0xffffff);
   // Pink light pooled on the back room's floor.
   const pink = new Color(DEGEN.pink);
   ctx.shell.floor.addRGBA('light', flatQuad(left + 0.18, back, right - 0.18, s.y + 0.12, 0.013), (_x, _y, z) => [
@@ -1012,7 +1092,7 @@ function degenBar(ctx: CounterContext): CounterHeader {
       bin.add('unlit', faceBox(bf, u - 0.025, 0.22, 0, u + 0.025, 0.78, 0.02), i === 1 ? DEGEN.lime : DEGEN.violet);
     }
   }
-  bin.add('accent', boxGeometry(s.x + 0.14, 0.3, front, s.x + s.width - 0.14, 0.72, front + 0.03), 0xffffff);
+  status.add('accent', boxGeometry(s.x + 0.14, 0.3, front, s.x + s.width - 0.14, 0.72, front + 0.03), 0xffffff);
   stationProps('degen', theme, bin, s.x + 0.1, s.x + s.width - 0.1, s.y + 0.14, s.y + s.height - 0.1);
   return { position: [(left + right) / 2, 2.02, front + 0.006], style: DEGEN_COUNTER_HEADER };
 }
@@ -1052,7 +1132,7 @@ function airmailBand(bin: GeometryBin, face: Face, u0: number, u1: number, v0: n
  * the pigeonholes on the north wall (`postOfficeDecor`).
  */
 function postOfficeCounter(ctx: CounterContext): CounterHeader {
-  const { station: s, bin, theme, labels, textLabels, group } = ctx;
+  const { station: s, bin, status, theme, labels, textLabels, group } = ctx;
   const cx0 = s.x - 2;
   const cx1 = s.x + s.width + 3;
   const [w0, w1] = [s.x, s.x + s.width];
@@ -1069,7 +1149,7 @@ function postOfficeCounter(ctx: CounterContext): CounterHeader {
     bin.add('body', faceBox(front, x + 0.12, 0.2, 0, x + 0.88, 0.56, 0.016), lift(POST_WOOD, -0.06));
   }
   airmailBand(bin, front, cx0 + 0.04, cx1 - 0.02, 0.64, 0.84, 0.012);
-  bin.add('accent', boxGeometry(w0 + 0.14, 0.2, z1, w1 - 0.14, 0.56, z1 + 0.03), 0xffffff);
+  status.add('accent', boxGeometry(w0 + 0.14, 0.2, z1, w1 - 0.14, 0.56, z1 + 0.03), 0xffffff);
 
   // The grilles: brass bars on the counter, broken by the service window.
   const gz = s.y + 0.34;
@@ -1089,7 +1169,7 @@ function postOfficeCounter(ctx: CounterContext): CounterHeader {
   // A service lamp on each jamb, lit in the window's state.
   for (const u of [w0, w1]) {
     bin.add('body', faceBox({ normal: 'z+', plane: gz + 0.06 }, u - 0.06, 1.72, 0, u + 0.06, 1.9, 0.02), POST_BRASS);
-    bin.add('accent', sphereGeometry(u, 1.81, gz + 0.12, 0.055, { widthSegments: 8, heightSegments: 5 }), 0xffffff);
+    status.add('accent', sphereGeometry(u, 1.81, gz + 0.12, 0.055, { widthSegments: 8, heightSegments: 5 }), 0xffffff);
   }
   const [f0, f1] = [1.98, 2.32];
   bin.add('body', boxGeometry(cx0 + 0.02, f0, gz - 0.1, cx1, f1, gz + 0.08), POST_BLUE);
@@ -1154,7 +1234,7 @@ function postOfficeCounter(ctx: CounterContext): CounterHeader {
  * screen on it.
  */
 function gatewayTerminal(ctx: CounterContext): CounterHeader {
-  const { station: s, bin, theme, shell } = ctx;
+  const { station: s, bin, status, theme, shell } = ctx;
   const left = s.x - 2;
   const right = s.x + s.width + 2;
   const back = s.y - 2;
@@ -1207,12 +1287,12 @@ function gatewayTerminal(ctx: CounterContext): CounterHeader {
   const depths = [front - 1.0, front - 1.7, front - 2.4];
   depths.forEach((z, k) => {
     const [a, b, h] = [p0 + 0.1 + k * 0.14, p1 - 0.1 - k * 0.14, pylonTop - 0.08 - k * 0.16];
-    const key = k === 0 ? 'accent' : 'unlit';
+    const [target, key] = k === 0 ? [status, 'accent'] : [bin, 'unlit'];
     const colour = k === 0 ? 0xffffff : k === 1 ? NEAR.teal : mixHex(NEAR.teal, NEAR.periwinkle, 0.5);
     const t = 0.05;
-    bin.add(key, boxGeometry(a, 0.02, z - 0.03, a + t, h, z + 0.03), colour);
-    bin.add(key, boxGeometry(b - t, 0.02, z - 0.03, b, h, z + 0.03), colour);
-    bin.add(key, boxGeometry(a, h - t, z - 0.03, b, h, z + 0.03), colour);
+    target.add(key, boxGeometry(a, 0.02, z - 0.03, a + t, h, z + 0.03), colour);
+    target.add(key, boxGeometry(b - t, 0.02, z - 0.03, b, h, z + 0.03), colour);
+    target.add(key, boxGeometry(a, h - t, z - 0.03, b, h, z + 0.03), colour);
   });
   const glow = new Color(NEAR.teal);
   shell.floor.addRGBA('light', flatQuad(p0 + 0.05, back, p1 - 0.05, s.y + 0.1, 0.013), (_x, _y, z) => [
@@ -1236,7 +1316,7 @@ function gatewayTerminal(ctx: CounterContext): CounterHeader {
   bin.add('body', boxGeometry(k0, 0, kz0, k1, 0.92, front), aoPaint(lift(NEAR.raised, 0.06), 0.1));
   bin.add('body', boxGeometry(k0 - 0.03, 0.92, kz0 - 0.03, k1 + 0.03, 1, front + 0.03), lift(NEAR.hairline, 0.12));
   bin.add('unlit', boxGeometry(k0 - 0.03, 0.96, front + 0.03, k1 + 0.03, 0.985, front + 0.045), theme.floorAccent);
-  bin.add('accent', boxGeometry(s.x + 0.18, 0.3, front, s.x + s.width - 0.18, 0.7, front + 0.03), 0xffffff);
+  status.add('accent', boxGeometry(s.x + 0.18, 0.3, front, s.x + s.width - 0.18, 0.7, front + 0.03), 0xffffff);
   stationProps('bridge', theme, bin, s.x + 0.1, s.x + s.width - 0.1, s.y + 0.14, s.y + s.height - 0.1);
   return { position: [(left + right) / 2, 2.84, front + 0.02], style: NEAR_DEPARTURE_HEADER };
 }
@@ -1763,10 +1843,15 @@ function perimeterInlay(shell: InteriorShell, map: FixedRoomLevelMap, inset: num
   shell.floor.add(key, flatQuad(b - width, c + width, b, d - width, y), paint);
 }
 
-/** Centre of the north wall span that a station faces, for decor behind it. */
+/**
+ * Centre of the north wall span the counters face, for decor behind them:
+ * one counter's own centre, or the middle of a row of them (D-103).
+ */
 function stationAnchor(map: FixedRoomLevelMap): number {
-  const first = map.stations[0];
-  return first ? first.x + first.width / 2 : map.width / 2;
+  if (map.stations.length === 0) return map.width / 2;
+  const west = Math.min(...map.stations.map((station) => station.x));
+  const east = Math.max(...map.stations.map((station) => station.x + station.width));
+  return (west + east) / 2;
 }
 
 function inSpans(wall: InteriorWall, u0: number, u1: number): boolean {

@@ -11,7 +11,7 @@ import { isSwappable, type ExchangeAsset } from './catalog.js';
 import { degenExchangeCatalog, policyAdmitsSwapToken } from './degen-catalog.js';
 import { useDegenCatalog } from './DegenCatalogProvider.js';
 import {
-  AmountField, DetailRows, FlipButton, InvertibleRate, SettingsPopover, TokenSelect,
+  AmountField, AmountSummary, DetailRows, FlipButton, InvertibleRate, SettingsPopover, TokenSelect,
   checkAmount, feeReserve, maxAfterReserve, maxBasis, primaryAction,
   type DetailRow, type TokenOption,
 } from '../kit/index.js';
@@ -299,15 +299,21 @@ function Review({ state, onConfirm, onCancel, onAcknowledge }: { state: Exchange
     { id: 'minimum', label: <GlossaryTerm term={COPY.exchange.protectedMinimum} definition={COPY.glossary.protectedMinimum} />, value: review.protectedMinimum },
     { id: 'slippage', label: <GlossaryTerm term={COPY.exchange.slippage} definition={<>{COPY.glossary.slippageFixedAt} {review.slippage} {COPY.glossary.slippageReason}</>} />, value: review.slippage },
     { id: 'expires', label: <GlossaryTerm term={COPY.exchange.expiresAt} definition={COPY.glossary.quoteExpiry} />, value: review.expiresAt },
-    { id: 'fee', label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />, value: review.poolFee },
-    { id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: review.networkCost },
-    { id: 'total', label: COPY.bank.total, value: review.total, tone: 'emphasis' },
   ];
-  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} requiresDisclosure busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><dl className="exchange-review-summary">
-    <dt>{COPY.exchange.sell}</dt><dd>{review.sell}</dd>
-    <dt>{COPY.exchange.expectedBuy}</dt><dd>{review.expectedBuy}</dd>
-    <dt>{COPY.exchange.rate}</dt><dd>{review.rate}</dd>
-  </dl>
+  return <div className="exchange-review">{flow.name === 'submitting' ? <p aria-live="polite">{flow.message}</p> : null}<ConfirmGate disclosures={review.disclosures} requiresDisclosure busy={flow.name === 'submitting'} onConfirm={onConfirm} onCancel={onCancel}><div className="exchange-review-summary">
+    {/* D-103: what you sell, what you should get, the fees on top, the total from the pool, then the rate. */}
+    <AmountSummary
+      entered={{ label: COPY.exchange.sell, value: review.sell }}
+      receive={{ label: COPY.exchange.expectedBuy, value: review.expectedBuy }}
+      fees={[
+        { id: 'fee', label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />, value: review.poolFee },
+        { id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: review.networkCost },
+      ]}
+      total={{ label: COPY.kit.totalFromPool, value: review.total }}
+      details={[{ id: 'rate', label: COPY.exchange.rate, value: review.rate }]}
+      label={COPY.flow.review}
+    />
+  </div>
   {unchecked ? <p className="exchange-price-check" data-status={review.priceCheck} role="note">{review.priceCheckNote}</p> : null}
   <details className="exchange-review-details"><summary>{COPY.exchange.details}</summary><DetailRows rows={rows} label={COPY.exchange.details} /></details>
   {unchecked ? <label className="exchange-acknowledge" role="alert"><input type="checkbox" checked={state.priceAcknowledged} disabled={flow.name === 'submitting'} onChange={(event) => onAcknowledge(event.target.checked)} /> {COPY.exchange.acknowledgeUnchecked}</label> : null}</ConfirmGate></div>;

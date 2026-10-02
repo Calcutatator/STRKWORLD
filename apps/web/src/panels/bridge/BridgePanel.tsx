@@ -185,7 +185,7 @@ export function BridgePanel({
             </div>
           </details>
         ) : null}
-        {shieldMachine ? <BankPanel panel={shieldMachine} experience="station" allowedModes={['shield']} initialMode="shield" title={COPY.bank.title} building="bank" register={register} onClose={() => setShowShieldBank(false)} /> : null}
+        {shieldMachine ? <BankPanel panel={shieldMachine} experience="station" mode="shield" title={COPY.bank.title} building="bank" register={register} onClose={() => setShowShieldBank(false)} /> : null}
       </PanelFrame>
     </section>
   );

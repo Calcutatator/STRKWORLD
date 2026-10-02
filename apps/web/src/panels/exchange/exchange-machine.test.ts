@@ -257,8 +257,20 @@ describe('Exchange machine', () => {
     expect(flow.summary.poolFee).toBe('6 STRK');
     // D-084: the wallet submits the swap and prices its own network fee.
     expect(flow.summary.networkCost).toBe('0 STRK');
-    expect(flow.summary.total).toBe('6 STRK');
+    // D-103: the total is what leaves the pool: the 1 STRK sold plus the fees.
+    expect(flow.summary.total).toBe('7 STRK');
     expect(flow.summary.disclosures).toEqual(['This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.']);
+  });
+
+  it('sells exactly the typed amount, and totals it with the fees on top (D-103)', async () => {
+    const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture } });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('2.5'); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow.name === 'review' && [flow.summary.sell, flow.summary.poolFee, flow.summary.total]).toEqual(['2.5 STRK', '6 STRK', '8.5 STRK']);
+    await machine.confirm();
+    expect(operations.submitted).toHaveLength(1);
+    expect(operations.submitted[0]![0]).toMatchObject({ kind: 'swap', tokenIn: strk!.token, amountIn: 25n * 10n ** 17n });
   });
 
   it('records the receipt under exchange and ignores a synchronous second confirmation', async () => {

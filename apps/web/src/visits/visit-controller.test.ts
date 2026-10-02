@@ -127,8 +127,10 @@ describe('visit controller', () => {
     expect(stations).toHaveBeenCalledWith({
       building: 'bank',
       stations: [
-        { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'available' },
+        { station: 'bank:shielding', label: 'SHIELD', status: 'available' },
+        { station: 'bank:unshielding', label: 'UNSHIELD', status: 'available' },
         { station: 'bank:staking', label: 'STAKE', status: 'available' },
+        { station: 'bank:unstaking', label: 'UNSTAKE', status: 'available' },
       ],
     });
   });
@@ -671,10 +673,12 @@ describe('station registry', () => {
       unapprovedShield,
     ];
 
-    // The staking counter keeps its own grade (D-030): shielding's lock is not its lock.
+    // Every other counter keeps its own grade (D-030, D-103): shielding's lock is not theirs.
     expect(stationSnapshot('bank', register)).toEqual([
-      { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'locked' },
+      { station: 'bank:shielding', label: 'SHIELD', status: 'locked' },
+      { station: 'bank:unshielding', label: 'UNSHIELD', status: 'available' },
       { station: 'bank:staking', label: 'STAKE', status: 'available' },
+      { station: 'bank:unstaking', label: 'UNSTAKE', status: 'available' },
     ]);
     expect(resolveStation('bank', 'bank:shielding', register)).toMatchObject({ status: 'locked' });
   });

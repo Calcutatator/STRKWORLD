@@ -50,30 +50,19 @@ function stakeCounter(
     receipts,
     allowedModes: ['stake'],
     initialMode: 'stake',
-    maxIntents: 1,
     canStartFinancialAction: () => true,
   });
-}
-
-function menuBank(operations: PrivacyOperations, receipts = createReceiptLedger()): BankMachine {
-  return createBankPanel({ operations, receipts, canStartFinancialAction: () => true });
 }
 
 function render(
   panel: BankMachine,
   operations: PrivacyOperations,
   experience: 'menu' | 'station',
-  modes?: readonly BankMode[],
+  mode?: BankMode,
 ): string {
   return renderToStaticMarkup(
     <PrivacyProvider operations={operations}>
-      <BankPanel
-        panel={panel}
-        experience={experience}
-        allowedModes={modes}
-        initialMode={modes?.[0]}
-        onClose={() => {}}
-      />
+      <BankPanel panel={panel} experience={experience} mode={mode} onClose={() => {}} />
     </PrivacyProvider>,
   );
 }
@@ -186,7 +175,6 @@ describe('the staking counter, end to end in demo', () => {
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
-    panel.clearBatch();
 
     // Evidence for the stake shape now exists: the maximum leaves both private
     // fees behind and never reaches into the maturing notes.
@@ -199,29 +187,16 @@ describe('the staking counter, end to end in demo', () => {
     expect(reviewSummary(panel).intents).toEqual([stakeIntent(max)]);
   });
 
-  it('settles one stake at a time, even in Menu Mode', async () => {
+  it('settles one stake at a time: the counter holds one action (D-103)', async () => {
     const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * ONE }, registered: ['0x0456'] });
-    const panel = menuBank(operations);
+    const panel = stakeCounter(operations);
     await panel.open();
-    panel.setMode('stake');
     panel.setAmount('1');
     await panel.addToBatch();
     panel.setAmount('2');
     await panel.addToBatch();
     expect(panel.store.getState().batch).toEqual([stakeIntent(strk('1'))]);
-    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.stakeAlone });
-
-    // Nor beside another route queued from another tab.
-    panel.clearBatch();
-    panel.setMode('transfer');
-    panel.setRecipient('0x0456');
-    panel.setAmount('1');
-    await panel.addToBatch();
-    panel.setMode('stake');
-    panel.setAmount('1');
-    await panel.addToBatch();
-    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['transfer']);
-    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.stakeAlone });
+    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.batchFull });
   });
 });
 
@@ -247,15 +222,15 @@ describe('the staking counter on screen', () => {
     expect(markup).toContain(escaped(COPY.stake.unstaking));
     expect(markup).toContain(COPY.stake.oneAtATime);
     expect(markup).toContain(COPY.kit.enterAmount);
-    expect(markup).toMatch(/<button[^>]*role="tab"[^>]*>Stake<\/button>/);
-    // D-091: the counter's own Stake and Unstake tabs.
-    expect(markup).toMatch(/<button[^>]*role="tab"[^>]*>Unstake<\/button>/);
-    // A stake-only counter: no other grade shares the station (D-030).
+    // D-103: STAKE does one thing; unstaking is the UNSTAKE counter beside it,
+    // so there are no tabs here at all, and no other grade shares it (D-030).
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain(COPY.unstake.title);
     expect(markup).not.toContain('>Shield<');
     expect(markup).not.toContain('>Unshield<');
     expect(markup).not.toContain(COPY.bank.transfer);
-    expect(markup).not.toContain(COPY.batch.add);
-    expect(markup).not.toContain(COPY.batch.empty);
+    expect(markup).not.toContain('Add to this visit');
+    expect(markup).not.toContain('Nothing queued yet');
     // D-064: no disclosure anywhere on the counter.
     expect(markup).not.toContain('data-testid="disclosure"');
     expect(markup).not.toContain('commit-disclosures');
@@ -269,7 +244,7 @@ describe('the staking counter on screen', () => {
     await panel.addToBatch();
     await panel.prepare();
 
-    const markup = render(panel, operations, 'station', ['stake']);
+    const markup = render(panel, operations, 'station', 'stake');
     expect(markup).toMatch(/data-brand="endur"/);
     expect(markup).toContain(`<dt>${COPY.stake.youStake}</dt><dd>${formatStrkExact(strk('5'))}</dd>`);
     expect(markup).toContain(COPY.stake.youReceive);
@@ -300,7 +275,7 @@ describe('the staking counter on screen', () => {
     await panel.prepare();
 
     const submitting = panel.confirm();
-    const markup = render(panel, operations, 'station', ['stake']);
+    const markup = render(panel, operations, 'station', 'stake');
     expect(panel.store.getState().flow.name).toBe('submitting');
     expect(markup).toContain('data-brand="endur"');
     expect(markup).toContain(COPY.flow.handingOver);
@@ -310,55 +285,25 @@ describe('the staking counter on screen', () => {
     await submitting;
   });
 
-  it('adds a Stake tab to Bank Menu Mode, and only the stake view wears Endur', async () => {
+  it('wears Endur on STAKE alone; SHIELD and UNSHIELD keep the Bank look', async () => {
     const operations = createDemoOperations({ funded: true });
-    const panel = menuBank(operations);
-    await panel.open();
-
-    const shieldView = render(panel, operations, 'menu');
-    expect(shieldView).toMatch(/<button[^>]*role="tab"[^>]*>Stake<\/button>/);
-    expect(shieldView).not.toContain('data-brand=');
-
-    panel.setMode('stake');
-    const stakeView = render(panel, operations, 'menu');
-    expect(stakeView).toContain('data-brand="endur"');
-    expect(stakeView).toContain(COPY.stake.intro);
-    expect(stakeView).toContain(COPY.stake.oneAtATime);
-    // One stake at a time: no visit vocabulary that promises a shared fee.
-    expect(stakeView).not.toContain(COPY.batch.add);
-    expect(stakeView).not.toContain(COPY.batch.why);
-    expect(stakeView).not.toContain(COPY.batch.empty);
-  });
-
-  it('lets the look follow the batch at the commit point, like the disclosures do', async () => {
-    const operations = new FakePrivacyOperations({ balances: { [STRK]: 100n * ONE }, registered: ['0x0456'] });
-    const stakeQueued = menuBank(operations);
-    await stakeQueued.open();
-    stakeQueued.setMode('stake');
-    stakeQueued.setAmount('1');
-    await stakeQueued.addToBatch();
-    stakeQueued.setMode('shield');
-    await stakeQueued.prepare();
-    const stakeReview = render(stakeQueued, operations, 'menu');
-    expect(stakeReview).toContain('data-brand="endur"');
-    expect(stakeReview).toContain(COPY.stake.youStake);
-
-    const transferQueued = menuBank(operations);
-    await transferQueued.open();
-    transferQueued.setMode('transfer');
-    transferQueued.setRecipient('0x0456');
-    transferQueued.setAmount('1');
-    await transferQueued.addToBatch();
-    transferQueued.setMode('stake');
-    await transferQueued.prepare();
-    const transferReview = render(transferQueued, operations, 'menu');
-    expect(transferReview).not.toContain('data-brand=');
-    expect(transferReview).not.toContain(COPY.stake.youStake);
+    for (const mode of ['shield', 'unshield', 'stake'] as const) {
+      const panel = createBankPanel({ operations, receipts: createReceiptLedger(), allowedModes: [mode], initialMode: mode, canStartFinancialAction: () => true });
+      await panel.open();
+      const markup = render(panel, operations, 'menu', mode);
+      if (mode === 'stake') {
+        expect(markup).toContain('data-brand="endur"');
+        expect(markup).toContain(COPY.stake.intro);
+        expect(markup).toContain(COPY.stake.oneAtATime);
+      } else {
+        expect(markup, mode).not.toContain('data-brand=');
+      }
+    }
   });
 });
 
 describe('the bank:staking station', () => {
-  it('is its own stake-only station in demo, beside shielding', () => {
+  it('is its own stake-only station in demo, among the Bank\'s four counters (D-103)', () => {
     const resolved = resolveStation('bank', 'bank:staking');
     expect(resolved).toMatchObject({
       status: 'available',
@@ -373,8 +318,10 @@ describe('the bank:staking station', () => {
       },
     });
     expect(stationSnapshot('bank')).toEqual([
-      { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'available' },
+      { station: 'bank:shielding', label: 'SHIELD', status: 'available' },
+      { station: 'bank:unshielding', label: 'UNSHIELD', status: 'available' },
       { station: 'bank:staking', label: 'STAKE', status: 'available' },
+      { station: 'bank:unstaking', label: 'UNSTAKE', status: 'available' },
     ]);
   });
 

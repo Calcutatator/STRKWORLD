@@ -6,7 +6,7 @@ import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET, FakePrivacyOperations } from '@strkworl
 import { COPY } from '../../copy.js';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
-import { BankPanel } from './BankPanel.js';
+import { VisitLayerView } from '../../visits/VisitLayer.js';
 
 /**
  * The unstaking counter (D-085) as a player drives it, under the stake form
@@ -64,14 +64,24 @@ async function render(operations: FakePrivacyOperations): Promise<HTMLElement> {
   await act(async () => {
     root!.render(
       <PrivacyProvider operations={operations}>
-        <BankPanel experience="station" allowedModes={['stake']} initialMode="stake" onClose={() => {}} />
+        <VisitLayerView
+          state={{ name: 'visiting', building: 'bank', surface: { name: 'station', station: 'bank:unstaking' } }}
+          connected
+          onOpenMenu={() => {}}
+          onRequestExit={() => {}}
+          onCloseSurface={() => {}}
+          onDismissLocked={() => {}}
+        />
       </PrivacyProvider>,
     );
   });
   await settle();
-  // D-091: the unstaking counter is the staking counter's Unstake tab.
-  expect(container.querySelector('section.unstake-counter')).toBeNull();
-  await click(button(COPY.stake.tabUnstake));
+  // D-103: unstaking is the UNSTAKE counter's own window, in Endur's look,
+  // with no stake form and no tabs beside it.
+  const panel = container.querySelector<HTMLElement>('section.panel')!;
+  expect(panel.getAttribute('data-brand')).toBe('endur');
+  expect(container.querySelector('[role="tablist"]')).toBeNull();
+  expect(container.textContent).not.toContain(COPY.stake.intro);
   return container.querySelector<HTMLElement>('section.unstake-counter')!;
 }
 
@@ -97,13 +107,16 @@ describe('the unstaking counter, driven through the screen in demo (D-085)', () 
 
     // Request: the review names the xSTRK and shows the approved disclosure.
     await type(counter.querySelector<HTMLInputElement>('input[name="unstake-amount"]')!, '4');
-    // D-091: what comes back at the demo rate, the rate, the measured wait and the fee.
+    // D-091, D-103: the xSTRK sent, what comes back at the demo rate, the fee
+    // on top, the total from the pool in both tokens, then the rate and the wait.
     const rows = [...counter.querySelectorAll('.unstake-compose .ui-detail')].map((row) => row.querySelector('dd')!.firstChild!.textContent);
-    expect(rows).toEqual(['≈ 5 STRK', '1 xSTRK = 1.25 STRK', COPY.unstake.waitValue, '6 STRK']);
+    expect(rows).toEqual(['4 xSTRK', '≈ 5 STRK', '6 STRK', '4 xSTRK + 6 STRK', '1 xSTRK = 1.25 STRK', COPY.unstake.waitValue]);
     expect(counter.querySelector('.unstake-compose')?.textContent).toContain(COPY.unstake.wait);
     await click(button(COPY.unstake.request));
     const review = counter.querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.stake-review dd')].map((dd) => dd.textContent)).toEqual(['4 xSTRK']);
+    expect([...review.querySelectorAll('.ui-detail dd')].map((dd) => dd.textContent)).toEqual([
+      '4 xSTRK', COPY.unstake.receiveLater, '6 STRK', COPY.unstake.networkByWallet, '4 xSTRK + 6 STRK',
+    ]);
     expect(review.querySelector('[data-testid="commit-disclosures"]')?.textContent).toContain(DISCLOSURE);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.endurSubmitted).toEqual([{ kind: 'request', shares: 4n * ONE, leftover: 0n }]);
@@ -119,7 +132,10 @@ describe('the unstaking counter, driven through the screen in demo (D-085)', () 
     // Claim the ready one into the pool.
     await click(button(COPY.unstake.claim));
     const claim = counter.querySelector('.panel-review')!;
-    expect([...claim.querySelectorAll('.stake-review dd')].map((dd) => dd.textContent)).toEqual(['5 STRK', '1']);
+    // A claim moves what Endur paid, not the pool's: only the fee leaves the pool.
+    expect([...claim.querySelectorAll('.ui-detail dd')].map((dd) => dd.textContent)).toEqual([
+      '5 STRK', '5 STRK', '6 STRK', COPY.unstake.networkByWallet, '6 STRK', '1',
+    ]);
     expect(claim.querySelector('[data-testid="commit-disclosures"]')?.textContent).toContain(DISCLOSURE);
     await click(claim.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.endurSubmitted.map(({ kind }) => kind)).toEqual(['request', 'claim']);

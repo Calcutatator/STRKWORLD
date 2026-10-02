@@ -208,7 +208,7 @@ describe('journey notices in building windows', () => {
       void panel.open();
       return harness.tree(
         <ArrivalNudgeProvider world={world} storage={viewer}>
-          <BankPanel panel={panel} experience="station" allowedModes={modes} initialMode={modes[0]} onClose={() => {}} />
+          <BankPanel panel={panel} experience="station" mode={modes[0]} onClose={() => {}} />
         </ArrivalNudgeProvider>,
       );
     };

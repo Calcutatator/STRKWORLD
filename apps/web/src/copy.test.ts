@@ -60,7 +60,6 @@ describe('shell copy', () => {
     expect(COPY.notices.shieldAfterSpend).toBe(
       'A spend is already queued, and a shield cannot travel with it. Remove the queued item first, then add the shield.',
     );
-    expect(COPY.notices.shieldAfterSpend).toContain(COPY.batch.remove);
     expect(COPY.notices.shieldAfterSpend).not.toBe(COPY.notices.mixedShieldAndSpend);
   });
 
@@ -180,9 +179,9 @@ describe('shell copy', () => {
     it('says plainly where the STRK comes from, where the xSTRK lands, and how unstaking works', () => {
       expect(COPY.stake.intro).toContain('STRK from your pool balance');
       expect(COPY.stake.intro).toMatch(/xSTRK you receive lands in your pool balance/);
-      // D-085: unstaking is a counter now; the line points at it (D-091: its tab) and says how long Endur takes.
+      // D-085: unstaking is a counter; the line points at it (D-103: the UNSTAKE counter) and says how long Endur takes.
       expect(COPY.stake.unstaking).toBe(
-        "To unstake, use the Unstake tab. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
+        "To unstake, use the Unstake counter. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
       );
     });
 

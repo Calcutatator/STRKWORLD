@@ -209,6 +209,12 @@ export interface BorrowPanelOptions {
   register?: readonly RouteGrade[];
   feeTolerance?: bigint;
   tokens?: readonly BorrowTokenView[];
+  /**
+   * The counter's actions (D-103): BORROW borrows and adds collateral, REPAY
+   * repays and withdraws collateral. The first is shown first; `setMode`
+   * refuses any other. Omitted, all four, as one window.
+   */
+  modes?: readonly BorrowMode[];
 }
 
 export interface BorrowPanel {
@@ -322,8 +328,12 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
   const register = options.register ?? PRIVACY_REGISTER;
   const feeTolerance = options.feeTolerance ?? 0n;
   const tokens = Object.freeze((options.tokens ?? borrowTokenChoices(detectRoutePolicy())).map((entry) => Object.freeze({ ...entry })));
+  const modes: readonly BorrowMode[] = Object.freeze([...(options.modes ?? BORROW_MODES)]);
+  if (modes.length === 0 || modes.some((mode, index) => !BORROW_MODES.includes(mode) || modes.indexOf(mode) !== index)) {
+    throw new Error('BorrowPanel modes must be distinct borrow modes, at least one');
+  }
 
-  const stateStore = createStore<BorrowState>(freezeBorrowState(initialState(register, tokens)));
+  const stateStore = createStore<BorrowState>(freezeBorrowState({ ...initialState(register, tokens), mode: modes[0]! }));
   const store: ReadableStore<BorrowState> = Object.freeze({
     getState: stateStore.getState,
     getServerSnapshot: stateStore.getServerSnapshot,
@@ -600,7 +610,7 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
     refreshBalances: readBalances,
 
     setMode(mode: BorrowMode): void {
-      if (!BORROW_MODES.includes(mode)) return;
+      if (!modes.includes(mode)) return;
       const state = store.getState();
       if (state.flow.name === 'submitting' || state.mode === mode) return;
       begin();
