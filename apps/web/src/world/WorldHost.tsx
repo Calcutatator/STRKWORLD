@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
-import type { FootballChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
+import type { ArenaChannel, FootballChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
 import { worldLeaseManager } from './world-acquisition.js';
 
 /**
@@ -20,6 +20,7 @@ export function WorldHost({
   remotePeers,
   sandbox,
   football,
+  arena,
   vaultOpen = false,
 }: {
   out: EventBus<WorldEvents>;
@@ -29,6 +30,8 @@ export function WorldHost({
   sandbox?: SandboxChannel;
   /** The shared football (D-078); optional in test compositions. */
   football?: FootballChannel;
+  /** The gladiator pit's ring (D-114); optional in test compositions. */
+  arena?: ArenaChannel;
   /**
    * Whether the Vault's street door opens (D-077): the Shell's answer from
    * the register and this build's policy, never the World's to decide.
@@ -38,8 +41,8 @@ export function WorldHost({
 }) {
   const parent = useRef<HTMLDivElement>(null);
   const leaseKey = useMemo(
-    () => ({ out, shellIn, remotePeers, sandbox, football, vaultOpen }),
-    [out, shellIn, remotePeers, sandbox, football, vaultOpen],
+    () => ({ out, shellIn, remotePeers, sandbox, football, arena, vaultOpen }),
+    [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen],
   );
 
   useEffect(() => {
@@ -55,11 +58,12 @@ export function WorldHost({
         remotePeers,
         ...(sandbox ? { sandbox } : {}),
         ...(football ? { football } : {}),
+        ...(arena ? { arena } : {}),
         ...(vaultOpen ? { vaultOpen } : {}),
       });
       return runtime.releaseWorld;
     }, leaseKey);
-  }, [out, shellIn, remotePeers, sandbox, football, vaultOpen, leaseKey]);
+  }, [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, leaseKey]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

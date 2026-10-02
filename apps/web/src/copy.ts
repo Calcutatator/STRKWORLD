@@ -871,6 +871,33 @@ export const COPY = freezeCopy({
     counters: 'Counters',
   },
 
+  /**
+   * D-114: the arena ring's HUD (`arena/ArenaHud.tsx`). Game copy only: no
+   * money, no names, no disclosure. The World's own prompts over the avatar
+   * (`E · ENTER THE RING`, `IN USE`, `E · STRIKE`) live in `arena-session.ts`.
+   */
+  arena: {
+    label: 'Training ring',
+    dummy: 'TRAINING DUMMY',
+    bout: 'TRAINING BOUT',
+    hp: 'HP',
+    timeLeft: 'Time left',
+    fight: 'FIGHT!',
+    strike: 'STRIKE',
+    leave: 'LEAVE RING',
+    victory: 'VICTORY',
+    /** Followed by the client-timed seconds, e.g. "Dummy down in 12.4 s". */
+    victoryDetail: 'Dummy down in',
+    seconds: 's',
+    time: 'TIME',
+    timeDetail: 'The dummy is still standing',
+    spectatorWon: 'The challenger won',
+    spectatorTimeout: 'The challenger ran out of time',
+    spectatorLeft: 'The challenger left the ring',
+    /** Read out by the live region as the countdown runs. */
+    countdownLive: 'Fight starts in',
+  },
+
   presence: {
     connecting: 'Connecting to multiplayer…',
     connected: 'Multiplayer connected',
