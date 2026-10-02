@@ -48,6 +48,25 @@ export interface ArenaSessionHost {
    * session then sends nothing, whatever the caller forwards.
    */
   inputSuspended?(): boolean;
+  /**
+   * C (optional): the press-E system's combat yield (D-117,
+   * `interactions.suspend`). When the host supplies it, the session holds a
+   * suspension for as long as this client fights, so E goes straight to the
+   * attack; and the gate's CLAIM / IN USE prompt comes from `gateTargets`
+   * through the interaction system instead of `setPrompt`.
+   */
+  suspendInteractions?(reason: string): () => void;
+}
+
+/**
+ * C: the ring gate as a press-E station target (D-117). Structurally the
+ * interaction system's `InteractionTarget`: World pixels, room origin included.
+ */
+export interface ArenaGateTarget {
+  readonly id: string;
+  readonly label: string;
+  readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  activate(): unknown;
 }
 
 export interface ArenaViewFrame {
@@ -68,6 +87,20 @@ export interface ArenaSession {
   onInteract(): boolean;
   /** Primary click/tap on the canvas in the arena. True if consumed. */
   onPrimary(): boolean;
+  /**
+   * C (optional), for the press-E system (D-117): the gate as a station,
+   * registered as an `InteractionSource` (`{ targets: () => session.gateTargets() }`).
+   * One target while this client stands on the gate approach and is not
+   * fighting: CLAIM while the ring is idle, IN USE (which does nothing) while
+   * it is not. None otherwise.
+   */
+  gateTargets?(): readonly ArenaGateTarget[];
+  /**
+   * C (optional), for the press-E system: E as an `InteractionAction`
+   * (`{ id: 'arena', priority: 10, run: () => session.onAttack() }`). Attacks
+   * only while this client fights; true when it took the press.
+   */
+  onAttack?(): boolean;
   frame(): ArenaViewFrame | null;
   destroy(): void;
 }

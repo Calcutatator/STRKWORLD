@@ -11,8 +11,11 @@ import {
 } from '@strkworld/shared';
 import type { ArenaChannel, ArenaSessionHost } from './arena-channel.js';
 import {
+  ARENA_BUSY_LABEL,
   ARENA_BUSY_PROMPT,
+  ARENA_CLAIM_LABEL,
   ARENA_CLAIM_PROMPT,
+  ARENA_GATE_RECT,
   ARENA_STRIKE_PROMPT,
   createArenaSession,
   dummyWithinReach,
@@ -457,5 +460,78 @@ describe('arena session: the frame is the server’s counters', () => {
     expect(host.selectLook).toHaveBeenLastCalledWith('restore');
     expect(session.frame()).toBeNull();
     expect(session.onPrimary()).toBe(false);
+  });
+});
+
+describe('arena session: the press-E system (D-117)', () => {
+  function withInteractions(initial: ArenaRingSnapshot | null, at = APPROACH) {
+    const time = clock();
+    const fake = fakeChannel(initial);
+    const { host, state } = fakeHost(at);
+    const holds: string[] = [];
+    const released = vi.fn();
+    const suspendInteractions = vi.fn((reason: string) => {
+      holds.push(reason);
+      return released;
+    });
+    const session = createArenaSession(fake.channel, { ...host, suspendInteractions }, { now: time.now });
+    return { time, fake, host, state, session, holds, released, suspendInteractions };
+  }
+
+  it('offers the gate as one CLAIM target on the approach while idle; activating it claims', () => {
+    const { session, fake } = withInteractions(ring());
+    const targets = session.gateTargets!();
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatchObject({ id: 'arena:gate', label: ARENA_CLAIM_LABEL, rect: ARENA_GATE_RECT });
+    // The footprint is the three gate tiles, World pixels with the room origin.
+    expect(ARENA_GATE_RECT).toEqual({ x: 64 + 19 * 32, y: 64 + 20 * 32, width: 96, height: 32 });
+    targets[0]!.activate();
+    expect(fake.channel.claim).toHaveBeenCalledTimes(1);
+  });
+
+  it('IN USE while busy takes the press and sends nothing; no target off the approach', () => {
+    const busy = withInteractions(ring({ phase: 'fighting', round: 1, challenger: OTHER }));
+    const targets = busy.session.gateTargets!();
+    expect(targets.map((t) => t.label)).toEqual([ARENA_BUSY_LABEL]);
+    targets[0]!.activate();
+    expect(busy.fake.channel.claim).not.toHaveBeenCalled();
+    const away = withInteractions(ring(), SAND);
+    expect(away.session.gateTargets!()).toEqual([]);
+  });
+
+  it('draws no gate prompt of its own when the interaction system draws it', () => {
+    const { session, host } = withInteractions(ring());
+    session.update(16);
+    expect(host.setPrompt).not.toHaveBeenCalled();
+  });
+
+  it('holds the combat yield from the new round until the ring is idle, and E attacks through onAttack', () => {
+    const { session, fake, holds, released, time } = withInteractions(ring());
+    fake.push(ring({ phase: 'countdown', round: 1, challenger: SELF }));
+    expect(holds).toEqual(['combat']);
+    expect(session.gateTargets!()).toEqual([]);
+    expect(session.onAttack!()).toBe(false); // the countdown
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
+    expect(session.onAttack!()).toBe(true);
+    expect(fake.channel.attack).toHaveBeenCalledTimes(1);
+    time.advance(100);
+    session.onAttack!();
+    expect(fake.channel.attack).toHaveBeenCalledTimes(1); // the client floor
+    fake.push(ring({ phase: 'idle', round: 1 }));
+    expect(released).toHaveBeenCalledTimes(1);
+    expect(session.onAttack!()).toBe(false);
+  });
+
+  it('a spectator’s E never attacks through the action', () => {
+    const { session, fake } = withInteractions(ring({ phase: 'fighting', round: 1, challenger: OTHER }), NEXT_TO_DUMMY);
+    expect(session.onAttack!()).toBe(false);
+    expect(fake.channel.attack).not.toHaveBeenCalled();
+  });
+
+  it('destroy releases the yield', () => {
+    const { session, fake, released } = withInteractions(ring());
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
+    session.destroy();
+    expect(released).toHaveBeenCalledTimes(1);
   });
 });

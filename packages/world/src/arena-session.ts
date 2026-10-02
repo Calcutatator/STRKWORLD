@@ -8,6 +8,7 @@ import {
   ARENA_ORIGIN_PX,
   ARENA_POINT_BLANK_PX,
   ARENA_REACH_PX,
+  ARENA_RING_GATE,
   ARENA_RING_RETURN,
   ARENA_RING_RETURN_FACING,
   ARENA_RING_SPAWN,
@@ -21,7 +22,7 @@ import {
   type GameId,
   type TileRect,
 } from '@strkworld/shared';
-import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
+import type { ArenaChannel, ArenaGateTarget, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 import { JUMP_TOTAL_MS } from './jump.js';
 
 /**
@@ -33,8 +34,10 @@ import { JUMP_TOTAL_MS } from './jump.js';
  * (the frame) is the server's counters, and the local swing is a cosmetic
  * prediction the server's swing counter later confirms.
  *
- * - **The gate.** On the gate approach the prompt reads `E · ENTER THE RING`
- *   while the ring is idle and `IN USE` while it is not. E claims.
+ * - **The gate.** On the gate approach the prompt reads `E · CLAIM` while
+ *   the ring is idle and `IN USE` while it is not. E claims. With the press-E
+ *   system (D-117) the gate is a station (`gateTargets`) and the system draws
+ *   the prompt; without it the session draws it through `setPrompt`.
  * - **In and out.** A new round whose challenger is this client leaps the
  *   player to the ring spawn; the ring going back to idle (or away) after
  *   this client's round leaps it out to the return tile. The fighting look
@@ -47,9 +50,21 @@ import { JUMP_TOTAL_MS } from './jump.js';
  */
 
 /** The World's arena prompts: game copy, never a disclosure. */
-export const ARENA_CLAIM_PROMPT = 'E · ENTER THE RING';
+export const ARENA_CLAIM_PROMPT = 'E · CLAIM';
 export const ARENA_BUSY_PROMPT = 'IN USE';
 export const ARENA_STRIKE_PROMPT = 'E · STRIKE';
+/** The gate's labels as a press-E target (D-117): the system draws "E · CLAIM". */
+export const ARENA_GATE_TARGET_ID = 'arena:gate';
+export const ARENA_CLAIM_LABEL = 'CLAIM';
+export const ARENA_BUSY_LABEL = 'IN USE';
+
+/** The gate's footprint in World pixels (room origin included): what a press-E prompt measures to. */
+export const ARENA_GATE_RECT = Object.freeze({
+  x: ARENA_ORIGIN_PX + ARENA_RING_GATE.x * ARENA_TILE_SIZE,
+  y: ARENA_ORIGIN_PX + ARENA_RING_GATE.y * ARENA_TILE_SIZE,
+  width: ARENA_RING_GATE.width * ARENA_TILE_SIZE,
+  height: ARENA_RING_GATE.height * ARENA_TILE_SIZE,
+});
 
 /** A predicted swing within this long of the server's counter is the same swing. */
 export const ARENA_SWING_ECHO_MS = 400;
@@ -139,6 +154,10 @@ export function createArenaSession(
   /** Whether the fighting look is on (so destroy and the way out restore it). */
   let lookSwitched = false;
   let outfitLocked = false;
+  /** The press-E combat yield held while this client fights. */
+  let releaseInteractions: (() => void) | null = null;
+  /** With the press-E system the gate's prompt is a station's, not ours. */
+  const gateByInteractions = typeof host.suspendInteractions === 'function';
 
   const safely = (action: () => void): void => {
     try {
@@ -185,9 +204,25 @@ export function createArenaSession(
     safely(() => host.selectLook(mode));
   };
 
+  const holdCombat = (hold: boolean): void => {
+    if (hold) {
+      if (releaseInteractions !== null) return;
+      try {
+        releaseInteractions = host.suspendInteractions?.('combat') ?? null;
+      } catch {
+        releaseInteractions = null;
+      }
+      return;
+    }
+    const release = releaseInteractions;
+    releaseInteractions = null;
+    if (release) safely(release);
+  };
+
   const enterRing = (round: number, startSwings: number): void => {
     fighting = round;
     swings = startSwings;
+    holdCombat(true);
     lockOutfit(true);
     safely(() => host.leapTo(ARENA_RING_SPAWN, ARENA_RING_SPAWN_FACING));
     look = { mode: 'fighting', at: now() + landingDelay() };
@@ -195,6 +230,7 @@ export function createArenaSession(
 
   const leaveRing = (leap: boolean): void => {
     fighting = null;
+    holdCombat(false);
     if (leap) safely(() => host.leapTo(ARENA_RING_RETURN, ARENA_RING_RETURN_FACING));
     lockOutfit(false);
     if (lookSwitched) look = { mode: 'restore', at: now() + (leap ? landingDelay() : 0) };
@@ -257,9 +293,29 @@ export function createArenaSession(
     if (selfIsChallenger()) {
       return ring.phase === 'fighting' && dummyWithinReach(at.x, at.y, at.facing) ? ARENA_STRIKE_PROMPT : null;
     }
-    if (!onArenaGateApproach(at.x, at.y)) return null;
+    if (gateByInteractions || !onArenaGateApproach(at.x, at.y)) return null;
     return ring.phase === 'idle' ? ARENA_CLAIM_PROMPT : ARENA_BUSY_PROMPT;
   };
+
+  const claimTarget: ArenaGateTarget = Object.freeze({
+    id: ARENA_GATE_TARGET_ID,
+    label: ARENA_CLAIM_LABEL,
+    rect: ARENA_GATE_RECT,
+    activate: () => {
+      if (destroyed || ring === null || ring.phase !== 'idle' || inputSuspended()) return false;
+      return intent(() => channel.claim());
+    },
+  });
+  // IN USE takes the press and does nothing: nothing is sent while the ring is busy.
+  const busyTarget: ArenaGateTarget = Object.freeze({
+    id: ARENA_GATE_TARGET_ID,
+    label: ARENA_BUSY_LABEL,
+    rect: ARENA_GATE_RECT,
+    activate: () => false,
+  });
+  const NO_TARGETS: readonly ArenaGateTarget[] = Object.freeze([]);
+  const CLAIM_TARGETS: readonly ArenaGateTarget[] = Object.freeze([claimTarget]);
+  const BUSY_TARGETS: readonly ArenaGateTarget[] = Object.freeze([busyTarget]);
 
   const attack = (): boolean => {
     const t = now();
@@ -334,6 +390,17 @@ export function createArenaSession(
     onPrimary(): boolean {
       return primary();
     },
+    gateTargets(): readonly ArenaGateTarget[] {
+      if (destroyed || ring === null || selfIsChallenger()) return NO_TARGETS;
+      const at = position();
+      if (at === null || !onArenaGateApproach(at.x, at.y)) return NO_TARGETS;
+      return ring.phase === 'idle' ? CLAIM_TARGETS : BUSY_TARGETS;
+    },
+    onAttack(): boolean {
+      if (destroyed || ring === null || inputSuspended()) return false;
+      if (!selfIsChallenger() || ring.phase !== 'fighting') return false;
+      return attack();
+    },
     frame(): ArenaViewFrame | null {
       return destroyed ? null : frame;
     },
@@ -345,6 +412,7 @@ export function createArenaSession(
       unsubscribe = null;
       unsubscribeStrikes = null;
       setPrompt(null);
+      holdCombat(false);
       lockOutfit(false);
       if (lookSwitched) applyLook('restore');
       look = null;
