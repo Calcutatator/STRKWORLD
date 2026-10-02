@@ -33,7 +33,9 @@ describe('the brand tokens (D-113)', () => {
     expect(token('--brand-font-headline')).toMatch(new RegExp(`^"${BRAND_FONTS.headline}"`));
     expect(token('--brand-font-body')).toMatch(new RegExp(`^"${BRAND_FONTS.body}"`));
     expect(token('--brand-font-menu')).toMatch(new RegExp(`^"${BRAND_FONTS.menu}"`));
-    expect(token('--brand-font-numeric')).toMatch(new RegExp(`^"${BRAND_FONTS.headline}"`));
+    // D-121: money amounts are VT323, whose digits stay distinct; Jersey 15's merge.
+    expect(token('--brand-font-numeric')).toMatch(new RegExp(`^"${BRAND_FONTS.body}", ui-monospace`));
+    expect(token('--brand-font-numeric')).not.toMatch(/Jersey/);
     expect(css).not.toMatch(/rounded|Nunito/i);
   });
 
