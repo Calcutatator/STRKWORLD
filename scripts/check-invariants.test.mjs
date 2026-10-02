@@ -55,7 +55,7 @@ describe('check 8: the privacy register gate, with the Vault routes (D-077, D-07
   it('passes the register as committed', async () => {
     const output = await runCheck();
     expect(output).toContain('ok   every privacy deviation is approved');
-    expect(output).toContain('ok   every deviation discloses itself to the player, or carries a decision-backed waiver');
+    expect(output).not.toContain('player-facing copy');
     expect(output).not.toContain('could not parse the privacy register');
   }, 30_000);
 
@@ -64,27 +64,10 @@ describe('check 8: the privacy register gate, with the Vault routes (D-077, D-07
     expect(output).toMatch(/FAIL\s+privacy deviation\(s\) with no recorded approval: vault\.supply \(anonymous\)/);
   }, 30_000);
 
-  it('fails an approved Vault route with its disclosure removed', async () => {
+  it('passes an approved Vault route with no pre-commit line: copy is not part of the gate (D-118)', async () => {
     const output = await runCheck(editEntry('vault.redeem', /disclosure:\s*\n\s*'[^']*',/, 'disclosure: null,'));
-    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.redeem/);
-  }, 30_000);
-
-  it('refuses a waiver citing D-079, which widens the Vault and waives nothing', async () => {
-    const output = await runCheck(editEntry(
-      'vault.redeem',
-      /disclosure:\s*\n\s*'[^']*',/,
-      "disclosure: null,\n    disclosureWaivedBy: 'D-079',",
-    ));
-    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.redeem/);
-  }, 30_000);
-
-  it('refuses a waiver citing D-081, which widens the Vault to every Vesu market and waives nothing', async () => {
-    const output = await runCheck(editEntry(
-      'vault.supply',
-      /disclosure:\s*\n\s*'[^']*',/,
-      "disclosure: null,\n    disclosureWaivedBy: 'D-081',",
-    ));
-    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.supply/);
+    expect(output).toContain('ok   every privacy deviation is approved');
+    expect(output).not.toMatch(/FAIL\s+(?:privacy|approved deviation|could not parse)/);
   }, 30_000);
 
   it('still parses the register now its Vault observables name no token (D-081)', async () => {
@@ -98,14 +81,5 @@ describe('check 8: the privacy register gate, with the Vault routes (D-077, D-07
     const output = await runCheck();
     expect(output).not.toContain('could not parse the privacy register');
     expect(output).toContain('ok   every privacy deviation is approved');
-  }, 30_000);
-
-  it('refuses a waiver the cited decision does not record for the route', async () => {
-    const output = await runCheck(editEntry(
-      'vault.supply',
-      /disclosure:\s*\n\s*'[^']*',/,
-      "disclosure: null,\n    disclosureWaivedBy: 'D-077',",
-    ));
-    expect(output).toMatch(/FAIL\s+approved deviation\(s\) still missing player-facing copy: vault\.supply/);
   }, 30_000);
 });

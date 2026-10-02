@@ -110,7 +110,6 @@ describe('the staking station, driven through the screen in demo', () => {
     expect(review.textContent).toContain(COPY.stake.amountAtExecution);
     expect(review.querySelector('.stake-note')?.textContent).toBe(COPY.stake.unstaking);
     expect(review.querySelector('.commit-disclosures')).toBeNull();
-    expect(review.querySelector('.confirm-blocked')).toBeNull();
     const confirm = review.querySelector<HTMLButtonElement>('button.confirm')!;
     expect(confirm.disabled).toBe(false);
     expect(panel.getAttribute('data-brand')).toBe('endur');

@@ -473,7 +473,6 @@ body {
   .review-warnings,
   .flow-failed,
   .flow-done,
-  .confirm-blocked,
   .exchange-experience .panel-body > [role="alert"]
 ) {
   margin: 0.85rem 0;
@@ -531,7 +530,6 @@ body {
 }
 
 .flow-failed,
-.confirm-blocked,
 .panel-notice.notice-error,
 .panel-notice[role="alert"],
 .exchange-experience .panel-body > [role="alert"] {
@@ -1349,15 +1347,26 @@ button[data-locked="true"] {
     linear-gradient(180deg, rgb(242 220 192 / 0.22) 0%, rgb(255 193 46 / 0.06) 38%, rgb(36 18 10 / 0.28) 100%);
 }
 
+/* One centred stack, title over menu, sitting in the upper-middle of the
+ * screen as Cube World's does: the deeper bottom padding lifts it off true
+ * centre. A stack taller than the screen starts at the top and scrolls. */
 .title-front {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.5rem, 2.5vh, 1.75rem);
+  justify-content: safe center;
+  gap: clamp(0.75rem, 4vh, 2.5rem);
   min-height: 100%;
-  padding: clamp(1rem, 4.5vh, 3rem) 16px max(2rem, env(safe-area-inset-bottom));
+  padding: clamp(1rem, 4vh, 2.5rem) 16px max(clamp(2rem, 11vh, 6.5rem), env(safe-area-inset-bottom));
+}
+
+/* A tall phone has more sky than menu: lift the stack further. */
+@media (max-aspect-ratio: 3/4) {
+  .title-front {
+    padding-bottom: max(18vh, env(safe-area-inset-bottom));
+  }
 }
 
 .brand-wordmark {
@@ -1422,6 +1431,7 @@ button[data-locked="true"] {
   letter-spacing: 0.06em;
   line-height: 1.2;
   text-transform: uppercase;
+  margin-bottom: 0.35rem;
 }
 
 .title-menu .room-connect > h2::before {

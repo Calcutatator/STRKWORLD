@@ -93,7 +93,6 @@ export function ConnectRoomView({
       return (
         <section className="room room-connect">
           <h2>{COPY.connect.title}</h2>
-          <p>{COPY.connect.body}</p>
           <button type="button" onClick={() => void connect.connect()}>
             {COPY.connect.action}
           </button>
@@ -124,11 +123,11 @@ function WalletSelection({
     ? COPY.connect.wrongNetwork
     : snapshot.wallets.length === 0
       ? COPY.connect.none
-      : COPY.connect.body;
+      : null;
   return (
     <section className="room room-connect">
       <h2>{COPY.connect.choose}</h2>
-      <p>{body}</p>
+      {body ? <p>{body}</p> : null}
       {snapshot.wallets.length === 0 ? <GetAWallet /> : null}
       {snapshot.wallets.map((choice) => (
         <button

@@ -183,44 +183,26 @@ else
 fi
 
 # 8. Privacy default is ABSOLUTE. Any route below `private` is a deviation and
-#    needs the project lead's recorded approval plus plain-language disclosure.
-#    Unapproved means a locked door, never a quiet downgrade. The only
-#    substitute for the disclosure is an explicit waiver naming a decision
-#    entry that exists and names the route (`disclosureWaivedBy`, D-064).
+#    needs the project lead's recorded approval. Unapproved means a locked
+#    door, never a quiet downgrade. Player copy is not part of this gate:
+#    a route's `disclosure` line is optional product copy (D-118).
 reg="packages/shared/src/privacy-grades.ts"
 if [ -f "$reg" ]; then
-  report=$(python3 - "$reg" docs/DECISIONS.md <<'PYEOF'
+  report=$(python3 - "$reg" <<'PYEOF'
 import re, sys
 raw = open(sys.argv[1]).read()
-try:
-    decisions = open(sys.argv[2]).read()
-except OSError:
-    decisions = ""
 
 # Strip comments first, so a commented-out key can neither satisfy nor hide
 # anything. (Known limit, as below: keep comment markers out of the copy.)
 src = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
 src = re.sub(r"(?m)^\s*//.*$", "", src)
 
-def waiver_holds(decision, route):
-    # The decision must exist as its own Accepted, unsuperseded entry, and must
-    # itself record this route's waiver — not merely mention the route.
-    m = re.search(r"^## " + re.escape(decision) + r" .*?(?=^## D-|\Z)", decisions, re.M | re.S)
-    if not m:
-        return False
-    body = m.group(0)
-    status = next((line for line in body.splitlines() if line.startswith("**")), "")
-    if "Accepted" not in status or re.search(r"superseded", status, re.I):
-        return False
-    pattern = re.escape(route) + r"[^\n]{0,40}disclosureWaivedBy: '" + re.escape(decision) + "'"
-    return re.search(pattern, body) is not None
-
 # Brace-depth parser: find each object literal whose first key is `building:`,
 # regardless of indentation or formatting. The previous regex only closed a
 # block on a line of exactly two spaces + `}`, so ordinary reformatting made
 # entries silently invisible to this safety gate (fail-open). This fails
 # CLOSED instead: zero parsed entries in a file that mentions `building:`
-# is itself a failure. (Known limit: a brace inside a disclosure string will
+# is itself a failure. (Known limit: a brace inside a copy string will
 # confuse the depth count for that entry — keep braces out of the copy.)
 blocks = []
 for m in re.finditer(r"\{", src):
@@ -251,27 +233,21 @@ if len(re.findall(r"\broute:\s*'", src)) != len(blocks):
     print("PARSEFAIL:yes")
     sys.exit(0)
 
-unapproved, nocopy = [], []
+unapproved = []
 for b in blocks:
     route = (re.search(r"route:\s*'([^']+)'", b) or [None, "?"])[1]
     grade = (re.search(r"grade:\s*'([^']+)'", b) or [None, "?"])[1]
     if grade == "private":
         continue
     approved = re.search(r"approvedBy:\s*'[^']+'", b)
-    disclosed = re.search(r"disclosure:\s*\n?\s*['\"]", b)
-    waiver = re.search(r"disclosureWaivedBy:\s*'(D-\d{3,})'", b)
     if not approved:
         unapproved.append(f"{route} ({grade})")
-    elif not disclosed and not (waiver and waiver_holds(waiver.group(1), route)):
-        nocopy.append(route)
 print("PARSEFAIL:")
 print("UNAPPROVED:" + " ".join(unapproved))
-print("NOCOPY:" + " ".join(nocopy))
 PYEOF
 )
   parsefail=$(echo "$report" | grep "^PARSEFAIL:" | cut -d: -f2- | xargs)
   unapproved=$(echo "$report" | grep "^UNAPPROVED:" | cut -d: -f2- | xargs)
-  nocopy=$(echo "$report" | grep "^NOCOPY:" | cut -d: -f2- | xargs)
 
   if [ -n "$parsefail" ]; then
     bad "could not parse the privacy register — check 8 cannot verify D-020"
@@ -284,13 +260,6 @@ PYEOF
     note "Run ./scripts/privacy-report.sh and take it to them."
   else
     ok "every privacy deviation is approved"
-  fi
-
-  if [ -n "$nocopy" ]; then
-    bad "approved deviation(s) still missing player-facing copy: $nocopy"
-    note "Approved but undisclosed is still a silent downgrade. Door stays locked."
-  else
-    ok "every deviation discloses itself to the player, or carries a decision-backed waiver"
   fi
 else
   bad "privacy register missing: $reg"

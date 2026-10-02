@@ -251,6 +251,9 @@ describe('ProductionRoot', () => {
     expect(none).toContain('<a href="https://chromewebstore.google.com/detail/xverse-wallet/idnnbdplmphpflfnlkomgpfbpcgelopg" target="_blank" rel="noopener noreferrer">Xverse</a>');
     expect(some).not.toContain('data-testid="get-a-wallet"');
     expect(some).not.toContain('<a ');
+    // D-118: a plain wallet list is the heading and the buttons, no paragraph.
+    const card = some.slice(some.indexOf('data-testid="wallet-entry-gate"'));
+    expect(card.slice(0, card.indexOf('</section>'))).not.toContain('<p');
   });
 
   it('looks again for wallets when the entry card mounts and when the page becomes visible (D-073)', async () => {

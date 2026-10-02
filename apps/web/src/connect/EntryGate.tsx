@@ -296,7 +296,6 @@ function ReviewCard({ gate, state }: { gate: EntryGateMachine; state: Of<'review
           ) : null}
           <ConfirmGate
             disclosures={review.disclosures}
-            requiresDisclosure={review.requiresDisclosure}
             busy={depositing}
             onConfirm={() => void gate.confirm()}
             onCancel={() => gate.cancelReview()}
