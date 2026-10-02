@@ -1,16 +1,12 @@
 import {
   ACESFilmicToneMapping,
-  BackSide,
   Color,
   DirectionalLight,
   Fog,
   HemisphereLight,
-  Mesh,
   PCFShadowMap,
   PerspectiveCamera,
   Scene,
-  ShaderMaterial,
-  SphereGeometry,
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three';
@@ -39,6 +35,7 @@ import {
 } from './lighting.js';
 import { createPresenter, type Presenter } from './presenter.js';
 import { disposeSandboxCaches } from './sandbox-view.js';
+import { createSky, SKY_HORIZON } from './sky.js';
 
 /**
  * The Three.js renderer for the World (D-059).
@@ -75,9 +72,6 @@ export interface WorldEngineOptions {
 /** A stalled tab must not deliver one enormous frame. */
 export const MAX_FRAME_MS = 50;
 
-const SKY_TOP = 0x6f9edb;
-const SKY_HORIZON = 0xf2dcc0;
-const SKY_GROUND = 0xd8c6ad;
 const FOG_NEAR = 26;
 const FOG_FAR = 64;
 const ERROR_REPORT_INTERVAL_MS = 1000;
@@ -369,45 +363,4 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       if (errors.length > 1) throw new AggregateError(errors, 'World engine teardown failed');
     },
   };
-}
-
-/** A gradient dome that follows the camera; cheaper than a sky shader pass. */
-function createSky(): Mesh<SphereGeometry, ShaderMaterial> {
-  const material = new ShaderMaterial({
-    side: BackSide,
-    depthWrite: false,
-    fog: false,
-    uniforms: {
-      top: { value: new Color(SKY_TOP) },
-      horizon: { value: new Color(SKY_HORIZON) },
-      below: { value: new Color(SKY_GROUND) },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vDirection;
-      void main() {
-        vDirection = normalize(position);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 top;
-      uniform vec3 horizon;
-      uniform vec3 below;
-      varying vec3 vDirection;
-      void main() {
-        float h = vDirection.y;
-        vec3 colour = h >= 0.0
-          ? mix(horizon, top, pow(clamp(h, 0.0, 1.0), 0.55))
-          : mix(horizon, below, pow(clamp(-h, 0.0, 1.0), 0.45));
-        gl_FragColor = vec4(colour, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const sky = new Mesh(new SphereGeometry(200, 32, 16), material);
-  sky.name = 'sky';
-  sky.renderOrder = -1;
-  sky.frustumCulled = false;
-  return sky;
 }

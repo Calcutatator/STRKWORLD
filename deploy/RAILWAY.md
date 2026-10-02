@@ -91,6 +91,10 @@ enabled, the Bridge's D-061 reserve planner is on too. Leave
 probe and the swap probe below: unset, the Vault is the locked facade and the
 Exchange stays locked. Leave
 `VITE_STRK20_BORROW_ENABLED` unset except for the Borrow counter probe below.
+Leave `VITE_STRK20_LEADERBOARD_LEDGER` unset (D-116). It is the address of
+the private leaderboard's `ReceiptLedger` contract
+(`contracts/receipt-ledger/README.md`), set only once the lead has deployed it
+and the web side sends receipts; unset, no action carries a receipt.
 
 ## After it deploys
 
