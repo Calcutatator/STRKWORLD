@@ -314,6 +314,13 @@ export function createArenaSession(
     activate: () => false,
   });
   const NO_TARGETS: readonly ArenaGateTarget[] = Object.freeze([]);
+  const gateObject = (): unknown => {
+    try {
+      return host.gateObject?.() ?? null;
+    } catch {
+      return null;
+    }
+  };
   const CLAIM_TARGETS: readonly ArenaGateTarget[] = Object.freeze([claimTarget]);
   const BUSY_TARGETS: readonly ArenaGateTarget[] = Object.freeze([busyTarget]);
 
@@ -394,7 +401,10 @@ export function createArenaSession(
       if (destroyed || ring === null || selfIsChallenger()) return NO_TARGETS;
       const at = position();
       if (at === null || !onArenaGateApproach(at.x, at.y)) return NO_TARGETS;
-      return ring.phase === 'idle' ? CLAIM_TARGETS : BUSY_TARGETS;
+      const targets = ring.phase === 'idle' ? CLAIM_TARGETS : BUSY_TARGETS;
+      const object = gateObject();
+      // With the gate's mesh, the cues glow it; the target is otherwise the same.
+      return object == null ? targets : [{ ...targets[0]!, object }];
     },
     onAttack(): boolean {
       if (destroyed || ring === null || inputSuspended()) return false;

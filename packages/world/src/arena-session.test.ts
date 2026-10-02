@@ -499,6 +499,17 @@ describe('arena session: the press-E system (D-117)', () => {
     expect(away.session.gateTargets!()).toEqual([]);
   });
 
+  it('hands the gate’s mesh to its target, for the cues to glow', () => {
+    const fake = fakeChannel(ring());
+    const { host } = fakeHost(APPROACH);
+    const gate = { name: 'arena:gate' };
+    const session = createArenaSession(fake.channel, { ...host, suspendInteractions: () => () => {}, gateObject: () => gate });
+    const [target] = session.gateTargets!();
+    expect(target).toMatchObject({ label: ARENA_CLAIM_LABEL, object: gate });
+    target!.activate();
+    expect(fake.channel.claim).toHaveBeenCalledTimes(1);
+  });
+
   it('draws no gate prompt of its own when the interaction system draws it', () => {
     const { session, host } = withInteractions(ring());
     session.update(16);

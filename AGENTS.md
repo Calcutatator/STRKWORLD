@@ -273,7 +273,7 @@ empty shell to fetchers, so a 200 there means nothing.
   Every look passes in the stance, at every swing stage standing and walking, and seated (`tools/avatar-clipping.ts` `arenaPoses`).
 - **The dummy is the room's.** Stream A builds the dummy in the arena room: a group named `arena:dummy`, its origin at the post's foot, next to `arena:fx-mount`. The fx adopts it by dep, or by name once it is mounted beside it. It flashes cloned materials, because the room's materials are shared and the whole stand would otherwise flash.
 - **E is shared.** With the press-E system (D-117):
-  - the gate is a station target (`gateTargets`: CLAIM, or IN USE, which sends nothing);
+  - the gate is a station target (`gateTargets`: CLAIM, or IN USE, which sends nothing), carrying the gate's mesh when the host gives it (`gateObject`) so the interaction cues can glow it; no floor tiles or floating prompt for the gate;
   - the attack is an action (`onAttack`);
   - the session holds `suspend('combat')` from the new round to idle, so E always attacks in a fight.
 

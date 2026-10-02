@@ -57,10 +57,21 @@ export interface ArenaSessionHost {
    * through the interaction system instead of `setPrompt`.
    */
   suspendInteractions?(reason: string): () => void;
+  /**
+   * C (optional): the ring gate's mesh in the arena room, handed to the
+   * gate's press-E target so the interaction cues can glow it. No floor
+   * tiles and no floating prompt are drawn for the gate.
+   */
+  gateObject?(): unknown;
 }
 
-/** C: the ring gate as a press-E station target (D-117): World pixels, room origin included. */
-export type ArenaGateTarget = InteractionTarget;
+/**
+ * C: the ring gate as a press-E station target (D-117): World pixels, room
+ * origin included. `object` is the gate's own mesh when the host supplies it
+ * (`ArenaSessionHost.gateObject`), for the interaction cues' edge glow; the
+ * field follows the interaction system's optional object ref.
+ */
+export type ArenaGateTarget = InteractionTarget & { readonly object?: unknown };
 
 export interface ArenaViewFrame {
   readonly phase: ArenaPhase;
