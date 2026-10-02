@@ -79,6 +79,8 @@ export interface PresenterOptions {
    * presenter binds must be created with the same value.
    */
   readonly vaultOpen?: boolean;
+  /** Leaderboard phase 1: the placement stand east of the plaza. Sessions must match it too. */
+  readonly placementStand?: boolean;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -153,7 +155,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const disposers: Array<() => void> = [];
 
   const vaultOpen = options.vaultOpen === true;
-  const streetMap = createStreetMap({ vaultOpen });
+  const streetMap = createStreetMap({ vaultOpen, placementStand: options.placementStand === true });
   const street: StreetView = buildStreet(streetMap, options.labels);
   // Pavement is raised; stand feet on it. Interiors and the Studio floor are
   // flat. On the sandbox, anyone stands on the tallest stack their body

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STREET_ORIGIN_X, type ShellEvents, type WorldEvents } from '@strkworld/shared';
-import { PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION } from './map/plaza.js';
+import { PLACEMENT_STAND, PLAZA_MONUMENT_STATION, PLAZA_PLACEMENT_STATION, PLAZA_SHELLS_STATION } from './map/plaza.js';
 import { TILE_SIZE } from './map/street.js';
 import type { MovementInput } from './street-movement.js';
 import { createWorldSession, type WorldKeyboard, type WorldSession, type WorldSessionView } from './world-session.js';
@@ -56,7 +56,7 @@ function fakeKeyboard() {
   return keyboard;
 }
 
-function setup(options: { claim?: boolean } = {}) {
+function setup(options: { claim?: boolean; placementStand?: boolean } = {}) {
   const emitted: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
   const shell = new Map<keyof ShellEvents, Set<(payload: unknown) => void>>();
   const shellEmit = (event: keyof ShellEvents, payload: unknown): void => {
@@ -72,6 +72,7 @@ function setup(options: { claim?: boolean } = {}) {
   const session = createWorldSession({
     view,
     keyboard,
+    ...(options.placementStand ? { placementStand: true } : {}),
     config: {
       out: {
         emit(event, payload) {
@@ -197,5 +198,45 @@ describe('the Privacy Plaza in the session (D-076)', () => {
     expect(world.keyboard.count('keydown-E')).toBe(0);
     world.shellEmit('plaza:stats', { accounts: '1', valueUsd: null, topHoldings: null });
     expect(world.last('setPlazaStats')).toBeUndefined();
+  });
+});
+
+describe('the placement stand by the plaza (leaderboard phase 1)', () => {
+  // The stand is two tiles at the street's x 12-13, y 22; its approach ring is x 11-14, y 21-23.
+  const standX = PLACEMENT_STAND.x - STREET_ORIGIN_X;
+
+  it('opens with E from its approach, like the plaza\'s other stations, when the Shell stands it', () => {
+    const world = setup({ placementStand: true, claim: true });
+    standAt(world, standX, 24);
+    standAt(world, standX, 23);
+    // D-117: the shared prompt, over the stand's centre.
+    expect(world.last('setInteractionPrompt')).toEqual([{
+      id: PLAZA_PLACEMENT_STATION,
+      label: 'CHECK PLACEMENT',
+      x: (PLACEMENT_STAND.x + PLACEMENT_STAND.width / 2) * 32,
+      y: (PLACEMENT_STAND.y + PLACEMENT_STAND.height / 2) * 32,
+    }]);
+    expect(world.events('station:activated')).toEqual([]);
+    world.keyboard.press('keydown-E');
+    expect(world.events('station:activated')).toEqual([{ building: 'plaza', station: PLAZA_PLACEMENT_STATION }]);
+    expect(world.session.inputSuspended).toBe(true);
+    // Walking up never opened it; only E did, and nothing left the street.
+    expect(world.session.area).toBe('street');
+    expect(world.events('building:entered')).toEqual([]);
+  });
+
+  it('does not exist without the switch: E on its lawn does nothing', () => {
+    const world = setup();
+    standAt(world, standX, 23);
+    world.keyboard.press('keydown-E');
+    expect(world.events('station:activated')).toEqual([]);
+    expect(world.last('setInteractionPrompt') ?? [null]).toEqual([null]);
+  });
+
+  it('leaves the monument and the table exactly as they were', () => {
+    const world = setup({ placementStand: true });
+    standAt(world, 10, 23);
+    world.keyboard.press('keydown-E');
+    expect(world.events('station:activated')).toEqual([{ building: 'plaza', station: PLAZA_SHELLS_STATION }]);
   });
 });

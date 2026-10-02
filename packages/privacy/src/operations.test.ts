@@ -44,6 +44,8 @@ const PINNED_METHODS = [
   'endurRate',
   // D-094: the account's public balance of one token, which a shield draws on.
   'publicBalance',
+  // Leaderboard phase 1: the private placement, counted on-chain, ranked on the device.
+  'checkPlacement',
 ] as const;
 
 type PinnedMethod = (typeof PINNED_METHODS)[number];
@@ -67,8 +69,8 @@ type NoMissingMember = MustBeNever<Exclude<PinnedMethod, keyof PrivacyOperations
 type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMethod, SeamMethod>>;
 
 describe('D-036 PrivacyOperations freeze', () => {
-  it('pins nineteen distinct method names', () => {
-    expect(new Set(PINNED_METHODS).size).toBe(19);
+  it('pins twenty distinct method names', () => {
+    expect(new Set(PINNED_METHODS).size).toBe(20);
   });
 
   it('names methods the shipped test double implements', () => {

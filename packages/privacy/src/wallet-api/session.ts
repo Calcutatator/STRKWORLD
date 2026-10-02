@@ -260,6 +260,9 @@ export function createWalletSession(
     // D-094: the public balance a shield draws on, owned the same way: a read
     // for a retired account is refused.
     publicBalance: (token, signal) => ownedResult((owned) => owned.publicBalance(token, signal)),
+    // Leaderboard phase 1: the placement check, owned the same way. Counts only
+    // come back; a check answered for a retired account is refused.
+    checkPlacement: (signal) => ownedResult((owned) => owned.checkPlacement(signal)),
   };
 
   async function ownedBorrowBatch(
@@ -661,6 +664,9 @@ export function createProductionWalletSession(
           borrow: backend,
           // D-085: unstaking's reads, through the same backend.
           endur: backend,
+          // Leaderboard phase 1: the placement's reads and blind tally, through
+          // the same backend. Used only while the policy names a ledger.
+          leaderboard: backend,
         }),
         subscribe(listener) {
           portListeners.add(listener);
@@ -887,6 +893,16 @@ function copyPolicyCollection<T>(value: Iterable<T>): T[] {
   }
 }
 
+/** Leaderboard phase 1: the review flag, carried only as an own data property holding exactly `true`. */
+function countsTowardPlacement(prepared: object): boolean {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(prepared, 'countsTowardPlacement');
+    return Boolean(descriptor && 'value' in descriptor && descriptor.value === true);
+  } catch {
+    return false;
+  }
+}
+
 function ownPreparedBatch(
   prepared: PreparedBatch,
   isCurrent: () => boolean,
@@ -965,6 +981,7 @@ function ownPreparedBatch(
     warnings,
     promptCount: prepared.promptCount,
     ...(swapReview ? { swapReview } : {}),
+    ...(countsTowardPlacement(prepared) ? { countsTowardPlacement: true as const } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
       if (!hasOwnDataProperties(options, ['feeCeiling'])) {
         throw new PrivacyError('unknown', 'The confirmation options are invalid.');
@@ -1134,6 +1151,7 @@ function ownPreparedShadowBatch<A, B extends { readonly action: A } & Omit<Prepa
     totalCost: prepared.totalCost,
     warnings,
     promptCount: prepared.promptCount,
+    ...(countsTowardPlacement(prepared) ? { countsTowardPlacement: true as const } : {}),
     async confirm(options: Parameters<PreparedVaultBatch['confirm']>[0]) {
       if (!hasOwnDataProperties(options, ['feeCeiling'])) {
         throw new PrivacyError('unknown', 'The confirmation options are invalid.');

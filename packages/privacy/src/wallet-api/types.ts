@@ -72,6 +72,39 @@ export interface EndurReadClient {
   endurRate(signal?: AbortSignal): Promise<{ readonly strkPerXstrk: bigint }>;
 }
 
+/**
+ * The private placement's reads (leaderboard phase 1), through the backend
+ * for the reason D-014 gives: the player's IP next to their season partial
+ * commitment `p` is a link, and a shield receipt names the account. The
+ * backend pins the anonymizer and the ledger itself and logs nothing per
+ * request; a request names only `p`, a page, or commitments.
+ */
+export interface LeaderboardReadClient {
+  /**
+   * One page of the anonymizer's `get_shadow_accounts(p, start, start + page,
+   * until_undeployed = false)`: every nonce in the page, its address, and
+   * whether it is deployed. The caller cross-checks each address.
+   */
+  leaderboardShadows(partialCommitment: string, page: number, signal?: AbortSignal): Promise<readonly LeaderboardShadowRow[]>;
+  /** The ledger's `count_of(C)` for each commitment, in order. */
+  leaderboardCounts(commitments: readonly string[], signal?: AbortSignal): Promise<readonly bigint[]>;
+  /**
+   * The blind tally: `p` (no address, no signature) refreshes this player's
+   * anonymous entry. The backend recounts the receipts on-chain, keeps only
+   * a hash of `p` and the count, and answers the count it verified.
+   */
+  leaderboardCheckIn(season: string, partialCommitment: string, signal?: AbortSignal): Promise<{ readonly count: bigint }>;
+  /** The season's anonymous histogram: counts only. */
+  leaderboardHistogram(signal?: AbortSignal): Promise<unknown>;
+}
+
+/** One nonce of a leaderboard shadow page. */
+export interface LeaderboardShadowRow {
+  readonly nonce: bigint;
+  readonly address: Address;
+  readonly deployed: boolean;
+}
+
 /** One unstaking read, as the backend answers it (D-085). */
 export interface EndurUnstakeRead {
   readonly chainTime: number;
@@ -370,6 +403,16 @@ export interface WalletRoutePolicy {
      * static list.
      */
     degen?: boolean;
+  };
+  /**
+   * The private placement's ledger (leaderboard phase 1). Present only when
+   * the build sets `VITE_STRK20_LEADERBOARD_ENABLED=true` and a valid
+   * `VITE_STRK20_LEADERBOARD_LEDGER`. Absent, no flow carries a receipt or a
+   * tick and nothing about it is read: every action is byte-for-byte what it
+   * was without it.
+   */
+  leaderboard?: {
+    readonly ledger: Address;
   };
 }
 

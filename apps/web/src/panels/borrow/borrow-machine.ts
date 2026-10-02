@@ -152,6 +152,11 @@ export interface BorrowSummary {
   readonly feeCeiling: bigint;
   readonly disclosures: readonly string[];
   readonly requiresDisclosure: boolean;
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 export type BorrowFlow =
@@ -728,6 +733,7 @@ export function createBorrowPanel(options: BorrowPanelOptions): BorrowPanel {
               feeCeiling: batch.totalCost + feeTolerance,
               disclosures: disclosure ? [disclosure] : [],
               requiresDisclosure: routeRequiresDisclosure(VAULT_BORROW_ROUTE, register),
+              ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
             },
           },
         });

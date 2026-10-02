@@ -29,6 +29,7 @@ import {
   ownCallOptions as ownShadowCallOptions,
   ownData,
   preparedShadowBatch,
+  withPlacementTick,
   sameAddress,
   throwIfAborted,
   type ShadowBatchDeps,
@@ -93,6 +94,8 @@ export interface ShadowVaultOptions {
   readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly receiptWaitsMs?: readonly number[];
+  /** Leaderboard phase 1: the ledger each action ticks. Absent, nothing is appended. */
+  readonly ledger?: Address;
 }
 
 interface PositionRead {
@@ -110,9 +113,11 @@ export class ShadowVault {
   /** The Vault's stand-in address for `VAULT_DAPP_NAME`, shared logic with the borrow counter (D-083). */
   private readonly identity: ShadowAccountResolver;
   private readonly batchDeps: ShadowBatchDeps;
+  private readonly ledger?: Address;
 
   constructor(options: ShadowVaultOptions) {
     this.walletAddress = options.walletAddress;
+    this.ledger = options.ledger;
     this.reads = options.reads;
     this.policy = options.policy;
     this.poolConfig = options.poolConfig;
@@ -321,8 +326,14 @@ export class ShadowVault {
     return positions;
   }
 
-  private prepared(action: VaultAction, built: STRK20_ACTION[], config: PoolConfig): PreparedVaultBatch {
-    return preparedShadowBatch(this.batchDeps, action, built, config, {});
+  private async prepared(action: VaultAction, built: STRK20_ACTION[], config: PoolConfig): Promise<PreparedVaultBatch> {
+    const { actions, extra } = await withPlacementTick(built, this.ledger, this.identity);
+    return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
+  }
+
+  /** Leaderboard phase 1: this counter's shadow commitment, whose ledger ticks count toward the placement. */
+  ledgerCommitment(): Promise<string> {
+    return this.identity.fullCommitment();
   }
 
   /**

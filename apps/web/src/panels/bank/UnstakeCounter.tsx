@@ -326,6 +326,7 @@ function ReviewBlock({ state, onConfirm, onCancel }: { state: UnstakeState; onCo
         disclosures={summary.disclosures}
         requiresDisclosure={summary.requiresDisclosure}
         busy={flow.name === 'submitting'}
+        countsTowardPlacement={summary.countsTowardPlacement === true}
         onConfirm={onConfirm}
         onCancel={onCancel}
       />

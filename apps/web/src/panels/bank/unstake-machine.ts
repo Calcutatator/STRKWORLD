@@ -93,6 +93,11 @@ export interface UnstakeSummary {
   /** The prepared route's approved disclosure, verbatim, for the commit point. */
   readonly disclosures: readonly string[];
   readonly requiresDisclosure: boolean;
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 export type UnstakeFlow =
@@ -305,6 +310,7 @@ export function createUnstakePanel(options: UnstakePanelOptions): UnstakePanel {
             feeCeiling: batch.totalCost + feeTolerance,
             disclosures: disclosure ? [disclosure] : [],
             requiresDisclosure: routeRequiresDisclosure(routeId, register),
+            ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
           },
         },
       });

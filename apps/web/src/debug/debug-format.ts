@@ -339,7 +339,7 @@ export function visitPanel(state: unknown): string | null {
 }
 
 /** The Privacy Plaza's stations (D-076), the only ids a plaza line may name. */
-const PLAZA_STATIONS = setOf({ 'plaza:monument': true, 'plaza:shells': true });
+const PLAZA_STATIONS = setOf({ 'plaza:monument': true, 'plaza:shells': true, 'plaza:placement': true });
 
 /**
  * The Privacy Plaza window a visit state shows (D-076), or null: its

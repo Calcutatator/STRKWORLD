@@ -21,6 +21,7 @@ export function WorldHost({
   sandbox,
   football,
   vaultOpen = false,
+  placementStand = false,
 }: {
   out: EventBus<WorldEvents>;
   in: EventBus<ShellEvents>;
@@ -35,11 +36,16 @@ export function WorldHost({
    * Absent or false keeps D-007's locked facade.
    */
   vaultOpen?: boolean;
+  /**
+   * Leaderboard phase 1: whether the placement stand stands by the plaza:
+   * the Shell's answer from this build's switch. Absent or false, no stand.
+   */
+  placementStand?: boolean;
 }) {
   const parent = useRef<HTMLDivElement>(null);
   const leaseKey = useMemo(
-    () => ({ out, shellIn, remotePeers, sandbox, football, vaultOpen }),
-    [out, shellIn, remotePeers, sandbox, football, vaultOpen],
+    () => ({ out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand }),
+    [out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand],
   );
 
   useEffect(() => {
@@ -56,10 +62,11 @@ export function WorldHost({
         ...(sandbox ? { sandbox } : {}),
         ...(football ? { football } : {}),
         ...(vaultOpen ? { vaultOpen } : {}),
+        ...(placementStand ? { placementStand } : {}),
       });
       return runtime.releaseWorld;
     }, leaseKey);
-  }, [out, shellIn, remotePeers, sandbox, football, vaultOpen, leaseKey]);
+  }, [out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand, leaseKey]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

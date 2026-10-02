@@ -97,7 +97,9 @@ the private leaderboard's `ReceiptLedger` contract
 and the web side sends receipts; unset, no action carries a receipt. The
 mainnet ledger is deployed at
 `0x01517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8`; that is
-the value to set when the leaderboard is switched on.
+the value to set when the leaderboard is switched on. Leave
+`VITE_STRK20_LEADERBOARD_ENABLED` unset too, except for the leaderboard probe
+below.
 
 ## After it deploys
 
@@ -325,6 +327,57 @@ the swap probe above has passed, with every swap variable from it still set.
 
 To close it again, unset the five variables and redeploy; the counter then
 says its list is unavailable while the ground floor keeps swapping.
+
+## The private leaderboard probe (leaderboard phase 1)
+
+Off by default, in three pieces that switch on together: the browser's
+receipts and ticks, the placement stand by the plaza, and the backend's blind
+tally. The ledger is live (D-116); the web side is new, so this is its first
+live check.
+
+1. Give the service a volume for the tally. In the Railway dashboard, add a
+   volume to the `strkworld` service mounted at `/data`. The tally is one
+   small JSON file of `(hash of the season commitment, count, day)` rows,
+   written through a temporary file and renamed, mode `0600`. Without a
+   volume (or with `BACKEND_LEADERBOARD_FILE` unset) the tally lives in memory
+   and empties on every deploy or restart: players simply check in again.
+   The container runs as the `node` user, so the mount must be writable by
+   it (Railway volumes are).
+2. Set these and redeploy (the two browser values are build arguments):
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_STRK20_LEADERBOARD_ENABLED` | `true` |
+   | `VITE_STRK20_LEADERBOARD_LEDGER` | `0x01517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8` |
+   | `BACKEND_LEADERBOARD_ENABLED` | `true` |
+   | `BACKEND_LEADERBOARD_LEDGER` | the same address |
+   | `BACKEND_LEADERBOARD_FILE` | `/data/leaderboard.json` |
+
+   The browser pair alone adds receipts and the stand, but the stand's check
+   and every receipt's nonce read go through the backend, so a missing
+   backend half means receipts fail open (actions go out without one) and a
+   check shows "can't be checked right now". Both halves follow
+   `BACKEND_GLOBAL_ENABLED`.
+3. With a funded account on a wallet that runs shadow accounts (Wallet API
+   0.10.4), do one small private send. Its review should say "Counts toward
+   your private placement". The wallet prompt is still one transaction with
+   one 6 STRK pool fee; note whether it now asks for anything extra (a
+   season commitment prompt, a higher network fee for the shadow deploy).
+4. Walk to the stand east of the plaza (the scoreboard on the lawn beside the
+   shell-game table), press E, and Check privately. Expect "1 private action"
+   and a placement among whoever has checked in. Do a second send and check
+   again: "+1 since your last check".
+5. What to record, since none of it is verified yet: whether Ready accepts a
+   `shadow_account_invoke` to the ledger next to a deposit, a transfer and a
+   withdraw (receipt mode); whether it accepts the extra `tick` call in a
+   Vault, Borrow, unstaking or swap action (DeFi mode); whether it prompts on
+   the season commitment; and the extra network fee of a fresh shadow deploy.
+
+The tally logs nothing per request. Its routes take their own rate windows
+(30 at once per client, one more every 2 s; check-ins 3 at once per client,
+one more a minute, and 60 a minute overall), keyed by the same salted,
+in-memory client hash as the swap quotes. To switch it all off, unset the
+five variables and redeploy; the file can stay, or be deleted with the volume.
 
 ## Debug logs
 

@@ -37,6 +37,11 @@ export interface ExchangeReview {
   /** D-084: whether an independent oracle price vouches for this quote. */
   readonly priceCheck: 'checked' | 'unchecked';
   readonly priceCheckNote: string;
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 export type ExchangeFlow =
@@ -291,6 +296,7 @@ export function createExchangePanel(options: {
       priceCheckNote: safeReview.priceCheck.status === 'checked'
         ? priceCheckedNote(safeReview.priceCheck.shortfallBps ?? 0, safeReview.priceCheck.boundBps)
         : COPY.exchange.priceUnchecked,
+      ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
     };
     return { batch, summary };
   };

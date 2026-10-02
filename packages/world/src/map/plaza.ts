@@ -41,6 +41,8 @@ export const PLAZA_NEARBY: PlazaRect = Object.freeze({ x: at(0), y: 14, width: 1
 
 export const PLAZA_MONUMENT_STATION: StationId = 'plaza:monument';
 export const PLAZA_SHELLS_STATION: StationId = 'plaza:shells';
+/** Leaderboard phase 1: the placement stand, built only while the Shell switches it on. */
+export const PLAZA_PLACEMENT_STATION: StationId = 'plaza:placement';
 
 /** The sign over the plaza's gateway, in the brand-plate style of the facades. */
 export const PLAZA_SIGN_TEXT = 'PRIVACY PLAZA\nPOOL STATS · SHELL GAME';
@@ -98,10 +100,56 @@ export const PLAZA_STATIONS: readonly PlazaStation[] = Object.freeze([
   Object.freeze({ station: PLAZA_SHELLS_STATION, label: "WHERE'S THE NOTE?", x: at(9), y: 23, width: 1, height: 1 }),
 ]);
 
+/**
+ * Leaderboard phase 1: the placement stand, a scoreboard kiosk on its own
+ * paved apron on the plaza's open east lawn, beside the shell-game table and
+ * inside the plaza's camera frame (`PLAZA_NEARBY`). Two tiles wide, facing the
+ * camera (south). Its approach ring (x 11-14, y 21-23) touches no other
+ * station's, so E is never ambiguous.
+ */
+export const PLACEMENT_STAND: PlazaRect = Object.freeze({ x: at(12), y: 22, width: 2, height: 1 });
+/** The stand's apron: plaza paving round the stand, so it reads as part of the square. */
+export const PLACEMENT_APRON: PlazaRect = Object.freeze({ x: at(11), y: 21, width: 4, height: 3 });
+/** The World's own prompt over the stand: "E · CHECK PLACEMENT". */
+export const PLACEMENT_STAND_LABEL = 'CHECK PLACEMENT';
+
+const PLACEMENT_STAND_STATION: PlazaStation = Object.freeze({
+  station: PLAZA_PLACEMENT_STATION,
+  label: PLACEMENT_STAND_LABEL,
+  ...PLACEMENT_STAND,
+});
+
+/** What the Shell decides about the plaza when it composes the World. */
+export interface PlazaOptions {
+  /** Leaderboard phase 1: the placement stand. Only a real `true` builds it. */
+  readonly placementStand?: boolean;
+}
+
+/** The stations E can use: the monument and the table, and the stand when it is built. */
+export function plazaStations(options?: PlazaOptions): readonly PlazaStation[] {
+  return options?.placementStand === true ? PLAZA_STATIONS_WITH_STAND : PLAZA_STATIONS;
+}
+
+const PLAZA_STATIONS_WITH_STAND: readonly PlazaStation[] = Object.freeze([...PLAZA_STATIONS, PLACEMENT_STAND_STATION]);
+
 /** Pave the plaza and mark every fixture's tiles solid, in an existing grid. */
-export function paintPlaza(tiles: TileKind[][]): void {
+export function paintPlaza(tiles: TileKind[][], options?: PlazaOptions): void {
   fillTiles(tiles, PLAZA_AREA, 'plaza');
   for (const piece of PLAZA_FIXTURES) fillTiles(tiles, piece, 'plinth');
+  if (options?.placementStand === true) {
+    fillTiles(tiles, PLACEMENT_APRON, 'plaza');
+    fillTiles(tiles, PLACEMENT_STAND, 'plinth');
+  }
+}
+
+/** Whether the map was painted with the placement stand. */
+export function hasPlacementStand(tiles: readonly (readonly TileKind[])[]): boolean {
+  for (let y = PLACEMENT_STAND.y; y < PLACEMENT_STAND.y + PLACEMENT_STAND.height; y++) {
+    for (let x = PLACEMENT_STAND.x; x < PLACEMENT_STAND.x + PLACEMENT_STAND.width; x++) {
+      if (tiles[y]?.[x] !== 'plinth') return false;
+    }
+  }
+  return true;
 }
 
 export function inPlazaRect(rect: PlazaRect, x: number, y: number): boolean {
@@ -109,8 +157,12 @@ export function inPlazaRect(rect: PlazaRect, x: number, y: number): boolean {
 }
 
 /** The station whose approach holds this street tile, or null. A station's own tiles are not its approach. */
-export function plazaStationAtApproach(x: number, y: number): PlazaStation | null {
-  for (const station of PLAZA_STATIONS) {
+export function plazaStationAtApproach(
+  x: number,
+  y: number,
+  stations: readonly PlazaStation[] = PLAZA_STATIONS,
+): PlazaStation | null {
+  for (const station of stations) {
     const halo = { x: station.x - 1, y: station.y - 1, width: station.width + 2, height: station.height + 2 };
     if (inPlazaRect(halo, x, y) && !inPlazaRect(station, x, y)) return station;
   }

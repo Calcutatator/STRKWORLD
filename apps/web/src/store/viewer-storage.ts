@@ -11,7 +11,11 @@
  * This is for presentation preferences only — the guide's dismissal, the HUD
  * balance toggle and an opaque Bridge-arrival fingerprint
  * (`bridge/arrival-nudge.ts`). No address, amount, hash or timestamp goes
- * through it, and nothing here is ever sent anywhere. The entry gate's
+ * through it, and nothing here is ever sent anywhere. One deliberate
+ * exception (leaderboard phase 1): the placement stand keeps the player's
+ * last check on this device, `{ placement, count, checkedAt, season }`
+ * (`plaza/placement.ts`), so it can say "+N since your last check"; it holds
+ * no commitment, address or history. The entry gate's
  * once-per-session pass (`connect/entry-pass.ts`, D-072) uses the same guard
  * over `sessionStorage`: its key is a SHA-256 of a label and the account, its
  * value a constant, so no raw address is stored. The key hides nothing: the

@@ -11,6 +11,7 @@ import type {
 } from '../operations.js';
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback, type TxResult } from '../types.js';
 import { isContractAddress, shadowAccountAddress, vaultOutcomeFromReceipt } from '../vault.js';
+import { shadowCommitment, withLedgerTick } from '../leaderboard.js';
 import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import type { PoolReadClient, VaultReadClient, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet, waitForReceipt } from './wallet-submission.js';
@@ -120,6 +121,18 @@ export class ShadowAccountResolver {
     return Object.freeze({ address: `0x${BigInt(address).toString(16)}`, deployed });
   }
 
+  /**
+   * The full commitment `C = h(p, nonce)` of this counter's shadow account,
+   * for the private placement's ledger tick (DeFi mode). It reuses the
+   * partial commitment `resolve` already asked for, so after a resolve it
+   * costs no wallet request. `C` is public once the account is deployed (it
+   * is the deploy salt), so handing it to the ledger adds no link.
+   */
+  async fullCommitment(): Promise<string> {
+    const partial = await this.partialCommitment(undefined);
+    return shadowCommitment(partial, this.nonce);
+  }
+
   private partialCommitment(onStage: VaultStageCallback | undefined): Promise<string> {
     if (this.commitment) return this.commitment;
     const request = (async () => {
@@ -147,6 +160,22 @@ export class ShadowAccountResolver {
     });
     return request;
   }
+}
+
+/**
+ * Leaderboard phase 1, DeFi mode: the counter's built actions with
+ * `ledger.tick(C_feature)` appended to its shadow account's calls, and the
+ * review flag, when the build names a ledger. Without one the actions come
+ * back untouched and the flag is absent: byte-for-byte what they were.
+ */
+export async function withPlacementTick(
+  built: STRK20_ACTION[],
+  ledger: Address | undefined,
+  identity: Pick<ShadowAccountResolver, 'fullCommitment'>,
+): Promise<{ readonly actions: STRK20_ACTION[]; readonly extra: { readonly countsTowardPlacement?: true } }> {
+  if (!ledger) return { actions: built, extra: {} };
+  const commitment = await identity.fullCommitment();
+  return { actions: withLedgerTick(built, ledger, commitment), extra: { countsTowardPlacement: true } };
 }
 
 /** What a shadow-account batch needs from its counter to confirm. */

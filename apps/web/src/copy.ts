@@ -793,6 +793,38 @@ export const COPY = freezeCopy({
       cup: 'Cup',
       streak: 'Streak',
     },
+    /**
+     * Leaderboard phase 1: the placement stand's window. The placement shows
+     * here and nowhere else. The trust line states plainly what the ranking
+     * covers and what is kept.
+     */
+    placement: {
+      title: 'Check your placement privately',
+      season: 'Season 1',
+      intro: 'Every shield, unshield, private send and DeFi action STRKWORLD sends leaves a receipt on-chain, each under a fresh code only your wallet can find. This counts yours here, on your device.',
+      trust: "Only players who've checked in are ranked. Your account is never stored.",
+      check: 'Check privately',
+      again: 'Check again',
+      checking: 'Counting your receipts…',
+      top: (percent: number) => `Top ${percent}%`,
+      rank: (rank: number, total: number) => `Rank about ${rank} of ${total}`,
+      count: (count: number) => (count === 1 ? '1 private action' : `${count} private actions`),
+      progress: (actions: number, places: number) => [
+        actions > 0 ? `+${actions} since your last check` : null,
+        places > 0 ? `up ${places} ${places === 1 ? 'place' : 'places'}` : places < 0 ? `down ${-places} ${places === -1 ? 'place' : 'places'}` : null,
+      ].filter(Boolean).join(', '),
+      defi: (ranked: number, defi: number) => `Ranked on your ${ranked} shield, unshield and send receipts. Your ${defi} DeFi ${defi === 1 ? 'action counts' : 'actions count'} here, on this device, for now.`,
+      none: 'No private actions counted yet this season. Shield, send or use a counter, and it counts.',
+      unranked: 'Not ranked yet: your shield, unshield and send receipts are what the ranking counts.',
+      rankingDown: "The ranking can't be reached right now, so only your own count shows.",
+      lastCheck: (percent: number, count: number) => `Last check on this device: top ${percent}%, ${count} private ${count === 1 ? 'action' : 'actions'}.`,
+      saved: 'Saved on this device only: your placement, your count and when you checked.',
+      refused: 'Your wallet declined, so nothing was checked.',
+      failed: "Your placement can't be checked right now. Try again in a moment.",
+      demo: 'Demo placement: this practice city shows sample numbers.',
+      /** The review step's quiet line, only when the transaction carries a receipt. */
+      reviewHint: 'Counts toward your private placement',
+    },
   },
 
   /**

@@ -36,6 +36,11 @@ export interface WorldConfig {
    * when it starts.
    */
   vaultOpen?: boolean;
+  /**
+   * Leaderboard phase 1: the placement stand east of the plaza, behind the
+   * Shell's switch. Read once, when the engine starts, like `vaultOpen`.
+   */
+  placementStand?: boolean;
 }
 
 interface WorldBinding {
@@ -175,5 +180,6 @@ function sameBinding(
     current.config.sandbox === config.sandbox &&
     current.config.football === config.football &&
     // Absent and false are the same locked Vault (D-077).
-    (current.config.vaultOpen === true) === (config.vaultOpen === true);
+    (current.config.vaultOpen === true) === (config.vaultOpen === true) &&
+    (current.config.placementStand === true) === (config.placementStand === true);
 }

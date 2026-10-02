@@ -19,6 +19,7 @@ import {
 } from './environment.js';
 import { createBackendFetchHandler } from './http.js';
 import { HttpPoolValueSource, PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
+import { LeaderboardService, LeaderboardStore, type LeaderboardRpcPort } from './leaderboard.js';
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type {
@@ -46,6 +47,8 @@ export interface BackendRuntimeOverrides {
   vaultRates?: VaultRatesPort;
   /** The D-069 debug sink, with a test writer in place of stdout. */
   debugLogs?: DebugLogSink;
+  /** Leaderboard phase 1: the tally's store, in place of the configured file. */
+  leaderboardStore?: LeaderboardStore;
 }
 
 export interface BackendRuntime {
@@ -218,6 +221,16 @@ function createBackendApi(
   // D-083: the Borrow counter's two pinned reads use the same private RPC,
   // when the port offers them.
   const borrow = isBorrowRpc(rpc) ? rpc : undefined;
+  // Leaderboard phase 1: composed only while BACKEND_LEADERBOARD_ENABLED=true,
+  // on the same private RPC. The store reads its file back once, at start.
+  const leaderboardConfig = parsed.backend.leaderboard;
+  let leaderboard: LeaderboardService | undefined;
+  if (leaderboardConfig && isLeaderboardRpc(rpc)) {
+    const store = overrides.leaderboardStore ?? new LeaderboardStore(leaderboardConfig.storePath);
+    const ready = store.load();
+    ready.catch(() => undefined);
+    leaderboard = new LeaderboardService({ config: leaderboardConfig, rpc, store, ready });
+  }
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
@@ -227,6 +240,7 @@ function createBackendApi(
     ...(endur ? { endur } : {}),
     vaultRates,
     ...(borrow ? { borrow } : {}),
+    ...(leaderboard ? { leaderboard } : {}),
     // D-084: avnu's keyless public quote API, read by this service alone.
     swapQuotes: overrides.swapQuotes ?? new AvnuSwapQuotes(parsed.swapQuotes),
     ...(degen ? {
@@ -239,6 +253,13 @@ function createBackendApi(
     // D-069: constructed either way; only BACKEND_DEBUG_LOGS_ENABLED=true routes to it.
     ...(overrides.debugLogs ? { debugLogs: overrides.debugLogs } : {}),
   });
+}
+
+/** Whether an RPC port offers the leaderboard's two pinned reads. */
+function isLeaderboardRpc(value: unknown): value is LeaderboardRpcPort {
+  if (!value || typeof value !== 'object') return false;
+  const port = value as Partial<Record<keyof LeaderboardRpcPort, unknown>>;
+  return typeof port.getLeaderboardShadows === 'function' && typeof port.getLeaderboardCounts === 'function';
 }
 
 /** Whether an RPC port offers unstaking's narrow read (D-085). */

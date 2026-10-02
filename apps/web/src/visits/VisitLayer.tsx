@@ -9,6 +9,7 @@ import { LockedRoom, UnbuiltRoom } from '../panels/LockedRoom.js';
 import { PanelFrame } from '../panels/PanelFrame.js';
 import { MonumentPanel } from '../panels/plaza/MonumentPanel.js';
 import { ShellGamePanel } from '../panels/plaza/ShellGamePanel.js';
+import { PlacementPanel } from '../panels/plaza/PlacementPanel.js';
 import { resolveRoom, type PanelRegistry } from '../panels/panel-framework.js';
 import { BUILDING_PANELS, type BuildingPanelDescriptor } from '../panels/registry.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
@@ -174,6 +175,8 @@ export function VisitLayerView({
     }
     if (station.definition.view === 'plaza-monument') return <MonumentPanel onClose={onCloseSurface} />;
     if (station.definition.view === 'plaza-shells') return <ShellGamePanel onClose={onCloseSurface} />;
+    // Leaderboard phase 1: the placement stand's window, behind its switch.
+    if (station.definition.view === 'plaza-placement') return <PlacementPanel onClose={onCloseSurface} />;
     return null;
   }
 

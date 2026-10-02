@@ -40,6 +40,7 @@ import {
   ownCallOptions,
   ownData,
   preparedShadowBatch,
+  withPlacementTick,
   sameAddress,
   throwIfAborted,
   type ShadowBatchDeps,
@@ -85,6 +86,8 @@ export interface ShadowBorrowOptions {
   readonly receiptWaitsMs?: readonly number[];
   /** The clock a prepared batch's two-minute life is measured by; `Date.now` by default. */
   readonly now?: () => number;
+  /** Leaderboard phase 1: the ledger each action ticks. Absent, nothing is appended. */
+  readonly ledger?: Address;
 }
 
 export class ShadowBorrow {
@@ -95,9 +98,11 @@ export class ShadowBorrow {
   private readonly identity: ShadowAccountResolver;
   private readonly batchDeps: ShadowBatchDeps;
   private readonly now: () => number;
+  private readonly ledger?: Address;
 
   constructor(options: ShadowBorrowOptions) {
     this.now = options.now ?? Date.now;
+    this.ledger = options.ledger;
     this.walletAddress = options.walletAddress;
     this.reads = options.reads;
     this.policy = options.policy;
@@ -222,7 +227,13 @@ export class ShadowBorrow {
         throw new BorrowRefusedError('review-expired', refusalMessage('review-expired'));
       }
     };
-    return preparedShadowBatch(this.batchDeps, action, actions, config, { after: assessed.after }, guard);
+    const ticked = await withPlacementTick(actions, this.ledger, this.identity);
+    return preparedShadowBatch(this.batchDeps, action, ticked.actions, config, { after: assessed.after, ...ticked.extra }, guard);
+  }
+
+  /** Leaderboard phase 1: this counter's shadow commitment, whose ledger ticks count toward the placement. */
+  ledgerCommitment(): Promise<string> {
+    return this.identity.fullCommitment();
   }
 
   /**

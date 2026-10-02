@@ -4269,3 +4269,123 @@ button.ui-link-button {
 .exchange-quote[data-stale="true"] .ui-detail > dd {
   color: var(--ui-text-dim);
 }
+
+/* ===========================================================================
+ * Leaderboard phase 1: the placement stand's window, in the STRKWORLD brand
+ * (D-113): a dark scoreboard card with the big placement in Jersey 15, body
+ * in VT323, and an ember Silkscreen button with a hard outline drop. The
+ * placement shows here and nowhere else in the UI.
+ * ======================================================================== */
+
+.placement {
+  display: grid;
+  gap: 0.6rem;
+  font-family: var(--brand-font-body, var(--ui-font));
+  font-size: var(--brand-body-size, 1.1rem);
+  line-height: var(--brand-body-leading, 1.25);
+}
+
+.placement p {
+  margin: 0;
+}
+
+.placement-season {
+  font-family: var(--brand-font-menu, var(--ui-btn-font));
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-ember, var(--ui-accent));
+}
+
+.placement-result {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 4px solid var(--brand-outline, #24120a);
+  border-radius: 6px;
+  background: var(--brand-window-dark, #261810);
+  box-shadow: inset 0 0 0 3px var(--brand-window-rim, #6e3e1e), 0 5px 0 var(--brand-outline, #24120a);
+  color: var(--brand-cream, #fff6e6);
+}
+
+.placement-top {
+  font-family: var(--brand-font-headline, var(--ui-heading-font));
+  font-size: 3.4rem;
+  line-height: 0.95;
+  color: var(--brand-sun-gold, #ffc12e);
+  text-shadow: 0 3px 0 var(--brand-outline, #24120a);
+}
+
+.placement-rank,
+.placement-count {
+  font-family: var(--brand-font-numeric, var(--ui-number-font));
+  font-size: 1.5rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.placement-progress {
+  color: var(--brand-sun-gold, #ffc12e);
+}
+
+.placement-note,
+.placement-unranked {
+  color: var(--brand-horizon, #f2dcc0);
+  font-size: 1rem;
+}
+
+.placement-trust {
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--brand-ember, var(--ui-accent));
+}
+
+.placement-last,
+.placement-saved {
+  color: var(--ui-text-dim);
+  font-size: 1rem;
+}
+
+.placement-check {
+  justify-self: start;
+  padding: 0.55rem 1.1rem;
+  border: 3px solid var(--brand-outline, #24120a);
+  border-radius: 4px;
+  background: var(--brand-ember, #f56a16);
+  box-shadow: 0 4px 0 var(--brand-outline, #24120a);
+  color: var(--brand-cream, #fff6e6);
+  font-family: var(--brand-font-menu, var(--ui-btn-font));
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.placement-check:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--brand-outline, #24120a);
+}
+
+.placement-check:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* The review step's one quiet line, only when the transaction carries a receipt. */
+.placement-hint {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 0.85rem;
+}
+
+.placement-hint::before {
+  content: "\25B8\00a0";
+  color: var(--brand-ember, var(--ui-accent));
+}
+
+@media (forced-colors: active) {
+  .placement-result,
+  .placement-check {
+    border-color: CanvasText;
+  }
+}

@@ -2121,6 +2121,7 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     prepareEndurClaim: async () => { throw new Error('unused'); },
     endurRate: async () => { throw new Error('unused'); },
     publicBalance: async () => { throw new Error('unused'); },
+    checkPlacement: async () => { throw new Error('unused'); },
   };
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
-import { PLAZA_STATIONS } from '@strkworld/world';
+import { plazaStations } from '@strkworld/world';
 import { createEventBus } from '../bus/event-bus.js';
 import { ownBuildingPayload, ownPlazaNearbyPayload, ownStationPayload } from '../bus/world-event-payload.js';
 import { COPY } from '../copy.js';
@@ -64,9 +64,11 @@ describe('the plaza stations in the station registry (D-076)', () => {
     expect(resolveStation('plaza', 'plaza:casino', PRIVACY_REGISTER, {}, null).status).toBe('locked');
   });
 
-  it("knows exactly the World's plaza stations", () => {
+  it("knows exactly the World's plaza stations, the placement stand included", () => {
+    // Leaderboard phase 1: the registry always knows the stand; the World
+    // builds it, and the registry opens it, only behind the switch.
     expect(stationSnapshot('plaza', PRIVACY_REGISTER, {}, null).map((entry) => entry.station)).toEqual(
-      PLAZA_STATIONS.map((station) => station.station),
+      plazaStations({ placementStand: true }).map((station) => station.station),
     );
   });
 

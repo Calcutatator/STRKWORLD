@@ -53,6 +53,16 @@ export interface BackendConfig {
    * opens `POST /v1/debug/logs`; absent or false, the path is unknown.
    */
   debugLogsEnabled?: boolean;
+  /**
+   * Leaderboard phase 1's blind tally, behind `BACKEND_LEADERBOARD_ENABLED`.
+   * Absent, its four routes are unknown paths.
+   */
+  leaderboard?: {
+    /** The `ReceiptLedger` contract (`BACKEND_LEADERBOARD_LEDGER`). */
+    readonly ledger: string;
+    /** `BACKEND_LEADERBOARD_FILE`: a JSON file on a volume, or null for memory only. */
+    readonly storePath: string | null;
+  };
 }
 
 /** avnu's token tags, as its public token API names them. */

@@ -219,6 +219,11 @@ export interface PreparedSummary {
    * gate fails closed on the combination.
    */
   readonly requiresDisclosure: boolean;
+  /**
+   * Leaderboard phase 1: present, and true, only when the prepared batch
+   * carries a private placement receipt or tick. The review says so, subtly.
+   */
+  readonly countsTowardPlacement?: true;
 }
 
 export type BankFlow =
@@ -907,6 +912,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               warnings: batch.warnings,
               disclosures: disclosuresForIntents(batch.intents, register),
               requiresDisclosure: batchRequiresDisclosure(batch.intents, register),
+              ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
               // `promptCount` is deliberately not carried into the summary:
               // it is a source-derived expectation awaiting the funded run
               // (D-028), and no pending UI may be driven from it.

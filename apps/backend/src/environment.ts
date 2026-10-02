@@ -80,6 +80,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       routes: { transfer, unshield, swap, ...(stake ? { stake } : {}) },
       ...(degen ? { degen } : {}),
       debugLogsEnabled: parseDebugLogsEnabled(environment),
+      ...parseLeaderboard(environment),
     },
     paymaster: {
       // D-068/D-070: optional at startup, but avnu refuses sponsored_private
@@ -245,6 +246,24 @@ function parseDegenCatalog(environment: Environment): DegenConfig | undefined {
  * startup like every other switch, so a typo can never half-enable them.
  * Never set for a launch.
  */
+/**
+ * Leaderboard phase 1: off unless `BACKEND_LEADERBOARD_ENABLED=true`, and
+ * then the ledger is required. `BACKEND_LEADERBOARD_FILE` is an optional
+ * absolute path for the tally's JSON file; unset, the tally lives in memory
+ * and is lost on restart.
+ */
+function parseLeaderboard(environment: Environment): { leaderboard?: { ledger: string; storePath: string | null } } {
+  if (isUnset(environment.BACKEND_LEADERBOARD_ENABLED)) return {};
+  if (!parseBoolean(environment, 'BACKEND_LEADERBOARD_ENABLED')) return {};
+  const ledger = parseFelt(environment, 'BACKEND_LEADERBOARD_LEDGER');
+  if (BigInt(ledger) >= 1n << 251n) throw new Error('Invalid BACKEND_LEADERBOARD_LEDGER.');
+  const file = environment.BACKEND_LEADERBOARD_FILE;
+  if (file !== undefined && file !== '' && (!file.startsWith('/') || file !== file.trim() || file.includes('\0') || PLACEHOLDER.test(file))) {
+    throw new Error('Invalid BACKEND_LEADERBOARD_FILE.');
+  }
+  return { leaderboard: { ledger, storePath: file ? file : null } };
+}
+
 function parseDebugLogsEnabled(environment: Environment): boolean {
   if (isUnset(environment.BACKEND_DEBUG_LOGS_ENABLED)) return false;
   return parseBoolean(environment, 'BACKEND_DEBUG_LOGS_ENABLED');

@@ -5,6 +5,7 @@ import type {
   RecipientStatus,
   TxResult,
 } from './types.js';
+import type { PlacementCheck } from './wallet-api/leaderboard-operations.js';
 
 /**
  * The financial seam.
@@ -157,6 +158,12 @@ export interface PreparedBatch {
   readonly promptCount: number;
   /** Sanitized display-only review data, present only for a prepared single swap. */
   readonly swapReview?: SwapReview;
+  /**
+   * Present, and `true`, only when this transaction carries a private
+   * placement receipt or ledger tick (leaderboard phase 1). Absent otherwise,
+   * including whenever the leaderboard is switched off.
+   */
+  readonly countsTowardPlacement?: true;
 
   /**
    * Submit. Rejects with `PrivacyError`; never throws a raw wallet error.
@@ -384,6 +391,15 @@ export interface PrivacyOperations {
   prepareEndurClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch>;
 
   /**
+   * The private placement (leaderboard phase 1): count this player's receipts
+   * on-chain, refresh their anonymous entry at the blind tally, and read the
+   * season's histogram. The wallet's season commitment stays inside this
+   * package; the answer is counts only. Rejects when the leaderboard is
+   * switched off: the Shell offers it only when its own flag is on.
+   */
+  checkPlacement(signal?: AbortSignal): Promise<PlacementCheck>;
+
+  /**
    * xSTRK's live exchange rate (D-091): what one xSTRK converts to in STRK
    * now, by xSTRK's own `convert_to_assets`, read through the backend
    * (D-014). A public read about Endur's vault, naming nobody, and no wallet
@@ -477,6 +493,12 @@ export interface PreparedEndurBatch {
   readonly totalCost: bigint;
   readonly warnings: readonly BatchWarning[];
   readonly promptCount: number;
+  /**
+   * Present, and `true`, only when this transaction carries a private
+   * placement receipt or ledger tick (leaderboard phase 1). Absent otherwise,
+   * including whenever the leaderboard is switched off.
+   */
+  readonly countsTowardPlacement?: true;
   confirm(opts: {
     feeCeiling: bigint;
     onProgress?: ProgressCallback;
@@ -605,6 +627,12 @@ export interface PreparedVaultBatch {
   readonly totalCost: bigint;
   readonly warnings: readonly BatchWarning[];
   readonly promptCount: number;
+  /**
+   * Present, and `true`, only when this transaction carries a private
+   * placement receipt or ledger tick (leaderboard phase 1). Absent otherwise,
+   * including whenever the leaderboard is switched off.
+   */
+  readonly countsTowardPlacement?: true;
 
   /**
    * Hand the batch to the wallet to prove and submit, then wait a bounded
@@ -806,6 +834,12 @@ export interface PreparedBorrowBatch {
   readonly totalCost: bigint;
   readonly warnings: readonly BatchWarning[];
   readonly promptCount: number;
+  /**
+   * Present, and `true`, only when this transaction carries a private
+   * placement receipt or ledger tick (leaderboard phase 1). Absent otherwise,
+   * including whenever the leaderboard is switched off.
+   */
+  readonly countsTowardPlacement?: true;
   confirm(opts: Parameters<PreparedVaultBatch['confirm']>[0]): Promise<VaultTxResult>;
   discard(): void;
 }

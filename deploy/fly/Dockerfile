@@ -58,6 +58,9 @@ ARG VITE_STRK20_SWAP_DEGEN_ENABLED
 # D-116: the private leaderboard's ReceiptLedger contract address. Unset, no
 # action carries a receipt and the leaderboard stand stays shut.
 ARG VITE_STRK20_LEADERBOARD_LEDGER
+# Leaderboard phase 1: the web side's switch. Only `true`, with the ledger set,
+# adds receipts, ticks and the placement stand.
+ARG VITE_STRK20_LEADERBOARD_ENABLED
 # D-069: test deployments only. Unset, as on every launch, the debug logger is
 # not compiled into the bundle at all.
 ARG VITE_DEBUG_LOGS

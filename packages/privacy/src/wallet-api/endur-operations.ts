@@ -25,6 +25,7 @@ import {
   ownCallOptions,
   ownData,
   preparedShadowBatch,
+  withPlacementTick,
   throwIfAborted,
   type ShadowBatchDeps,
   type ShadowIdentity,
@@ -72,6 +73,8 @@ export interface EndurUnstakeOptions {
   readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly receiptWaitsMs?: readonly number[];
+  /** Leaderboard phase 1: the ledger each action ticks. Absent, nothing is appended. */
+  readonly ledger?: Address;
 }
 
 export interface UnstakeRead {
@@ -90,9 +93,11 @@ export class EndurUnstake {
   private readonly poolConfig: (signal?: AbortSignal) => Promise<PoolConfig>;
   private readonly identity: ShadowAccountResolver;
   private readonly batchDeps: ShadowBatchDeps;
+  private readonly ledger?: Address;
 
   constructor(options: EndurUnstakeOptions) {
     this.walletAddress = options.walletAddress;
+    this.ledger = options.ledger;
     this.reads = options.reads;
     this.policy = options.policy;
     this.poolConfig = options.poolConfig;
@@ -141,12 +146,13 @@ export class EndurUnstake {
     const config = await this.poolConfig(signal);
     throwIfAborted(signal);
     const action: EndurAction = Object.freeze({ kind: 'request', shares, leftover: read.xstrk });
-    return preparedShadowBatch(this.batchDeps, action, endurUnstakeRequestActions({
+    const { actions, extra } = await withPlacementTick(endurUnstakeRequestActions({
       shadowAccount: identity.address,
       player: this.walletAddress,
       shares,
       leftover: read.xstrk,
-    }), config, {});
+    }), this.ledger, this.identity);
+    return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
   }
 
   async prepareClaim(options?: VaultCallOptions): Promise<PreparedEndurBatch> {
@@ -171,11 +177,17 @@ export class EndurUnstake {
     throwIfAborted(signal);
     const requestIds = Object.freeze(ready.map((entry) => entry.requestId));
     const action: EndurAction = Object.freeze({ kind: 'claim', requestIds, owed, held: read.strk });
-    return preparedShadowBatch(this.batchDeps, action, endurUnstakeClaimActions({
+    const { actions, extra } = await withPlacementTick(endurUnstakeClaimActions({
       shadowAccount: identity.address,
       player: this.walletAddress,
       requestIds,
-    }), config, {});
+    }), this.ledger, this.identity);
+    return preparedShadowBatch(this.batchDeps, action, actions, config, extra);
+  }
+
+  /** Leaderboard phase 1: this counter's shadow commitment, whose ledger ticks count toward the placement. */
+  ledgerCommitment(): Promise<string> {
+    return this.identity.fullCommitment();
   }
 
   /** The one public read, validated and classified by the chain's clock. */

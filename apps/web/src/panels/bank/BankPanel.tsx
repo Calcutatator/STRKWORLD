@@ -615,6 +615,7 @@ function CommitBlock({
         disclosures={summary.disclosures}
         requiresDisclosure={summary.requiresDisclosure}
         busy={busy}
+        countsTowardPlacement={summary.countsTowardPlacement === true}
         onConfirm={onConfirm}
         onCancel={onCancel}
       />

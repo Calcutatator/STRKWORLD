@@ -51,6 +51,7 @@ import {
   ONE_XSTRK,
   WITHDRAW_QUEUE_EVENT_KEY,
 } from './endur.js';
+import { COUNT_OF_SELECTOR, type LeaderboardRpcPort, type LeaderboardShadowRead } from './leaderboard.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
 const PUBLIC_KEY_SELECTOR = '0x1a35984e05126dbecb7c3bb9929e7dd9106d460c59b1633739a5c733a5fb13b';
@@ -98,7 +99,7 @@ export interface StarknetRpcOptions {
 }
 
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
-export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort, BorrowRpcPort, EndurRpcPort {
+export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort, BorrowRpcPort, EndurRpcPort, LeaderboardRpcPort {
   private id = 0;
   private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
@@ -258,6 +259,72 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, Vault
       throw new Error('Starknet RPC returned an invalid shadow account.');
     }
     return { address, deployed: BigInt(deployed) === 1n };
+  }
+
+  /**
+   * Leaderboard phase 1: one page of the pinned anonymizer's
+   * `get_shadow_accounts(partial, start, start + count, until_undeployed =
+   * false)`, a `Span<ShadowAccountInfo>` of `{ nonce: u64, address,
+   * is_deployed: bool }`. Anything but exactly one well-formed row per nonce,
+   * in order, is refused.
+   */
+  async getLeaderboardShadows(
+    partialCommitment: string,
+    start: number,
+    count: number,
+    signal?: AbortSignal,
+  ): Promise<readonly LeaderboardShadowRead[]> {
+    if (
+      !isFelt(partialCommitment) || BigInt(partialCommitment) === 0n
+      || !Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(count) || count <= 0 || count > 1_024
+    ) {
+      throw new Error('Leaderboard shadow read is invalid.');
+    }
+    const felts = await this.callContract(
+      SHADOW_ACCOUNT_ANONYMIZER,
+      GET_SHADOW_ACCOUNTS_SELECTOR,
+      [partialCommitment, `0x${start.toString(16)}`, `0x${(start + count).toString(16)}`, '0x0'],
+      signal,
+    );
+    const [length, ...items] = felts;
+    if (length === undefined || BigInt(length) !== BigInt(count) || items.length !== count * 3) {
+      throw new Error('Starknet RPC returned an invalid shadow page.');
+    }
+    const rows: LeaderboardShadowRead[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const nonce = BigInt(items[index * 3]!);
+      const address = items[index * 3 + 1]!;
+      const deployed = BigInt(items[index * 3 + 2]!);
+      if (
+        nonce !== BigInt(start + index)
+        || BigInt(address) === 0n || BigInt(address) >= CONTRACT_ADDRESS_BOUND
+        || (deployed !== 0n && deployed !== 1n)
+      ) {
+        throw new Error('Starknet RPC returned an invalid shadow page.');
+      }
+      rows.push({ nonce: start + index, address, deployed: deployed === 1n });
+    }
+    return rows;
+  }
+
+  /**
+   * Leaderboard phase 1: the ledger's `count_of(C) -> u64` for each
+   * commitment (D-116, `contracts/receipt-ledger/src/lib.cairo`), in JSON-RPC
+   * batches. Anything but one felt below 2^64, or a failed call, is null.
+   */
+  async getLeaderboardCounts(ledger: string, commitments: readonly string[], signal?: AbortSignal): Promise<readonly (bigint | null)[]> {
+    if (!isFelt(ledger) || BigInt(ledger) === 0n || commitments.some((commitment) => !isFelt(commitment))) {
+      throw new Error('Leaderboard count read is invalid.');
+    }
+    const outcomes = await this.callPinned(
+      commitments.map((commitment) => ({ contract: ledger, selector: COUNT_OF_SELECTOR, calldata: [commitment] })),
+      signal,
+    );
+    return outcomes.map((felts) => {
+      if (!felts || felts.length !== 1) return null;
+      const count = BigInt(felts[0]!);
+      return count < 1n << 64n ? count : null;
+    });
   }
 
   /**
