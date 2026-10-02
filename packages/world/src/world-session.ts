@@ -1039,7 +1039,7 @@ class Session implements WorldSession {
               this.activeRoom === entered.building && controller.state.inRoom &&
               this.isSharedFloor(entered.building, 'ground')
             ) {
-              // D-114: the arena's spawn has its own facing (south, into it).
+              // D-114: the arena's spawn has its own facing (east, into it).
               this.areaFacing = entered.building === ARENA_BUILDING ? ARENA_SPAWN_FACING : this.movement.facing;
               this.publishAreaPosition();
               if (this.cleanedUp || this.activeRoom !== entered.building) return;
@@ -1065,9 +1065,9 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).enter();
     this.lastTile = { x: -1, y: -1 };
     this.renderRoom();
-    // D-114: through the pit's arch you drop into the arena's north tunnel
-    // with a leap, still facing south into the arena; under reduced motion it
-    // is a plain handoff.
+    // D-114: through the pit's west arch you drop into the arena's west
+    // tunnel with a leap, still facing east into the arena; under reduced
+    // motion it is a plain handoff.
     if (definition.building === ARENA_BUILDING) {
       this.view.setPlayerFacing?.(ARENA_SPAWN_FACING);
       if (!this.prefersReducedMotion()) this.view.playerJump?.();
@@ -1078,7 +1078,7 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).exit();
     this.lastTile = { x: -1, y: -1 };
     this.activeRoom = undefined;
-    // D-114: back on the pit's path, facing north, away from the arch.
+    // D-114: back on the pit's branch path, facing west, away from the arch.
     if (definition.building === ARENA_BUILDING) {
       this.clearArena();
       this.view.setPlayerFacing?.(ARENA_PIT_RETURN_FACING);
@@ -1207,7 +1207,7 @@ class Session implements WorldSession {
       // A room exit holds the doors briefly (door-trigger.ts), so a key held
       // through the handoff cannot walk the player straight back in.
       resetDoors: () => this.doors?.reset({ holdMs: DOOR_REENTRY_HOLD_MS }),
-      // D-114: off the arena, the street hears the player facing north, away
+      // D-114: off the arena, the street hears the player facing west, away
       // from the arch, as the view shows them.
       resumeStreet: () => this.movement.exit(
         { x: this.position.x, y: this.position.y },
@@ -1261,7 +1261,8 @@ class Session implements WorldSession {
   }
 
   private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
-    // D-114: the tile below the pit's door is its bowl; the return is the path.
+    // D-114: the tile below the pit's door is lawn beside its bowl; the
+    // return is the branch path, just west of the arch.
     if (building === ARENA_BUILDING) return { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
     const door = this.map.doors.find((candidate) => candidate.building === building);
     return {

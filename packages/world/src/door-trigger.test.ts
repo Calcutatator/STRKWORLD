@@ -229,7 +229,8 @@ describe('the re-entry hold after a room exit (D-114, 2026-10-02)', () => {
     // A key held through the handoff carries them straight back onto the arch.
     trigger.advance(DOOR_REENTRY_HOLD_MS - 1);
     trigger.update(ARCH);
-    trigger.update({ x: ARCH.x + 1, y: ARCH.y });
+    // Sliding along the arch's three-tile threshold is never stepping off it.
+    trigger.update({ x: ARCH.x, y: ARCH.y + 1 });
     // The hold runs out while they are still on it: it stays shut.
     trigger.advance(1_000);
     trigger.update(ARCH);

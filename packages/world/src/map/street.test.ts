@@ -101,8 +101,8 @@ describe('the street is walkable', () => {
       ['vault', 41, 10],
       // The hidden stair's top step in the alley across from the plaza (D-107).
       ['bunker', 10, 10],
-      // The gladiator pit's arch on the south lawn (D-114).
-      ['arena', 38, 20],
+      // The gladiator pit's west arch on the south lawn (D-114).
+      ['arena', 28, 22],
     ]);
   });
 
@@ -200,8 +200,8 @@ describe('every building is present and reachable', () => {
     // A door embedded in a solid facade is unreachable, and it looks fine on
     // screen — which is why this is a test rather than a look.
     for (const door of map.doors) {
-      // The pit's arch is approached from the path north of it (D-114).
-      const approach = door.building === 'arena' ? { x: door.x, y: door.y - 1 } : { x: door.x, y: door.y + 1 };
+      // The pit's west arch is approached from the branch west of it (D-114).
+      const approach = door.building === 'arena' ? { x: door.x - 1, y: door.y } : { x: door.x, y: door.y + 1 };
       expect(isSolidAt(map, approach.x, approach.y)).toBe(false);
     }
   });

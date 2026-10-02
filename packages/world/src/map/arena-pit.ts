@@ -3,8 +3,11 @@ import type { TileKind } from './street.js';
 
 /**
  * The gladiator pit (D-114), as data: an old-style sunken stone pit on the
- * east half of the south lawn, entered through a two-tile arch on its north
- * side, reached by a one-row stone path from the south pavement.
+ * south lawn just east of the Avatar Studio's path, entered through a
+ * three-tile arch on its west side. A short stone path branches east off the
+ * Studio's path to the arch, so walking east off the branch through the arch
+ * enters the arena, and leaving puts the player back on the branch facing
+ * west (amended 2026-10-02: the arch was on the north rim, off the road).
  *
  * Like the plaza and the hidden stair it is plain tile data: the map paints
  * it (`paintArenaPit`), collision reads the tiles, and the renderer
@@ -15,8 +18,9 @@ import type { TileKind } from './street.js';
  * machinery. `arena` is a codename for code only.
  *
  * The rows are spelled out one by one, so the rim follows the bowl's rounded
- * corners exactly and no corner of the pit is an invisible wall: every solid
- * tile is drawn as rim or bowl, and every tile drawn as lawn is walkable.
+ * east corners and square west front exactly and no corner of the pit is an
+ * invisible wall: every solid tile is drawn as rim or bowl, and every tile
+ * drawn as lawn is walkable.
  */
 
 export const ARENA_PIT_BUILDING: BuildingId = ARENA_BUILDING;
@@ -31,34 +35,37 @@ export interface ArenaPitRect {
 /** Laid out from the street's first column, as the plaza is (D-078). */
 const at = (x: number): number => STREET_ORIGIN_X + x;
 
-/** The pit's whole footprint: street x 61-75, rows 20-26. */
-export const ARENA_PIT_AREA: ArenaPitRect = Object.freeze({ x: at(32), y: 20, width: 15, height: 7 });
+/** The pit's whole footprint: street x 57-70, rows 20-26. */
+export const ARENA_PIT_AREA: ArenaPitRect = Object.freeze({ x: at(28), y: 20, width: 14, height: 7 });
 
-/** The arch's threshold, two tiles wide on the north rim: the door. */
-export const ARENA_PIT_DOOR: ArenaPitRect = Object.freeze({ x: at(38), y: 20, width: 2, height: 1 });
-
-/** The one-row stone path from the south pavement to the arch. */
-export const ARENA_PIT_PATH: ArenaPitRect = Object.freeze({ x: at(38), y: 19, width: 2, height: 1 });
+/** The arch's threshold, three tiles tall on the west front: the door. */
+export const ARENA_PIT_DOOR: ArenaPitRect = Object.freeze({ x: at(28), y: 22, width: 1, height: 3 });
 
 /**
- * Where a player leaving the arena stands: on the path, facing north, away
- * from the arch (the generic "a tile below the door" would be in the bowl).
+ * The stone branch path, east off the Avatar Studio's path (street x 52-53)
+ * to the arch: three tiles long, as tall as the arch's opening.
  */
-export const ARENA_PIT_RETURN = Object.freeze({ x: at(38), y: 19 });
-export const ARENA_PIT_RETURN_FACING: Facing = 'up';
+export const ARENA_PIT_PATH: ArenaPitRect = Object.freeze({ x: at(25), y: 22, width: 3, height: 3 });
 
-/** The arch's two gateposts, on the rim either side of the threshold. */
+/**
+ * Where a player leaving the arena stands: on the branch just outside the
+ * arch, facing west, back along the branch to the Studio's path.
+ */
+export const ARENA_PIT_RETURN = Object.freeze({ x: at(27), y: 23 });
+export const ARENA_PIT_RETURN_FACING: Facing = 'left';
+
+/** The arch's two gateposts, on the west front either side of the threshold. */
 export const ARENA_PIT_GATEPOSTS: readonly { readonly x: number; readonly y: number }[] = Object.freeze([
-  Object.freeze({ x: at(37), y: 20 }),
-  Object.freeze({ x: at(40), y: 20 }),
+  Object.freeze({ x: at(28), y: 21 }),
+  Object.freeze({ x: at(28), y: 25 }),
 ]);
 
-/** The four braziers on the rim's corners. */
+/** The four braziers: two flanking the arch on the west front's corners, two at the east ends of the long rims. */
 export const ARENA_PIT_TORCHES: readonly { readonly x: number; readonly y: number }[] = Object.freeze([
-  Object.freeze({ x: at(34), y: 20 }),
-  Object.freeze({ x: at(44), y: 20 }),
-  Object.freeze({ x: at(34), y: 26 }),
-  Object.freeze({ x: at(44), y: 26 }),
+  Object.freeze({ x: at(28), y: 20 }),
+  Object.freeze({ x: at(39), y: 20 }),
+  Object.freeze({ x: at(28), y: 26 }),
+  Object.freeze({ x: at(39), y: 26 }),
 ]);
 
 /** One row of the pit: its rim runs, its bowl run and any door run, in street x. */
@@ -70,23 +77,23 @@ interface PitRow {
 }
 
 /**
- * The exact rows (inclusive x ranges), from the design's table:
+ * The exact rows (inclusive x ranges):
  *
- *   row 20  rim 63-66, 69-73   step 67-68 (door)
- *   row 21  rim 62, 74         bowl 63-73
- *   row 22-24  rim 61, 75      bowl 62-74
- *   row 25  rim 62, 74         bowl 63-73
- *   row 26  rim 63-73
+ *   row 20     rim 57-68
+ *   row 21     rim 57, 69        bowl 58-68   (57: the north gatepost)
+ *   row 22-24  step 57 (door)    bowl 58-69   rim 70
+ *   row 25     rim 57, 69        bowl 58-68   (57: the south gatepost)
+ *   row 26     rim 57-68
  */
 export const ARENA_PIT_ROWS: readonly PitRow[] = Object.freeze(
   [
-    { y: 20, rim: [[at(34), at(37)], [at(40), at(44)]], bowl: null, step: [at(38), at(39)] },
-    { y: 21, rim: [[at(33), at(33)], [at(45), at(45)]], bowl: [at(34), at(44)], step: null },
-    { y: 22, rim: [[at(32), at(32)], [at(46), at(46)]], bowl: [at(33), at(45)], step: null },
-    { y: 23, rim: [[at(32), at(32)], [at(46), at(46)]], bowl: [at(33), at(45)], step: null },
-    { y: 24, rim: [[at(32), at(32)], [at(46), at(46)]], bowl: [at(33), at(45)], step: null },
-    { y: 25, rim: [[at(33), at(33)], [at(45), at(45)]], bowl: [at(34), at(44)], step: null },
-    { y: 26, rim: [[at(34), at(44)]], bowl: null, step: null },
+    { y: 20, rim: [[at(28), at(39)]], bowl: null, step: null },
+    { y: 21, rim: [[at(28), at(28)], [at(40), at(40)]], bowl: [at(29), at(39)], step: null },
+    { y: 22, rim: [[at(41), at(41)]], bowl: [at(29), at(40)], step: [at(28), at(28)] },
+    { y: 23, rim: [[at(41), at(41)]], bowl: [at(29), at(40)], step: [at(28), at(28)] },
+    { y: 24, rim: [[at(41), at(41)]], bowl: [at(29), at(40)], step: [at(28), at(28)] },
+    { y: 25, rim: [[at(28), at(28)], [at(40), at(40)]], bowl: [at(29), at(39)], step: null },
+    { y: 26, rim: [[at(28), at(39)]], bowl: null, step: null },
   ].map((row) =>
     Object.freeze({
       y: row.y,
@@ -107,7 +114,7 @@ export function arenaPitTileAt(x: number, y: number): 'pitrim' | 'pitbowl' | 'pi
   return null;
 }
 
-/** Paint the pit and its path into an existing grid. */
+/** Paint the pit and its branch path into an existing grid. */
 export function paintArenaPit(tiles: TileKind[][]): void {
   for (let y = ARENA_PIT_AREA.y; y < ARENA_PIT_AREA.y + ARENA_PIT_AREA.height; y++) {
     for (let x = ARENA_PIT_AREA.x; x < ARENA_PIT_AREA.x + ARENA_PIT_AREA.width; x++) {
@@ -115,8 +122,10 @@ export function paintArenaPit(tiles: TileKind[][]): void {
       if (kind && tiles[y]?.[x] !== undefined) tiles[y]![x] = kind;
     }
   }
-  for (let x = ARENA_PIT_PATH.x; x < ARENA_PIT_PATH.x + ARENA_PIT_PATH.width; x++) {
-    if (tiles[ARENA_PIT_PATH.y]?.[x] !== undefined) tiles[ARENA_PIT_PATH.y]![x] = 'pavement';
+  for (let y = ARENA_PIT_PATH.y; y < ARENA_PIT_PATH.y + ARENA_PIT_PATH.height; y++) {
+    for (let x = ARENA_PIT_PATH.x; x < ARENA_PIT_PATH.x + ARENA_PIT_PATH.width; x++) {
+      if (tiles[y]?.[x] !== undefined) tiles[y]![x] = 'pavement';
+    }
   }
 }
 

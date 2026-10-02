@@ -836,7 +836,7 @@ describe('the arena ring names only its fighter, to arena members only (D-114)',
       expect(registry.enterArea(key, { area: 'arena', ...arenaTileCentre(tile), facing: 'down' }, 0)).toBe(true);
       return outcome.gameId;
     };
-    const fighter = place('fighter', { x: 20, y: 10 });
+    const fighter = place('fighter', { x: 13, y: 16 });
     const watcher = place('watcher', { x: 13, y: 14 });
     const walker = join(registry, 'walker', 100, 100);
 
@@ -858,7 +858,7 @@ describe('the arena ring names only its fighter, to arena members only (D-114)',
       now += 100;
       // A look change mid-fight with a hostile sprite, and hostile facings on moves.
       registry.enterArea('fighter', { area: 'arena', x: 0, y: 0, sprite: attempts[step % attempts.length] }, now);
-      registry.move('fighter', { ...arenaTileCentre({ x: 20, y: 17 }), facing: step % 2 ? 'down' : attempts[step % attempts.length] }, now + 1);
+      registry.move('fighter', { ...arenaTileCentre({ x: 20, y: 16 }), facing: step % 2 ? 'right' : attempts[step % attempts.length] }, now + 1);
       registry.arenaAttack('fighter', now + 2);
       registry.arenaTick(now + 3);
       wires.push(member.patch(), street.patch());

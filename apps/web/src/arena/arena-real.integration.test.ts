@@ -92,18 +92,18 @@ describe('the arena ring over a real lobby (D-114)', () => {
     await waitFor(() => fighter.presence.getState().status, (s) => s === 'connected', 'the fighter connected');
     await waitFor(() => fan.presence.getState().status, (s) => s === 'connected', 'the fan connected');
 
-    // Both drop into the arena's north tunnel: the spawn first, then the door's entry.
+    // Both drop into the arena's west tunnel: the spawn first, then the door's entry.
     for (const who of [fighter, fan]) {
-      who.world.emit('area:moved', { position: arenaTileCentre({ x: 20, y: 2 }), facing: 'down' });
+      who.world.emit('area:moved', { position: arenaTileCentre({ x: 2, y: 16 }), facing: 'right' });
       who.world.emit('building:entered', { building: 'arena' });
     }
     await waitFor(() => fighter.arena.channel.ring(), (r) => r !== null && r.phase === 'idle', 'the fighter to see the idle ring');
     await waitFor(() => fan.arena.channel.ring(), (r) => r !== null, 'the fan to see the ring');
     expect(fighter.arena.channel.selfId()).not.toBeNull();
 
-    // The fighter walks down the north tunnel to the gate approach; the fan to the sand beside it.
-    await fighter.walk([[20, 3], [20, 4], [20, 5], [20, 6], [20, 7], [20, 8], [20, 9], [20, 10]], 'down');
-    await fan.walk([[20, 3], [20, 4], [20, 5], [20, 6], [20, 7], [20, 8], [20, 9], [19, 9], [18, 9], [17, 9]], 'down');
+    // The fighter walks east up the west tunnel to the gate approach; the fan onto the sand beside it.
+    await fighter.walk([[3, 16], [4, 16], [5, 16], [6, 16], [7, 16], [8, 16], [9, 16], [10, 16], [11, 16], [12, 16], [13, 16], [14, 16]], 'right');
+    await fan.walk([[3, 16], [4, 16], [5, 16], [6, 16], [7, 16], [8, 16], [9, 16], [9, 15], [9, 14], [9, 13]], 'right');
 
     // A claim from the approach: a new round with this client as challenger.
     fighter.arena.channel.claim();
@@ -113,8 +113,8 @@ describe('the arena ring over a real lobby (D-114)', () => {
     // The fan's claim while busy changes nothing.
     fan.arena.channel.claim();
 
-    // The World snaps itself to the ring spawn (the server already moved it), then steps down to the dummy.
-    await fighter.walk([[20, 14], [20, 15], [20, 16], [20, 17]], 'down');
+    // The World snaps itself to the ring spawn (the server already moved it), then steps east to the dummy.
+    await fighter.walk([[17, 16], [18, 16], [19, 16], [20, 16]], 'right');
     await waitFor(() => fighter.arena.channel.ring(), (r) => r?.phase === 'fighting', 'the fight', ARENA_COUNTDOWN_MS + 3_000);
 
     // Ten swings at the client floor.
