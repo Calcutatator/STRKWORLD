@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
+import { BUNKER_PRESENCE_GRID, ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
 import {
   AREA_STEP_SLACK_PX,
   isAreaStepAllowed,
@@ -15,12 +15,17 @@ function roof(tileX: number, tileY: number): { x: number; y: number } {
 function studio(tileX: number, tileY: number): { x: number; y: number } {
   return { x: STUDIO_PRESENCE_GRID.originX + tileX * 32 + 16, y: STUDIO_PRESENCE_GRID.originY + tileY * 32 + 16 };
 }
+function bunker(tileX: number, tileY: number): { x: number; y: number } {
+  return { x: BUNKER_PRESENCE_GRID.originX + tileX * 32 + 16, y: BUNKER_PRESENCE_GRID.originY + tileY * 32 + 16 };
+}
 
 describe('normalizePresenceArea (D-087)', () => {
-  it('accepts the three areas, defaults a missing one to the street, and rejects anything else', () => {
+  it('accepts the four areas, defaults a missing one to the street, and rejects anything else', () => {
     expect(normalizePresenceArea('street')).toBe('street');
     expect(normalizePresenceArea('roof')).toBe('roof');
     expect(normalizePresenceArea('studio')).toBe('studio');
+    // D-112: the hidden bunker.
+    expect(normalizePresenceArea('bunker')).toBe('bunker');
     expect(normalizePresenceArea(undefined)).toBe('street');
     for (const hostile of [null, '', 'ROOF', 'vault', 'bank', 0, 1, {}, ['roof'], 'roof ']) {
       expect(normalizePresenceArea(hostile)).toBeNull();
@@ -55,6 +60,34 @@ describe('isAreaWalkable (D-087)', () => {
         expect(isAreaWalkable('studio', px, py), `studio tile ${x},${y}`).toBe(floor || portal);
       }
     }
+  });
+
+  it('holds the bunker to its floor between the booths, and its stair (D-112)', () => {
+    // The hidden room's floor plan, '.' walkable: the World test pins it to BUNKER_ROOM_DEFINITION.
+    const plan = [
+      '################',
+      '###.############',
+      '###............#',
+      '###.#####.....##',
+      '###.#####..#..##',
+      '###...........##',
+      '###.#####...#.##',
+      '#...#####.######',
+      '#..............#',
+      '#..#############',
+    ];
+    for (let y = 0; y < 10; y += 1) {
+      for (let x = 0; x < 16; x += 1) {
+        const { x: px, y: py } = bunker(x, y);
+        expect(isAreaWalkable('bunker', px, py), `bunker tile ${x},${y}`).toBe(plan[y]![x] === '.');
+      }
+    }
+    // Its grid is over the hidden street, so a street position never reads as the bunker's.
+    expect(isOverAreaGrid('bunker', bunker(5, 5).x, bunker(5, 5).y)).toBe(true);
+    expect(isOverAreaGrid('bunker', bunker(16, 5).x, bunker(16, 5).y)).toBe(false);
+    // A step through a booth row is refused; a step along a corridor is not.
+    expect(isAreaStepAllowed('bunker', bunker(6, 2), bunker(6, 5))).toBe(false);
+    expect(isAreaStepAllowed('bunker', bunker(4, 2), bunker(8, 2))).toBe(true);
   });
 
   it('refuses non-finite positions', () => {

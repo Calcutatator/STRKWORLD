@@ -5,8 +5,8 @@
  *
  * The room's whole client-facing surface is seven message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
- * to hold. The area verb (D-087) names one of three presence areas —
- * `street`, `roof`, `studio` — and a placement, and the area is kept on the
+ * to hold. The area verb (D-087) names one of the presence areas —
+ * `street`, `roof`, `studio`, `bunker` (D-112) — and a placement, and the area is kept on the
  * server's side: no field of the state says which area anyone is in. That is the enforcement: not a filter that strips money out of
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
  * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky

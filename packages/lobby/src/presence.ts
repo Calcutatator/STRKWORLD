@@ -463,7 +463,7 @@ export class LobbyPresence {
    * The placement is checked against the area entered: anywhere in the world
    * for the street, as `resume`; a walkable tile for a shared room. It is not
    * checked against the area left, because the two do not share coordinates
-   * — the Studio is drawn over the hidden street, the roof above it — and a
+   * — the Studio and the bunker are drawn over the hidden street, the roof above it — and a
    * change of area is a teleport by nature.
    *
    * A malformed request, or a placement off the area's walkable tiles,
@@ -670,7 +670,7 @@ export class LobbyPresence {
    * D-097: the session's avatar jumped. Bumps its `jumps` counter (mod 256),
    * which reaches exactly the observers whose view already holds the entry —
    * so only peers in the same presence area, inside the interest radius. Live
-   * in any shared area, the Studio included (D-111); a suspended session has
+   * in any shared area, the Studio (D-111) and the bunker (D-112) included; a suspended session has
    * no entry. Throttled strictly; every refusal is silent. An accepted jump opens the session's climb window (D-106); a
    * throttled one does not.
    */
@@ -764,8 +764,10 @@ export class LobbyPresence {
    * the cap means what its name says.
    *
    * The area comes first because the areas share coordinates: the roof lies
-   * over the street, and the Studio is drawn over the hidden street near the
-   * pitch, so distance alone would show a room's players on the street.
+   * over the street, and the Studio and the bunker (D-112) are both drawn at
+   * the interiors' origin over the hidden street near the pitch, so distance
+   * alone would show a room's players on the street, or the Studio's in the
+   * bunker.
    *
    * One view is one-way on top of that: a roof observer also receives the
    * street below, as the roof's view draws it, and no street observer ever

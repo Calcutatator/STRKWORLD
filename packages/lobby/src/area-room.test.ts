@@ -20,7 +20,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { matchMaker } from '@colyseus/core';
 import { Room as SdkRoom } from '@colyseus/sdk';
-import { ROOF_PRESENCE_GRID, SANDBOX_AREA, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
+import { BUNKER_PRESENCE_GRID, ROOF_PRESENCE_GRID, SANDBOX_AREA, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
 import { MESSAGE } from './config';
 import { LobbyClient, type PeerSnapshot } from './client';
 import type { PresenceRoom } from './room';
@@ -41,6 +41,10 @@ function roof(tileX: number, tileY: number): { x: number; y: number } {
 }
 function studio(tileX: number, tileY: number): { x: number; y: number } {
   return { x: STUDIO_PRESENCE_GRID.originX + tileX * T + T / 2, y: STUDIO_PRESENCE_GRID.originY + tileY * T + T / 2 };
+}
+
+function bunker(tileX: number, tileY: number): { x: number; y: number } {
+  return { x: BUNKER_PRESENCE_GRID.originX + tileX * T + T / 2, y: BUNKER_PRESENCE_GRID.originY + tileY * T + T / 2 };
 }
 
 async function joined(at: { x: number; y: number }, sprite = 'avatar-2'): Promise<LobbyClient> {
@@ -181,6 +185,49 @@ describe('presence areas over the wire (D-087)', () => {
     expect(ids(below.peers())).toEqual([street]);
     expect(ids(pitch.peers())).toEqual([street]);
     expect(decodeErrors.mock.calls.some((call) => String(call[0]).includes('refId'))).toBe(false);
+  }, WIRE_TIMEOUT_MS);
+
+  it('shares the bunker (D-112): its two players see each other move and jump, nobody else does, and leaving switches back', async () => {
+    // A street player standing on the bunker's World pixels (it is drawn
+    // over the hidden street), a street mover beside it, and a Studio
+    // player on the same pixels (the Studio is drawn at the same origin).
+    const street = await joined(bunker(2, 8));
+    const passer: Mover = { client: await joined(bunker(4, 8)), home: bunker(4, 8), steps: 0 };
+    const dresser = await joined(bunker(2, 8));
+    const down1 = await joined(bunker(3, 8));
+    const down2 = await joined(bunker(3, 8));
+    dresser.enterArea('studio', studio(2, 8), 'avatar-2');
+    down1.suspend();
+    down1.enterArea('bunker', bunker(2, 8), 'avatar-2');
+    down2.enterArea('bunker', bunker(1, 9), 'avatar-5');
+    await sees(down1, [down2.gameId]);
+    await sees(down2, [down1.gameId]);
+    await sees(dresser, []);
+    await settled(passer, [street], 'after the bunker entries');
+    expect(ids(street.peers())).toEqual([passer.client.gameId]);
+    expect(down1.area).toBe('bunker');
+
+    // A move and a jump reach the other bunker player.
+    down1.updatePosition(bunker(3, 7).x, bunker(3, 7).y, 'up');
+    await waitFor(() => peerOf(down2, down1), (peer) => peer?.x === bunker(3, 7).x && peer?.y === bunker(3, 7).y, 'the bunker move');
+    expect(down1.jump()).toBe(true);
+    await waitFor(() => peerOf(down2, down1)?.jumps, (jumps) => jumps === 1, 'the bunker jump');
+    // A move onto the lift's doors (out of order) is refused and held.
+    const room = await roomOf(down1);
+    const refused = room.counters.rejected;
+    down1.updatePosition(bunker(2, 6).x, bunker(2, 6).y, 'up');
+    await waitFor(() => room.counters.rejected, (count) => count > refused, 'the step into the lift refused');
+    const held = room.state.peers.get(down1.gameId as string)?.position;
+    expect({ x: held?.x, y: held?.y }).toEqual(bunker(3, 7));
+    await settled(passer, [street], 'after the bunker moves');
+    expect(ids(street.peers())).toEqual([passer.client.gameId]);
+    expect(dresser.peers()).toEqual([]);
+
+    // Up the stair: down2 is the street's again, and gone from the bunker.
+    down2.enterArea('street', bunker(4, 9), 'avatar-5');
+    await sees(street, [passer.client.gameId, down2.gameId]);
+    await sees(down1, []);
+    expect(down2.area).toBe('street');
   }, WIRE_TIMEOUT_MS);
 
   it('never shows the area left in the area entered, and comes back to the street', async () => {

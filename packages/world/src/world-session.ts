@@ -10,7 +10,7 @@ import type {
   StationId,
   WorldEvents,
 } from '@strkworld/shared';
-import { SANDBOX_STEP_HEIGHT } from '@strkworld/shared';
+import { SANDBOX_STEP_HEIGHT, presenceAreaOfBuilding } from '@strkworld/shared';
 import {
   createStreetMap,
   isAvatarStudioEntrance,
@@ -781,6 +781,17 @@ class Session implements WorldSession {
               }
               throw error;
             }
+            // D-112: a shared room (the bunker) publishes its spawn first, so
+            // the Shell has a placement when `building:entered` lands and goes
+            // live there instead of suspending.
+            if (
+              this.activeRoom === entered.building && controller.state.inRoom &&
+              this.isSharedFloor(entered.building, 'ground')
+            ) {
+              this.areaFacing = this.movement.facing;
+              this.publishAreaPosition();
+              if (this.cleanedUp || this.activeRoom !== entered.building) return;
+            }
           }
         } else if (event === 'building:exited') {
           this.inputGate.resume();
@@ -831,7 +842,7 @@ class Session implements WorldSession {
     this.view.setPlayerMotion(IDLE_MOTION);
     this.view.setStreetVisible(onRoof);
     this.view.setDoorsVisible(onRoof);
-    this.view.setRemoteVisible(onRoof);
+    this.view.setRemoteVisible(onRoof || this.isSharedFloor(building, level));
     this.view.setLabelsVisible(onRoof);
     if (onRoof) this.view.showRoom(null);
     else if (level === 'ground') this.view.showRoom(building);
@@ -901,7 +912,11 @@ class Session implements WorldSession {
       setBodyEnabled: () => {},
       setGroundVisible: (visible) => this.view.setStreetVisible(visible),
       setDoorsVisible: (visible) => this.view.setDoorsVisible(visible),
-      setRemoteVisible: (visible) => this.view.setRemoteVisible(visible),
+      // D-112: a shared room's peers are drawn in it, as in the Studio. The
+      // lobby sends only peers in the player's own area, so no street
+      // passer-by is drawn there; a private room hides every peer.
+      setRemoteVisible: (visible) =>
+        this.view.setRemoteVisible(visible || this.isSharedFloor(definition.building, 'ground')),
       setLabelsVisible: (visible) => this.view.setLabelsVisible(visible),
       setRoomVisible: (visible) => {
         this.view.showRoom(visible ? definition.building : null);
@@ -1031,8 +1046,18 @@ class Session implements WorldSession {
       toTile: (x, y) => worldToFloorTile(map, x, y),
       isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
     });
-    // D-087: the roof is shared; every other floor is private.
+    // D-087: the roof is shared, and the bunker (D-112); every other floor is private.
     if (moved && map.rooftop && this.rooftopAnnounced) this.publishAreaPosition(velocity);
+    else if (moved && this.isSharedFloor(map.building, map.level)) this.publishAreaPosition(velocity);
+  }
+
+  /**
+   * D-112: whether a floor is a whole shared presence area, published with
+   * `area:moved` from entry to exit: the bunker's ground floor. The roof is
+   * shared too, but announced on its own (`announceRooftop`).
+   */
+  private isSharedFloor(building: BuildingId, level: FixedRoomLevelId): boolean {
+    return level === 'ground' && presenceAreaOfBuilding(building) !== null;
   }
 
   private moveAvatarStudioPlayer(delta: number, cameraYaw: number): void {

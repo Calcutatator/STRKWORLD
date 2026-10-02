@@ -258,7 +258,7 @@ export const MESSAGE = Object.freeze({
   resume: 'resume',
   /**
    * `{ area, x, y, facing, sprite }` — D-087: go live in a presence area
-   * (`street`, `roof` or `studio`) at a placement in that area, from a
+   * (`street`, `roof`, `studio` or, since D-112, `bunker`) at a placement in that area, from a
    * suspend or from another area. Peers in the area left stop seeing the
    * avatar; peers in the area entered start. Sent to the current area, it
    * refreshes the placement and the sprite.
@@ -275,8 +275,8 @@ export const MESSAGE = Object.freeze({
   kick: 'football:kick',
   /**
    * No payload — D-097: the avatar jumped. The room bumps the sender's
-   * `jumps` counter, at most once per `JUMP_MIN_INTERVAL_MS`, on the street
-   * or the roof. Whatever a client sends with it is never read.
+   * `jumps` counter, at most once per `JUMP_MIN_INTERVAL_MS`, in any live
+   * presence area (D-111, D-112). Whatever a client sends with it is never read.
    */
   jump: 'jump',
 } as const);

@@ -47,7 +47,7 @@ The binding constraints are economic and procedural, not architectural: wallet p
 | Code target | `WalletWithStarknetFeatures` | Not a specific wallet. Web wallets register on the same feature surface, so email/social lights up with no code change when one ships |
 | Network | Mainnet from day one | Real funds. No testnet phase |
 | Game engine | Three.js 0.186 + tile-authored map data + React overlay | D-059. Gameplay stays in 2D pixel space; the renderer is presentation only. Any future Tiled export still embeds tilesets (D-008) |
-| Multiplayer | Colyseus, presence only | The overworld (street, sandbox, pitch, plaza) plus two shared rooms, the Exchange roof and the Avatar Studio (D-087): positions, D-060's anonymous blocks and D-078's one ball. Every other interior is a private solo instance. Never sees an account address |
+| Multiplayer | Colyseus, presence only | The overworld (street, sandbox, pitch, plaza) plus three shared rooms, the Exchange roof and the Avatar Studio (D-087) and the hidden bunker (D-112): positions, D-060's anonymous blocks and D-078's one ball. Every other interior is a private solo instance. Never sees an account address |
 | Gas | `strk20PrepareInvoke` + sponsor submit | Requires a small backend to hold the paymaster key |
 
 ### Why target the interface, not the wallet
@@ -401,23 +401,26 @@ financial action, but a nearby observer may infer the chosen building and visit
 timing from the last position and disappearance. The project lead accepts that
 trade-off for v1 (D-019).
 
-### Multiplayer scope (D-087)
+### Multiplayer scope (D-087, D-112)
 
 Only the overworld is multiplayer — the street, the sandbox, the football
-pitch and the Privacy Plaza — plus two shared rooms the product owner
-approved: **the roof of the avnu building** (the Exchange tower's roof,
-reached by lift) and **the avatar changing room** (the Avatar Studio). Every
-other interior is a private solo instance: the Bank, the Vault, the Post
-Office, the Bridge, and the Exchange's ground floor and degen floor suspend
-presence as before.
+pitch and the Privacy Plaza — plus an approved list of shared rooms:
+**the roof of the avnu building** (the Exchange tower's roof, reached by
+lift), **the avatar changing room** (the Avatar Studio), both D-087, and
+**the hidden bunker** under the alley across from the plaza (D-107, public
+since D-112; its out-of-order lift stays locked). Every other interior is a
+private solo instance: the Bank, the Vault, the Post Office, the Bridge, and
+the Exchange's ground floor and degen floor suspend presence as before.
+Adding a room to this list needs a decision.
 
-A live player is in exactly one presence area, `street`, `roof` or `studio`,
+A live player is in exactly one presence area, `street`, `roof`, `studio` or `bunker`,
 and sees and is seen by players in the same one. One view is one-way on top
 of that: the roof also shows the street's passers-by below, as it did before
-D-087, but street players never see the roof's players, and the Studio and
-the street never see each other. The area is the lobby's server-side
-bookkeeping; no wire field names it. Neither room carries money: the roof has no station and the Studio only
-the cosmetic sprite field. Reaching the roof tells observers there that a
+D-087, but street players never see the roof's players, and the Studio, the
+bunker and the street never see one another. The area is the lobby's server-side
+bookkeeping; no wire field names it. No shared room carries money: the roof has no station, the Studio only
+the cosmetic sprite field, and the bunker's only station (its lift) is
+reserved and never opens. Reaching the roof tells observers there that a
 player came through the Exchange — the same inference D-019 already accepts
 at its door — and their stay on the floors below is bracketed by suspend and
 roof arrival.
@@ -434,7 +437,7 @@ while the pool is small (D-015, D-019).
 ## 7. What the game builds
 
 - **The game itself** — Three.js canvas over a tile-authored world (D-059; Tiled-shaped map data, embedded tilesets per D-008 if exported), React overlay, PWA shell. STRK20 provides zero game primitives.
-- **Colyseus lobby** — presence and position only, in three presence areas (the overworld, the Exchange roof and the Avatar Studio, D-087), plus two anonymous shared toys on the street: D-060's block sandbox at the road's east end and D-078's football at its west end, whose kick carries no payload. Never sees an address.
+- **Colyseus lobby** — presence and position only, in four presence areas (the overworld, the Exchange roof and the Avatar Studio, D-087, and the hidden bunker, D-112), plus two anonymous shared toys on the street: D-060's block sandbox at the road's east end and D-078's football at its west end, whose kick carries no payload. Never sees an address.
 - **The Bridge funding edge** — NEAR Intents 1Click orchestration in `packages/bridge`, deposit-only, public by design, followed by a prompted shield (D-009, D-012).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation

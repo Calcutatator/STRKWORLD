@@ -706,8 +706,8 @@ describe('WorldSession lifecycle', () => {
     }
 
     // Rooms are entered through their doors here, so the door trigger's entry
-    // is on the wire too; nothing else is.
-    world.expectOnlySelectionOnTheWire(['building:entered', 'building:exited', 'player:moved']);
+    // is on the wire too, and the bunker's shared moves (D-112); nothing else is.
+    world.expectOnlySelectionOnTheWire(['building:entered', 'building:exited', 'player:moved', 'area:moved']);
   });
 
   it('is inactive while World gameplay input is suspended', () => {
@@ -2394,7 +2394,7 @@ describe('WorldSession: shared presence areas (D-087)', () => {
     expect(eventsSince(world, before)).toEqual(['rooftop:exited', 'player:moved', 'building:exited']);
   });
 
-  it('never announces a roof for any other floor or building', () => {
+  it('never announces a roof for any other floor or building, and publishes area moves only from the bunker', () => {
     for (const building of ROOM_BUILDINGS) {
       const world = createWorld();
       world.start();
@@ -2402,7 +2402,9 @@ describe('WorldSession: shared presence areas (D-087)', () => {
       for (let i = 0; i < 5; i++) tickHolding(world, { up: true });
       if (building === 'exchange') ride(world, 'degen');
       expect(world.bus.count('rooftop:entered'), building).toBe(0);
-      expect(world.bus.count('area:moved'), building).toBe(0);
+      // D-112: the bunker is a shared room; every other interior is private.
+      if (building === 'bunker') expect(world.bus.count('area:moved'), building).toBeGreaterThan(0);
+      else expect(world.bus.count('area:moved'), building).toBe(0);
     }
   });
 
