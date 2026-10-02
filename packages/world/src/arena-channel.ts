@@ -20,11 +20,21 @@ export interface ArenaChannel {
   claim(): void;
   attack(): void;
   leave(): void;
+  /**
+   * C (optional): the HUD's STRIKE button, routed through the World so it
+   * takes the same path as E and a click (client floor, local swing). The
+   * Shell calls each listener on a STRIKE press; with none, it sends the
+   * attack itself.
+   */
+  subscribeStrikes?(listener: () => void): () => void;
 }
 
 /** What world-session (A) gives the arena session (C). */
 export interface ArenaSessionHost {
-  /** Arena-local World pixels and facing of the local player. */
+  /**
+   * The local player's World pixels in the arena room, room origin included
+   * (the frame the lobby holds positions in), and facing.
+   */
   position(): { readonly x: number; readonly y: number; readonly facing: Facing };
   /** Snap the local player to a tile with the jump choreography (a cut under reduced motion). */
   leapTo(tile: { readonly x: number; readonly y: number }, facing: Facing): void;
@@ -33,6 +43,11 @@ export interface ArenaSessionHost {
   setOutfitLocked(locked: boolean): void;
   selectLook(mode: 'fighting' | 'restore'): void;
   reducedMotion(): boolean;
+  /**
+   * C (optional): true while a panel or Shell claim owns the keyboard. The
+   * session then sends nothing, whatever the caller forwards.
+   */
+  inputSuspended?(): boolean;
 }
 
 export interface ArenaViewFrame {
@@ -47,6 +62,7 @@ export interface ArenaViewFrame {
 /** Implemented by C in arena-session.ts; PR 0 ships a no-op. */
 export interface ArenaSession {
   update(deltaMs: number): void;
+  /** Arena-local tile indices (the room's own grid, origin excluded). */
   isRingTileWalkable(tileX: number, tileY: number): boolean;
   /** E pressed in the arena. True if consumed. */
   onInteract(): boolean;
