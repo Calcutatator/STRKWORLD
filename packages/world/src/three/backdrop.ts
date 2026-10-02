@@ -80,7 +80,7 @@ const MID_NORTH = STREET_SOUTH[1];
 /** Its blocks stand this deep from their street faces; back gardens fill the rest. */
 const MID_FRONTAGE = 6;
 
-/** North-south streets: one every `PITCH` along x, the first on the gap between the Bank and the Exchange. */
+/** North-south streets: one every `PITCH` along x, the first on the gap between the west lot (the Bridge, D-110) and the Exchange. */
 const PITCH = 18;
 const CROSS_ORIGIN = STREET_ORIGIN_X + 9;
 /** They run from the first street to the last. */

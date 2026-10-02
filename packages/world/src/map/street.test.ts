@@ -93,10 +93,11 @@ describe('the street is walkable', () => {
     expect(SANDBOX_AREA.x).toBe(X + 54);
     expect(map.spawn).toEqual({ x: X + 24, y: 15 });
     expect(map.doors.map((door) => [door.building, door.x - X, door.y])).toEqual([
-      ['bank', 5, 10],
+      // West to east: the Bridge on the west lot, the Bank on the fourth (D-110).
+      ['bridge', 5, 10],
       ['exchange', 14, 10],
       ['post-office', 23, 10],
-      ['bridge', 32, 10],
+      ['bank', 32, 10],
       ['vault', 41, 10],
       // The hidden stair's top step in the alley across from the plaza (D-107).
       ['bunker', 10, 10],
@@ -226,10 +227,10 @@ describe('every building is present and reachable', () => {
 
   it('gives every facade a readable placeholder name and function', () => {
     expect(map.exteriorLabels).toEqual([
-      { building: 'bank', text: 'BANK\nSHIELD / UNSHIELD', x: X + 6.5, y: 7 },
+      { building: 'bridge', text: 'BRIDGE\nDEPOSIT', x: X + 6.5, y: 7 },
       { building: 'exchange', text: 'EXCHANGE\nSWAP', x: X + 15.5, y: 7 },
       { building: 'post-office', text: 'POST OFFICE\nTRANSFER', x: X + 24.5, y: 7 },
-      { building: 'bridge', text: 'BRIDGE\nDEPOSIT', x: X + 33.5, y: 7 },
+      { building: 'bank', text: 'BANK\nSHIELD / UNSHIELD', x: X + 33.5, y: 7 },
       { building: 'vault', text: 'VAULT\nCOMING SOON', x: X + 42.5, y: 7 },
     ]);
   });

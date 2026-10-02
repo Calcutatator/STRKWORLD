@@ -24,9 +24,9 @@ import {
 
 /**
  * The hidden stair in 3D (D-107): a narrow concrete service stair cut into
- * the alley mouth between the Bank and the Exchange, a steel door ajar at its
- * foot with neon leaking out and up the steps, a lit vending machine beside
- * it, and a calico cat asleep on the machine. Nothing here is text: no sign,
+ * the alley mouth between the Bridge (the Bank until D-110) and the Exchange,
+ * a steel door ajar at its foot with neon leaking out and up the steps, a lit
+ * vending machine beside it, and a calico cat asleep on the machine. Nothing here is text: no sign,
  * no label, no name. The one hint is a small sticker on the machine and a
  * stencilled arrow on the top step, both shapes.
  *

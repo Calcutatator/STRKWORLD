@@ -84,8 +84,9 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    */
   railing: Object.freeze({ kind: 'railing', solid: true, colour: 0x8e959c }),
   /**
-   * The hidden stair's top step, in the alley between the Bank and the
-   * Exchange (D-107). Walkable: it carries the stair's door.
+   * The hidden stair's top step, in the alley between the west lot (the
+   * Bridge since D-110) and the Exchange (D-107). Walkable: it carries the
+   * stair's door.
    */
   stairhead: Object.freeze({ kind: 'stairhead', solid: false, colour: 0x8f8a84 }),
   /**
@@ -214,12 +215,14 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   fill(tiles, 0, 11, width, 2, 'pavement');
   fill(tiles, 0, 17, width, 2, 'pavement');
 
-  // Five buildings along the north side, evenly spaced.
+  // Five buildings along the north side, evenly spaced, on five equal lots.
+  // The Bridge stands on the west lot and the Bank on the fourth (D-110); a
+  // building's look, door and room go with it wherever its lot is.
   const plan: Array<{ building: BuildingId; x: number; locked: boolean; label: string }> = [
-    { building: 'bank', x: X + 3, locked: false, label: 'BANK\nSHIELD / UNSHIELD' },
+    { building: 'bridge', x: X + 3, locked: false, label: 'BRIDGE\nDEPOSIT' },
     { building: 'exchange', x: X + 12, locked: false, label: 'EXCHANGE\nSWAP' },
     { building: 'post-office', x: X + 21, locked: false, label: 'POST OFFICE\nTRANSFER' },
-    { building: 'bridge', x: X + 30, locked: false, label: 'BRIDGE\nDEPOSIT' },
+    { building: 'bank', x: X + 30, locked: false, label: 'BANK\nSHIELD / UNSHIELD' },
     vaultOpen
       ? { building: 'vault', x: X + 39, locked: false, label: 'VAULT\nSUPPLY / REDEEM' }
       : { building: 'vault', x: X + 39, locked: true, label: 'VAULT\nCOMING SOON' },
@@ -287,7 +290,8 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   paintPlaza(tiles);
 
   // The hidden stair (D-107): two tiles of stair and a vending machine in the
-  // alley mouth between the Bank and the Exchange, across from the plaza.
+  // alley mouth between the west lot (the Bridge, D-110) and the Exchange,
+  // across from the plaza.
   // Unmarked: no facade, no sign, no label (see bunker.ts).
   paintBunker(tiles);
 

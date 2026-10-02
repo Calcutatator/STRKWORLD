@@ -3,8 +3,10 @@ import type { TileKind } from './street.js';
 
 /**
  * The hidden stair (D-107), as data: a narrow service stair going down in the
- * alley between the Bank and the Exchange, across the road from the Privacy
- * Plaza, screened on its east side by a vending machine.
+ * alley between the street's west lot and the Exchange, across the road from
+ * the Privacy Plaza, screened on its east side by a vending machine. The west
+ * lot held the Bank when the stair was laid; it holds the Bridge since D-110,
+ * and the stair did not move.
  *
  * Deliberately unmarked. No facade, no sign, no exterior label, no door
  * portal and no name anywhere a player can read it: the stair is found by
@@ -31,9 +33,9 @@ export interface BunkerRect {
 const at = (x: number): number => STREET_ORIGIN_X + x;
 
 /**
- * The alley the stair stands in: the two grass columns between the Bank
- * (street x 3-9) and the Exchange (x 12-18), rows 5-10, directly across the
- * road from the plaza's east edge (x 10).
+ * The alley the stair stands in: the two grass columns between the west lot
+ * (street x 3-9, the Bridge since D-110) and the Exchange (x 12-18), rows
+ * 5-10, directly across the road from the plaza's east edge (x 10).
  */
 export const BUNKER_ALLEY: BunkerRect = Object.freeze({ x: at(10), y: 5, width: 2, height: 6 });
 

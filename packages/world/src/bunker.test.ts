@@ -70,7 +70,7 @@ function streetReach(district: DistrictMap): Set<string> {
 }
 
 describe('the hidden stair on the street (D-107)', () => {
-  it('stands across the road from the Privacy Plaza, in the alley between the Bank and the Exchange', () => {
+  it('stands across the road from the Privacy Plaza, in the alley between the Bridge and the Exchange', () => {
     // The plaza is south of the road, the stair north of it, inside the plaza's columns.
     expect(BUNKER_DOOR.x).toBeGreaterThanOrEqual(PLAZA_AREA.x);
     expect(BUNKER_DOOR.x).toBeLessThan(PLAZA_AREA.x + PLAZA_AREA.width);
@@ -78,11 +78,20 @@ describe('the hidden stair on the street (D-107)', () => {
     const roadRows = [...Array(map.height).keys()].filter((y) => map.tiles[y]![X + 10] === 'road');
     expect(Math.max(...BUNKER_TILES.map((tile) => tile.y + tile.height - 1))).toBeLessThan(Math.min(...roadRows));
     expect(PLAZA_AREA.y).toBeGreaterThan(Math.max(...roadRows));
-    // The alley: the Bank's east wall on one side, the Exchange's west wall on the other.
+    // The alley: the Bridge's east wall on one side, the Exchange's west wall
+    // on the other. The west lot was the Bank's when the stair was laid; the
+    // lots swapped in D-110 and the stair stayed put.
     for (let y = BUNKER_ALLEY.y; y < BUNKER_ALLEY.y + BUNKER_ALLEY.height; y++) {
       expect(['wall', 'facade']).toContain(map.tiles[y]![BUNKER_ALLEY.x - 1]);
       expect(['wall', 'facade']).toContain(map.tiles[y]![BUNKER_ALLEY.x + BUNKER_ALLEY.width]);
     }
+    const doorOf = (building: string) => map.doors.find((door) => door.building === building)!;
+    // Each building's two-tile door is centred on its seven-tile lot, two
+    // tiles in from its west wall: the Bridge's lot ends where the alley
+    // begins, and the Exchange's begins where it ends.
+    expect(doorOf('bridge').x + 5).toBe(BUNKER_ALLEY.x);
+    expect(doorOf('exchange').x - 2).toBe(BUNKER_ALLEY.x + BUNKER_ALLEY.width);
+    expect(doorOf('bank').x).toBeGreaterThan(BUNKER_ALLEY.x);
     for (const tile of BUNKER_TILES) {
       for (let y = tile.y; y < tile.y + tile.height; y++) {
         for (let x = tile.x; x < tile.x + tile.width; x++) expect(inBunkerRect(BUNKER_ALLEY, x, y)).toBe(true);

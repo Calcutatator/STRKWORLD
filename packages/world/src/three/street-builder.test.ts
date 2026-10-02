@@ -43,11 +43,12 @@ import type { StreetView } from './types.js';
 /** The street's first column, past the pitch square's fence (D-078). */
 const X = STREET_ORIGIN_X;
 
+/** West to east. The Bridge and the Bank swapped lots in D-110. */
 const PLAN = [
-  { building: 'bank', x: X + 3 },
+  { building: 'bridge', x: X + 3 },
   { building: 'exchange', x: X + 12 },
   { building: 'post-office', x: X + 21 },
-  { building: 'bridge', x: X + 30 },
+  { building: 'bank', x: X + 30 },
   { building: 'vault', x: X + 39 },
 ] as const;
 
