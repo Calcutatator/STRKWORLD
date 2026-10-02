@@ -535,3 +535,38 @@ describe('arena session: the press-E system (D-117)', () => {
     expect(released).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('arena session on the real press-E system (D-117)', () => {
+  it('E claims at the gate through the system, then attacks through the action while the yield holds', async () => {
+    const { createInteractionSystem } = await import('./interaction.js');
+    const time = clock();
+    const fake = fakeChannel(ring());
+    const { host, state } = fakeHost(APPROACH);
+    const prompts: Array<string | null> = [];
+    const interactions = createInteractionSystem({ onPrompt: (prompt) => prompts.push(prompt?.label ?? null) });
+    const session = createArenaSession(
+      fake.channel,
+      { ...host, suspendInteractions: (reason: string) => interactions.suspend(reason) },
+      { now: time.now },
+    );
+    interactions.register({ targets: () => session.gateTargets!() });
+    interactions.addAction({ id: 'arena', priority: 10, run: () => session.onAttack!() });
+    const player = () => ({ position: { x: state.x, y: state.y }, heading: { x: 0, y: -1 } });
+    interactions.update(player());
+    expect(prompts.at(-1)).toBe(ARENA_CLAIM_LABEL);
+    expect(interactions.interact()).toBe(true);
+    expect(fake.channel.claim).toHaveBeenCalledTimes(1);
+    // The server's new round: the session leaps in and holds the yield.
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
+    expect(interactions.suspended).toBe(true);
+    interactions.update(player());
+    expect(interactions.focused).toBeNull();
+    expect(interactions.interact()).toBe(true);
+    expect(fake.channel.attack).toHaveBeenCalledTimes(1);
+    // Back to idle: the yield is released and a spectator's E is the gate's again.
+    fake.push(ring({ phase: 'idle', round: 1 }));
+    expect(interactions.suspended).toBe(false);
+    session.destroy();
+    interactions.destroy();
+  });
+});

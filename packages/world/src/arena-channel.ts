@@ -1,4 +1,5 @@
 import type { ArenaPhase, ArenaRingSnapshot, Facing, GameId } from '@strkworld/shared';
+import type { InteractionTarget } from './interaction.js';
 
 /**
  * D-114: the gladiator pit's arena, as the World sees it.
@@ -58,16 +59,8 @@ export interface ArenaSessionHost {
   suspendInteractions?(reason: string): () => void;
 }
 
-/**
- * C: the ring gate as a press-E station target (D-117). Structurally the
- * interaction system's `InteractionTarget`: World pixels, room origin included.
- */
-export interface ArenaGateTarget {
-  readonly id: string;
-  readonly label: string;
-  readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
-  activate(): unknown;
-}
+/** C: the ring gate as a press-E station target (D-117): World pixels, room origin included. */
+export type ArenaGateTarget = InteractionTarget;
 
 export interface ArenaViewFrame {
   readonly phase: ArenaPhase;
