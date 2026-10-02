@@ -343,6 +343,7 @@ export function createArenaSession(
     return true;
   };
 
+  /** The one attack path: E (`onAttack`), a click (`onPrimary`) and the HUD STRIKE all land here. */
   const primary = (): boolean => {
     if (destroyed || ring === null || inputSuspended()) return false;
     if (!selfIsChallenger() || ring.phase !== 'fighting') return false;
@@ -407,9 +408,8 @@ export function createArenaSession(
       return object == null ? targets : [{ ...targets[0]!, object }];
     },
     onAttack(): boolean {
-      if (destroyed || ring === null || inputSuspended()) return false;
-      if (!selfIsChallenger() || ring.phase !== 'fighting') return false;
-      return attack();
+      // E, a click and STRIKE are one path: one floor, one local swing, one send.
+      return primary();
     },
     frame(): ArenaViewFrame | null {
       return destroyed ? null : frame;

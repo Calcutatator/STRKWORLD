@@ -1,5 +1,5 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import { ARENA_SWING_MS, arenaTileAt, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
+import { type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_LEVELS,
@@ -24,6 +24,8 @@ import { buildFixedRoom } from './room-builder.js';
 import { arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
 import { createArenaFx, type ArenaFx, type RemoteSwingPort } from './arena-fx.js';
 import type { ArenaViewFrame } from '../arena-channel.js';
+// D-114: one swing timeline and one seat rule, shared with the remote layer (C's arena-swing.ts).
+import { ARENA_SEAT_IDLE_MS, attackPoseAt, isArenaSeatAt } from '../arena-swing.js';
 import { buildAvatarStudio } from './studio-builder.js';
 import {
   REMOTE_FALL_GRAVITY,
@@ -131,11 +133,6 @@ const MAX_HOP_RISE = 1.5;
 const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
-/** D-114: an arena swing's stages (`ARENA_SWING_MS` in all): wind-up, strike, recover. */
-const SWING_WINDUP_MS = 100;
-const SWING_STRIKE_MS = 120;
-/** D-114: idle this long on an arena tier and the local avatar sits down. */
-export const ARENA_SIT_AFTER_MS = 1500;
 /** D-114: the arena prompt over the local avatar ("E · ENTER THE RING"). */
 const ARENA_PROMPT_STYLE = Object.freeze({
   lineHeight: 0.26,
@@ -162,17 +159,6 @@ export function roomSurfaceHeightAt(room: string | null, x: number, z: number): 
   const tileX = Math.floor(x - ROOM_ORIGIN.x / PIXELS_PER_UNIT);
   const tileY = Math.floor(z - ROOM_ORIGIN.y / PIXELS_PER_UNIT);
   return arenaSurfaceHeightAt(tileX, tileY);
-}
-
-/** D-114: the arena swing pose `elapsed` ms after the swing began, or null once it is over. */
-export function arenaSwingPose(elapsed: number): AttackPose | null {
-  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= ARENA_SWING_MS) return null;
-  if (elapsed < SWING_WINDUP_MS) return { stage: 'windup', progress: elapsed / SWING_WINDUP_MS };
-  if (elapsed < SWING_WINDUP_MS + SWING_STRIKE_MS) {
-    return { stage: 'strike', progress: (elapsed - SWING_WINDUP_MS) / SWING_STRIKE_MS };
-  }
-  const recover = ARENA_SWING_MS - SWING_WINDUP_MS - SWING_STRIKE_MS;
-  return { stage: 'recover', progress: Math.min(1, (elapsed - SWING_WINDUP_MS - SWING_STRIKE_MS) / recover) };
 }
 
 /**
@@ -473,9 +459,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
    */
   const arenaSeatAt = (xPx: number, yPx: number): boolean => {
     if (streetVisible || visibleRoom !== 'arena' || !Number.isFinite(xPx) || !Number.isFinite(yPx)) return false;
-    const tileX = Math.floor((xPx - ROOM_ORIGIN.x) / PIXELS_PER_UNIT);
-    const tileY = Math.floor((yPx - ROOM_ORIGIN.y) / PIXELS_PER_UNIT);
-    return arenaTileAt(tileX, tileY) === 'tier';
+    // The Studio and the bunker share the arena's pixels: the room gate above keeps them apart.
+    return isArenaSeatAt(xPx, yPx);
   };
 
   const retireRemote = (): void => {
@@ -523,15 +508,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
       retireRemote();
       resetPresentation();
       if (remotePeers) {
-        // D-114: remote spectators sit on the arena's tiers (the layer reads
-        // `seatAt` once C's remote-avatars.ts takes it; others ignore it).
-        const seats: Record<string, unknown> = { seatAt: arenaSeatAt };
+        // D-114: remote spectators sit on the arena's tiers.
         const layer = createRemoteAvatarLayer3D({
           source: remotePeers,
           figures: options.figures,
           surfaceHeight: remoteHeight,
           ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
-          ...seats,
+          seatAt: arenaSeatAt,
         });
         remote = layer;
         root.add(layer.group);
@@ -825,11 +808,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
       let attack: AttackPose | null = null;
       if (swingElapsed !== null) {
         swingElapsed += dt;
-        attack = arenaSwingPose(swingElapsed);
+        attack = attackPoseAt(swingElapsed);
         if (attack === null) swingElapsed = null;
       }
       const inArena = !streetVisible && visibleRoom === 'arena';
-      const onTier = inArena && roomFeet() >= 0.8 - 1e-6;
+      const onTier = inArena && arenaSeatAt(ground.x * PIXELS_PER_UNIT, ground.z * PIXELS_PER_UNIT);
       idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
       const guard = inArena && arenaFrame?.selfIsChallenger === true &&
         (arenaFrame.phase === 'countdown' || arenaFrame.phase === 'fighting');
@@ -839,7 +822,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
         jump: pose,
         attack,
         guard,
-        seated: idleOnTier >= ARENA_SIT_AFTER_MS,
+        seated: idleOnTier >= ARENA_SEAT_IDLE_MS,
       });
       if (streetVisible) {
         street.update(dt);

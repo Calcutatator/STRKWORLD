@@ -581,3 +581,18 @@ describe('arena session on the real press-E system (D-117)', () => {
     interactions.destroy();
   });
 });
+
+describe('arena session: one attack path', () => {
+  it('E, a click and STRIKE share one floor: three inputs in one instant send one attack', () => {
+    const time = clock();
+    const fake = fakeChannel(ring());
+    const { host } = fakeHost(APPROACH);
+    const session = createArenaSession(fake.channel, { ...host, suspendInteractions: () => () => {} }, { now: time.now });
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
+    expect(session.onAttack!()).toBe(true);
+    session.onPrimary();
+    fake.strike();
+    expect(fake.channel.attack).toHaveBeenCalledTimes(1);
+    expect(host.playLocalSwing).toHaveBeenCalledTimes(1);
+  });
+});
