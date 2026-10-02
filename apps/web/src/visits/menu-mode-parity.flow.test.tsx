@@ -12,8 +12,9 @@ import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER } from '../privacy/register.js';
 import { DegenCatalogProvider } from '../panels/exchange/DegenCatalogProvider.js';
 import { ExchangeMenuPanel } from '../panels/exchange/ExchangeMenuPanel.js';
+import { BANK_COUNTERS, BankMenuPanel } from '../panels/bank/BankMenuPanel.js';
 import { menuCounters } from '../panels/MenuCounters.js';
-import { VaultMenuPanel } from '../panels/vault/VaultMenuPanel.js';
+import { VAULT_COUNTERS, VaultMenuPanel } from '../panels/vault/VaultMenuPanel.js';
 import { VisitLayer } from './VisitLayer.js';
 
 /**
@@ -162,17 +163,31 @@ function onlyWindow(): Element {
 
 describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () => {
   it('names the counters as the room does, admitting each as its counter is', () => {
-    expect(menuCounters('vault', ['vault:lending', 'vault:borrow'], PRIVACY_REGISTER, borrowOn)).toEqual([
-      { station: 'vault:lending', label: 'SUPPLY / REDEEM' },
+    // D-103: the Vault's four counters, in the room's order.
+    expect(menuCounters('vault', VAULT_COUNTERS, PRIVACY_REGISTER, borrowOn)).toEqual([
+      { station: 'vault:supply', label: 'SUPPLY' },
+      { station: 'vault:redeem', label: 'REDEEM' },
       { station: 'vault:borrow', label: 'BORROW' },
+      { station: 'vault:repay', label: 'REPAY' },
     ]);
-    // Borrowing off in this build: the BORROW counter is locked, so Menu Mode hides it.
-    expect(menuCounters('vault', ['vault:lending', 'vault:borrow'], PRIVACY_REGISTER, vaultOn)).toEqual([
-      { station: 'vault:lending', label: 'SUPPLY / REDEEM' },
+    // Borrowing off in this build: BORROW and REPAY are locked, so Menu Mode hides them.
+    expect(menuCounters('vault', VAULT_COUNTERS, PRIVACY_REGISTER, vaultOn)).toEqual([
+      { station: 'vault:supply', label: 'SUPPLY' },
+      { station: 'vault:redeem', label: 'REDEEM' },
     ]);
-    // Its route unapproved in the register: hidden too, with borrowing switched on.
+    // Their route unapproved in the register: hidden too, with borrowing switched on.
     const unapproved = PRIVACY_REGISTER.map((entry) => (entry.route === 'vault.borrow' ? { ...entry, approvedBy: null } : entry));
-    expect(menuCounters('vault', ['vault:lending', 'vault:borrow'], unapproved, borrowOn)).toHaveLength(1);
+    expect(menuCounters('vault', VAULT_COUNTERS, unapproved, borrowOn)).toHaveLength(2);
+    // The Bank's four (D-103): SHIELD always, the others while their counters open.
+    expect(menuCounters('bank', BANK_COUNTERS, PRIVACY_REGISTER, null)).toEqual([
+      { station: 'bank:shielding', label: 'SHIELD' },
+      { station: 'bank:unshielding', label: 'UNSHIELD' },
+      { station: 'bank:staking', label: 'STAKE' },
+      { station: 'bank:unstaking', label: 'UNSTAKE' },
+    ]);
+    const stakeOnly: WalletRoutePolicy = { ...denyAll, maxIntents: 1, enabledRoutes: ['stake'] };
+    expect(menuCounters('bank', BANK_COUNTERS, PRIVACY_REGISTER, stakeOnly).map((counter) => counter.label)).toEqual(['SHIELD', 'STAKE']);
+    expect(menuCounters('bank', BANK_COUNTERS, PRIVACY_REGISTER, denyAll).map((counter) => counter.label)).toEqual(['SHIELD']);
     expect(menuCounters('exchange', ['exchange:swap', 'exchange:degen'], PRIVACY_REGISTER, swapOn)).toEqual([
       { station: 'exchange:swap', label: 'SWAP' },
       { station: 'exchange:degen', label: 'DEGEN SWAP' },
@@ -181,7 +196,7 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     expect(menuCounters('exchange', ['exchange:swap', 'exchange:degen'], PRIVACY_REGISTER, denyAll)).toEqual([
       { station: 'exchange:swap', label: 'SWAP' },
     ]);
-    expect(Object.isFrozen(menuCounters('vault', ['vault:lending'], PRIVACY_REGISTER, borrowOn))).toBe(true);
+    expect(Object.isFrozen(menuCounters('vault', ['vault:supply'], PRIVACY_REGISTER, borrowOn))).toBe(true);
   });
 
   it('opens the Borrow window from the Vault\'s Menu Mode, with its own disclosure, and opens a loan', async () => {
@@ -191,9 +206,10 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     });
     await openMenu('vault', operations);
 
-    // The Vault's own window first, exactly as before, with the counter tabs above it.
-    expect(tabs()).toEqual(['SUPPLY / REDEEM', 'BORROW']);
-    expect(selectedTab()).toBe('SUPPLY / REDEEM');
+    // The Vault's own window first, SUPPLY, with the four counter tabs above it (D-103).
+    expect(tabs()).toEqual(['SUPPLY', 'REDEEM', 'BORROW', 'REPAY']);
+    expect(selectedTab()).toBe('SUPPLY');
+    expect(onlyWindow().closest('.vault-experience')?.getAttribute('data-mode')).toBe('supply');
     expect(onlyWindow().closest('.vault-experience')?.getAttribute('data-experience')).toBe('menu');
     expect(onlyWindow().classList.contains('borrow-experience')).toBe(false);
     expect(onlyWindow().querySelector('.borrow-risk')).toBeNull();
@@ -201,6 +217,11 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     await click(button('BORROW'));
     expect(selectedTab()).toBe('BORROW');
     const borrow = onlyWindow();
+    // BORROW borrows and adds collateral; repaying is REPAY's (D-103).
+    expect([...borrow.querySelectorAll('.borrow-modes [role="tab"]')].map((tab) => tab.textContent)).toEqual([
+      COPY.borrow.modes.borrow,
+      COPY.borrow.modes['add-collateral'],
+    ]);
     expect(borrow.closest('.borrow-experience')?.getAttribute('data-experience')).toBe('menu');
     expect(borrow.querySelector('.vault-eyebrow')?.textContent).toBe(COPY.borrow.eyebrow);
     // D-024: the approved words, verbatim, previewed while composing.
@@ -222,23 +243,86 @@ describe('Menu Mode offers the counters its Game Mode room holds (D-088)', () =>
     ]);
     expect(onlyWindow().querySelector('.flow-done')?.textContent).toContain(COPY.borrow.submitted.succeeded);
 
+    // REPAY: repaying and withdrawing collateral, on the same loan route.
+    await click(button('REPAY'));
+    expect(selectedTab()).toBe('REPAY');
+    const repay = onlyWindow();
+    expect(repay.closest('.borrow-experience')?.getAttribute('data-mode')).toBe('repay');
+    expect([...repay.querySelectorAll('.borrow-modes [role="tab"]')].map((tab) => tab.textContent)).toEqual([
+      COPY.borrow.modes.repay,
+      COPY.borrow.modes['withdraw-collateral'],
+    ]);
+    expect(repay.querySelector('[data-testid="disclosure"]')?.textContent).toBe(disclosureOf('vault.borrow'));
+
+    // REDEEM: the lending window on its redeem form alone, no supply tab.
+    await click(button('REDEEM'));
+    expect(onlyWindow().closest('.vault-experience')?.getAttribute('data-mode')).toBe('redeem');
+    expect(onlyWindow().querySelector('.panel-body .panel-modes')).toBeNull();
+
     // Back to the Vault's counter: its window again, the Borrow window gone.
-    await click(button('SUPPLY / REDEEM'));
-    expect(selectedTab()).toBe('SUPPLY / REDEEM');
+    await click(button('SUPPLY'));
+    expect(selectedTab()).toBe('SUPPLY');
     expect(onlyWindow().classList.contains('borrow-experience')).toBe(false);
     expect(container!.querySelector('.borrow-experience')).toBeNull();
   });
 
-  it('keeps the Vault\'s Menu Mode one window, with no tabs, while borrowing is off', async () => {
+  it('keeps the Vault\'s Menu Mode to its lending counters while borrowing is off', async () => {
     await mount(
       <PrivacyProvider operations={new FakePrivacyOperations()} initialConnectState={CONNECTED}>
         <VaultMenuPanel onClose={() => {}} policy={vaultOn} />
       </PrivacyProvider>,
     );
-    expect(container!.querySelector('.menu-counters')).toBeNull();
-    expect(container!.querySelector('.panel-counters')).toBeNull();
+    expect(tabs()).toEqual(['SUPPLY', 'REDEEM']);
     expect(onlyWindow().closest('.vault-experience')?.getAttribute('data-experience')).toBe('menu');
     expect(container!.querySelector('.borrow-experience')).toBeNull();
+  });
+
+  it('offers the Bank\'s four counters as tabs, one window at a time, each doing one thing (D-103)', async () => {
+    const operations = createDemoOperations({ funded: true });
+    await openMenu('bank', operations);
+    expect(tabs()).toEqual(['SHIELD', 'UNSHIELD', 'STAKE', 'UNSTAKE']);
+    expect(selectedTab()).toBe('SHIELD');
+    expect(onlyWindow().closest('.bank-experience')?.getAttribute('data-mode')).toBe('shield');
+    expect(onlyWindow().getAttribute('data-brand')).toBeNull();
+    // No transfer anywhere in the Bank: the Post Office is the one place to send.
+    expect(container!.textContent).not.toContain(COPY.bank.transfer);
+
+    await click(button('UNSHIELD'));
+    expect(onlyWindow().closest('.bank-experience')?.getAttribute('data-mode')).toBe('unshield');
+    expect(onlyWindow().querySelector('input[name="recipient"]')).not.toBeNull();
+
+    await click(button('STAKE'));
+    expect(onlyWindow().closest('.bank-experience')?.getAttribute('data-mode')).toBe('stake');
+    expect(onlyWindow().getAttribute('data-brand')).toBe('endur');
+    expect(onlyWindow().querySelector('section.unstake-counter')).toBeNull();
+
+    await click(button('UNSTAKE'));
+    expect(onlyWindow().closest('.bank-experience')?.getAttribute('data-mode')).toBe('unstake');
+    expect(onlyWindow().getAttribute('data-brand')).toBe('endur');
+    expect(onlyWindow().querySelector('section.unstake-counter')).not.toBeNull();
+    expect(onlyWindow().querySelector('input[name="amount"]')).toBeNull();
+
+    // A shield from its tab: one action, reviewed and confirmed on its own.
+    await click(button('SHIELD'));
+    await type('amount', '5');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(container!.querySelectorAll('button.confirm')).toHaveLength(1);
+    expect(onlyWindow().querySelector('.commit-disclosures')?.textContent).toContain(disclosureOf('bank.shield'));
+    await click(onlyWindow().querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.submitted).toEqual([[expect.objectContaining({ kind: 'shield', amount: 5n * E18 })]]);
+  });
+
+  it('hides the Bank counters its build leaves off, keeping SHIELD, the Bank\'s own window', async () => {
+    await mount(
+      <PrivacyProvider operations={new FakePrivacyOperations()} initialConnectState={CONNECTED}>
+        <BankMenuPanel onClose={() => {}} policy={denyAll} />
+      </PrivacyProvider>,
+    );
+    // One counter left: no tabs, and SHIELD's window, which still shows its
+    // own door from the build's policy.
+    expect(container!.querySelector('.menu-counters')).toBeNull();
+    expect(onlyWindow().closest('.bank-experience')?.getAttribute('data-mode')).toBe('shield');
+    expect(onlyWindow().querySelector('h3.counter-action')?.textContent).toBe(COPY.bank.shield);
   });
 
   it('asks for the unpriced-token acknowledgement in the Exchange\'s Menu Mode, and offers the degen floor', async () => {

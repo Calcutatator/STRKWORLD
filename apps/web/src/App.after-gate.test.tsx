@@ -138,7 +138,8 @@ function bankStations(snapshots: ShellEvents['world:stations'][]): string[] {
 }
 
 function bankPanel(): Element | null {
-  return container!.querySelector('section.panel[data-building="bank"] .panel-modes');
+  // D-103: the SHIELD counter's own window, naming its one action.
+  return container!.querySelector('section.panel[data-building="bank"] .counter-action');
 }
 
 describe('the city behind the entry gate (D-072)', () => {
@@ -160,7 +161,7 @@ describe('the city behind the entry gate (D-072)', () => {
     // The Bridge runtime lands with the player at the Bank counter. Only the
     // Bridge's stations read it, so the Bank's door snapshot stays the only one.
     await landDemoBridge();
-    expect(bankStations(stations)).toEqual(['bank:shielding:available', 'bank:staking:available']);
+    expect(bankStations(stations)).toEqual(['bank:shielding:available', 'bank:unshielding:available', 'bank:staking:available', 'bank:unstaking:available']);
     // The counter opens; in the demo the wallet still has to connect, as before D-072.
     expect(container!.textContent).toContain(COPY.connect.title);
     await click(button(COPY.connect.action));
@@ -195,7 +196,7 @@ describe('the city behind the entry gate (D-072)', () => {
     expect(hudWallet()).toBe(COPY.hud.wallet.connected);
 
     await openBankCounter(worldOut);
-    expect(bankStations(stations)).toEqual(['bank:shielding:available', 'bank:staking:available']);
+    expect(bankStations(stations)).toEqual(['bank:shielding:available', 'bank:unshielding:available', 'bank:staking:available', 'bank:unstaking:available']);
     expect(bankPanel()).not.toBeNull();
   });
 });

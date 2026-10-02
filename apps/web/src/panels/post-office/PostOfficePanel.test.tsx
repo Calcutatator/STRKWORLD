@@ -34,10 +34,9 @@ describe('Post Office Menu Mode', () => {
     const markup = render(<PostOfficePanel onClose={() => {}} />);
     expect(markup).toContain(COPY.postOffice.oneAtATime);
     expect(markup).toContain(COPY.bank.enterRecipient);
-    // D-040's visit vocabulary would promise several sends settling together.
-    expect(markup).not.toContain(COPY.batch.add);
-    expect(markup).not.toContain(COPY.batch.empty);
-    expect(markup).not.toContain(COPY.batch.why);
+    // D-040's visit vocabulary would promise several sends settling together;
+    // since D-103 no counter has it.
+    for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action']) expect(markup).not.toContain(gone);
   });
 
   it('explains its own identity — a private send to another registered pool account — before any control', () => {

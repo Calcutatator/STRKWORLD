@@ -6,7 +6,7 @@ import {
   EXCHANGE_DEGEN_STATION,
   EXCHANGE_ROOF_HEIGHT,
   EXCHANGE_ROOF_LEVEL,
-  VAULT_LENDING_STATION,
+  VAULT_SUPPLY_STATION,
   VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
@@ -388,9 +388,9 @@ describe('presenter', () => {
       level: 'ground',
       controlOwner: 'world',
       highlightedStation: null,
-      stations: [{ station: VAULT_LENDING_STATION, label: 'SUPPLY / REDEEM', status: 'available' }],
+      stations: [{ station: VAULT_SUPPLY_STATION, label: 'SUPPLY', status: 'available' }],
     }));
-    const counter = vault.children.find((child) => child.userData['station'] === VAULT_LENDING_STATION)!;
+    const counter = vault.children.find((child) => child.userData['station'] === VAULT_SUPPLY_STATION)!;
     expect(counter.userData['status']).toBe('available');
     view.showRoom(null);
     expect(vault.visible).toBe(false);

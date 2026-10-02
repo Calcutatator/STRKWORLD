@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act, useState, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COPY } from '../../copy.js';
-import { AmountField, BeforeAfter, DetailRows, FlipButton, InvertibleRate, QuoteTimer, RecipientField, SettingsPopover, TokenSelect, feeReserve, maxAfterReserve } from './index.js';
+import { AmountField, BeforeAfter, DetailRows, FlipButton, InvertibleRate, QuoteTimer, RecipientField, SettingsPopover, TokenSelect, feeReserve, maxAfterReserve, AmountSummary, amountSummaryRows, totalAcross } from './index.js';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -383,5 +384,37 @@ describe('RecipientField', () => {
       button(COPY.kit.pasteLabel).click();
     });
     expect(view.querySelector<HTMLInputElement>('input')!.value).toBe('');
+  });
+});
+
+describe('AmountSummary (D-103)', () => {
+  it('reads what you enter, what you receive, the fees, then the total, and details last', () => {
+    const rows = amountSummaryRows({
+      entered: [{ label: 'You add as collateral', value: '100 STRK' }, { label: 'You borrow', value: '20 USDC' }],
+      receive: { label: 'You receive', value: '20 USDC' },
+      fees: [{ id: 'fee', label: 'Pool fee', value: '6 STRK' }],
+      total: { label: 'Total from your pool', value: '106 STRK' },
+      details: [{ id: 'health', label: 'Health', value: '2.1' }],
+    });
+    expect(rows.map((row) => [row.id, row.label])).toEqual([
+      ['entered', 'You add as collateral'],
+      ['entered-2', 'You borrow'],
+      ['receive', 'You receive'],
+      ['fee', 'Pool fee'],
+      ['total', 'Total from your pool'],
+      ['health', 'Health'],
+    ]);
+    expect(rows.find((row) => row.id === 'total')?.tone).toBe('emphasis');
+    const markup = renderToStaticMarkup(<AmountSummary entered={{ label: 'You shield', value: '25 STRK' }} fees={[]} total={null} />);
+    expect(markup).toContain('class="ui-amount-summary"');
+    expect(markup).toContain('<dt>You shield</dt><dd>25 STRK</dd>');
+  });
+
+  it('totals across tokens: one figure for one token, side by side for two, nothing for a zero', () => {
+    const strk = (amount: bigint) => `${amount} STRK`;
+    const usdc = (amount: bigint) => `${amount} USDC`;
+    expect(totalAcross([{ token: '0xA', amount: 25n, format: strk }, { token: '0xa', amount: 6n, format: strk }])).toBe('31 STRK');
+    expect(totalAcross([{ token: '0xB', amount: 20n, format: usdc }, { token: '0xA', amount: 6n, format: strk }])).toBe('20 USDC + 6 STRK');
+    expect(totalAcross([{ token: '0xB', amount: 0n, format: usdc }, { token: '0xA', amount: 6n, format: strk }])).toBe('6 STRK');
   });
 });

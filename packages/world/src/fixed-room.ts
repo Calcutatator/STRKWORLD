@@ -299,6 +299,15 @@ function ownDataField(value: unknown, key: string): unknown {
   }
 }
 
+/**
+ * The Bank's teller line (D-103): four counters along the north wall, one
+ * action each, west to east SHIELD, UNSHIELD, STAKE and UNSTAKE. Each keeps
+ * one privacy grade (D-030): shielding and unshielding are `public-edge`,
+ * staking and unstaking their own Endur routes (D-063, D-085). Two-tile
+ * counters four tiles apart: their approaches tile the north band edge to
+ * edge without overlapping, so every counter opens from its own three-wide
+ * halo and none stands in another's path. The Shell supplies the labels.
+ */
 export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bank',
   width: 18,
@@ -306,25 +315,10 @@ export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: 9, y: 9 },
   exit: { x: 8, y: 11, width: 2, height: 1 },
   stations: [
-    {
-      station: 'bank:shielding',
-      label: 'SHIELD / UNSHIELD',
-      x: 8,
-      y: 3,
-      width: 2,
-      height: 1,
-    },
-    // Endur staking (D-063): its own counter, never merged with shielding,
-    // so each station keeps one privacy grade (D-030). East of shielding with
-    // a free column between their approaches; the Shell supplies the label.
-    {
-      station: 'bank:staking',
-      label: 'STAKE',
-      x: 13,
-      y: 3,
-      width: 2,
-      height: 1,
-    },
+    { station: 'bank:shielding', label: 'SHIELD', x: 2, y: 3, width: 2, height: 1 },
+    { station: 'bank:unshielding', label: 'UNSHIELD', x: 6, y: 3, width: 2, height: 1 },
+    { station: 'bank:staking', label: 'STAKE', x: 10, y: 3, width: 2, height: 1 },
+    { station: 'bank:unstaking', label: 'UNSTAKE', x: 14, y: 3, width: 2, height: 1 },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -436,23 +430,51 @@ export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
   ],
 } as const satisfies FixedRoomDefinition);
 
-/** The Vault's lending counter; the Shell supplies its label and state (D-077). */
+/** The Vault's SUPPLY counter (D-077, D-103); the Shell supplies its label and state. */
+export const VAULT_SUPPLY_STATION: StationId = 'vault:supply';
+
+/** The Vault's REDEEM counter (D-103), beside SUPPLY. */
+export const VAULT_REDEEM_STATION: StationId = 'vault:redeem';
+
+/**
+ * D-103: the id the Vault's one lending counter had while it held supply and
+ * redeem together. It is not a station any more; a snapshot or a stale World
+ * that still names it reads as SUPPLY (`canonicalFixedRoomStation`).
+ * @deprecated Use `VAULT_SUPPLY_STATION`.
+ */
 export const VAULT_LENDING_STATION: StationId = 'vault:lending';
 
 /**
- * The Vault's borrowing counter (D-083): its own counter, never merged with
- * lending, because borrowing carries a different, riskier disclosure, so each
- * station keeps one privacy grade (D-030). The Shell supplies its label and state.
+ * The Vault's BORROW counter (D-083): borrow, and add collateral to a loan.
+ * Its own counters, never merged with lending, because borrowing carries a
+ * different, riskier disclosure, so each station keeps one privacy grade
+ * (D-030). The Shell supplies its label and state.
  */
 export const VAULT_BORROW_STATION: StationId = 'vault:borrow';
 
+/** The Vault's REPAY counter (D-103): repay a loan, and withdraw its collateral. */
+export const VAULT_REPAY_STATION: StationId = 'vault:repay';
+
 /**
- * The Vault opens on shadow accounts, behind the Shell's switch (D-077): a
- * lending counter, and east of it the borrowing counter (D-083), in the
- * envelope every room shares. Locked, it is D-007's
- * facade and no room is built, so it stays out of `FIXED_ROOM_DEFINITIONS`,
- * whose rooms are always open; `fixedRoomDefinitionsFor` adds it when the
- * Shell says so.
+ * Station ids an earlier build used, and the counter each now names (D-103).
+ * Only the Vault's lending counter was renamed; every other id was kept.
+ */
+export const FIXED_ROOM_STATION_ALIASES: Readonly<Partial<Record<StationId, StationId>>> = Object.freeze({
+  [VAULT_LENDING_STATION]: VAULT_SUPPLY_STATION,
+});
+
+/** The current id for `station`: itself, or the counter a renamed id now names (D-103). */
+export function canonicalFixedRoomStation(station: StationId): StationId {
+  return FIXED_ROOM_STATION_ALIASES[station] ?? station;
+}
+
+/**
+ * The Vault opens on shadow accounts, behind the Shell's switch (D-077): four
+ * counters along the north wall in the envelope every room shares, west to
+ * east SUPPLY, REDEEM, BORROW and REPAY (D-103), laid out as the Bank's teller
+ * line. Locked, it is D-007's facade and no room is built, so it stays out of
+ * `FIXED_ROOM_DEFINITIONS`, whose rooms are always open;
+ * `fixedRoomDefinitionsFor` adds it when the Shell says so.
  */
 export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'vault',
@@ -461,25 +483,10 @@ export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: 9, y: 9 },
   exit: { x: 8, y: 11, width: 2, height: 1 },
   stations: [
-    {
-      station: 'vault:lending',
-      label: 'SUPPLY / REDEEM',
-      x: 8,
-      y: 3,
-      width: 2,
-      height: 1,
-    },
-    // Borrowing (D-083): its own counter, so each station keeps one privacy
-    // grade (D-030). East of lending, clear of the east market board, with
-    // two free columns between their approaches; the Shell supplies the label.
-    {
-      station: 'vault:borrow',
-      label: 'BORROW',
-      x: 14,
-      y: 3,
-      width: 2,
-      height: 1,
-    },
+    { station: 'vault:supply', label: 'SUPPLY', x: 2, y: 3, width: 2, height: 1 },
+    { station: 'vault:redeem', label: 'REDEEM', x: 6, y: 3, width: 2, height: 1 },
+    { station: 'vault:borrow', label: 'BORROW', x: 10, y: 3, width: 2, height: 1 },
+    { station: 'vault:repay', label: 'REPAY', x: 14, y: 3, width: 2, height: 1 },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -859,8 +866,13 @@ export function normalizeFixedRoomStations(
   stations: readonly ShellEvents['world:stations']['stations'][number][] | undefined,
 ): readonly FixedRoomStationSnapshot[] {
   return Object.freeze(definition.stations.map((known) => {
+    // D-103: a snapshot that names a renamed counter by its old id still
+    // reaches it; two entries for one counter stay ambiguous, so locked.
     const candidates = Array.isArray(stations)
-      ? stations.filter((candidate) => ownDataField(candidate, 'station') === known.station)
+      ? stations.filter((candidate) => {
+          const id = ownDataField(candidate, 'station');
+          return typeof id === 'string' && canonicalFixedRoomStation(id as StationId) === known.station;
+        })
       : [];
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
     const label = ownDataField(candidate, 'label');

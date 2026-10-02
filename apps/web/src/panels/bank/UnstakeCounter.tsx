@@ -6,7 +6,7 @@ import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { useStore } from '../../store/use-store.js';
 import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
-import { AmountField, DetailRows, checkAmount, primaryAction, type DetailRow } from '../kit/index.js';
+import { AmountField, AmountSummary, checkAmount, primaryAction, totalAcross, type AmountSummaryProps, type DetailRow } from '../kit/index.js';
 import { estimateText, rateRow, strkForXstrk, type EndurRateView } from './endur-rate.js';
 import { voyagerContractUrl } from '../vault/vault-machine.js';
 import {
@@ -222,7 +222,7 @@ function ComposeBlock({ state, panel, rate, poolFee }: { state: UnstakeState; pa
           disabled={preparing}
         />
         {state.noXstrk ? <p className="unstake-holding-none" role="status">{COPY.unstake.noXstrk}</p> : null}
-        <DetailRows rows={unstakeRows(check.amount, rate, poolFee)} />
+        <AmountSummary {...unstakeSummary(check.amount, rate, poolFee)} label={COPY.kit.amountsLabel} />
         <p className="stake-note">{COPY.unstake.wait}</p>
         <button type="submit" className="review" disabled={action.disabled}>
           {action.label}
@@ -252,28 +252,36 @@ function ClaimAction({ state, panel }: { state: UnstakeState; panel: UnstakePane
 }
 
 /**
- * Endur's unstake rows (D-091): what comes back at today's rate, the rate,
- * the wait D-085 measured on chain, and the pool fee each request pays.
- * Estimates only: the request fixes its STRK when it runs.
+ * Endur's unstake figures in the owner's order (D-091, D-103): the xSTRK you
+ * send, what comes back at today's rate, the pool fee on top (in STRK), and
+ * the total from your pool in each token; then the rate and the wait D-085
+ * measured on chain. Estimates only: the request fixes its STRK when it runs.
  */
-function unstakeRows(shares: bigint | null, rate: EndurRateView, poolFee: bigint | null): DetailRow[] {
+function unstakeSummary(shares: bigint | null, rate: EndurRateView, poolFee: bigint | null): AmountSummaryProps {
+  const typed = shares ?? 0n;
   const estimate = rate.status === 'loaded' && shares !== null
     ? estimateText(strkForXstrk(shares, rate.strkPerXstrk), 'STRK')
     : null;
-  const rows: DetailRow[] = [
-    { id: 'receive', label: COPY.stake.willReceive, value: estimate ?? '—', tone: 'emphasis' },
-    rateRow(rate),
-    { id: 'wait', label: COPY.unstake.waitingTime, value: COPY.unstake.waitValue },
-  ];
-  if (poolFee !== null) {
-    rows.push({
+  return {
+    entered: { label: COPY.unstake.youUnstake, value: formatXstrk(typed) },
+    receive: { label: COPY.stake.willReceive, value: estimate ?? '—' },
+    fees: poolFee === null ? [] : [{
       id: 'fee',
       label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
       value: formatStrk(poolFee),
       note: COPY.unstake.feeNote,
-    });
-  }
-  return rows;
+    }],
+    total: poolFee === null ? null : { label: COPY.kit.totalFromPool, value: unstakeTotal(typed, poolFee, false) },
+    details: [rateRow(rate), { id: 'wait', label: COPY.unstake.waitingTime, value: COPY.unstake.waitValue }],
+  };
+}
+
+/** What leaves the pool for a request: the xSTRK sent and the pool fee in STRK, two tokens. */
+function unstakeTotal(shares: bigint, poolFee: bigint, exact: boolean): string {
+  return totalAcross([
+    { token: 'xSTRK', amount: shares, format: exact ? formatXstrkExact : formatXstrk },
+    { token: 'STRK', amount: poolFee, format: exact ? formatStrkExact : formatStrk },
+  ]);
 }
 
 function ReviewBlock({ state, onConfirm, onCancel }: { state: UnstakeState; onConfirm: () => void; onCancel: () => void }) {
@@ -284,41 +292,33 @@ function ReviewBlock({ state, onConfirm, onCancel }: { state: UnstakeState; onCo
   return (
     <div className="panel-review">
       <h3>{COPY.flow.review}</h3>
+      {/* D-103: entered, what comes back, the fees on top, the total, in exact figures. */}
       {action.kind === 'request' ? (
         <>
-          <dl className="stake-review">
-            <dt>{COPY.unstake.reviewRequest}</dt>
-            <dd>{formatXstrkExact(action.shares)}</dd>
-            {action.leftover > 0n ? (
-              <>
-                <dt>{COPY.unstake.reviewLeftover}</dt>
-                <dd>{formatXstrkExact(action.leftover)}</dd>
-              </>
-            ) : null}
-          </dl>
+          <AmountSummary
+            entered={{ label: COPY.unstake.youUnstake, value: formatXstrkExact(action.shares) }}
+            receive={{ label: COPY.stake.youReceive, value: COPY.unstake.receiveLater }}
+            fees={reviewFees(summary.poolFee)}
+            total={{ label: COPY.kit.totalFromPool, value: unstakeTotal(action.shares, summary.poolFee, true) }}
+            details={action.leftover > 0n ? [{ id: 'leftover', label: COPY.unstake.reviewLeftover, value: formatXstrkExact(action.leftover) }] : []}
+            label={COPY.flow.review}
+          />
           <p className="stake-review-note">{COPY.unstake.reviewRequestTail}</p>
         </>
       ) : (
         <>
-          <dl className="stake-review">
-            <dt>{COPY.unstake.reviewClaim}</dt>
-            <dd>{formatStrkExact(action.owed + action.held)}</dd>
-            {action.requestIds.length > 0 ? (
-              <>
-                <dt>{COPY.unstake.requestsCount}</dt>
-                <dd>{action.requestIds.length}</dd>
-              </>
-            ) : null}
-          </dl>
+          {/* A claim moves what Endur paid the stand-in, not the pool: only the fee leaves the pool. */}
+          <AmountSummary
+            entered={{ label: COPY.unstake.reviewClaim, value: formatStrkExact(action.owed + action.held) }}
+            receive={{ label: COPY.stake.youReceive, value: formatStrkExact(action.owed + action.held) }}
+            fees={reviewFees(summary.poolFee)}
+            total={{ label: COPY.kit.totalFromPool, value: formatStrkExact(summary.poolFee) }}
+            details={action.requestIds.length > 0 ? [{ id: 'requests', label: COPY.unstake.requestsCount, value: String(action.requestIds.length) }] : []}
+            label={COPY.flow.review}
+          />
           <p className="stake-review-note">{COPY.unstake.reviewClaimTail}</p>
         </>
       )}
-      <dl className="review-costs">
-        <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-        <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-        <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
-        <dd>{COPY.unstake.networkByWallet}</dd>
-      </dl>
       {flow.name === 'submitting' ? (
         <p className="flow-pending" aria-live="polite" data-stage={flow.stage}>{flow.message}</p>
       ) : null}
@@ -331,6 +331,22 @@ function ReviewBlock({ state, onConfirm, onCancel }: { state: UnstakeState; onCo
       />
     </div>
   );
+}
+
+/** The review's fees: the pool fee, exact, and the network fee the wallet states itself (D-082). */
+function reviewFees(poolFee: bigint): DetailRow[] {
+  return [
+    {
+      id: 'fee',
+      label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+      value: <span title={COPY.bank.poolFeeNote}>{formatStrkExact(poolFee)}</span>,
+    },
+    {
+      id: 'network',
+      label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />,
+      value: COPY.unstake.networkByWallet,
+    },
+  ];
 }
 
 function SubmittedBlock({ state, onBack }: { state: UnstakeState; onBack: () => void }) {

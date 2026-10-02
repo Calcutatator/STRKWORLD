@@ -95,7 +95,7 @@ describe('ExchangePanel review render', () => {
     expect(gate).not.toContain('type="checkbox"');
   });
 
-  it('shows only Sell, Expected buy and Rate until Details is opened', async () => {
+  it('shows the amounts (D-103) and the rate until Details is opened', async () => {
     const operations = new FakePrivacyOperations({
       balances: { [strk!.token]: 100n * 10n ** 18n },
       swapReview: {
@@ -107,18 +107,23 @@ describe('ExchangePanel review render', () => {
     await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
     const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
     const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
-    const summary = gate.slice(gate.indexOf('<dl class="exchange-review-summary">'), gate.indexOf('</dl>'));
-    expect([...summary.matchAll(/<dt>(.*?)<\/dt>/g)].map((match) => match[1])).toEqual([COPY.exchange.sell, COPY.exchange.expectedBuy, COPY.exchange.rate]);
-    expect(summary).toContain('1 STRK');
+    const summary = gate.slice(gate.indexOf('<div class="exchange-review-summary">'), gate.indexOf('</dl>'));
+    // D-103: what you sell, what you should get, the fees on top, the total from the pool, then the rate.
+    expect([...summary.matchAll(/<dt>(?:<details[^>]*><summary>)?(.*?)(?:<\/summary>[^]*?<\/details>)?<\/dt>/g)].map((match) => match[1])).toEqual([
+      COPY.exchange.sell, COPY.exchange.expectedBuy, COPY.bank.poolFee, COPY.bank.networkCost, COPY.kit.totalFromPool, COPY.exchange.rate,
+    ]);
+    expect(summary).toContain('<dd>1 STRK</dd>');
     expect(summary).toContain('2 ETH');
+    // Selling STRK, the pool's fee token: 1 STRK and the 6 STRK fee leave the pool as one figure.
+    expect(summary).toContain('<dd>7 STRK</dd>');
     expect(summary).toContain('1 STRK ≈ 2 ETH');
-    for (const hidden of ['1.99 ETH', '0.50%', '6 STRK', '$1,234.57', "Pragma&#x27;s oracle price"]) expect(summary).not.toContain(hidden);
+    for (const hidden of ['1.99 ETH', '0.50%', '$1,234.57', "Pragma&#x27;s oracle price"]) expect(summary).not.toContain(hidden);
 
     // Details is a closed disclosure holding everything else, and the route row is gone.
     expect(gate).toMatch(/<details class="exchange-review-details"><summary>Details<\/summary>/);
     expect(gate).not.toMatch(/<details[^>]* open/); // no disclosure, nested glossary terms included, starts open
     const details = gate.slice(gate.indexOf('<details class="exchange-review-details"'), gate.indexOf('</dl></details>'));
-    for (const shown of ['1.99 ETH', '0.50%', '2100-01-01T00:00:00.000Z', '6 STRK', '0 STRK', '≈ $1,234.57', '≈ $1,219.75', "1.20% below Pragma&#x27;s oracle price, within the 3% allowed."]) expect(details).toContain(shown);
+    for (const shown of ['1.99 ETH', '0.50%', '2100-01-01T00:00:00.000Z', '≈ $1,234.57', '≈ $1,219.75', "1.20% below Pragma&#x27;s oracle price, within the 3% allowed."]) expect(details).toContain(shown);
     expect(markup).not.toContain('via avnu');
     expect(markup).not.toContain('Route');
   });

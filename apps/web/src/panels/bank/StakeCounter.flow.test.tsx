@@ -64,7 +64,7 @@ describe('the staking station, driven through the screen in demo', () => {
     await act(async () => {
       root!.render(
         <PrivacyProvider operations={operations}>
-          <BankPanel experience="station" allowedModes={['stake']} initialMode="stake" onClose={() => {}} />
+          <BankPanel experience="station" mode="stake" onClose={() => {}} />
         </PrivacyProvider>,
       );
     });
@@ -85,25 +85,28 @@ describe('the staking station, driven through the screen in demo', () => {
     expect(container.querySelector('.balance-total')).toBeNull();
     await type(container.querySelector<HTMLInputElement>('input[name="amount"]')!, '5');
     expect(container.querySelector('input[name="recipient"]')).toBeNull();
-    // D-091: Endur's preview rows, at the demo fake's rate and said to be one.
-    const rows = Object.fromEntries([...container.querySelectorAll('.panel-compose .ui-detail')].map((row) => [
+    // D-091, D-103: the amounts in order (what you stake, the estimate at the
+    // demo fake's rate, the pool fee on top, the total), then the rate.
+    const rows = [...container.querySelectorAll('.panel-compose .ui-detail')].map((row) => [
       row.querySelector('dt')!.textContent,
       row.querySelector('dd')!.firstChild!.textContent,
-    ]));
-    expect(rows).toEqual({
-      [COPY.stake.willReceive]: '≈ 4 xSTRK',
-      [COPY.stake.exchangeRate]: '1 xSTRK = 1.25 STRK',
-      [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`]: '6 STRK',
-    });
+    ]);
+    expect(rows).toEqual([
+      [COPY.stake.youStake, '5 STRK'],
+      [COPY.stake.willReceive, '≈ 4 xSTRK'],
+      [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`, '6 STRK'],
+      [COPY.kit.totalFromPool, '11 STRK'],
+      [COPY.stake.exchangeRate, '1 xSTRK = 1.25 STRK'],
+    ]);
     expect(container.querySelector('.panel-compose')?.textContent).toContain(COPY.stake.demoRate);
+    // D-103: one click from the form to the review; nothing is queued in between.
     await click(button(COPY.gameMode.reviewAction));
-    expect(container.querySelector('.station-action')?.textContent).toBe('Stake 5 STRK → xSTRK');
+    expect(container.querySelector('.station-action')).toBeNull();
 
     // Review: STRK in, exact; xSTRK out, named only.
-    await click(button(COPY.flow.review));
     const review = container.querySelector('.panel-review')!;
-    const figures = [...review.querySelectorAll('.stake-review dd')].map((dd) => dd.textContent);
-    expect(figures).toEqual(['5 STRK', 'xSTRK']);
+    const figures = [...review.querySelectorAll('.ui-detail dd')].map((dd) => dd.textContent);
+    expect(figures).toEqual(['5 STRK', 'xSTRK', '6 STRK', '11 STRK']);
     expect(review.textContent).toContain(COPY.stake.amountAtExecution);
     expect(review.querySelector('.stake-note')?.textContent).toBe(COPY.stake.unstaking);
     expect(review.querySelector('.commit-disclosures')).toBeNull();

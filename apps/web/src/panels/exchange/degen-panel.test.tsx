@@ -87,7 +87,8 @@ describe('the degen counter in demo', () => {
       expiresAt: '2100-01-01T00:00:00.000Z',
       poolFee: '6 STRK',
       networkCost: '0 STRK',
-      total: '6 STRK',
+      // D-103: the 10 STRK sold and the 6 STRK fee leave the pool together.
+      total: '16 STRK',
       disclosures: [SWAP_DISCLOSURE],
       rate: '1 STRK ≈ 10 LORDS',
       inverseRate: '1 LORDS ≈ 0.1 STRK',

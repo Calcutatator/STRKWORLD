@@ -118,14 +118,19 @@ describe('the Unshield recipient', () => {
     expect(panel.store.getState().recipientText).toBe(OWN);
   });
 
-  it('queues an unshield to the wallet\'s own address without typing one, and is ready again after the form clears', async () => {
+  it('reviews an unshield to the wallet\'s own address without typing one, and is ready again after the form clears', async () => {
     const panel = await mount();
     await type(container!.querySelector<HTMLInputElement>('input[name="amount"]')!, '1');
-    expect(button(COPY.batch.add).disabled).toBe(false);
-    await click(button(COPY.batch.add));
-    const [intent] = panel.store.getState().batch;
+    expect(button(COPY.gameMode.reviewAction).disabled).toBe(false);
+    // D-103: one click from the form to the review.
+    await click(button(COPY.gameMode.reviewAction));
+    const flow = panel.store.getState().flow;
+    const [intent] = flow.name === 'review' ? flow.summary.intents : [];
     expect(intent?.kind === 'unshield' ? intent.recipient : null).toBe(OWN);
-    // The machine clears the form on Add; the wallet recipient is filled again.
+    // Confirmed, the machine clears the form; the wallet recipient is filled again.
+    await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(panel.store.getState().flow.name).toBe('submitted');
+    await click(button(COPY.flow.back));
     expect(panel.store.getState().recipientText).toBe(OWN);
     expect(ownLine()).not.toBeNull();
     expect(recipientInput()).toBeNull();
@@ -147,11 +152,16 @@ describe('the Unshield recipient', () => {
 
     await type(input, OTHER);
     await blur(input);
-    expect(button(COPY.batch.add).disabled).toBe(false);
-    await click(button(COPY.batch.add));
-    const [intent] = panel.store.getState().batch;
+    expect(button(COPY.gameMode.reviewAction).disabled).toBe(false);
+    await click(button(COPY.gameMode.reviewAction));
+    const flow = panel.store.getState().flow;
+    const [intent] = flow.name === 'review' ? flow.summary.intents : [];
     expect(intent?.kind === 'unshield' ? intent.recipient : null).toBe(OTHER);
 
+    // Back out of the review: the other address is still in the form, and
+    // the player can switch back to their own wallet.
+    await click(button(COPY.flow.cancel));
+    expect(recipientInput()?.value).toBe(OTHER);
     await click(button(COPY.bank.useMyWallet));
     expect(recipientInput()).toBeNull();
     expect(ownLine()?.textContent).toContain(shortenAddress(OWN));

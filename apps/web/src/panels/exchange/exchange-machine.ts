@@ -24,6 +24,7 @@ export interface ExchangeReview {
   readonly expiresAt: string;
   readonly poolFee: string;
   readonly networkCost: string;
+  /** D-103: what leaves the pool, the amount sold plus the fees, in each token they are paid in. */
   readonly total: string;
   readonly disclosures: readonly string[];
   /** D-084: the quote's implied rate, "1 STRK ≈ 0.0431 USDC". */
@@ -265,13 +266,22 @@ export function createExchangePanel(options: {
     }
     const safeReview = review!;
     const fee = (amount: bigint) => formatTokenAmountExact(amount, 18) + ' STRK';
+    // D-103: what leaves the pool is the amount sold plus the fees, one figure
+    // when the sold token is the pool's fee token, else the two side by side.
+    const feeToken = store.getState().pool?.feeToken ?? null;
+    const sellsFeeToken = feeToken !== null && sameAddress(feeToken, sell.token);
+    const total = sellsFeeToken
+      ? `${formatTokenAmountExact(intent.amountIn + batch.totalCost, sell.decimals)} ${sell.symbol}`
+      : batch.totalCost > 0n
+        ? `${formatTokenAmountExact(intent.amountIn, sell.decimals)} ${sell.symbol} + ${fee(batch.totalCost)}`
+        : `${formatTokenAmountExact(intent.amountIn, sell.decimals)} ${sell.symbol}`;
     const summary: ExchangeReview = {
       sell: `${formatTokenAmountExact(intent.amountIn, sell.decimals)} ${sell.symbol}`,
       expectedBuy: `${formatTokenAmountExact(safeReview.expectedAmountOut, buy.decimals)} ${buy.symbol}`,
       protectedMinimum: `${formatTokenAmountExact(safeReview.minimumAmountOut, buy.decimals)} ${buy.symbol}`,
       slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
       expiresAt: new Date(safeReview.expiresAt).toISOString(),
-      poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
+      poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total,
       disclosures: disclosuresForIntents(batch.intents, register),
       rate: `1 ${sell.symbol} ≈ ${formatRate((safeReview.expectedAmountOut * 10n ** BigInt(sell.decimals)) / intent.amountIn, buy.decimals)} ${buy.symbol}`,
       inverseRate: `1 ${buy.symbol} ≈ ${formatRate((intent.amountIn * 10n ** BigInt(buy.decimals)) / safeReview.expectedAmountOut, sell.decimals)} ${sell.symbol}`,

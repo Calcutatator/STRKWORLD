@@ -20,15 +20,22 @@ import {
 } from './fixed-room.js';
 
 export const BANK_ROOM_BUILDING: BuildingId = 'bank';
+/** The SHIELD counter (D-103: shielding alone; unshielding has its own). */
 export const BANK_SHIELDING_STATION: StationId = 'bank:shielding';
-export const BANK_SHIELDING_LABEL = 'SHIELD / UNSHIELD';
+export const BANK_SHIELDING_LABEL = 'SHIELD';
+/** D-103: the UNSHIELD counter, beside SHIELD. */
+export const BANK_UNSHIELDING_STATION: StationId = 'bank:unshielding';
+export const BANK_UNSHIELDING_LABEL = 'UNSHIELD';
 /**
  * Endur staking (D-063): a separate counter, never merged with shielding
- * (D-030). This facade keeps describing shielding alone; the staking counter
- * lives in `BANK_ROOM_DEFINITION` beside it.
+ * (D-030). This facade keeps describing shielding alone; the other three
+ * counters live in `BANK_ROOM_DEFINITION` beside it.
  */
 export const BANK_STAKING_STATION: StationId = 'bank:staking';
 export const BANK_STAKING_LABEL = 'STAKE';
+/** D-103: the UNSTAKE counter, Endur's request, pending list and claim (D-085). */
+export const BANK_UNSTAKING_STATION: StationId = 'bank:unstaking';
+export const BANK_UNSTAKING_LABEL = 'UNSTAKE';
 export const BANK_ROOM_TILE_SIZE = FIXED_ROOM_TILE_SIZE;
 
 export type BankRoomTile = FixedRoomTile;

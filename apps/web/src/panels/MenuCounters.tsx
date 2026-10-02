@@ -9,8 +9,9 @@ import { resolveStation, type StationDefinition } from '../visits/station-regist
 /**
  * Menu Mode's counter switch (D-088).
  *
- * A building whose Game Mode room holds more than one window (the Vault's
- * SUPPLY / REDEEM and BORROW, the Exchange's SWAP and DEGEN SWAP) shows the
+ * A building whose Game Mode room holds more than one window (the Bank's
+ * SHIELD, UNSHIELD, STAKE and UNSTAKE and the Vault's SUPPLY, REDEEM, BORROW
+ * and REPAY since D-103, the Exchange's SWAP and DEGEN SWAP) shows the
  * same windows in Menu Mode, one at a time, behind a row of tabs named as the
  * counters are. Each tab is admitted exactly as its counter is: by
  * `resolveStation`, against the same register, policy and build switches, so

@@ -157,7 +157,7 @@ describe('street movement seam', () => {
   it('does not tunnel through a solid interior tile during a large fixed-room delta', () => {
     const room = createFixedRoom(BANK_ROOM_DEFINITION);
     const position = moveWithCollisionSubsteps({
-      position: { x: 9 * 32 + 16, y: 9 * 32 + 16 },
+      position: { x: 10 * 32 + 16, y: 10 * 32 + 16 },
       velocity: { x: 0, y: -160 },
       delta: 1400,
       tileSize: 32,
@@ -165,13 +165,13 @@ describe('street movement seam', () => {
       isSolidAt: (x, y) => isFixedRoomSolidAt(room, x, y),
     });
 
-    expect(position).toEqual({ x: 9 * 32 + 16, y: 4 * 32 });
+    expect(position).toEqual({ x: 10 * 32 + 16, y: 4 * 32 });
   });
 
   it('keeps the authoritative 24px body clear of a solid tile, not only its anchor', () => {
     const room = createFixedRoom(BANK_ROOM_DEFINITION);
     const position = moveWithCollisionSubsteps({
-      position: { x: 9 * 32 + 16, y: 5 * 32 + 16 },
+      position: { x: 10 * 32 + 16, y: 5 * 32 + 16 },
       velocity: { x: 0, y: -160 },
       delta: 1_000,
       tileSize: 32,
@@ -181,17 +181,17 @@ describe('street movement seam', () => {
       isSolidAt: (x: number, y: number) => isFixedRoomSolidAt(room, x, y),
     });
 
-    // The station occupies row 3 (world y 96..128 in this origin-free map).
+    // The STAKE counter (columns 10-11, D-103) occupies row 3 (world y 96..128 in this origin-free map).
     // With 16px collision substeps, the body must stop at center y=144 rather
     // than entering row 4's lower edge-adjacent position at y=128.
-    expect(position).toEqual({ x: 9 * 32 + 16, y: 144 });
+    expect(position).toEqual({ x: 10 * 32 + 16, y: 144 });
   });
 
   it('uses the supplied world-to-tile transform for body collision checks', () => {
     const room = createFixedRoom(BANK_ROOM_DEFINITION);
     const origin = 64;
     const position = moveWithCollisionSubsteps({
-      position: { x: origin + 9 * 32 + 16, y: origin + 5 * 32 + 16 },
+      position: { x: origin + 10 * 32 + 16, y: origin + 5 * 32 + 16 },
       velocity: { x: 0, y: -160 },
       delta: 1_000,
       tileSize: 32,
@@ -203,7 +203,7 @@ describe('street movement seam', () => {
       isSolidAt: (x: number, y: number) => isFixedRoomSolidAt(room, x, y),
     });
 
-    expect(position).toEqual({ x: origin + 9 * 32 + 16, y: origin + 144 });
+    expect(position).toEqual({ x: origin + 10 * 32 + 16, y: origin + 144 });
   });
 
   it('uses the same bounded collision seam for Avatar Studio movement', () => {

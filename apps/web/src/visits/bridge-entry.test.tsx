@@ -105,7 +105,7 @@ describe('entering the Bridge loads its runtime', () => {
     await settle();
 
     // No Bank station reads a Bridge capability, so its door snapshot stands.
-    expect(bankStations()).toEqual([['bank:shielding:available', 'bank:staking:available']]);
+    expect(bankStations()).toEqual([['bank:shielding:available', 'bank:unshielding:available', 'bank:staking:available', 'bank:unstaking:available']]);
     expect(bridgeStations()).toEqual([['bridge:deposit:locked']]);
 
     // The Bridge's next door snapshot reads the runtime that landed.

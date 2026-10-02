@@ -2,6 +2,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { COPY } from '../../copy.js';
 import {
   formatRatePercent,
+  formatStrk,
   formatStrkExact,
   formatTokenAmount,
   formatTokenAmountExact,
@@ -18,11 +19,10 @@ import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
-import { AmountField, DetailRows, checkAmount, feeReserve, maxAfterReserve, primaryAction, type DetailRow } from '../kit/index.js';
+import { AmountField, AmountSummary, checkAmount, feeReserve, maxAfterReserve, primaryAction, totalAcross, type AmountSummaryProps, type DetailRow } from '../kit/index.js';
+import { usePoolFee } from '../pool-fee.js';
 import { createPendingHudOwner } from '../pending-hud.js';
-import { routeDoor } from '../routes.js';
 import {
-  ROUTE_BY_VAULT_MODE,
   createVaultPanel,
   noneInPoolLine,
   poolBalanceOf,
@@ -37,8 +37,6 @@ import {
   type VaultState,
   type VaultTokenView,
 } from './vault-machine.js';
-
-const VAULT_MODES: readonly VaultMode[] = ['supply', 'redeem'];
 
 /** A position figure: up to eight decimal places, truncated, with the token's symbol (D-079). */
 function formatHolding(amount: bigint, token: VaultTokenView): string {
@@ -75,14 +73,16 @@ function poolLabel(token: VaultTokenView): string {
  * switched on shows a locked door rather than a form nobody can submit; a
  * wallet that cannot run a shadow account is told so instead of being shown a
  * form; and the only confirm button is inside `ConfirmGate`, which cannot
- * render without the prepared route's approved disclosure. The Game Mode
- * counter and Menu Mode render the same window: the Vault confirms one action
- * at a time either way.
+ * render without the prepared route's approved disclosure. D-103: SUPPLY and
+ * REDEEM are counters of their own, so a window shows one of them; the Game
+ * Mode counter and Menu Mode's tab render the same window, and the Vault
+ * confirms one action at a time either way.
  */
 export function VaultPanel({
   onClose,
   panel: injected,
   experience = 'menu',
+  mode = 'supply',
   register = PRIVACY_REGISTER,
   counters = null,
 }: {
@@ -90,6 +90,8 @@ export function VaultPanel({
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: VaultPanelMachine;
   experience?: 'menu' | 'station';
+  /** The counter: SUPPLY or REDEEM (D-103). */
+  mode?: VaultMode;
   register?: readonly RouteGrade[];
   /** Menu Mode's counter tabs (D-088); presentation only. */
   counters?: ReactNode;
@@ -103,16 +105,19 @@ export function VaultPanel({
             operations,
             receipts,
             register,
+            initialMode: mode,
             onError: noteOperationError,
             canStartFinancialAction: () => {
               const current = submissionUncertainty.store.getState();
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, register, noteOperationError, submissionUncertainty],
+    [injected, operations, receipts, register, mode, noteOperationError, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
+  // D-103: the pool fee for the amounts under the form; the review shows the prepared one.
+  const poolFee = usePoolFee(operations);
   const uncertaintyState = useStore(submissionUncertainty.store);
   const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
 
@@ -141,7 +146,7 @@ export function VaultPanel({
   const token = state.token === null ? undefined : vaultChoices(state, state.mode).find((entry) => sameAddress(entry.token, state.token!));
 
   return (
-    <div className="vault-experience" data-experience={experience}>
+    <div className="vault-experience" data-experience={experience} data-mode={state.mode}>
       <WalletAttentionCue active={attention !== null} kind={attention ?? 'confirm'} />
       <PanelFrame
         title={COPY.buildings.vault}
@@ -153,7 +158,6 @@ export function VaultPanel({
         counters={counters}
       >
         <VaultIntro token={token} />
-        <ModeTabs state={state} register={register} onSelect={(mode) => panel.setMode(mode)} />
 
         {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
@@ -176,7 +180,7 @@ export function VaultPanel({
             ) : state.flow.name === 'submitted' ? (
               <SubmittedBlock state={state} onBack={() => panel.acknowledge()} />
             ) : gateBlocked || (state.flow.name === 'failed' && state.flow.recovery === 'close') ? null : token ? (
-              <ComposeBlock state={state} token={token} panel={panel} />
+              <ComposeBlock state={state} token={token} panel={panel} poolFee={poolFee} />
             ) : (
               <p className="vault-no-choice">{state.mode === 'supply' ? COPY.vault.noSupply : COPY.vault.noRedeem}</p>
             )}
@@ -217,37 +221,6 @@ function VaultIntro({ token }: { token: VaultTokenView | undefined }) {
       <p className="vault-note">{COPY.vault.feeNote}</p>
       {otherToken ? <p className="vault-note vault-fee-token">{COPY.vault.feeInStrk}</p> : null}
     </div>
-  );
-}
-
-function ModeTabs({
-  state,
-  register,
-  onSelect,
-}: {
-  state: VaultState;
-  register: readonly RouteGrade[];
-  onSelect: (mode: VaultMode) => void;
-}) {
-  const labels: Record<VaultMode, string> = { supply: COPY.vault.supply, redeem: COPY.vault.redeem };
-  return (
-    <nav className="panel-modes" role="tablist">
-      {VAULT_MODES.map((mode) => {
-        const door = mode === state.mode ? state.door : routeDoor(ROUTE_BY_VAULT_MODE[mode], register);
-        return (
-          <button
-            key={mode}
-            type="button"
-            role="tab"
-            aria-selected={state.mode === mode}
-            data-locked={door.open ? undefined : 'true'}
-            onClick={() => onSelect(mode)}
-          >
-            {labels[mode]}
-          </button>
-        );
-      })}
-    </nav>
   );
 }
 
@@ -374,13 +347,17 @@ function StandInLine({ address }: { address: string }) {
  * and a button that says what is missing ("Enter an amount", "Insufficient
  * USDC") before it offers the review.
  */
-function ComposeBlock({ state, token, panel }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine }) {
+function ComposeBlock({ state, token, panel, poolFee }: { state: VaultState; token: VaultTokenView; panel: VaultPanelMachine; poolFee: bigint | null }) {
   const preparing = state.flow.name === 'preparing';
   const supply = state.mode === 'supply';
   const noneHeld = state.holding.status === 'none' && sameAddress(state.holding.token, token.token);
   const choices = vaultChoices(state, state.mode);
   const field = amountFieldFor(state, token);
-  const check = checkAmount(state.amountText, { decimals: token.decimals, balance: field.balance });
+  // D-103: a supply of the fee token leaves the pool fee on top of the amount,
+  // so the amount is checked against the pool balance less the fee.
+  const fee = state.balances.status === 'loaded' && state.balances.fee ? state.balances.fee.feeAmount : poolFee;
+  const limit = supply && field.balance !== null && fee !== null && sameAddress(token.token, STRK_TOKEN) ? field.balance - fee : undefined;
+  const check = checkAmount(state.amountText, { decimals: token.decimals, balance: limit ?? field.balance });
   const everything = !supply && (state.redeemAll || (check.status === 'ok' && redeemsWholePosition(state, token, check.amount)));
   const action = everything && check.status === 'empty'
     ? { label: COPY.gameMode.reviewAction, disabled: preparing }
@@ -392,16 +369,17 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
         ...(supply ? {} : { exceeds: COPY.vault.form.overSupplied }),
       });
   const rate = state.rates.status === 'loaded' ? state.rates.rates.find((candidate) => sameAddress(candidate.token, token.token)) : undefined;
-  const rows: DetailRow[] = [];
-  if (rate) rows.push({ id: 'apy', label: COPY.vault.rates.label, value: `${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}` });
-  if (check.status === 'ok') {
-    rows.push({
-      id: 'amount',
-      label: supply ? COPY.vault.form.willSupply : COPY.vault.form.willReceive,
-      value: formatExact(check.amount, token),
-      tone: 'emphasis',
-    });
-  }
+  const details: DetailRow[] = rate
+    ? [{ id: 'apy', label: COPY.vault.rates.label, value: `${formatRatePercent(rate.value, rate.decimals)}, ${COPY.vault.rates.source}` }]
+    : [];
+  const typed = check.status === 'ok' ? check.amount : 0n;
+  const summary: AmountSummaryProps = {
+    entered: { label: supply ? COPY.vault.review.supply : COPY.vault.review.redeem, value: formatHolding(typed, token) },
+    receive: { label: supply ? COPY.vault.form.inVesu : COPY.kit.youReceive, value: formatHolding(typed, token) },
+    fees: fee === null ? [] : [poolFeeRow(formatStrk(fee))],
+    total: fee === null ? null : { label: COPY.kit.totalFromPool, value: vaultTotal(supply ? typed : 0n, token, fee, false) },
+    details,
+  };
   return (
     <form
       className="panel-compose"
@@ -451,12 +429,13 @@ function ComposeBlock({ state, token, panel }: { state: VaultState; token: Vault
         symbol={token.symbol}
         balance={field.balance}
         balanceLabel={supply ? COPY.kit.poolBalance : COPY.vault.form.supplied}
-        exceedsMessage={supply ? COPY.kit.exceedsBalance : COPY.vault.form.overSupplied}
+        exceedsMessage={supply ? (limit !== undefined ? COPY.kit.exceedsWithFee : COPY.kit.exceedsBalance) : COPY.vault.form.overSupplied}
+        {...(limit !== undefined ? { limit } : {})}
         {...(field.max ? { max: field.max } : {})}
         hint={field.hint(state.amountText)}
         disabled={preparing}
       />
-      <DetailRows rows={rows} label={COPY.flow.review} />
+      <AmountSummary {...summary} label={COPY.kit.amountsLabel} />
       <button type="submit" className="review" disabled={action.disabled}>
         {action.label}
       </button>
@@ -552,22 +531,26 @@ function CommitBlock({
   return (
     <div className="panel-review">
       <h3>{COPY.flow.review}</h3>
-      <dl className="vault-review">
-        <dt>{action.kind === 'supply' ? COPY.vault.review.supply : all ? COPY.vault.review.redeemAll : COPY.vault.review.redeem}</dt>
-        <dd>{formatExact(action.amount, token)}</dd>
-      </dl>
+      {/* D-103: entered, what comes out, the fees on top, the total from the pool. */}
+      <AmountSummary
+        entered={{
+          label: action.kind === 'supply' ? COPY.vault.review.supply : all ? COPY.vault.review.redeemAll : COPY.vault.review.redeem,
+          value: formatExact(action.amount, token),
+        }}
+        receive={{ label: action.kind === 'supply' ? COPY.vault.form.inVesu : COPY.kit.youReceive, value: formatExact(action.amount, token) }}
+        fees={[
+          poolFeeRow(formatStrkExact(summary.poolFee), COPY.bank.poolFeeNote),
+          { id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: COPY.vault.review.networkByWallet },
+        ]}
+        total={{ label: COPY.kit.totalFromPool, value: vaultTotal(action.kind === 'supply' ? action.amount : 0n, token, summary.poolFee, true) }}
+        label={COPY.flow.review}
+      />
       {action.kind === 'redeem' ? (
         <p className="vault-review-note">
           {all ? `${COPY.vault.review.allNote} ` : ''}
           {`${COPY.vault.review.landsInLead} ${token.symbol} ${COPY.vault.review.landsInTail}`}
         </p>
       ) : null}
-      <dl className="review-costs">
-        <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-        <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-        <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
-        <dd>{COPY.vault.review.networkByWallet}</dd>
-      </dl>
       {otherToken ? <p className="vault-review-note vault-fee-token">{COPY.vault.review.feeTokenByWallet}</p> : null}
       {flow.name === 'submitting' ? (
         <p className="flow-pending" aria-live="polite" data-stage={flow.stage}>
@@ -583,6 +566,27 @@ function CommitBlock({
       />
     </div>
   );
+}
+
+/** The pool fee row, glossed; its exact figure carries the "read live" note at the review. */
+function poolFeeRow(value: string, note?: string): DetailRow {
+  return {
+    id: 'fee',
+    label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+    value: note ? <span title={note}>{value}</span> : value,
+  };
+}
+
+/**
+ * What leaves the pool (D-103): a supply's amount in its token plus the pool
+ * fee in STRK, one figure when the token is STRK; a redeem takes only the fee,
+ * since the redeemed amount comes out of Vesu.
+ */
+function vaultTotal(amount: bigint, token: VaultTokenView, fee: bigint, exact: boolean): string {
+  return totalAcross([
+    { token: token.token, amount, format: (value) => (exact ? formatExact(value, token) : formatHolding(value, token)) },
+    { token: STRK_TOKEN, amount: fee, format: exact ? formatStrkExact : formatStrk },
+  ]);
 }
 
 function SubmittedBlock({ state, onBack }: { state: VaultState; onBack: () => void }) {

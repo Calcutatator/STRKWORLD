@@ -62,9 +62,14 @@ import { debugBank } from '../../debug/debug-tap.js';
  * (SPEC §5 rule 5).
  *
  * **Disclosures follow the batch, not the controls.** The approved copy shown
- * at the commit point is derived from the intents actually queued, so switching
- * tab after queuing a shield cannot hide the fact that a public deposit is what
- * is about to be signed (D-020, D-024).
+ * at the commit point is derived from the intents actually prepared, never
+ * from the control on screen (D-020, D-024).
+ *
+ * **One action per counter (D-103).** Each counter reviews and confirms one
+ * intent, which pays its own pool fee: `review()` checks the form, queues the
+ * one intent through the accumulator (which still validates its shape, D-018)
+ * and prepares it. Backing out of the review returns the intent to the form,
+ * so nothing is left queued behind it. There is no visit-long queue.
  *
  * **Every submission is an attempt with an identity.** A second confirm cannot
  * start, and a late answer from an abandoned attempt cannot overwrite the state
@@ -304,8 +309,7 @@ export interface BankPanelOptions {
    * larger than the one the player was shown.
    */
   feeTolerance?: bigint;
-  maxIntents?: number;
-  /** Explicit controls for a fixed station. An omitted list keeps Menu Mode. */
+  /** The counter's controls: one in every shipped window (D-103). An omitted list allows every mode. */
   allowedModes?: readonly BankMode[];
   /** The first mode shown by a fixed station. Must be in `allowedModes`. */
   initialMode?: BankMode;
@@ -347,9 +351,13 @@ export interface BankPanel {
   /** `null` whenever a maximum would have to be guessed. See D-022. */
   maxSpendable(): bigint | null;
   applyMax(): void;
+  /**
+   * D-103: the counter's one primary action: check the form, queue its one
+   * intent and prepare it for review, as `addToBatch` then `prepare`.
+   */
+  review(signal?: AbortSignal): Promise<void>;
+  /** Check the form and queue its one intent; a second is refused (D-103). */
   addToBatch(signal?: AbortSignal): Promise<void>;
-  removeFromBatch(index: number): void;
-  clearBatch(): void;
   prepare(signal?: AbortSignal): Promise<void>;
   confirm(signal?: AbortSignal): Promise<void>;
   cancelPrepared(): void;
@@ -386,7 +394,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   if (!allowedModes.includes(initialMode)) {
     throw new Error(`BankPanel initial mode is not allowed: ${initialMode}`);
   }
-  const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: options.maxIntents });
+  // D-103: one intent per counter. The accumulator still re-validates the
+  // intent's shape and refuses a second one.
+  const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: 1 });
 
   const stateStore = createStore<BankState>(freezeBankState(initialState(initialMode, register)));
   const store: ReadableStore<BankState> = Object.freeze({
@@ -420,8 +430,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let balanceRead = 0;
   /** D-094: the public balance read's own clock; a newer read, a mode or token change, or a close supersedes it. */
   let publicRead = 0;
-  /** A Clear/Remove edit owns the batch over work started from an older shape. */
+  /** A form edit or a Back owns the composition over work started from an older one. */
   let composition = 0;
+  /** D-103: one review at a time, from its check of the form to its prepare. */
+  let reviewing = false;
   /**
    * Network cost per batch shape, as reported by the seam.
    *
@@ -526,8 +538,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       // The lost response is single-attempt. Do not leave the old intent in a
       // newly unlocked form where acknowledgement could turn it into a blind
       // retry; the player may compose a fresh action after the gate opens.
+      // D-103: the form held the action too, so it is emptied with it.
       accumulator.clear();
       setBatch(accumulator.intents);
+      patch({ amountText: '', recipientText: '' });
     }
     patch({
       flow: {
@@ -607,7 +621,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return spendable > 0n ? spendable : null;
   }
 
-  return Object.freeze<BankPanel>({
+  const panel: BankPanel = Object.freeze<BankPanel>({
     store,
 
     /**
@@ -843,28 +857,13 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
 
+        // D-103: the form keeps what was typed until the action settles, so
+        // backing out of the review leaves it there to edit.
         setBatch(result.value);
-        patch({ amountText: '', recipientText: '', notice: pending });
+        patch({ notice: pending });
       } finally {
         if (live(mySession)) patch({ adding: false });
       }
-    },
-
-    removeFromBatch(index: number): void {
-      begin();
-      composition += 1;
-      discardPrepared();
-      setBatch(accumulator.remove(index));
-      patch({ notice: null, flow: { name: 'composing' } });
-    },
-
-    clearBatch(): void {
-      begin();
-      composition += 1;
-      accumulator.clear();
-      discardPrepared();
-      setBatch(accumulator.intents);
-      patch({ notice: null, flow: { name: 'composing' } });
     },
 
     /**
@@ -1035,6 +1034,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
           // The balance moved. It is not re-read here: the player asks.
           balance: { status: 'unrequested' },
+          // D-103: the action is done; the form starts empty for the next one.
+          amountText: '',
+          recipientText: '',
           notice: { tone: 'info', text: COPY.balance.changed },
         });
         trace('submitted');
@@ -1070,9 +1072,41 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       }
     },
 
+    /**
+     * D-103: the form is the action. Anything left queued by an earlier,
+     * abandoned attempt is dropped first, so what is prepared is always what
+     * the form says now.
+     */
+    async review(signal?: AbortSignal): Promise<void> {
+      const { adding, flow } = store.getState();
+      if (reviewing || adding || flow.name === 'preparing' || flow.name === 'review' || flow.name === 'submitting') return;
+      reviewing = true;
+      try {
+        if (accumulator.intents.length > 0) {
+          begin();
+          discardPrepared();
+          accumulator.clear();
+          setBatch(accumulator.intents);
+        }
+        await panel.addToBatch(signal);
+        if (accumulator.intents.length === 0) return;
+        await panel.prepare(signal);
+      } finally {
+        reviewing = false;
+      }
+    },
+
+    /**
+     * Back out of a review, or of a failed prepare, to the form. D-103: the
+     * one queued intent is dropped rather than left waiting; the form still
+     * holds what was typed.
+     */
     cancelPrepared(): void {
       begin();
       discardPrepared();
+      accumulator.clear();
+      composition += 1;
+      setBatch(accumulator.intents);
       patch({ flow: { name: 'composing' }, notice: null });
     },
 
@@ -1087,6 +1121,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       patch({ notice: null });
     },
   });
+  return panel;
 
   async function feeMovedPast(summary: PreparedSummary, signal?: AbortSignal): Promise<boolean> {
     try {
