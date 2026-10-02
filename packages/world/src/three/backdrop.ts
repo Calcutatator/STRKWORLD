@@ -1,6 +1,7 @@
 import type { Color, ColorRepresentation } from 'three';
 import { STREET_ORIGIN_X } from '@strkworld/shared';
 import { westRoadColumn, type DistrictMap } from '../map/street.js';
+import { SOUTH_SHORE_Z } from './south-vista.js';
 import {
   PALETTE,
   aoPaint,
@@ -209,6 +210,10 @@ function groundCode(l: Layout, x: number, z: number): number {
   const W = l.width;
   const H = l.height;
   if (x < -HINTERLAND || x >= W + HINTERLAND || z < -HINTERLAND || z >= H + OUTSKIRT) return 0;
+  // South, the country stops at the water (D-124). Past the shore the south
+  // vista owns the ground, so there is no field here to lay, no hedgerow to
+  // run between parcels and no tree line to plant in a river.
+  if (z >= SOUTH_SHORE_Z) return 0;
   if (z >= CITY_FRONT && x >= -OUTSKIRT && x < W + OUTSKIRT) return 0;
   const g = l.grid;
   if (z < CITY_FRONT && z >= GRID_NORTH && x >= g.x0 && x < g.x1) return gridCode(l, x, z);
@@ -373,7 +378,7 @@ function makePlan(map: DistrictMap): Plan {
     eastRoad: roadRows(map, W - 1),
   };
   const cells = raster(layout);
-  const hills = hillSpots(W, H);
+  const hills = hillSpots(W);
   const trees: BackdropTree[] = [];
   const seeds = { next: 20_000 };
   const buildings = [...midRise(grid), ...houses(map, layout, hills, trees, seeds)];
@@ -850,12 +855,17 @@ export function backdropCity(map: DistrictMap, bin: GeometryBin): void {
 // Hills
 // ---------------------------------------------------------------------------
 
-/** Gentle hills out in the fields: behind the town, west and east past the houses, and south. */
-function hillSpots(width: number, height: number): readonly Hill[] {
+/**
+ * Gentle hills out in the fields: behind the town, and west and east past the
+ * houses. None due south any more — the land there ends at the water (D-124),
+ * and the two hills that stood out past the groves would have risen out of
+ * the river. The south-west and south-east ones are clear of the shore and
+ * stay.
+ */
+function hillSpots(width: number): readonly Hill[] {
   const W = width;
-  const H = height;
-  // Behind the town and south of the groves, placed along the street (D-078);
-  // west and east, past the houses at the map's own edges.
+  // Behind the town, placed along the street (D-078); west and east, past the
+  // houses at the map's own edges.
   const X = STREET_ORIGIN_X;
   const spots: ReadonlyArray<readonly [number, number, number, number]> = [
     [X - 4, -74, 20, 0.26],
@@ -865,8 +875,6 @@ function hillSpots(width: number, height: number): readonly Hill[] {
     [-38, 38, 14, 0.28],
     [W + 60, 6, 14, 0.28],
     [W + 38, 36, 13, 0.3],
-    [X + 8, H + 36, 16, 0.25],
-    [X + 40, H + 40, 18, 0.25],
   ];
   return spots.map(([x, z, radius, scaleY]) => ({ x, z, radius, scaleY }));
 }

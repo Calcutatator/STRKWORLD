@@ -89,6 +89,7 @@ import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
 import { buildBunkerEntrance } from './bunker-builder.js';
 import { buildArenaPit, type ArenaPitOccluder } from './arena-pit-builder.js';
+import { SOUTH_SHORE_Z, createSouthVista } from './south-vista.js';
 import { BUNKER_BUILDING } from '../map/bunker.js';
 import { ARENA_PIT_BUILDING } from '../map/arena-pit.js';
 import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
@@ -342,6 +343,23 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
       occluders: pitchOccluders,
     });
     occluders.push(...pitchOccluders);
+
+    // The south vista (D-124): the river past the map's south edge, the
+    // station across it and the city behind, in its own module so the
+    // Exchange roof's swing can mount the same thing. It goes into the
+    // street's ground group, which means it hides with the street indoors and
+    // stays drawn on the roof — the roof is the building's top in the street
+    // scene, not a room of its own (presenter.ts). Nothing of it is walkable,
+    // it casts and receives no shadow, and it stands entirely south of the
+    // map, so no camera that looks north ever sees it.
+    const vista = createSouthVista({
+      // Read once: the vista is built once, and its only motion is a glitter
+      // on the water and two boats that take minutes to cross.
+      reducedMotion: options.reducedMotion?.() === true,
+    });
+    ground.add(vista.group);
+    animators.push((elapsed) => vista.update(elapsed));
+    res.disposable(vista);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -947,7 +965,9 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
   const H = map.height;
   // North only to where the backdrop's own ground starts (backdrop.ts).
   meadow(bin, -OUTSKIRT, CITY_FRONT, W + OUTSKIRT, 0, 2, 2);
-  meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
+  // South only to the shore: past it the south vista's water lies over this
+  // ground, and grass under a river is grass nobody pays for (D-124).
+  meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, Math.min(H + OUTSKIRT, SOUTH_SHORE_Z), 2, 2);
   for (let y = 0; y < H; y++) {
     for (const side of [-1, 1] as const) {
       const edgeX = W - 1;
