@@ -221,8 +221,8 @@ describe('the football in the session (D-078)', () => {
   it('lets go of the channel and the key on destroy', () => {
     const world = setup();
     expect(world.football.listening()).toBe(1);
-    // The plaza's E and the ball's.
-    expect(world.keyboard.count('keydown-E')).toBe(2);
+    // One E for every station and every action (D-117).
+    expect(world.keyboard.count('keydown-E')).toBe(1);
     world.session.destroy();
     expect(world.football.listening()).toBe(0);
     expect(world.keyboard.count('keydown-E')).toBe(0);

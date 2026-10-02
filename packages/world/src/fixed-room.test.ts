@@ -377,12 +377,14 @@ describe('fixed room definitions', () => {
       throw deliveryError;
     });
 
-    expect(() => h.controller.update({ x: 3, y: 4 })).toThrow(deliveryError);
+    h.controller.update({ x: 3, y: 4 });
+    expect(h.inputCalls).toEqual(['resume']);
+    expect(() => h.controller.activate()).toThrow(deliveryError);
     expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
     expect(h.controller.state.inRoom).toBe(true);
   });
 
-  it('rearms the station approach when station delivery throws', () => {
+  it('retries the same counter on the next E when station delivery throws (D-117)', () => {
     const h = harness();
     h.controller.enter();
     h.shell.emit('world:stations', {
@@ -399,14 +401,15 @@ describe('fixed room definitions', () => {
       if (attempts === 1) throw new Error('station consumer failed');
     });
 
-    expect(() => h.controller.update({ x: 3, y: 4 })).toThrow('station consumer failed');
     h.controller.update({ x: 3, y: 4 });
+    expect(() => h.controller.activate()).toThrow('station consumer failed');
+    expect(h.controller.activate()).toBe(true);
 
     expect(attempts).toBe(2);
     expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume', 'suspend', 'resume']);
   });
 
-  it('rearms after delivery and input restoration both fail', () => {
+  it('retries on the next E after delivery and input restoration both fail', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
     const deliveryError = new Error('station consumer failed');
@@ -432,8 +435,9 @@ describe('fixed room definitions', () => {
       stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
     });
 
-    expect(() => controller.update({ x: 3, y: 4 })).toThrow(AggregateError);
     controller.update({ x: 3, y: 4 });
+    expect(() => controller.activate()).toThrow(AggregateError);
+    controller.activate();
 
     expect(attempts).toBe(2);
     expect(resume).toHaveBeenCalledTimes(3);
@@ -461,6 +465,7 @@ describe('fixed room definitions', () => {
     });
 
     controller.update({ x: 3, y: 4 });
+    expect(controller.activate()).toBe(false);
 
     expect(events).toEqual([]);
     expect(controller.state.inRoom).toBe(false);
@@ -646,9 +651,10 @@ describe('fixed room definitions', () => {
       stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
     });
 
+    controller.update({ x: 3, y: 4 });
     let thrown: unknown;
     try {
-      controller.update({ x: 3, y: 4 });
+      controller.activate();
     } catch (error) {
       thrown = error;
     }
@@ -670,6 +676,7 @@ describe('fixed room definitions', () => {
     });
 
     h.controller.update({ x: 3, y: 4 });
+    h.controller.activate();
 
     expect(seen).toEqual([{ building: 'post-office', station: 'post-office:transfer' }]);
     expect(Object.isFrozen(seen[0])).toBe(true);
@@ -914,6 +921,10 @@ describe('fixed room definitions', () => {
       stations: [{ station: VAULT_SUPPLY_STATION, label: 'SUPPLY', status: 'available' }],
     });
     h.controller.update({ x: 3, y: 4 });
+    // D-117: standing at it shows the prompt; only E opens it.
+    expect(h.events).toEqual([]);
+    expect(h.controller.interaction()).toMatchObject({ station: VAULT_SUPPLY_STATION, label: 'SUPPLY' });
+    expect(h.controller.activate()).toBe(true);
     expect(h.events).toEqual([{ event: 'station:activated', payload: { building: 'vault', station: VAULT_SUPPLY_STATION } }]);
     h.controller.update({ x: 8, y: 11 });
     expect(h.controller.state.inRoom).toBe(false);
@@ -923,7 +934,7 @@ describe('fixed room definitions', () => {
   it.each([
     ['the Bank', BANK_ROOM_DEFINITION],
     ['the Vault', VAULT_ROOM_DEFINITION],
-  ] as const)('opens each of %s\'s counters on its own, leaves a locked one shut, and re-arms on the way back (D-103)', (_name, definition) => {
+  ] as const)('opens each of %s\'s counters on its own with E, never by walking up, and leaves a locked one shut (D-103, D-117)', (_name, definition) => {
     const h = harness(definition);
     h.controller.enter();
     const [first, second, third, fourth] = definition.stations;
@@ -943,18 +954,28 @@ describe('fixed room definitions', () => {
       const approach = walkableApproach(room, station);
       return approach[Math.floor(approach.length / 2)]!;
     };
+    // Walking up to every counter, open or not, opens none of them.
+    for (const station of [first, second, third, fourth]) {
+      h.controller.update(centre(station));
+      expect(h.controller.state.highlightedStation).toBe(station.station);
+    }
+    expect(activated()).toEqual([]);
     h.controller.update(centre(first));
+    expect(h.controller.activate()).toBe(true);
     expect(activated()).toEqual([first.station]);
-    // Stepping straight into the next counter's halo highlights it, but a locked one never opens.
+    // A locked counter is highlighted but offers no prompt, and E there does nothing.
     h.controller.update(centre(second));
     expect(h.controller.state.highlightedStation).toBe(second.station);
+    expect(h.controller.interaction()).toBeNull();
+    expect(h.controller.activate()).toBe(false);
     expect(activated()).toEqual([first.station]);
     h.controller.update(centre(third));
+    h.controller.activate();
     h.controller.update(centre(fourth));
+    h.controller.activate();
     expect(activated()).toEqual([first.station, third.station, fourth.station]);
-    // Walking back into an area reopens its counter once the player stepped off every halo.
-    h.controller.update(definition.spawn);
-    h.controller.update(centre(fourth));
+    // E again at the same counter opens it again: no stepping away first.
+    h.controller.activate();
     expect(activated()).toEqual([first.station, third.station, fourth.station, fourth.station]);
   });
 
@@ -1121,6 +1142,7 @@ describe('fixed room definitions', () => {
       label: map.stations[0]!.label,
       status: 'locked',
       highlighted: false,
+      notice: false,
     }]);
   });
 });
@@ -1302,13 +1324,14 @@ describe('fixed room controller', () => {
       ],
     });
     controller.update({ x: 3, y: 4 });
+    expect(controller.activate()).toBe(false);
 
     expect(controller.state.inRoom).toBe(false);
     expect(h.events.filter((event) => event.event === 'station:activated')).toEqual([]);
     expect(h.inputCalls).toEqual(['resume', 'resume']);
   });
 
-  it('activates a counter that becomes available while the player already stands at it', () => {
+  it('never opens a counter that becomes available under a player standing at it: it prompts, and E opens it (D-117)', () => {
     const h = harness(POST_OFFICE_ROOM_DEFINITION);
     const activations = () => h.events.filter((event) => event.event === 'station:activated').map((event) => event.payload);
     const snapshot = (status: 'available' | 'locked', label = 'TRANSFER') => ({
@@ -1316,26 +1339,30 @@ describe('fixed room controller', () => {
       stations: [{ station: 'post-office:transfer' as const, label, status }],
     });
     h.controller.enter();
-    // They step up while it is still locked: highlighted, nothing activated.
+    // They step up while it is still locked: highlighted, no prompt, nothing activated.
     h.controller.update({ x: 3, y: 4 });
     expect(h.controller.state.highlightedStation).toBe('post-office:transfer');
+    expect(h.controller.interaction()).toBeNull();
     expect(activations()).toEqual([]);
-    // The Shell switches it on while they stand there: it activates at once.
+    // The Shell switches it on while they stand there: a prompt, still no window.
     h.shell.emit('world:stations', snapshot('available'));
+    expect(activations()).toEqual([]);
+    expect(h.controller.interaction()).toEqual({
+      station: 'post-office:transfer',
+      label: 'TRANSFER',
+      rect: { x: 3, y: 3, width: 2, height: 1 },
+    });
+    // The prompt carries the Shell's label.
+    h.shell.emit('world:stations', snapshot('available', 'SEND'));
+    expect(h.controller.interaction()?.label).toBe('SEND');
+    expect(h.controller.activate()).toBe(true);
     expect(activations()).toEqual([{ building: 'post-office', station: 'post-office:transfer' }]);
     expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
-    // Once: a repeated snapshot or a new label does not activate it again.
-    h.shell.emit('world:stations', snapshot('available'));
-    h.shell.emit('world:stations', snapshot('available', 'SEND'));
-    expect(activations()).toHaveLength(1);
-    // Nor does a counter switching on while they stand somewhere else.
+    // Standing somewhere else, E opens nothing.
     h.controller.update({ x: 9, y: 8 });
-    h.shell.emit('world:stations', snapshot('locked'));
-    h.shell.emit('world:stations', snapshot('available'));
+    expect(h.controller.interaction()).toBeNull();
+    expect(h.controller.activate()).toBe(false);
     expect(activations()).toHaveLength(1);
-    // Stepping back up to it is a fresh approach, as before.
-    h.controller.update({ x: 3, y: 4 });
-    expect(activations()).toHaveLength(2);
   });
 
   it('does not activate a station after onChange transfers control to Shell', () => {
@@ -1367,7 +1394,7 @@ describe('fixed room controller', () => {
     expect(h.inputCalls).toEqual(['resume', 'suspend']);
   });
 
-  it('does not activate a stale station after onChange re-enters update', () => {
+  it('opens the newer station after onChange re-enters update (D-117)', () => {
     const definition: FixedRoomDefinition = {
       ...POST_OFFICE_ROOM_DEFINITION,
       stations: [
@@ -1401,11 +1428,14 @@ describe('fixed room controller', () => {
     });
 
     h.controller.update({ x: 3, y: 4 });
+    expect(h.events).toEqual([]);
+    expect(h.controller.state.highlightedStation).toBe('post-office:second');
+    // E uses the newer highlight, never the stale one.
+    h.controller.activate();
 
     expect(h.events.map((event) => event.payload)).toEqual([
       { building: 'post-office', station: 'post-office:second' },
     ]);
-    expect(h.controller.state.highlightedStation).toBe('post-office:second');
   });
 
   it('does not expose station admission through the public state snapshot', () => {
@@ -1468,13 +1498,17 @@ describe('fixed room controller', () => {
       }),
     );
     h.controller.update({ x: 3, y: 4 });
+    h.controller.activate();
     expect(order.slice(-3)).toEqual(['suspend', 'emit', 'suspend']);
     expect(h.controller.state.controlOwner).toBe('shell');
+    // While the window holds the controls, neither a step nor E opens it again.
     h.controller.update({ x: 3, y: 4 });
+    expect(h.controller.activate()).toBe(false);
+    expect(h.controller.interaction()).toBeNull();
     expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(1);
   });
 
-  it('rearms station activation when input suspension fails', () => {
+  it('retries station activation on the next E when input suspension fails', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
     const error = new Error('input suspension failed');
@@ -1497,10 +1531,11 @@ describe('fixed room controller', () => {
       stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
     });
 
-    expect(() => controller.update({ x: 3, y: 4 })).toThrow(error);
+    controller.update({ x: 3, y: 4 });
+    expect(() => controller.activate()).toThrow(error);
     expect(controller.state.inRoom).toBe(true);
 
-    controller.update({ x: 3, y: 4 });
+    controller.activate();
     expect(events).toHaveLength(1);
     expect(suspend).toHaveBeenCalledTimes(2);
   });
@@ -1521,6 +1556,7 @@ describe('fixed room controller', () => {
     h.out.on('station:activated', () => h.controller.destroy());
 
     h.controller.update({ x: 3, y: 4 });
+    h.controller.activate();
 
     expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
   });
@@ -1630,7 +1666,7 @@ describe('fixed room controller', () => {
     expect(input.suspend).toHaveBeenCalledOnce();
   });
 
-  it('rearms after leaving the station approach and resumes when no Shell claims', () => {
+  it('opens on every E at the counter, and resumes when no Shell claims (D-117)', () => {
     const h = harness();
     h.controller.enter();
     h.shell.emit('world:stations', {
@@ -1644,13 +1680,13 @@ describe('fixed room controller', () => {
       ],
     });
     h.controller.update({ x: 3, y: 4 });
-    h.controller.update({ x: 10, y: 8 });
-    h.controller.update({ x: 3, y: 4 });
+    h.controller.activate();
+    h.controller.activate();
     expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(2);
-    expect(h.inputCalls.filter((call) => call === 'resume').length).toBeGreaterThanOrEqual(2);
+    expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume', 'suspend', 'resume']);
   });
 
-  it('rearms when the step off the approach lands while a window holds the controls', () => {
+  it('follows a step reported while a window holds the controls, so E never opens a counter left behind (D-117)', () => {
     const h = harness();
     h.controller.enter();
     h.shell.emit('world:stations', {
@@ -1664,13 +1700,17 @@ describe('fixed room controller', () => {
       ],
     });
     h.controller.update({ x: 3, y: 4 });
+    h.controller.activate();
     // The counter's window claims the controls; the player's last step, off
     // every approach, is reported while it holds them.
     h.shell.emit('world:control-owner', { building: 'post-office', owner: 'shell' });
     h.controller.update({ x: 10, y: 8 });
     h.shell.emit('world:control-owner', { building: 'post-office', owner: 'world' });
-    // Walking back in opens the counter again.
+    expect(h.controller.state.highlightedStation).toBeNull();
+    expect(h.controller.activate()).toBe(false);
+    // Walking back up and pressing E opens it again.
     h.controller.update({ x: 3, y: 4 });
+    expect(h.controller.activate()).toBe(true);
     expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(2);
   });
 
@@ -1942,6 +1982,8 @@ describe('fixed room controller', () => {
     });
 
     h.controller.update({ x: 8, y: 4 });
+    expect(h.events).toEqual([]);
+    h.controller.activate();
     expect(h.events).toEqual([
       { event: 'station:activated', payload: { building: 'bridge', station: 'bridge:deposit' } },
     ]);
@@ -2106,8 +2148,11 @@ describe('fixed room floors (the Exchange tower)', () => {
     });
     h.controller.update({ x: 14, y: 4 });
     expect(h.controller.state.highlightedStation).toBeNull();
-    // ...and the degen counter opens from its own approach.
+    expect(h.controller.activate()).toBe(false);
+    // ...and the degen counter opens from its own approach, on E.
     h.controller.update({ x: 9, y: 4 });
+    expect(h.events).toEqual([]);
+    expect(h.controller.activate()).toBe(true);
     expect(h.events).toEqual([{ event: 'station:activated', payload: { building: 'exchange', station: EXCHANGE_DEGEN_STATION } }]);
 
     const roof = padOf('degen', 'roof');

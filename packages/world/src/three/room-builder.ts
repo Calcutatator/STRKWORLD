@@ -411,7 +411,7 @@ interface StationView {
   /** A free-standing counter's spinning status beacon; a built-in one's light is part of its status mesh (D-104). */
   readonly beacon: Mesh | null;
   readonly label: TextLabel;
-  /** D-107: a line shown only while the player stands at the counter (the hidden room's lift), or none. */
+  /** D-107: a line shown only after E at the counter (the hidden room's lift, D-117), or none. */
   readonly prompt: TextLabel | null;
   readonly phase: number;
   readonly looks: StationLooks;
@@ -638,7 +638,9 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
       : looks.locked;
   view.look = look;
   view.highlighted = highlighted;
-  if (view.prompt) view.prompt.object.visible = highlighted;
+  // D-117: the lift's "Out of order" shows once E asked for it, while the
+  // player still stands there; walking up only lights the counter.
+  if (view.prompt) view.prompt.object.visible = presentation.notice === true;
   view.accent.color.setHex(look.color);
   view.accent.emissive.setHex(look.emissive);
   view.accent.emissiveIntensity = look.emissiveIntensity;
@@ -917,8 +919,8 @@ function buildBuiltInStation(
   label.object.rotation.z = built.sign.roll ?? 0;
   label.object.userData['station'] = station.station;
   group.add(label.object);
-  // D-107: a line that floats over the counter only while the player stands
-  // at it (the lift's "Out of order"); hidden otherwise.
+  // D-107: a line that floats over the counter only once E asked for it
+  // (the lift's "Out of order", D-117); hidden otherwise.
   let prompt: TextLabel | null = null;
   if (built.prompt && dress.prompt) {
     prompt = labels.floating(dress.prompt.text, dress.prompt.style);

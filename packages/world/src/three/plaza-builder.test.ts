@@ -256,18 +256,16 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     view.dispose();
   });
 
-  it('shows an E prompt over the station the player stands at, and only that one', () => {
+  it('draws no prompt of its own: it says how high the shared E prompt floats over each station (D-117)', () => {
     const { view, plazaLabels } = build();
-    const prompts = plazaLabels.filter((child) => child.userData['plaza'] === 'prompt');
-    expect(prompts.map((prompt) => prompt.userData['station'])).toEqual([PLAZA_MONUMENT_STATION, PLAZA_SHELLS_STATION]);
-    expect(prompts.map((prompt) => prompt.userData['text'])).toEqual(['E · POOL STATS', "E · WHERE'S THE NOTE?"]);
-    expect(prompts.every((prompt) => !prompt.visible)).toBe(true);
-    view.plaza!.setHighlight(PLAZA_SHELLS_STATION);
-    expect(prompts.map((prompt) => prompt.visible)).toEqual([false, true]);
-    view.plaza!.setHighlight(PLAZA_MONUMENT_STATION);
-    expect(prompts.map((prompt) => prompt.visible)).toEqual([true, false]);
-    view.plaza!.setHighlight(null);
-    expect(prompts.every((prompt) => !prompt.visible)).toBe(true);
+    expect(plazaLabels.filter((child) => child.userData['plaza'] === 'prompt')).toEqual([]);
+    const monument = view.plaza!.promptHeight(PLAZA_MONUMENT_STATION)!;
+    const table = view.plaza!.promptHeight(PLAZA_SHELLS_STATION)!;
+    // Over the monument's tip, and just above the table.
+    expect(monument).toBeGreaterThan(5);
+    expect(table).toBeGreaterThan(1);
+    expect(table).toBeLessThan(2);
+    expect(view.plaza!.promptHeight('bank:shielding')).toBeNull();
     // The table carries its game's name all the time.
     expect(labelFor(plazaLabels, 'card').userData['text']).toBe("WHERE'S THE NOTE?");
     view.dispose();
@@ -309,12 +307,13 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     view.dispose();
   });
 
-  it('costs twelve draw calls and a few thousand triangles, leaving the street well inside its budget', () => {
+  it('costs ten draw calls and a few thousand triangles, leaving the street well inside its budget', () => {
     const { view, plazaLabels } = build();
     const plazaMeshes = view.ground.children.filter((child) => child.name.startsWith('plaza:'));
     const plaza = cost(plazaMeshes, plazaLabels);
-    // Five merged meshes, and seven labels: the sign, three faces, the card and two prompts.
-    expect(plaza.calls).toBe(12);
+    // Five merged meshes, and five labels: the sign, three faces and the card
+    // (the E prompt is the World's shared one, D-117).
+    expect(plaza.calls).toBe(10);
     expect(plaza.triangles).toBeGreaterThan(1_000);
     expect(plaza.triangles).toBeLessThan(4_000);
     const street = cost([view.ground, view.doors, view.labels], view.labels.children);
@@ -327,7 +326,6 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     const second = build();
     for (const part of [first, second]) {
       part.view.plaza!.setStats({ accounts: '1', valueUsd: '$3', topHoldings: ['A · $4'] });
-      part.view.plaza!.setHighlight(PLAZA_SHELLS_STATION);
     }
     const sample = (part: ReturnType<typeof build>) => part.plazaLabels.map((label) => [label.userData['text'], label.position.y]);
     for (const delta of [16, 900, 3_500, 250, 16]) {

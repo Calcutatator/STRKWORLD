@@ -1301,8 +1301,9 @@ export interface StationTheme {
   /** A built-in counter's sign, which carries the Shell's label in place of a floating one. */
   readonly sign?: SignStyleOptions;
   /**
-   * D-107: a line that floats over a built-in counter only while the player
-   * stands at it (the hidden room's lift: "Out of order"), and nothing else.
+   * D-107: a line that floats over a built-in counter only after E at it,
+   * while the player still stands there (the hidden room's lift: "Out of
+   * order", D-117), and nothing else.
    */
   readonly prompt?: { readonly text: string; readonly style: FloatingStyleOptions };
 }
@@ -1627,7 +1628,7 @@ export const NETCAFE_OUT_OF_ORDER_SIGN: SignStyleOptions = Object.freeze({
   subtitleTracking: 0.06,
 });
 
-/** The line over the lift while the player stands at it. */
+/** The line over the lift once E asked for it (D-117). */
 export const NETCAFE_ELEVATOR_PROMPT: FloatingStyleOptions = Object.freeze({
   lineHeight: 0.26,
   foreground: '#ffe2d6',
@@ -3161,3 +3162,9 @@ export function createTickerStrip(
   texture.needsUpdate = true;
   return { texture, width, height };
 }
+
+/**
+ * D-117: the one "E · …" prompt every station shares, the plaza's own
+ * (D-076): cream rounded capitals on near-black, ringed in STRK20 orange.
+ */
+export const INTERACTION_PROMPT_STYLE: FloatingStyleOptions = PLAZA_THEME.prompt;
