@@ -21,6 +21,25 @@ export interface AvatarMotion {
    * none. The caller lifts the figure; the figure only changes shape.
    */
   readonly jump?: JumpPose | null;
+  /**
+   * D-114: the arena swing this frame, or none. The figure drives its right
+   * arm, an upper-body twist and a small lunge from it; callers that never
+   * fight leave it out.
+   */
+  readonly attack?: AttackPose | null;
+  /** D-114: the battle-stance idle (weapon raised, feet apart). */
+  readonly guard?: boolean;
+  /** D-114: a spectator sitting on an arena tier. */
+  readonly seated?: boolean;
+}
+
+/**
+ * D-114: one arena swing (`ARENA_SWING_MS`, 350 ms): 100 ms wind-up, 120 ms
+ * strike, 130 ms recover. `progress` runs 0..1 within the current stage.
+ */
+export interface AttackPose {
+  readonly stage: 'windup' | 'strike' | 'recover';
+  readonly progress: number;
 }
 
 /**
