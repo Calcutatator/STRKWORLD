@@ -13775,3 +13775,68 @@ near-black station gets an invisible tint.
 *Verified:* dumping the per-station colour tallies while building every real
 room, the plaza, the Studio and the arena gate (a scratch vitest probe,
 2026-10-02); both scoring functions compared on the same tallies.
+
+### 2026-10-02 — Reading a tile coordinate back out of a game screenshot
+
+An annotated screenshot of the fixed camera is enough to recover exact tile
+coordinates, because the rig (`three/camera-rig.ts`) has no free parameters:
+yaw is always north, pitch 28°, distance 11, FOV 50° vertical, and it aims
+`CAMERA_AIM_HEIGHT = 4` above the player's feet. So the camera sits at
+`(tx, 4 + 11·sin28, tz + 11·cos28)` and the only unknowns are the player's
+`(tx, tz)`. Two consequences make the solve easy: a ground line of constant
+z projects to a **horizontal** screen line (no roll, no yaw), so screen y
+alone gives z; and the player's feet land at a fixed screen y (865/1090 at
+the sketch's aspect), which confirms the whole model in one look before any
+fitting. Then one vertical ground edge at a known x — the plaza's east
+paving edge at world x 40 — gives `tx` to a hundredth of a tile, and it must
+give the *same* `tx` at every row, which is the check that the fit is real
+rather than fitted. Beware two traps: the screenshot must be the whole
+canvas (any crop or chrome shifts the principal point and the solve goes
+quietly wrong), and near-building rows read 1 tile off because facade shadow
+hides the pavement/road seam — calibrate on the open rows.
+
+*Verified:* solving the lead's placement sketch
+(`scratchpad/research/stand-location-sketch.webp`, 2000×1090) gave
+`tx = 42.73` from eight separate rows of the plaza's east edge, agreeing to
+0.03 of a tile, and predicted the Studio path's two columns (x 52-54) to
+within 4 px at its centre. The drawn path line then came out at world
+x 40.00 — the plaza's east edge to the pixel. Re-rendered the same frame
+offline from the same rig and overlaid it on the sketch: every landmark
+lines up.
+
+---
+
+### 2026-10-02 — A modal over a panel must stop keystrokes at the window in the capture phase
+
+The consent pop-up on the placement stand (D-122, amended) is a dialog inside
+the Shell's panel layer. Two listeners sit on `window` and would otherwise
+both act on its keystrokes: the visit layer's Escape handler, which closes the
+whole station window (`VisitLayer.handleVisitKeyDown`), and the World's own
+keyboard (`packages/world/src/dom-keyboard.ts`), which reads E, movement and
+Space. Both are **bubble-phase** listeners on `window`. A React `onKeyDown`
+inside the dialog is not enough to be sure of beating them, and `preventDefault`
+is wrong for a dialog (Space on a focused button activates it). The reliable
+shape is a `keydown` listener on `window` with `capture: true` that calls
+`stopPropagation()` on everything, handles Escape and Tab itself, and leaves
+`keyup` alone — `dom-keyboard` clears a held key on release whatever else is
+open, and swallowing that would leave a key held after the dialog closes.
+
+Two smaller traps found with it. A button styled with a plain `background` is
+undone by the shared `button:hover:not(:disabled)` rule, which is more
+specific and resets `--btn-bg-hover`: a hovered ember cap went grey in the
+first render. Styling through the `--btn-*` tokens instead keeps hover, press
+and focus (`.placement-check` has the same latent bug). And under this
+runner's `localStorage` shim there are no `key()`, `length` or even
+`getItem()` methods, so a test cannot enumerate or read storage directly —
+assert through `ViewerStorage` with an injected backing map instead.
+
+*Verified:* `apps/web/src/plaza/placement-consent.test.tsx` (7 tests), which
+includes a window-level bubble listener that hears nothing while the dialog is
+open and both keys again once it closes, and a real `VisitLayer` where the
+first Escape answers the dialog while the station window stays open and the
+Shell keeps the controls. The hover trap was seen in a Playwright render of
+the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
+(295 files, 6232 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---

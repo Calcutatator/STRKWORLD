@@ -15,7 +15,8 @@ import { createFootballController } from './football/football-controller.js';
 import { createArenaController } from './arena/arena-controller.js';
 import { createArenaAuthority } from '@strkworld/lobby/arena';
 import { installPresenceTeardown } from './presence/lifecycle.js';
-import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
+import { parseProductionWalletConfig, usesProductionWallet, withLeaderboardProbe } from './production/config.js';
+import { detectLeaderboardProbe } from './production/leaderboard-probe.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
 import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
@@ -133,7 +134,13 @@ if (usesProductionWallet(environment)) {
     </StrictMode>,
   );
   try {
-    const config = parseProductionWalletConfig(environment);
+    // D-122's probe switch: the leaderboard's build flag counts only in a tab
+    // opened with `?lb=1`, so the session this page builds carries receipts
+    // for the lead's own probe and for nobody else's visit. Every other
+    // variable reaches the parser untouched.
+    const config = parseProductionWalletConfig(
+      withLeaderboardProbe(environment, detectLeaderboardProbe()),
+    );
     // The degen floor's list (D-067), read from the same-origin backend only
     // when the degen counter opens; while swap is off that counter is locked.
     const degenCatalog = createBackendDegenCatalog({ baseUrl: config.backendBaseUrl });
