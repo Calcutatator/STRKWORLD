@@ -121,7 +121,11 @@ describe('the Privacy Plaza in the session (D-076)', () => {
     const world = setup({ claim: true });
     standAt(world, 5, 26);
     standAt(world, 5, 25);
-    expect(world.last('setPlazaHighlight')).toEqual([PLAZA_MONUMENT_STATION]);
+    // D-117: the shared prompt, over the monument's centre.
+    expect(world.last('setInteractionPrompt')).toEqual([
+      { id: PLAZA_MONUMENT_STATION, label: 'POOL STATS', x: (STREET_ORIGIN_X + 5.5) * 32, y: 23.5 * 32 },
+    ]);
+    expect(world.events('station:activated')).toEqual([]);
     world.keyboard.press('keydown-E');
     expect(world.events('station:activated')).toEqual([{ building: 'plaza', station: PLAZA_MONUMENT_STATION }]);
     expect(world.session.inputSuspended).toBe(true);
@@ -172,11 +176,20 @@ describe('the Privacy Plaza in the session (D-076)', () => {
     ]);
   });
 
-  it('adds no plaza key without a bus, and releases it on destroy', () => {
+  it('offers no plaza station without a bus, and releases the one E key on destroy', () => {
     const keyboard = fakeKeyboard();
     const headless: WorldSession = createWorldSession({ view: new Proxy({} as WorldSessionView, { get: () => () => {} }), keyboard });
-    expect(keyboard.count('keydown-E')).toBe(0);
+    // D-117: one E key in every session; headless, the plaza offers nothing to it.
+    expect(keyboard.count('keydown-E')).toBe(1);
+    (headless as unknown as { position: { x: number; y: number } }).position = centre(STREET_ORIGIN_X + 5, 25);
+    keyboard.hold({ up: true });
+    headless.update(1);
+    keyboard.hold({});
+    headless.update(16);
+    expect(headless.interactionPrompt).toBeNull();
+    expect(headless.interact()).toBe(false);
     headless.destroy();
+    expect(keyboard.count('keydown-E')).toBe(0);
 
     const world = setup();
     expect(world.keyboard.count('keydown-E')).toBe(1);

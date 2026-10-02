@@ -4,6 +4,7 @@
  * handoff and the renderer only draws its map and state (D-059).
  */
 
+import { promptLabel } from './interaction.js';
 import {
   ARENA_BOX,
   ARENA_EXIT,
@@ -82,9 +83,16 @@ export interface FixedRoomStationDefinition extends FixedRoomRect {
    * D-107: an id held for a counter that does not open yet (the hidden
    * room's lift, for floors to come). It stands, highlights and draws like
    * any station, but it is always locked, whatever a `world:stations`
-   * snapshot says, so walking up to it never activates anything.
+   * snapshot says, so E at it never opens a window: it only shows the
+   * room's notice (the lift's "Out of order", D-117).
    */
   readonly reserved?: true;
+  /**
+   * D-117: the words after "E ·" in the station's prompt, when its label is
+   * not one line of them (the lift's sign is two lines). Absent, the
+   * Shell's label (or the authored one) is the prompt.
+   */
+  readonly prompt?: string;
 }
 
 /**
@@ -196,6 +204,11 @@ export interface FixedRoomState {
   readonly level?: FixedRoomLevelId | null;
   readonly controlOwner: 'world' | 'shell';
   readonly highlightedStation: StationId | null;
+  /**
+   * D-117: the reserved station whose notice E brought up (the lift's "Out
+   * of order"), until the player steps away from it; null otherwise.
+   */
+  readonly noticeStation?: StationId | null;
   readonly stations: readonly FixedRoomStationSnapshot[];
 }
 
@@ -203,6 +216,19 @@ export interface FixedRoomStationPresentation extends FixedRoomStationDefinition
   readonly label: string;
   readonly status: 'available' | 'locked';
   readonly highlighted: boolean;
+  /** D-117: E brought up this reserved station's notice, and the player still stands at it. */
+  readonly notice?: boolean;
+}
+
+/**
+ * D-117: what E would use on this floor, for the World's interaction system:
+ * the station the player stands at, while it is usable, with its prompt
+ * words and its footprint in floor tiles.
+ */
+export interface FixedRoomInteraction {
+  readonly station: StationId;
+  readonly label: string;
+  readonly rect: FixedRoomRect;
 }
 
 export type FixedRoomDefinitionErrorCode =
@@ -319,7 +345,19 @@ function restoreStreetPresentation(
 export interface FixedRoomController {
   readonly state: FixedRoomState;
   enter(): void;
+  /**
+   * The player's floor tile changed: exits and lift pads act at once (they
+   * are transitions); a station's approach only highlights it (D-117).
+   */
   update(tile: { x: number; y: number }): void;
+  /**
+   * D-117: E at the highlighted station. An available counter opens through
+   * the Shell handoff (D-033); a reserved one shows its notice; anything else
+   * does nothing. Returns whether something happened.
+   */
+  activate(): boolean;
+  /** D-117: what E would use right now, or null. */
+  interaction(): FixedRoomInteraction | null;
   destroy(): void;
 }
 
@@ -643,12 +681,15 @@ export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
 /**
  * D-107: the hidden room's lift, out of order. Its id is held for the floors
  * it will one day ride to; until then it is reserved, so it is always locked
- * and walking up to it only shows that it is out of order.
+ * and E at it only shows that it is out of order (D-117).
  */
 export const BUNKER_ELEVATOR_STATION: StationId = 'bunker:elevator';
 
-/** What walking up to the lift says, and nothing else happens. */
+/** What E at the lift says, and nothing else happens (D-117; D-107 showed it on approach). */
 export const BUNKER_ELEVATOR_MESSAGE = 'Out of order';
+
+/** D-117: the lift's prompt, "E · LIFT". */
+export const BUNKER_ELEVATOR_PROMPT = 'LIFT';
 
 /**
  * D-107: the room under the alley's stair, a Tokyo net cafe left years ago.
@@ -673,7 +714,7 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: 2, y: 8 },
   exit: { x: 1, y: 9, width: 2, height: 1 },
   stations: [
-    { station: 'bunker:elevator', label: '故障中\nOUT OF ORDER', x: 1, y: 6, width: 2, height: 1, reserved: true },
+    { station: 'bunker:elevator', label: '故障中\nOUT OF ORDER', x: 1, y: 6, width: 2, height: 1, reserved: true, prompt: BUNKER_ELEVATOR_PROMPT },
   ],
   fixtures: [
     // The lift's shaft, behind its doors, and the junk stored behind that.
@@ -704,6 +745,9 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
  * so it is always locked and walking up to it only says it is closed.
  */
 export const ARENA_BOX_STATION: StationId = 'arena:box';
+
+/** D-117: the box's one-line prompt ("E · EMPEROR'S BOX"); E only shows it is closed. */
+export const ARENA_BOX_PROMPT = "EMPEROR'S BOX";
 
 /**
  * The solid tiles strictly inside the arena's border, as rectangles: every
@@ -765,7 +809,7 @@ export const ARENA_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: ARENA_SPAWN.x, y: ARENA_SPAWN.y },
   exit: { x: ARENA_EXIT.x, y: ARENA_EXIT.y, width: ARENA_EXIT.width, height: ARENA_EXIT.height },
   stations: [
-    { station: 'arena:box', label: "EMPEROR'S BOX\nCLOSED", x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true },
+    { station: 'arena:box', label: "EMPEROR'S BOX\nCLOSED", x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true, prompt: ARENA_BOX_PROMPT },
   ],
   fixtures: arenaFixtures(),
 } satisfies FixedRoomDefinition);
@@ -1211,6 +1255,7 @@ export function fixedRoomStationPresentations(
       label: validLabel ? label : station.label,
       status: snapshot && validLabel && validStatus ? status : 'locked',
       highlighted: state.highlightedStation === station.station,
+      notice: state.noticeStation === station.station,
     };
   });
 }
@@ -1259,17 +1304,20 @@ export function createFixedRoomController(
   const building = Object.freeze({
     stations: Object.freeze([...floors.values()].flatMap((floor) => floor.stations)),
   });
-  const armAll = (): Set<StationId> => new Set(building.stations.map((station) => station.station));
   let inRoom = false;
   let level: FixedRoomLevelId = 'ground';
   let controlOwner: 'world' | 'shell' = 'world';
   let highlightedStation: StationId | null = null;
+  // D-117: the reserved station whose notice E brought up, until the player
+  // steps away from it.
+  let noticeStation: StationId | null = null;
   let stations = normalizeFixedRoomStations(building, undefined);
   let destroyed = false;
-  let approachArmed = armAll();
-  // The tile the World last reported in this room: a counter that becomes
-  // available while the player already stands at it activates from here.
+  // The tile the World last reported in this room: where a failed ride or
+  // exit puts the player back.
   let standing: { readonly x: number; readonly y: number } | null = null;
+  // True while this controller's own `station:activated` is delivered.
+  let activating = false;
 
   const state = (): FixedRoomState => ({
     inRoom,
@@ -1277,6 +1325,7 @@ export function createFixedRoomController(
     level: inRoom ? level : null,
     controlOwner,
     highlightedStation,
+    noticeStation,
     stations,
   });
   const publish = (): void => options.onChange?.(state());
@@ -1288,22 +1337,16 @@ export function createFixedRoomController(
   let destroyPending = false;
   let destroying = false;
   let inputCleanupPending = true;
-  let updateRevision = 0;
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
-    if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
-    const waiting = highlightedStation;
-    const wasAvailable = stations.some((station) => station.station === waiting && station.status === 'available');
-    stations = normalizeFixedRoomStations(
-      building,
-      ownDataField(payload, 'stations') as ShellEvents['world:stations']['stations'] | undefined,
-    );
+      if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
+      // D-117: a counter that becomes available while the player stands at
+      // it now shows its prompt; it opens on E, never by itself.
+      stations = normalizeFixedRoomStations(
+        building,
+        ownDataField(payload, 'stations') as ShellEvents['world:stations']['stations'] | undefined,
+      );
       publish();
-      // Activation otherwise runs only on a tile change. If this snapshot made
-      // the counter the player already stands at available, step up to it now
-      // through the same path, with its arming and ownership guards.
-      const nowAvailable = stations.some((station) => station.station === waiting && station.status === 'available');
-      if (waiting && standing && !wasAvailable && nowAvailable && highlightedStation === waiting) api.update(standing);
     });
     stopOwner = options.in?.on('world:control-owner', (payload) => {
     if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
@@ -1362,21 +1405,21 @@ export function createFixedRoomController(
     if (!inRoom) return;
     const previousControlOwner = controlOwner;
     const previousHighlightedStation = highlightedStation;
-    const previousApproachArmed = approachArmed;
+    const previousNoticeStation = noticeStation;
     const previousLevel = level;
     const previousStanding = standing;
     inRoom = false;
     level = 'ground';
     controlOwner = 'world';
     highlightedStation = null;
-    approachArmed = armAll();
+    noticeStation = null;
     standing = null;
     const restoreInside = (keepStanding: boolean): void => {
       inRoom = true;
       level = previousLevel;
       controlOwner = previousControlOwner;
       highlightedStation = previousHighlightedStation;
-      approachArmed = previousApproachArmed;
+      noticeStation = previousNoticeStation;
       if (keepStanding) standing = previousStanding;
     };
     // Compensate a presentation that already left. From the ground floor the
@@ -1446,18 +1489,18 @@ export function createFixedRoomController(
     const back = floorOf(to).lifts.find((candidate) => candidate.to === from);
     if (!back || !floors.has(to)) return;
     const previousHighlightedStation = highlightedStation;
-    const previousApproachArmed = approachArmed;
+    const previousNoticeStation = noticeStation;
     const rollback = (): void => {
       if (destroyed || !inRoom || level !== to) return;
       level = from;
       highlightedStation = previousHighlightedStation;
-      approachArmed = previousApproachArmed;
+      noticeStation = previousNoticeStation;
       standing = { x: tile.x, y: tile.y };
       presentFloor(from, tile);
     };
     level = to;
     highlightedStation = null;
-    approachArmed = armAll();
+    noticeStation = null;
     standing = null;
     try {
       options.onLevel?.(to, back.arrival);
@@ -1487,8 +1530,8 @@ export function createFixedRoomController(
       level = 'ground';
       controlOwner = 'world';
       highlightedStation = null;
+      noticeStation = null;
       standing = null;
-      approachArmed = armAll();
       stations = normalizeFixedRoomStations(building, undefined);
       try {
         options.input.resume();
@@ -1499,7 +1542,7 @@ export function createFixedRoomController(
         inRoom = false;
         controlOwner = 'world';
         highlightedStation = null;
-        approachArmed = armAll();
+        noticeStation = null;
         throw error;
       }
       // Input restoration is an external synchronous boundary. A callback
@@ -1517,7 +1560,7 @@ export function createFixedRoomController(
         inRoom = false;
         controlOwner = 'world';
         highlightedStation = null;
-        approachArmed = armAll();
+        noticeStation = null;
         if (shouldCompensate) {
           try {
             options.onExit?.();
@@ -1538,7 +1581,7 @@ export function createFixedRoomController(
           level = 'ground';
           controlOwner = 'world';
           highlightedStation = null;
-          approachArmed = armAll();
+          noticeStation = null;
           try {
             options.onExit?.();
           } catch {
@@ -1552,86 +1595,119 @@ export function createFixedRoomController(
       if (destroyed || !inRoom) return;
       standing = { x: tile.x, y: tile.y };
       const floor = floorOf(level);
-      // Stepping off every approach re-arms the counters even while a window
-      // holds the controls. The session reports each tile once, so a step
-      // that lands as a counter opens is never reported again: dropping it
-      // here left that counter disarmed, and walking back did not reopen it.
-      if (!fixedRoomStationAtApproach(floor, tile.x, tile.y)) approachArmed = armAll();
-      if (controlOwner === 'shell') return;
-      const ownRevision = ++updateRevision;
-      if (isFixedRoomExit(floor, tile.x, tile.y)) {
-        leave();
-        return;
-      }
-      const lift = fixedRoomLiftAt(floor, tile.x, tile.y);
-      if (lift) {
-        ride(lift, tile);
-        return;
-      }
-
-      const approached = fixedRoomStationAtApproach(floor, tile.x, tile.y);
-      if (!approached) approachArmed = armAll();
-      const nextHighlighted = approached?.station ?? null;
-      if (nextHighlighted !== highlightedStation) {
-        highlightedStation = nextHighlighted;
-        publish();
-      }
-      // onChange delivery is synchronous and may destroy the room or let
-      // Shell claim control before this update resumes. It may also run a
-      // newer update, so do not activate the stale station from this turn.
-      if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) return;
-      const station = stations.find((candidate) => candidate.station === nextHighlighted);
-      if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
-        approachArmed.delete(approached.station);
-        try {
-          options.input.suspend();
-        } catch (error) {
-          // Input suspension is an external lifecycle boundary. Keep the
-          // station armed when it fails so the same approach can be retried.
-          approachArmed.add(approached.station);
-          throw error;
-        }
-        // Input suspension is synchronous and may retire this controller,
-        // transfer control to Shell, or trigger a newer update before the
-        // handoff below. Do not emit station activation for that stale turn.
-        if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) {
-          if (!destroyed && inRoom) approachArmed.add(approached.station);
+      // While a window holds the controls nothing is entered or ridden, but
+      // the highlight still follows the player: a step reported then must not
+      // leave E aimed at a counter they have walked away from.
+      if (controlOwner !== 'shell') {
+        if (isFixedRoomExit(floor, tile.x, tile.y)) {
+          leave();
           return;
         }
-        let deliveryError: unknown;
-        let deliveryFailed = false;
-        try {
-          options.out.emit('station:activated', Object.freeze({
-            building: options.definition.building,
-            station: approached.station,
-          }));
-        } catch (error) {
-          deliveryError = error;
-          deliveryFailed = true;
-        }
-        try {
-          // EventBus delivery is synchronous and may throw. A stale/missing
-          // Shell claim or failed consumer must not strand the player with
-          // World input suspended.
-          if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
-        } catch (error) {
-          if (deliveryFailed && !destroyed && inRoom) approachArmed.add(approached.station);
-          if (deliveryFailed) {
-            throw new AggregateError(
-              [deliveryError, error],
-              'Fixed-room station activation failed',
-            );
-          }
-          throw error;
-        }
-        if (deliveryFailed) {
-          // A failed synchronous handoff did not complete station activation.
-          // Keep the same approach retryable unless this controller has
-          // already left its lifecycle; leaving or destruction owns reset.
-          if (!destroyed && inRoom) approachArmed.add(approached.station);
-          throw deliveryError;
+        const lift = fixedRoomLiftAt(floor, tile.x, tile.y);
+        if (lift) {
+          ride(lift, tile);
+          return;
         }
       }
+      // D-117: standing at a counter highlights it and nothing more; E opens
+      // it (`activate`). Stepping away also takes down a notice E brought up.
+      const nextHighlighted = fixedRoomStationAtApproach(floor, tile.x, tile.y)?.station ?? null;
+      const nextNotice = noticeStation === nextHighlighted ? noticeStation : null;
+      if (nextHighlighted !== highlightedStation || nextNotice !== noticeStation) {
+        highlightedStation = nextHighlighted;
+        noticeStation = nextNotice;
+        publish();
+      }
+    },
+    activate(): boolean {
+      if (destroyed || !inRoom || activating || !ownsWorldControl()) return false;
+      const chosen = highlightedStation;
+      if (!chosen) return false;
+      const definition = floorOf(level).stations.find((candidate) => candidate.station === chosen);
+      if (!definition) return false;
+      if (definition.reserved === true) {
+        // D-107's lift: E shows that it is out of order, and nothing else.
+        if (noticeStation === chosen) return false;
+        noticeStation = chosen;
+        try {
+          publish();
+        } catch (error) {
+          if (!destroyed && inRoom && noticeStation === chosen) noticeStation = null;
+          throw error;
+        }
+        return true;
+      }
+      const station = stations.find((candidate) => candidate.station === chosen);
+      if (station?.status !== 'available') return false;
+      try {
+        options.input.suspend();
+      } catch (error) {
+        // Nothing was handed over; the next E retries.
+        throw error;
+      }
+      // Input suspension is synchronous and may retire this controller,
+      // transfer control to Shell, or move the player on before the handoff
+      // below. Do not emit station activation for that stale press.
+      if (destroyed || !inRoom || !ownsWorldControl() || highlightedStation !== chosen) {
+        try {
+          if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+        } catch {
+          // Preserve the stale press's quiet return; the gate fails closed.
+        }
+        return false;
+      }
+      let deliveryError: unknown;
+      let deliveryFailed = false;
+      activating = true;
+      try {
+        options.out.emit('station:activated', Object.freeze({
+          building: options.definition.building,
+          station: chosen,
+        }));
+      } catch (error) {
+        deliveryError = error;
+        deliveryFailed = true;
+      } finally {
+        activating = false;
+      }
+      try {
+        // EventBus delivery is synchronous and may throw. A stale/missing
+        // Shell claim or failed consumer must not strand the player with
+        // World input suspended.
+        if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+      } catch (error) {
+        if (deliveryFailed) {
+          throw new AggregateError(
+            [deliveryError, error],
+            'Fixed-room station activation failed',
+          );
+        }
+        throw error;
+      }
+      if (deliveryFailed) throw deliveryError;
+      return true;
+    },
+    interaction(): FixedRoomInteraction | null {
+      if (destroyed || !inRoom || !ownsWorldControl()) return null;
+      const chosen = highlightedStation;
+      if (!chosen) return null;
+      const definition = floorOf(level).stations.find((candidate) => candidate.station === chosen);
+      if (!definition) return null;
+      const snapshot = stations.find((candidate) => candidate.station === chosen);
+      if (definition.reserved === true) {
+        // Its notice, once up, replaces the prompt until the player steps away.
+        if (noticeStation === chosen) return null;
+      } else if (snapshot?.status !== 'available') {
+        // A locked counter shows its grey look and no prompt (D-033).
+        return null;
+      }
+      const label = promptLabel(definition.prompt) ?? promptLabel(snapshot?.label) ?? promptLabel(definition.label);
+      if (!label) return null;
+      return Object.freeze({
+        station: chosen,
+        label,
+        rect: Object.freeze({ x: definition.x, y: definition.y, width: definition.width, height: definition.height }),
+      });
     },
     destroy(): void {
       if (destroying || (destroyed && !destroyPending)) return;
@@ -1670,6 +1746,7 @@ export function createFixedRoomController(
       level = 'ground';
       controlOwner = 'world';
       highlightedStation = null;
+      noticeStation = null;
       if (inputCleanupPending) {
         attempt(() => {
           options.input.resume();

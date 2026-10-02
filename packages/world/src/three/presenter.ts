@@ -1,5 +1,5 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import { ARENA_SWING_MS, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn } from '@strkworld/shared';
+import { ARENA_SWING_MS, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_LEVELS,
@@ -38,6 +38,7 @@ import { segmentHitsBox } from './occlusion.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow } from './jump-shadow.js';
 import { EMPTY_PLAZA_STATS } from '../plaza-stations.js';
+import { createInteractionPromptView } from './interaction-prompt.js';
 import type {
   AttackPose,
   AvatarFigure,
@@ -338,6 +339,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
     carried.dispose();
   });
 
+  // D-117: the one "E · …" prompt every station shares.
+  const interactionPrompt = createInteractionPromptView(options.labels);
+  root.add(interactionPrompt.object);
+  disposers.push(() => interactionPrompt.dispose());
+
   // D-097: the local avatar's jump shadow, on the ground under it.
   const jumpShadow = createJumpShadow();
   root.add(jumpShadow.object);
@@ -412,8 +418,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     sandbox.setTarget(null);
     sandboxHeights = FLAT_SANDBOX;
     carried.setColour(null);
-    // The plaza's prompt and figures belong to the session that set them (D-076).
-    street.plaza?.setHighlight(null);
+    // The prompt belongs to the session that set it (D-117), and so do the
+    // plaza's figures (D-076).
+    interactionPrompt.show(null);
     street.plaza?.setStats(EMPTY_PLAZA_STATS);
     // So do the ball, its prompt, the pitch's moments and the scoreboard (D-078).
     football.group.visible = true;
@@ -626,9 +633,20 @@ export function createPresenter(options: PresenterOptions): Presenter {
             ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
             : null);
         },
-        setPlazaHighlight(station) {
+        setInteractionPrompt(prompt) {
           if (!live()) return;
-          street.plaza?.setHighlight(station);
+          if (!prompt) {
+            interactionPrompt.show(null);
+            return;
+          }
+          // The plaza says how high over its monument and table; anything
+          // else floats at the default height over its own floor (a roof's
+          // deck, or the floor of a room or the Studio).
+          const ground = pixelToGround(prompt.x, prompt.y);
+          const plazaHeight = streetVisible ? street.plaza?.promptHeight(prompt.id as StationId) ?? null : null;
+          const deck = rooftop !== null ? rooftopHeightAt(rooftop, ground.x, ground.z) ?? 0 : 0;
+          if (plazaHeight !== null) interactionPrompt.show(prompt, plazaHeight, 0);
+          else interactionPrompt.show(prompt, undefined, deck);
         },
         setPlazaStats(stats) {
           if (!live()) return;
@@ -800,6 +818,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (visibleRoom) rooms.get(visibleRoom)?.update(dt);
       if (visibleRoom === 'arena') arenaFx.update(dt);
       if (studioVisible) studio.update(dt);
+      interactionPrompt.update(dt);
       remote?.update(dt);
     },
     updateOcclusion(camera, deltaMs) {

@@ -361,6 +361,14 @@ describe('the arena in the session (D-114)', () => {
     expect(world.last('setArenaPrompt')).toEqual(['E · ENTER THE RING']);
     ring.host!.playLocalSwing();
     expect(world.count('playerSwing')).toBe(1);
+    // D-117: E is interact, so a station in reach (the emperor's box) takes
+    // the press first; the ring's claim and strikes are an action behind it.
+    world.inRoom(20, 9);
+    world.walk({ up: true }, 120);
+    expect(world.session.interactionPrompt).toMatchObject({ id: 'arena:box' });
+    const before = ring.interacts;
+    world.keyboard.press('keydown-E');
+    expect(ring.interacts).toBe(before);
     world.session.destroy();
     expect(ring.destroyed).toBe(1);
   });

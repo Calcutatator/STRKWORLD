@@ -142,7 +142,7 @@ describe('Bank room controller', () => {
     expect(h.controller.state.station.status).toBe('locked');
   });
 
-  it('highlights and activates once per approach, suspending before the emit', () => {
+  it('highlights on approach, opens only on E, and suspends before the emit (D-117)', () => {
     const h = setup();
     const order: string[] = [];
     h.input.input.suspend = () => order.push('suspend');
@@ -155,15 +155,20 @@ describe('Bank room controller', () => {
 
     h.controller.update({ x: 5, y: 4 });
     h.controller.update({ x: 6, y: 4 });
+    expect(order).toEqual([]);
+    expect(h.events).toHaveLength(0);
+    expect(h.controller.state.highlightedStation).toBe(BANK_SHIELDING_STATION);
+    expect(h.controller.interaction()).toMatchObject({ station: BANK_SHIELDING_STATION, label: 'SHIELD' });
+
+    expect(h.controller.activate()).toBe(true);
     expect(order).toEqual(['suspend', 'emit']);
     expect(h.events).toHaveLength(1);
-    expect(h.controller.state.highlightedStation).toBe(BANK_SHIELDING_STATION);
 
-    h.controller.update({ x: 6, y: 5 });
-    expect(h.events).toHaveLength(1);
+    // Off the approach: no prompt, and E opens nothing.
     h.controller.update({ x: 6, y: 6 });
-    h.controller.update({ x: 6, y: 4 });
-    expect(h.events).toHaveLength(2);
+    expect(h.controller.interaction()).toBeNull();
+    expect(h.controller.activate()).toBe(false);
+    expect(h.events).toHaveLength(1);
   });
 
   it('keeps controls suspended only when the matching Shell claims them', () => {

@@ -7,7 +7,6 @@ import type {
   SandboxSnapshot,
   SandboxTile,
   ShellEvents,
-  StationId,
   WorldEvents,
 } from '@strkworld/shared';
 import {
@@ -28,6 +27,7 @@ import {
 } from './map/street.js';
 import {
   AVATAR_STUDIO_DEFINITION,
+  AVATAR_STUDIO_PROMPT,
   AVATAR_STUDIO_HEIGHT,
   AVATAR_STUDIO_TILE_SIZE,
   AVATAR_STUDIO_WIDTH,
@@ -65,6 +65,15 @@ import {
   type FixedRoomStationPresentation,
 } from './fixed-room.js';
 import { createInputGate, type InputGate, type KeyboardLike } from './input-gate.js';
+import {
+  createInteractionSystem,
+  type InteractionAction,
+  type InteractionPrompt,
+  type InteractionSource,
+  type InteractionSystem,
+} from './interaction.js';
+import { isEditableTarget } from './dom-keyboard.js';
+import { PLAZA_STATIONS } from './map/plaza.js';
 import {
   createPlazaController,
   type PlazaController,
@@ -186,9 +195,11 @@ export interface WorldSessionView {
   setCarried?(colour: number | null): void;
   /** Where `E` would act, or null outside the sandbox. */
   setSandboxAim?(aim: SandboxAim | null): void;
+  // D-117: the one "E · …" prompt every station shares. Optional: a view
+  // without it draws no prompt (E still works).
+  /** Show the prompt over what E would use, or hide it. */
+  setInteractionPrompt?(prompt: InteractionPrompt | null): void;
   // The Privacy Plaza (D-076). Optional: a view without the plaza ignores them.
-  /** The plaza station `E` would use, or none. */
-  setPlazaHighlight?(station: StationId | null): void;
   /** The monument's pre-formatted figures; a null part is drawn as "…". */
   setPlazaStats?(stats: PlazaStatsPresentation): void;
   // The football pitch (D-078). Optional: a view without the pitch ignores them.
@@ -229,10 +240,12 @@ export interface WorldKeyboard extends KeyboardLike {
   readonly held: MovementInput;
   readonly sprinting: boolean;
   /**
-   * `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a
-   * block (D-060), uses a Privacy Plaza station (D-076), or kicks the ball
-   * (D-078); `keydown-Space` jumps (D-097); `pointerdown-primary`, a
-   * primary click or tap on the World's canvas, strikes in the arena (D-114).
+   * `keydown-F` toggles the outfit (D-053); `keydown-E` is interact (D-117):
+   * it uses the station the player stands at (a plaza station, a counter, a
+   * Studio figure, the bunker's lift), or else picks or places a block
+   * (D-060), kicks the ball (D-078) or acts in the arena's ring (D-114);
+   * `keydown-Space` jumps (D-097); `pointerdown-primary`, a primary click or
+   * tap on the World's canvas, strikes in the arena (D-114).
    */
   on(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
@@ -296,9 +309,26 @@ export interface WorldSession {
   readonly elevation: number;
   /** D-097: the local avatar's cosmetic jump: ready, in the air, or cooling down. */
   readonly jump: JumpPhase;
+  /** D-117: the "E · …" prompt showing now, or none. */
+  readonly interactionPrompt: InteractionPrompt | null;
+  /**
+   * D-117: the interaction system's extension points: register a station
+   * kind (`register`), a non-station use of E (`addAction`, e.g. a ring
+   * attack), or hold E away from every station during a fight (`suspend`).
+   */
+  readonly interactions: WorldInteractions;
   update(deltaMs: number, frame?: WorldFrame): void;
+  /**
+   * D-117: E, or the touch button: use what the prompt shows, or else the
+   * sandbox, the kick or another action. Nothing while a panel or a Shell
+   * claim owns the keyboard. Returns whether anything took the press.
+   */
+  interact(): boolean;
   destroy(): void;
 }
+
+/** D-117: what a session exposes of its interaction system. */
+export type WorldInteractions = Pick<InteractionSystem, 'register' | 'addAction' | 'suspend' | 'suspended'>;
 
 /** Longest frame the session will integrate; a stalled tab must not warp the player. */
 export const MAX_SESSION_FRAME_MS = 100;
@@ -405,14 +435,11 @@ class Session implements WorldSession {
   private stopSandboxDrops?: () => void;
   private stopSandboxBursts?: () => void;
   private stopSandboxResync?: () => void;
-  private sandboxKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   private elevationLevel = 0;
   private aim: SandboxAim | null = null;
   private plaza?: PlazaController;
-  private plazaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   private readonly football?: FootballChannel;
   private stopFootballMoments?: () => void;
-  private footballKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   /** Whether "E · KICK" shows: exactly when a kick would reach the ball. */
   private kickPrompt = false;
   /** Whether the view was last given a ball, so a missing one is cleared once. */
@@ -422,10 +449,20 @@ class Session implements WorldSession {
   /** D-097: one jump at a time, then a short cooldown. */
   private readonly jumpState: JumpState = createJumpState();
   private jumpKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-117: every station and every other use of E, behind one key. */
+  private interactionSystem: InteractionSystem = createInteractionSystem();
+  private interactKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /**
+   * D-117: the World-space way the player last moved; facing for the
+   * interaction system. (0, 0) until they first move: not known, so it faces
+   * everything.
+   */
+  private heading = { x: 0, y: 0 };
   /** D-114: the ring's combat session (C's arena-session.ts), only with a channel. */
   private readonly arenaChannel?: ArenaChannel;
   private arenaSession?: ArenaSession;
-  private arenaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-114: removes the arena's use of E from the interaction system. */
+  private stopArenaAction?: () => void;
   private arenaPrimary?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   /** Whether the view was last given a ring frame, so leaving clears it once. */
   private arenaShown = false;
@@ -454,6 +491,7 @@ class Session implements WorldSession {
       });
       this.createPlayer();
       this.createInput();
+      this.createInteractions();
       this.createAvatarOutfit();
       this.createFixedRooms();
       this.createAvatarStudio();
@@ -464,6 +502,7 @@ class Session implements WorldSession {
       this.createPlaza();
       this.createFootball();
       this.createJump();
+      this.createInteractionSources();
       this.createArena();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
@@ -512,6 +551,27 @@ class Session implements WorldSession {
     return this.jumpState.phase;
   }
 
+  get interactionPrompt(): InteractionPrompt | null {
+    return this.interactionSystem.focused;
+  }
+
+  get interactions(): WorldInteractions {
+    const system = this.interactionSystem;
+    return {
+      register: (source) => system.register(source),
+      addAction: (action) => system.addAction(action),
+      suspend: (reason) => system.suspend(reason),
+      get suspended() {
+        return system.suspended;
+      },
+    };
+  }
+
+  interact(): boolean {
+    if (this.cleanedUp || !this.worldOwnsKeys()) return false;
+    return this.interactionSystem.interact();
+  }
+
   get inputSuspended(): boolean {
     try {
       return this.inputGate.suspended === true;
@@ -528,12 +588,14 @@ class Session implements WorldSession {
     const room = this.activeRoomController();
     if (this.avatarStudioActive) {
       this.moveAvatarStudioPlayer(delta, cameraYaw);
+      this.refreshInteractions();
       return;
     }
     if (room?.state.inRoom) {
       this.moveRoomPlayer(delta, cameraYaw);
       this.movement.interiorUpdate(() => this.reportRoomTile());
       if (!this.cleanedUp) this.presentArena(delta);
+      this.refreshInteractions();
       return;
     }
     if (this.arenaShown) this.clearArena();
@@ -544,6 +606,7 @@ class Session implements WorldSession {
     });
     // A door may just have taken the player inside, where there is no ball.
     if (!this.cleanedUp && this.area === 'street') this.presentFootball();
+    this.refreshInteractions();
   }
 
   destroy(): void {
@@ -590,30 +653,20 @@ class Session implements WorldSession {
     const stopSandboxResync = this.stopSandboxResync;
     this.stopSandboxResync = undefined;
     if (stopSandboxResync) attempt(stopSandboxResync);
-    const sandboxKey = this.sandboxKey;
-    this.sandboxKey = undefined;
-    if (sandboxKey && this.keyboard) {
-      const keyboard = this.keyboard;
-      attempt(() => keyboard.off('keydown-E', sandboxKey));
-    }
     const plaza = this.plaza;
     this.plaza = undefined;
     if (plaza) attempt(() => plaza.destroy());
-    const plazaKey = this.plazaKey;
-    this.plazaKey = undefined;
-    if (plazaKey && this.keyboard) {
-      const keyboard = this.keyboard;
-      attempt(() => keyboard.off('keydown-E', plazaKey));
-    }
     const stopFootballMoments = this.stopFootballMoments;
     this.stopFootballMoments = undefined;
     if (stopFootballMoments) attempt(stopFootballMoments);
-    const footballKey = this.footballKey;
-    this.footballKey = undefined;
-    if (footballKey && this.keyboard) {
+    const interactKey = this.interactKey;
+    this.interactKey = undefined;
+    if (interactKey && this.keyboard) {
       const keyboard = this.keyboard;
-      attempt(() => keyboard.off('keydown-E', footballKey));
+      attempt(() => keyboard.off('keydown-E', interactKey));
     }
+    const interactions = this.interactionSystem;
+    attempt(() => interactions.destroy());
     const jumpKey = this.jumpKey;
     this.jumpKey = undefined;
     if (jumpKey && this.keyboard) {
@@ -621,12 +674,9 @@ class Session implements WorldSession {
       attempt(() => keyboard.off('keydown-Space', jumpKey));
     }
     this.jumpState.reset();
-    const arenaKey = this.arenaKey;
-    this.arenaKey = undefined;
-    if (arenaKey && this.keyboard) {
-      const keyboard = this.keyboard;
-      attempt(() => keyboard.off('keydown-E', arenaKey));
-    }
+    const stopArenaAction = this.stopArenaAction;
+    this.stopArenaAction = undefined;
+    if (stopArenaAction) attempt(stopArenaAction);
     const arenaPrimary = this.arenaPrimary;
     this.arenaPrimary = undefined;
     if (arenaPrimary && this.keyboard) {
@@ -662,6 +712,128 @@ class Session implements WorldSession {
 
   private createInput(): void {
     this.inputGate = this.keyboard ? createInputGate(this.keyboard) : NOOP_INPUT_GATE;
+  }
+
+  /**
+   * D-117: one interaction system and one E binding for the whole session.
+   * Stations (the plaza, every room counter, the Studio's figures, the
+   * bunker's lift) register as sources once everything exists
+   * (`createInteractionSources`); the sandbox and the kick register as
+   * actions where they are built. A press aimed at a text field is never
+   * read (the keyboard already drops it; this is the second lock), and
+   * nothing is used while a panel or a Shell claim owns the keyboard.
+   */
+  private createInteractions(): void {
+    this.interactionSystem = createInteractionSystem({
+      onPrompt: (prompt) => this.view.setInteractionPrompt?.(prompt),
+      blocked: () => this.cleanedUp || !this.worldOwnsKeys(),
+    });
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat) return;
+      if (isEditableTarget(event.target)) return;
+      this.interact();
+    };
+    keyboard.on('keydown-E', onKey);
+    this.interactKey = onKey;
+  }
+
+  /**
+   * Whether the World owns the keys right now: no panel or Shell claim on
+   * the gate, and no room counter holding the controls ('shell').
+   */
+  private worldOwnsKeys(): boolean {
+    if (this.inputSuspended) return false;
+    const room = this.activeRoomController();
+    if (room?.state.inRoom && room.state.controlOwner !== 'world') return false;
+    return true;
+  }
+
+  /** D-117: every station kind, as interaction sources. */
+  private createInteractionSources(): void {
+    this.interactionSystem.register(this.plazaInteractions());
+    this.interactionSystem.register(this.roomInteractions());
+    this.interactionSystem.register(this.studioInteractions());
+  }
+
+  /** The plaza's monument and table (D-076), from the street. */
+  private plazaInteractions(): InteractionSource {
+    return {
+      targets: () => {
+        const plaza = this.plaza;
+        if (!plaza || this.area !== 'street') return [];
+        const id = plaza.state.highlightedStation;
+        const station = PLAZA_STATIONS.find((candidate) => candidate.station === id);
+        if (!station) return [];
+        return [{
+          id: station.station,
+          label: station.label,
+          rect: {
+            x: station.x * TILE_SIZE,
+            y: station.y * TILE_SIZE,
+            width: station.width * TILE_SIZE,
+            height: station.height * TILE_SIZE,
+          },
+          activate: () => this.plaza?.activate(),
+        }];
+      },
+    };
+  }
+
+  /** The counter the player stands at on any floor of any room (D-033), and the bunker's lift (D-107). */
+  private roomInteractions(): InteractionSource {
+    return {
+      targets: () => {
+        if (this.avatarStudioActive) return [];
+        const controller = this.activeRoomController();
+        const map = this.activeRoomMap();
+        if (!controller?.state.inRoom || !map) return [];
+        const usable = controller.interaction();
+        if (!usable) return [];
+        const origin = floorOrigin(map);
+        return [{
+          id: usable.station,
+          label: usable.label,
+          rect: {
+            x: origin.x + usable.rect.x * FIXED_ROOM_TILE_SIZE,
+            y: origin.y + usable.rect.y * FIXED_ROOM_TILE_SIZE,
+            width: usable.rect.width * FIXED_ROOM_TILE_SIZE,
+            height: usable.rect.height * FIXED_ROOM_TILE_SIZE,
+          },
+          activate: () => controller.activate(),
+        }];
+      },
+    };
+  }
+
+  /** The Avatar Studio's figures (D-053): E puts on the look in reach. */
+  private studioInteractions(): InteractionSource {
+    return {
+      targets: () => {
+        const studio = this.avatarStudio;
+        if (!studio || !this.avatarStudioActive) return [];
+        const usable = studio.interaction();
+        if (!usable) return [];
+        return [{
+          id: `studio:figure-${usable.figure}`,
+          label: AVATAR_STUDIO_PROMPT,
+          rect: {
+            x: ROOM_ORIGIN.x + usable.rect.x * AVATAR_STUDIO_TILE_SIZE,
+            y: ROOM_ORIGIN.y + usable.rect.y * AVATAR_STUDIO_TILE_SIZE,
+            width: usable.rect.width * AVATAR_STUDIO_TILE_SIZE,
+            height: usable.rect.height * AVATAR_STUDIO_TILE_SIZE,
+          },
+          activate: () => studio.activate(),
+        }];
+      },
+    };
+  }
+
+  /** Re-pick what E would use, from where the player stands and faces now. */
+  private refreshInteractions(): void {
+    if (this.cleanedUp) return;
+    this.interactionSystem.update({ position: this.position, heading: this.heading });
   }
 
   /**
@@ -1179,6 +1351,9 @@ class Session implements WorldSession {
     },
   ): boolean {
     if (velocity.x === 0 && velocity.y === 0) return false;
+    if (Number.isFinite(velocity.x) && Number.isFinite(velocity.y)) {
+      this.heading = { x: velocity.x, y: velocity.y };
+    }
     const movement = {
       position: { x: this.position.x, y: this.position.y },
       velocity,
@@ -1208,6 +1383,8 @@ class Session implements WorldSession {
     this.setElevation(0);
     this.setAim(null);
     this.setKickPrompt(false);
+    // A prompt never follows the player across a teleport; the next frame picks again.
+    this.interactionSystem.clear();
   }
 
   // -- block sandbox (D-060) -------------------------------------------------
@@ -1235,26 +1412,27 @@ class Session implements WorldSession {
     if (typeof channel.subscribeResync === 'function') {
       this.stopSandboxResync = channel.subscribeResync((position) => this.resyncStreetPosition(position));
     }
-    const keyboard = this.keyboard;
-    if (!keyboard) return;
-    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
-      if (this.cleanedUp || event.repeat) return;
-      if (this.inputGate.suspended || this.area !== 'street') return;
-      const aim = this.aim;
-      if (!aim || !aim.valid) return;
-      if (aim.mode === 'pick') channel.pick(aim.tile);
-      else channel.place(aim.tile);
+    // D-117: E in the sandbox, when no station is in reach.
+    const action: InteractionAction = {
+      id: 'sandbox',
+      run: () => {
+        if (this.cleanedUp || this.area !== 'street') return false;
+        const aim = this.aim;
+        if (!aim || !aim.valid) return false;
+        if (aim.mode === 'pick') channel.pick(aim.tile);
+        else channel.place(aim.tile);
+        return true;
+      },
     };
-    keyboard.on('keydown-E', onKey);
-    this.sandboxKey = onKey;
+    this.interactionSystem.addAction(action);
   }
 
   // -- the Privacy Plaza (D-076) ----------------------------------------------
 
   /**
-   * The plaza's two stations, used with E from the street. Built only with a
-   * bus: a headless session has no Shell to open a window, so it gets no
-   * plaza key either.
+   * The plaza's two stations, used with E from the street through the
+   * interaction system (D-117). Built only with a bus: a headless session has
+   * no Shell to open a window, so it offers no plaza station either.
    */
   private createPlaza(): void {
     const config = this.config;
@@ -1263,19 +1441,8 @@ class Session implements WorldSession {
       out: { emit: (event, payload) => config.out.emit(event, payload) },
       in: config.in,
       input: this.inputGate,
-      onHighlight: (station) => this.view.setPlazaHighlight?.(station),
       onStats: (stats) => this.view.setPlazaStats?.(stats),
     });
-    const keyboard = this.keyboard;
-    if (!keyboard) return;
-    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
-      if (this.cleanedUp || event.repeat) return;
-      // A panel or Shell claim owns the keyboard; the plaza is on the street.
-      if (this.inputGate.suspended || this.area !== 'street') return;
-      this.plaza?.activate();
-    };
-    keyboard.on('keydown-E', onKey);
-    this.plazaKey = onKey;
   }
 
   // -- the jump (D-097) --------------------------------------------------------
@@ -1323,8 +1490,8 @@ class Session implements WorldSession {
 
   /**
    * The ring's combat session (C's `arena-session.ts`), with this session as
-   * its host, and its two inputs: E (claim, strike) and a primary click or
-   * tap on the canvas (strike). Both work only in the arena, only while the
+   * its host, and its two inputs: E (claim, strike; an interaction action,
+   * D-117) and a primary click or tap on the canvas (strike). Both work only in the arena, only while the
    * World owns the keyboard and the room's controls; the session decides
    * whether they do anything. Built only with a channel: without one the
    * arena is a room to walk and watch from.
@@ -1333,18 +1500,28 @@ class Session implements WorldSession {
     const channel = this.arenaChannel;
     if (!channel) return;
     this.arenaSession = createArenaSession(channel, this.arenaHost());
+    // D-117: E is interact. The arena's use of it (claim at the gate, strike
+    // in a fight) is an action, so a focused station still comes first; the
+    // ring floor has none in range, and C's session may suspend stations
+    // for a fight through the interaction system.
+    this.stopArenaAction = this.interactionSystem.addAction({
+      id: 'arena',
+      priority: 10,
+      run: () => {
+        if (this.cleanedUp || !this.arenaInputLive()) return false;
+        try {
+          return this.arenaSession?.onInteract() === true;
+        } catch {
+          return false;
+        }
+      },
+    });
     const keyboard = this.keyboard;
     if (!keyboard) return;
-    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
-      if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
-      this.arenaSession?.onInteract();
-    };
     const onPrimary = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
       if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
       this.arenaSession?.onPrimary();
     };
-    keyboard.on('keydown-E', onKey);
-    this.arenaKey = onKey;
     keyboard.on('pointerdown-primary', onPrimary);
     this.arenaPrimary = onPrimary;
   }
@@ -1479,17 +1656,17 @@ class Session implements WorldSession {
         if (moment) this.view.footballMoment?.(moment);
       });
     }
-    const keyboard = this.keyboard;
-    if (!keyboard) return;
-    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
-      if (this.cleanedUp || event.repeat) return;
-      if (this.inputGate.suspended || this.area !== 'street') return;
-      // The prompt shows exactly when a kick would reach the ball.
-      if (!this.kickPrompt) return;
-      channel.kick();
-    };
-    keyboard.on('keydown-E', onKey);
-    this.footballKey = onKey;
+    // D-117: E kicks while "E · KICK" shows, when no station is in reach.
+    this.interactionSystem.addAction({
+      id: 'football:kick',
+      run: () => {
+        if (this.cleanedUp || this.area !== 'street') return false;
+        // The prompt shows exactly when a kick would reach the ball.
+        if (!this.kickPrompt) return false;
+        channel.kick();
+        return true;
+      },
+    });
   }
 
   /** Hand the view this frame's ball, and show "E · KICK" while a kick would reach it. */

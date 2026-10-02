@@ -13,6 +13,7 @@ import {
 import type { WorldConfig } from '../runtime.js';
 import { createDomKeyboard, type DomKeyboard } from '../dom-keyboard.js';
 import { createWorldSession, type WorldSession } from '../world-session.js';
+import { createTouchInteractButton, isTouchScreen, type TouchInteractButton } from '../touch-interact.js';
 import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js';
 import { CAMERA_FOV, createCameraRig, type CameraRig } from './camera-rig.js';
 import { createImageTextureLoader } from './image-textures.js';
@@ -122,6 +123,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   let rig: CameraRig;
   let session: WorldSession | null = null;
   let keyboard: DomKeyboard | null = null;
+  // D-117: on a touch screen, the "E · …" prompt is a button over the canvas.
+  let touchButton: TouchInteractButton | null = null;
   let destroyed = false;
   let lastTime: number | null = null;
   // One report slot per frame stage, so a handoff failing every frame cannot
@@ -156,6 +159,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     const currentKeyboard = keyboard;
     session = null;
     keyboard = null;
+    touchButton?.show(null);
     const errors: unknown[] = [];
     try {
       current?.destroy();
@@ -177,9 +181,21 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     let view: ReturnType<Presenter['bindSession']> | undefined;
     try {
       view = presenter.bindSession(config.remotePeers);
+      const bound = view;
+      const button = touchButton;
+      // D-117: on a touch screen the button takes the key prompt's place.
+      const sessionView = button
+        ? {
+          ...bound,
+          setInteractionPrompt: (prompt: Parameters<typeof bound.setInteractionPrompt>[0]) => {
+            bound.setInteractionPrompt(null);
+            button.show(prompt);
+          },
+        }
+        : bound;
       session = createWorldSession({
         config: { out: config.out, in: config.in },
-        view,
+        view: sessionView,
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
         football: config.football,
@@ -318,6 +334,18 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());
+
+    if (isTouchScreen(win)) {
+      const button = createTouchInteractButton({
+        mount,
+        onPress: () => guard('interact', () => session?.interact()),
+      });
+      touchButton = button;
+      cleanup.push(() => {
+        touchButton = null;
+        button.destroy();
+      });
+    }
     cleanup.push(() => disposeSandboxCaches());
 
     // A fixed camera: it reads no pointer or wheel input.

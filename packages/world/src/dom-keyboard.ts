@@ -237,7 +237,8 @@ function composedTarget(event: KeyboardEventLike): unknown {
   return event.target;
 }
 
-function isEditableTarget(target: unknown): boolean {
+/** Whether a keystroke target is a text field (or inside one): the World never reads it. */
+export function isEditableTarget(target: unknown): boolean {
   if (target === null || (typeof target !== 'object' && typeof target !== 'function')) {
     return false;
   }

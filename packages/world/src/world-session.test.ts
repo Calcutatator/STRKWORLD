@@ -13,19 +13,27 @@ import {
   EXCHANGE_DEGEN_STATION,
   EXCHANGE_ROOF_HEIGHT,
   EXCHANGE_ROOF_LEVEL,
+  BUNKER_ELEVATOR_PROMPT,
   FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   VAULT_SUPPLY_STATION,
   VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
+  fixedRoomDefinitionsFor,
+  fixedRoomLiftAt,
+  isFixedRoomExit,
   isFixedRoomSolidAt,
+  type FixedRoomStationDefinition,
   type FixedRoomController,
   type FixedRoomLevelId,
   type FixedRoomLevelMap,
 } from './fixed-room.js';
 import type { InputGate } from './input-gate.js';
 import { createStreetMap, isSolidAt, TILE_SIZE, tileToWorld, worldToTile } from './map/street.js';
+import { PLAZA_MONUMENT_STATION } from './map/plaza.js';
+import type { InteractionTarget } from './interaction.js';
 import { PLAYER_WALK_SPEED } from './movement-input.js';
 import type { MovementInput } from './street-movement.js';
 import { ROOM_ORIGIN } from './world-layout.js';
@@ -190,6 +198,8 @@ class FakeKeyboard implements WorldKeyboard {
   leaksWhileDisabled = false;
   private pressed: MovementInput = NO_KEYS;
   private readonly handlers = new Set<OutfitHandler>();
+  /** D-117: the interact key, tracked apart so the F journal stays as it was. */
+  private readonly interactHandlers = new Set<OutfitHandler>();
   readonly disableGlobalCapture = vi.fn(() => {
     this.journal.push('keyboard.disableGlobalCapture');
   });
@@ -215,9 +225,12 @@ class FakeKeyboard implements WorldKeyboard {
     this.pressed = NO_KEYS;
   }
 
-  // The sandbox key (D-060) is covered by world-session-sandbox.test.ts; this
-  // suite never supplies a sandbox, so only the outfit key is tracked here.
+  // The outfit key is journalled; E (D-117) is tracked apart (`pressE`).
   on(event: 'keydown-F' | 'keydown-E', handler: OutfitHandler): this {
+    if (event === 'keydown-E') {
+      this.interactHandlers.add(handler);
+      return this;
+    }
     if (event !== 'keydown-F') return this;
     this.journal.push(`keyboard.on:${event}`);
     this.handlers.add(handler);
@@ -225,6 +238,10 @@ class FakeKeyboard implements WorldKeyboard {
   }
 
   off(event: 'keydown-F' | 'keydown-E', handler: OutfitHandler): this {
+    if (event === 'keydown-E') {
+      this.interactHandlers.delete(handler);
+      return this;
+    }
     if (event !== 'keydown-F') return this;
     this.journal.push(`keyboard.off:${event}`);
     this.handlers.delete(handler);
@@ -243,6 +260,16 @@ class FakeKeyboard implements WorldKeyboard {
 
   press(event: OutfitKeyEvent = { repeat: false, target: null }): void {
     for (const handler of [...this.handlers]) handler(event);
+  }
+
+  /** D-117: press E, as the DOM keyboard delivers it while enabled. */
+  pressE(event: OutfitKeyEvent = { repeat: false, target: null }): void {
+    if (!this.enabled) return;
+    for (const handler of [...this.interactHandlers]) handler(event);
+  }
+
+  interactListenerCount(): number {
+    return this.interactHandlers.size;
   }
 }
 
@@ -303,7 +330,7 @@ function createRecordingView(journal: Journal) {
     sandboxBurst: (tile) => record('sandboxBurst', [{ x: tile.x, y: tile.y }]),
     setCarried: (colour) => record('setCarried', [colour]),
     setSandboxAim: (aim) => record('setSandboxAim', [aim]),
-    setPlazaHighlight: (station) => record('setPlazaHighlight', [station]),
+    setInteractionPrompt: (prompt) => record('setInteractionPrompt', [prompt]),
     setPlazaStats: (stats) => record('setPlazaStats', [stats]),
     setFootball: (frame) => record('setFootball', [frame]),
     setKickPrompt: (visible) => record('setKickPrompt', [visible]),
@@ -608,7 +635,7 @@ function countEntries(journal: readonly string[], prefix: string): number {
  * "destroy, then construct a new session", which is how the engine rebinds.
  */
 describe('WorldSession lifecycle', () => {
-  it('retries the same Avatar Studio tile after selection delivery fails', () => {
+  it('retries E at a Studio figure after selection delivery fails (D-117)', () => {
     const world = createWorld();
     world.start();
     enterStudioByEntrance(world);
@@ -619,11 +646,16 @@ describe('WorldSession lifecycle', () => {
     place(world.session, studioTileCentre({ x: 5, y: 3 }));
     const sentinel = { ...internals(world.session).lastTile };
 
-    expect(() => tickHolding(world, { down: true })).toThrow(error);
-    expect(internals(world.session).lastTile).toEqual(sentinel);
+    // Walking onto it selects nothing: it only shows the prompt.
+    tickHolding(world, { down: true });
+    expect(internals(world.session).lastTile).not.toEqual(sentinel);
+    expect(world.selected()).toBe('avatar-1');
+    expect(world.session.interactionPrompt).toMatchObject({ id: 'studio:figure-2', label: 'WEAR' });
+
+    expect(() => world.keyboard.pressE()).toThrow(error);
     expect(world.selected()).toBe('avatar-1');
 
-    expect(() => tickHolding(world, { down: true })).not.toThrow();
+    expect(() => world.keyboard.pressE()).not.toThrow();
     expect(world.selected()).toBe('avatar-2');
   });
 
@@ -661,8 +693,10 @@ describe('WorldSession lifecycle', () => {
     world.press();
     expect(world.selected()).toBe('avatar-1');
 
-    // Walking onto a figure still selects it, and F pairs that figure.
+    // E at a figure selects it (D-117), and F pairs that figure.
     stepOntoStudioTile(world, { x: 14, y: 6 });
+    expect(world.selected()).toBe('avatar-1');
+    world.keyboard.pressE();
     expect(world.selected()).toBe('avatar-8');
     world.press();
     expect(world.selected()).toBe('avatar-16');
@@ -860,21 +894,24 @@ describe('WorldSession lifecycle', () => {
     world.session.destroy();
   });
 
-  it('retries room tile delivery after a failed station handoff', () => {
+  it('retries E at a counter after a failed station handoff (D-117)', () => {
     const world = createWorld();
     world.start();
     enterBuilding(world, 'bank');
     makeBankStationAvailable(world);
     world.bus.failNext('station:activated', new Error('room tile handoff failed'));
     place(world.session, interiorTileCentre(BANK_APPROACH));
+    // Standing at it opens nothing.
+    tick(world);
+    expect(world.bus.count('station:activated')).toBe(0);
 
-    expect(() => tick(world)).toThrow('room tile handoff failed');
+    expect(() => world.keyboard.pressE()).toThrow('room tile handoff failed');
     // The failed activation handed the keyboard back rather than stranding it.
     expect(world.session.inputSuspended).toBe(false);
 
-    expect(() => tick(world)).not.toThrow();
+    expect(() => world.keyboard.pressE()).not.toThrow();
     expect(world.bus.count('station:activated')).toBe(2);
-    // Committed now: standing on the approach does not re-deliver the tile.
+    // Standing on at the approach does not open it again.
     tick(world);
     expect(world.bus.count('station:activated')).toBe(2);
   });
@@ -1333,7 +1370,7 @@ describe('WorldSession orchestration', () => {
     expect(internals(session).lastTile).toEqual({ x: -1, y: -1 });
   });
 
-  it('does not roll back a room tile after station delivery retires the session', () => {
+  it('hands the keyboard back by teardown when E\'s station delivery retires the session (D-117)', () => {
     const world = createWorld();
     const session = world.start();
     enterBuilding(world, 'bank');
@@ -1344,9 +1381,11 @@ describe('WorldSession orchestration', () => {
       throw error;
     });
     place(session, interiorTileCentre(BANK_APPROACH));
-
-    expect(() => tick(world)).toThrow(error);
+    tick(world);
     expect(internals(session).lastTile).toEqual(BANK_APPROACH);
+
+    expect(() => world.keyboard.pressE()).toThrow(error);
+    expect(session.destroyed).toBe(true);
     // Teardown, not the retired activation, handed the keyboard back.
     expect(world.keyboard.enabled).toBe(true);
   });
@@ -1381,12 +1420,13 @@ describe('WorldSession orchestration', () => {
     expect(world.studio().state.highlightedFigure).toBeNull();
 
     tickHolding(world, { down: true });
-    expect(world.selected()).toBe('avatar-3');
+    expect(world.selected()).toBe('avatar-1');
     expect(world.studio().state.highlightedFigure).toBe(3);
     expect(world.view.last('syncStudio')).toEqual([{ visible: true, highlightedFigure: 3 }]);
+    world.keyboard.pressE();
+    expect(world.selected()).toBe('avatar-3');
 
-    // An unchanged tile is not reported again: a re-report would reselect
-    // figure 3 over the toggled outfit.
+    // Walking on never reselects figure 3 over the toggled outfit (D-117).
     world.press();
     expect(world.selected()).toBe('avatar-11');
     tickHolding(world, { down: true });
@@ -1615,18 +1655,23 @@ describe('WorldSession orchestration', () => {
     expect(session.inputSuspended).toBe(false);
   });
 
-  it('activates the Bank counter when it becomes available under a player already at it', () => {
+  it('prompts at the Bank counter when it becomes available under a player already at it, and opens it only on E (D-117)', () => {
     const world = createWorld();
     world.start();
     enterBuilding(world, 'bank');
     place(world.session, interiorTileCentre(BANK_APPROACH));
     tick(world);
     expect(world.bus.payloads('station:activated')).toEqual([]);
-    // Standing still, no tile change: the snapshot alone brings it up.
+    expect(world.session.interactionPrompt).toBeNull();
+    // Standing still, no tile change: the snapshot brings up the prompt, not the window.
     makeBankStationAvailable(world);
-    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'bank', station: BANK_STATION.station }]);
+    expect(world.bus.payloads('station:activated')).toEqual([]);
     tick(world);
-    expect(world.bus.payloads('station:activated')).toHaveLength(1);
+    expect(world.session.interactionPrompt).toMatchObject({ id: BANK_STATION.station, label: 'SHIELD' });
+    expect(world.view.last('setInteractionPrompt')).toEqual([world.session.interactionPrompt]);
+    expect(world.bus.payloads('station:activated')).toEqual([]);
+    world.keyboard.pressE();
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'bank', station: BANK_STATION.station }]);
   });
 
   it('hands the active room station presentations to the view', () => {
@@ -1635,27 +1680,26 @@ describe('WorldSession orchestration', () => {
     enterBuilding(world, 'bank');
     // The Bank's other three counters ride along, locked: the Shell has not
     // switched them on (D-063, D-103).
-    const others = FIXED_ROOM_DEFINITIONS.bank.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false }));
+    const others = FIXED_ROOM_DEFINITIONS.bank.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false, notice: false }));
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, status: 'locked', highlighted: false }, ...others],
+      [{ ...BANK_STATION, status: 'locked', highlighted: false, notice: false }, ...others],
     ]);
 
     makeBankStationAvailable(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false }, ...others],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false, notice: false }, ...others],
     ]);
 
     place(world.session, interiorTileCentre(BANK_APPROACH));
     tick(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true }, ...others],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true, notice: false }, ...others],
     ]);
-    expect(world.bus.payloads('station:activated')).toEqual([
-      { building: 'bank', station: BANK_STATION.station },
-    ]);
+    // Highlighted, not opened (D-117).
+    expect(world.bus.payloads('station:activated')).toEqual([]);
 
     // A retired room is hidden, not rendered again.
     const renders = world.view.count('renderRoom');
@@ -2302,6 +2346,9 @@ describe('WorldSession: the Exchange tower', () => {
         { station: EXCHANGE_DEGEN_STATION, label: 'DEGEN', status: 'available' },
       ],
     });
+    expect(world.bus.payloads('station:activated')).toEqual([]);
+    tick(world);
+    world.keyboard.pressE();
     expect(world.bus.payloads('station:activated')).toEqual([{ building: 'exchange', station: EXCHANGE_DEGEN_STATION }]);
     expect(world.view.last('renderRoom')![1].map(({ label, status }) => ({ label, status }))).toEqual([
       { label: 'DEGEN', status: 'available' },
@@ -2498,7 +2545,7 @@ describe('WorldSession: the Vault (D-077)', () => {
     // Every visit begins locked, until the Shell's snapshot says otherwise.
     expect(world.view.last('renderRoom')).toEqual([
       'vault',
-      VAULT_ROOM_DEFINITION.stations.map((station) => ({ ...station, status: 'locked', highlighted: false })),
+      VAULT_ROOM_DEFINITION.stations.map((station) => ({ ...station, status: 'locked', highlighted: false, notice: false })),
     ]);
 
     world.bus.shellEmit('world:stations', {
@@ -2508,13 +2555,15 @@ describe('WorldSession: the Vault (D-077)', () => {
     expect(world.bus.payloads('station:activated')).toEqual([]);
     place(session, interiorTileCentre(VAULT_APPROACH));
     tick(world);
+    expect(world.bus.payloads('station:activated')).toEqual([]);
+    world.keyboard.pressE();
     expect(world.bus.payloads('station:activated')).toEqual([{ building: 'vault', station: VAULT_SUPPLY_STATION }]);
     expect(world.view.last('renderRoom')).toEqual([
       'vault',
       [
-        { ...VAULT_STATION, label: 'SUPPLY', status: 'available', highlighted: true },
+        { ...VAULT_STATION, label: 'SUPPLY', status: 'available', highlighted: true, notice: false },
         // The other three counters are untouched by SUPPLY's snapshot: still locked.
-        ...VAULT_ROOM_DEFINITION.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false })),
+        ...VAULT_ROOM_DEFINITION.stations.slice(1).map((station) => ({ ...station, status: 'locked', highlighted: false, notice: false })),
       ],
     ]);
 
@@ -2525,5 +2574,238 @@ describe('WorldSession: the Vault (D-077)', () => {
     expect(world.view.last('showRoom')).toEqual([null]);
     expect(world.view.last('setPlayerPosition')).toEqual([streetTileCentre(returnTile('vault')), true]);
     expect(world.view.last('setCameraBounds')).toEqual([STREET_BOUNDS]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-117: press E to interact
+// ---------------------------------------------------------------------------
+
+interface StationCase {
+  readonly building: RoomBuilding | 'vault';
+  readonly level: FixedRoomLevelId;
+  readonly station: FixedRoomStationDefinition;
+}
+
+/** Every counter on every floor of every room, the opened Vault's (and its Vesu counters) included. */
+const STATION_CASES: readonly StationCase[] = fixedRoomDefinitionsFor({ vaultOpen: true }).flatMap((definition) => [
+  ...definition.stations.map((station) => ({ building: definition.building as StationCase['building'], level: 'ground' as const, station })),
+  ...(FIXED_ROOM_LEVELS[definition.building] ?? []).flatMap((level) =>
+    level.stations.map((station) => ({ building: definition.building as StationCase['building'], level: level.level, station }))),
+]);
+
+/** A walkable tile in a station's approach ring: where a player stands to use it. */
+function standingTile(level: FixedRoomLevelMap, station: FixedRoomStationDefinition): Point {
+  for (let y = station.y - 1; y <= station.y + station.height; y++) {
+    for (let x = station.x - 1; x <= station.x + station.width; x++) {
+      const inside = x >= station.x && x < station.x + station.width && y >= station.y && y < station.y + station.height;
+      if (inside || isFixedRoomSolidAt(level, x, y) || isFixedRoomExit(level, x, y) || fixedRoomLiftAt(level, x, y)) continue;
+      return { x, y };
+    }
+  }
+  throw new Error(`No standing tile for ${station.station}`);
+}
+
+function floorOf(building: StationCase['building'], level: FixedRoomLevelId): FixedRoomLevelMap {
+  const definition = fixedRoomDefinitionsFor({ vaultOpen: true }).find((candidate) => candidate.building === building)!;
+  if (level === 'ground') return createFixedRoom(definition);
+  return createFixedRoomLevel(FIXED_ROOM_LEVELS[building]!.find((candidate) => candidate.level === level)!);
+}
+
+function openEveryCounter(world: World, building: StationCase['building']): void {
+  const stations = STATION_CASES.filter((entry) => entry.building === building).map(({ station }) => ({
+    station: station.station,
+    label: station.label,
+    status: 'available' as const,
+  }));
+  world.bus.shellEmit('world:stations', { building, stations });
+}
+
+function enterFloor(world: World, building: StationCase['building'], level: FixedRoomLevelId): void {
+  place(world.session, streetTileCentre(doorTile(building)));
+  tick(world);
+  expect(world.session.area).toBe(building);
+  if (level !== 'ground') climbTo(world, level);
+}
+
+function target(id: string, rect: { x: number; y: number; width: number; height: number }, used: string[]): InteractionTarget {
+  return { id, label: id.toUpperCase(), rect, activate: () => used.push(id) };
+}
+
+describe('WorldSession: press E to interact (D-117)', () => {
+  it.each(STATION_CASES.map((entry) => [`${entry.building} ${entry.level} ${entry.station.station}`, entry] as const))(
+    'never opens %s by walking up to it: it prompts, and E opens it',
+    (_name, { building, level, station }) => {
+      const world = createWorld({ vaultOpen: true });
+      world.start();
+      enterFloor(world, building, level);
+      openEveryCounter(world, building);
+      const floor = floorOf(building, level);
+      const opened = (): number => world.bus.count('station:activated');
+
+      place(world.session, floorTileCentre(level, standingTile(floor, station)));
+      tick(world);
+      // Proximity alone: highlighted and prompted, never opened.
+      expect(world.room(building as RoomBuilding).state.highlightedStation).toBe(station.station);
+      expect(opened()).toBe(0);
+      // A reserved station prompts with its own short line (the bunker's lift, D-107; the arena's box, D-114).
+      const label = station.reserved ? station.prompt ?? BUNKER_ELEVATOR_PROMPT : station.label.replace(/\s+/g, ' ');
+      expect(world.session.interactionPrompt).toMatchObject({ id: station.station, label });
+      expect(world.view.last('setInteractionPrompt')).toEqual([world.session.interactionPrompt]);
+      tick(world);
+      expect(opened()).toBe(0);
+
+      world.keyboard.pressE();
+      if (station.reserved) {
+        // The bunker's lift or the arena's box: its notice in the prompt's place, and nothing opens.
+        expect(opened()).toBe(0);
+        expect(world.room(building as RoomBuilding).state.noticeStation).toBe(station.station);
+        tick(world);
+        expect(world.session.interactionPrompt).toBeNull();
+      } else {
+        expect(world.bus.payloads('station:activated')).toEqual([{ building, station: station.station }]);
+      }
+
+      // Walking away takes the prompt down.
+      place(world.session, floorTileCentre(level, floor.spawn));
+      tick(world);
+      expect(world.session.interactionPrompt).toBeNull();
+      expect(world.view.last('setInteractionPrompt')).toEqual([null]);
+      world.keyboard.pressE();
+      expect(opened()).toBe(station.reserved ? 0 : 1);
+    },
+  );
+
+  it('never changes clothes at a Studio figure by walking onto it: it prompts, and E puts it on', () => {
+    const world = createWorld();
+    world.start();
+    enterStudioByEntrance(world);
+    stepOntoStudioTile(world, { x: 9, y: 6 });
+    expect(world.selected()).toBe('avatar-1');
+    expect(world.session.interactionPrompt).toMatchObject({ id: 'studio:figure-7', label: 'WEAR' });
+    world.keyboard.pressE();
+    expect(world.selected()).toBe('avatar-7');
+    // Worn now: no prompt.
+    tick(world);
+    expect(world.session.interactionPrompt).toBeNull();
+    stepOntoStudioTile(world, { x: 6, y: 5 });
+    expect(world.studio().state.highlightedFigure).toBeNull();
+  });
+
+  it('never opens a plaza station by walking up to it: E does', () => {
+    const world = createWorld();
+    world.start();
+    place(world.session, streetTileCentre({ x: STREET_ORIGIN_X + 5, y: 25 }));
+    tickHolding(world, { up: true });
+    tick(world);
+    expect(world.session.interactionPrompt).toMatchObject({ id: PLAZA_MONUMENT_STATION, label: 'POOL STATS' });
+    expect(world.bus.count('station:activated')).toBe(0);
+    world.keyboard.pressE();
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'plaza', station: PLAZA_MONUMENT_STATION }]);
+  });
+
+  it('reads no E aimed at a text field, no held repeat, and nothing while a panel holds the keyboard', () => {
+    const world = createWorld();
+    world.start();
+    enterBuilding(world, 'bank');
+    makeBankStationAvailable(world);
+    place(world.session, interiorTileCentre(BANK_APPROACH));
+    tick(world);
+    expect(world.session.interactionPrompt).not.toBeNull();
+
+    world.keyboard.pressE({ repeat: false, target: { tagName: 'INPUT' } });
+    world.keyboard.pressE({ repeat: false, target: { tagName: 'textarea' } });
+    world.keyboard.pressE({ repeat: false, target: { isContentEditable: true } });
+    world.keyboard.pressE({ repeat: true, target: null });
+    expect(world.bus.count('station:activated')).toBe(0);
+
+    // A panel (or Menu Mode) claims the keyboard: no prompt, and neither E nor the touch button acts.
+    world.bus.shellEmit('world:control-owner', { building: 'bank', owner: 'shell' });
+    tick(world);
+    expect(world.session.interactionPrompt).toBeNull();
+    expect(world.session.interact()).toBe(false);
+    expect(world.bus.count('station:activated')).toBe(0);
+
+    world.bus.shellEmit('world:control-owner', { building: 'bank', owner: 'world' });
+    tick(world);
+    expect(world.session.interactionPrompt).not.toBeNull();
+    expect(world.session.interact()).toBe(true);
+    expect(world.bus.count('station:activated')).toBe(1);
+  });
+
+  it('uses the nearest of two stations in reach, or the one the player faces', () => {
+    const world = createWorld();
+    const session = world.start();
+    const used: string[] = [];
+    const here = streetTileCentre({ x: STREET.spawn.x, y: STREET.spawn.y });
+    place(session, here);
+    // Two stations the player stands between: one a tile to the west, one two tiles east.
+    session.interactions.register({
+      targets: () => [
+        target('gate', { x: here.x + 2 * TILE_SIZE, y: here.y - 16, width: 32, height: 32 }, used),
+        target('board', { x: here.x - TILE_SIZE - 16, y: here.y - 16, width: 32, height: 32 }, used),
+      ],
+    });
+    tick(world);
+    expect(session.interactionPrompt?.id).toBe('board');
+    world.keyboard.pressE();
+    expect(used).toEqual(['board']);
+    // Facing the farther one: it wins over the nearer one beside or behind.
+    place(session, here);
+    tickHolding(world, { right: true });
+    place(session, here);
+    tick(world);
+    expect(session.interactionPrompt?.id).toBe('gate');
+    world.keyboard.pressE();
+    expect(used).toEqual(['board', 'gate']);
+  });
+
+  it('yields E to a combat context: stations first, and none at all while a fight suspends them', () => {
+    const world = createWorld();
+    const session = world.start();
+    const attacks: number[] = [];
+    session.interactions.addAction({ id: 'arena:attack', priority: 10, run: () => attacks.push(1) > 0 });
+    enterBuilding(world, 'bank');
+    makeBankStationAvailable(world);
+    // Away from every station, E is the action's.
+    world.keyboard.pressE();
+    expect(attacks).toHaveLength(1);
+    // At a station, E is interact.
+    place(session, interiorTileCentre(BANK_APPROACH));
+    tick(world);
+    world.keyboard.pressE();
+    expect(world.bus.count('station:activated')).toBe(1);
+    expect(attacks).toHaveLength(1);
+    // A fight holds the stations off: no prompt, and E attacks even here.
+    const release = session.interactions.suspend('combat');
+    expect(session.interactions.suspended).toBe(true);
+    tick(world);
+    expect(session.interactionPrompt).toBeNull();
+    world.keyboard.pressE();
+    expect(attacks).toHaveLength(2);
+    expect(world.bus.count('station:activated')).toBe(1);
+    release();
+    tick(world);
+    expect(session.interactionPrompt?.id).toBe(BANK_STATION.station);
+  });
+
+  it.each(ROOM_BUILDINGS.map((building) => [building] as const))(
+    'still walks in through the %s door without E: doors and the bunker stair are transitions',
+    (building) => {
+      const world = createWorld();
+      world.start();
+      place(world.session, streetTileCentre(doorTile(building)));
+      tick(world);
+      expect(world.session.area).toBe(building);
+      expect(world.bus.payloads('building:entered')).toEqual([{ building }]);
+      expect(world.keyboard.interactListenerCount()).toBe(1);
+    },
+  );
+
+  it('still walks into the Avatar Studio without E', () => {
+    const world = createWorld();
+    world.start();
+    enterStudioByEntrance(world);
+    expect(world.bus.count('avatar-studio:entered')).toBe(1);
   });
 });

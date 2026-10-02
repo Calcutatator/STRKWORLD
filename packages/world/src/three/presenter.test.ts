@@ -15,6 +15,8 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
+import { DEFAULT_PROMPT_HEIGHT } from './interaction-prompt.js';
+import { INTERACTION_PROMPT_STYLE } from './palette.js';
 import { createRemotePeerSource } from '../remote-peer.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
 import { JUMP_AIR_MS, JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift } from '../jump.js';
@@ -732,5 +734,48 @@ describe('presenter: one jump in every scene (D-111)', () => {
     for (let ms = 0; ms < JUMP_AIR_MS / 2; ms += 25) presenter.update(25);
     expect(remote.object.position.y).toBeCloseTo(JUMP_HEIGHT, 1);
     presenter.dispose();
+  });
+});
+
+describe('the shared E prompt (D-117)', () => {
+  const promptOf = (root: Group) => {
+    let found: import('three').Object3D | undefined;
+    root.traverse((object) => {
+      if (!found && object.name === 'interaction-prompt') found = object;
+    });
+    if (!found) throw new Error('no interaction prompt');
+    return found;
+  };
+
+  it('floats one "E · …" prompt, in the plaza\'s style, over whatever the session focuses', () => {
+    const world = setup();
+    const prompt = promptOf(world.parent);
+    expect(prompt.visible).toBe(false);
+    expect(prompt.userData['options']).toEqual(INTERACTION_PROMPT_STYLE);
+    // A room counter: over its centre, at the default height.
+    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
+    expect(prompt.visible).toBe(true);
+    expect(prompt.userData['text']).toBe('E · SHIELD');
+    expect([prompt.position.x, prompt.position.y, prompt.position.z]).toEqual([5, DEFAULT_PROMPT_HEIGHT, 3]);
+    // The plaza's monument says how high: over its tip.
+    world.view.setInteractionPrompt({ id: 'plaza:monument', label: 'POOL STATS', x: 320, y: 736 });
+    expect(prompt.userData['text']).toBe('E · POOL STATS');
+    expect(prompt.position.y).toBeGreaterThan(5);
+    // It bobs while it shows, and hides on null.
+    const base = prompt.position.y;
+    world.presenter.update(300);
+    expect(prompt.position.y).not.toBe(base);
+    world.view.setInteractionPrompt(null);
+    expect(prompt.visible).toBe(false);
+  });
+
+  it('belongs to the session that set it', () => {
+    const world = setup();
+    const prompt = promptOf(world.parent);
+    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
+    world.presenter.bindSession();
+    expect(prompt.visible).toBe(false);
+    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
+    expect(prompt.visible).toBe(false);
   });
 });

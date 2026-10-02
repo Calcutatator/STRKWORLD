@@ -85,11 +85,12 @@ describe('buildStreet', () => {
     // Five facade signs, four brand plates, the sandbox square's sign and its
     // gate's, and the label on the Exchange tower's roof lift; then the Privacy
     // Plaza's (D-076): its gateway sign, the monument's three faces, the
-    // table's card and the two E prompts; then the football pitch's (D-078):
-    // its scoreboard and its gate's board; then the gladiator pit's arch sign (D-114).
-    expect(view.labels.children).toHaveLength(22);
+    // table's card (its E prompt is the World's shared one, D-117); then the
+    // football pitch's (D-078): its scoreboard and its gate's board; then the
+    // gladiator pit's arch sign (D-114).
+    expect(view.labels.children).toHaveLength(20);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'arena-pit')).toHaveLength(1);
-    expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(7);
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(5);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'pitch').map((child) => child.userData['pitch'])).toEqual(['scoreboard', 'gate']);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(

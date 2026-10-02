@@ -13,6 +13,7 @@ import {
   normalizeFixedRoomStations,
   type FixedRoomController,
   type FixedRoomInputGate,
+  type FixedRoomInteraction,
   type FixedRoomMap,
   type FixedRoomRect,
   type FixedRoomState,
@@ -66,6 +67,10 @@ export interface BankRoomController {
   readonly state: BankRoomState;
   enter(): void;
   update(tile: { x: number; y: number }): void;
+  /** D-117: E at the highlighted counter (`FixedRoomController.activate`). */
+  activate(): boolean;
+  /** D-117: what E would use (`FixedRoomController.interaction`). */
+  interaction(): FixedRoomInteraction | null;
   destroy(): void;
 }
 
@@ -150,6 +155,8 @@ export function createBankRoomController(options: BankRoomControllerOptions): Ba
     },
     enter: () => controller.enter(),
     update: (tile) => controller.update(tile),
+    activate: () => controller.activate(),
+    interaction: () => controller.interaction(),
     destroy: () => controller.destroy(),
   };
 }
