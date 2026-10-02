@@ -320,6 +320,8 @@ Anything registering those four qualifies — extension, cross-origin iframe key
 **2. Never branch on wallet identity in the STRK20 path.**
 No `if (wallet.id === …)`, no name matching, no allowlist. Capability is determined at runtime. A wallet either answers the methods or it does not — that is the only question the game asks.
 
+> **One exception, D-108 (2026-10-02).** Discovery leaves out wallets known not to implement the STRK20 Wallet API, from one denylist in `packages/privacy/src/wallet-api/unsupported-wallets.ts` (today: MetaMask, including its Starknet Snap, whose connect failed with 163 and kept opening MetaMask windows). The denylist only removes a wallet from the list. It never admits one, and every listed wallet is still judged by capability alone.
+
 **3. Never set cross-origin isolation headers.**
 This is the trap that would close the door silently and permanently. `COOP: same-origin` + `COEP: require-corp` — needed only for `SharedArrayBuffer` and multithreaded WASM — **break `postMessage`-based popups and cross-origin iframes**, which is exactly how web wallets and iframe keychains communicate. The standards fix (`COOP: restrict-properties`) was put on hold in 2025 and ships in no browser. We have no reason to set them: we do no in-browser proving. But if anyone later adds a WASM dependency that wants threads, it becomes threads *or* web wallets, not both. Write it into the deployment config as a comment and a header test.
 
