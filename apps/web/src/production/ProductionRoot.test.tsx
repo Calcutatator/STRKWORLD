@@ -688,6 +688,132 @@ async function unmountReactRoot(root: ReturnType<typeof createRoot>): Promise<vo
   });
 }
 
+/** Read through a call, so TypeScript does not narrow the reset `captured` to null. */
+function capturedSignOut(): (() => Promise<void>) | undefined {
+  return captured.current?.onSignOut as (() => Promise<void>) | undefined;
+}
+
+describe('ProductionRoot sign-out (D-120)', () => {
+  it('disconnects, leaves the lobby, drops the city for the title screen, forgets the pass, and connects again in the same tab', async () => {
+    captured.current = null;
+    const first = fakePresence();
+    const second = fakePresence();
+    const createPresence = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const operations = fundedOperations();
+    const session = reactiveSession('connected', '0xabc', operations);
+    // As the real session does: the account is forgotten synchronously, and
+    // only then is the wallet asked to disconnect.
+    const disconnect = vi.fn(() => {
+      session.publish('selection-required', null);
+      return Promise.resolve();
+    });
+    const connect = vi.fn(async () => {
+      session.publish('connected', '0xabc');
+      return session.getSnapshot();
+    });
+    Object.assign(session, { disconnect, connect });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <ProductionRoot
+            session={session}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            createPresence={createPresence}
+            bridge={recoveryBridge()}
+          />
+        </StrictMode>,
+      );
+      await flushReact();
+    });
+    await enterCity(container);
+    await flushUntil(() => sessionStorage.length > 0);
+    expect(sessionStorage.length).toBe(1);
+    expect(container.textContent).toContain('production app');
+    expect(container.querySelector('[data-testid="title-screen"]')).toBeNull();
+    const onSignOut = capturedSignOut();
+    expect(typeof onSignOut).toBe('function');
+
+    await act(async () => {
+      await onSignOut!();
+      await flushReact();
+    });
+    expect(disconnect).toHaveBeenCalledOnce();
+    // The presence owner is destroyed, which leaves the lobby.
+    expect(first.destroy).toHaveBeenCalledOnce();
+    // The city (and with it the World and the HUD) is gone; the title screen
+    // and its wallet menu are back.
+    expect(container.textContent).not.toContain('production app');
+    expect(container.querySelector('[data-testid="title-screen"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+    // A logout: the tab no longer remembers the entry pass.
+    await flushUntil(() => sessionStorage.length === 0);
+    expect(sessionStorage.length).toBe(0);
+
+    // Connect again, from the same menu, with no reload.
+    captured.current = null;
+    const ready = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Ready');
+    expect(ready).toBeDefined();
+    await act(async () => {
+      ready!.click();
+      await flushReact();
+    });
+    expect(connect).toHaveBeenCalledWith('wallet-1');
+    // The pass was forgotten, so the gate checks again before the city.
+    await enterCity(container);
+    expect(createPresence).toHaveBeenCalledTimes(2);
+    expect(second.destroy).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('production app');
+    expect(typeof capturedSignOut()).toBe('function');
+
+    await unmountReactRoot(root);
+    expect(second.destroy).toHaveBeenCalledOnce();
+    container.remove();
+  });
+
+  it('still returns to the title screen when the wallet refuses the disconnect call', async () => {
+    captured.current = null;
+    const presence = fakePresence();
+    const session = reactiveSession('connected', '0xabc', fundedOperations());
+    Object.assign(session, {
+      disconnect: vi.fn(() => {
+        session.publish('selection-required', null);
+        return Promise.reject(new Error('wallet said no'));
+      }),
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <ProductionRoot
+          session={session}
+          worldOut={createEventBus<WorldEvents>()}
+          shellIn={createEventBus<ShellEvents>()}
+          createPresence={() => presence}
+          bridge={recoveryBridge()}
+        />,
+      );
+      await flushReact();
+    });
+    await enterCity(container);
+    const onSignOut = capturedSignOut()!;
+    await act(async () => {
+      await expect(onSignOut()).rejects.toThrow('wallet said no');
+      await flushReact();
+    });
+    expect(presence.destroy).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+    await unmountReactRoot(root);
+    container.remove();
+  });
+});
+
 describe('ProductionRoot Bridge shield planner (D-061)', () => {
   const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
   const ONE_STRK = 10n ** 18n;

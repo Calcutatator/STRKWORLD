@@ -53,9 +53,22 @@ vi.mock('./bridge/demo-runtime.js', () => ({
     });
   },
 }));
-vi.mock('./world/WorldHost.js', () => ({
-  WorldHost: () => <div data-testid="world-host">world</div>,
-}));
+// The World's lease: acquired as the host mounts, released as it unmounts.
+const worldHost = vi.hoisted(() => ({ acquired: 0, released: 0 }));
+vi.mock('./world/WorldHost.js', async () => {
+  const { useEffect } = await import('react');
+  return {
+    WorldHost: () => {
+      useEffect(() => {
+        worldHost.acquired += 1;
+        return () => {
+          worldHost.released += 1;
+        };
+      }, []);
+      return <div data-testid="world-host">world</div>;
+    },
+  };
+});
 
 import { App } from './App.js';
 import { ProductionRoot } from './production/ProductionRoot.js';
@@ -113,7 +126,7 @@ async function click(target: HTMLElement): Promise<void> {
 }
 
 function hudWallet(): string | null | undefined {
-  return container!.querySelector('.journey-hud-wallet')?.textContent;
+  return container!.querySelector('.journey-hud-pill .journey-hud-label')?.textContent;
 }
 
 function mount(element: React.ReactElement): void {
@@ -182,7 +195,7 @@ describe('the city behind the entry gate (D-072)', () => {
     expect(hudWallet()).toBe(COPY.hud.wallet.connected);
   });
 
-  it('production: the HUD reads "Wallet connected" and the Bank counter opens straight to the Bank', async () => {
+  it('production: the wallet pill reads "Connected" and the Bank counter opens straight to the Bank', async () => {
     const worldOut = createEventBus<WorldEvents>();
     const shellIn = createEventBus<ShellEvents>();
     const stations: ShellEvents['world:stations'][] = [];
@@ -212,6 +225,99 @@ describe('the city behind the entry gate (D-072)', () => {
     expect(bankPanel()).not.toBeNull();
   });
 });
+
+describe('signing out from the wallet pill (D-120)', () => {
+  it('production: Disconnect & return to menu disconnects, leaves the lobby, releases the World, shows the title screen, and connecting again works', async () => {
+    const worldOut = createEventBus<WorldEvents>();
+    const shellIn = createEventBus<ShellEvents>();
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 1n },
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
+    });
+    const session = switchableSession('0xabc', operations);
+    const presences: ReturnType<typeof createPresenceController>[] = [];
+    const createPresence = () => {
+      // The real controller is frozen; watch its teardown through a wrapper.
+      const real = createPresenceController({});
+      const presence = { ...real, destroy: vi.fn(() => real.destroy()) };
+      presences.push(presence);
+      return presence;
+    };
+    worldHost.acquired = 0;
+    worldHost.released = 0;
+    mount(
+      <ProductionRoot
+        session={session}
+        worldOut={worldOut}
+        shellIn={shellIn}
+        createPresence={createPresence}
+        bridge={{ loadRuntime: async () => ({ service: {} as never, loadSources: async () => [] }) }}
+        policy={null}
+      />,
+    );
+    await settleGate();
+    await click(button(COPY.entry.action));
+    expect(hudWallet()).toBe('Connected');
+    expect(worldHost).toEqual({ acquired: 1, released: 0 });
+
+    await click(container!.querySelector('.journey-hud-pill') as HTMLElement);
+    await click(button('Disconnect & return to menu'));
+
+    expect(session.disconnect).toHaveBeenCalledOnce();
+    expect(presences).toHaveLength(1);
+    expect(presences[0]!.destroy).toHaveBeenCalledOnce();
+    expect(worldHost).toEqual({ acquired: 1, released: 1 });
+    expect(container!.querySelector('.journey-hud')).toBeNull();
+    expect(container!.querySelector('[data-testid="world-host"]')).toBeNull();
+    expect(container!.querySelector('[data-testid="title-screen"]')).not.toBeNull();
+    expect(container!.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+
+    // The same tab, no reload: pick the wallet again and walk back in.
+    await click(button('Ready'));
+    await settleGate();
+    await click(button(COPY.entry.action));
+    expect(session.connect).toHaveBeenCalledWith('wallet-1');
+    expect(presences).toHaveLength(2);
+    expect(presences[1]!.destroy).not.toHaveBeenCalled();
+    expect(worldHost).toEqual({ acquired: 2, released: 1 });
+    expect(hudWallet()).toBe('Connected');
+  });
+});
+
+/** A session that signs out and back in as the real one does: the snapshot changes first. */
+function switchableSession(account: string, operations: FakePrivacyOperations) {
+  const wallets = [{ key: 'wallet-1', name: 'Ready', icon: 'data:image/svg+xml,ready' }];
+  let generation = 1;
+  let snapshot: ReturnType<WalletSession['getSnapshot']> = {
+    phase: 'connected', wallets, selectedKey: 'wallet-1', account, generation,
+  };
+  const listeners = new Set<() => void>();
+  const publish = (next: typeof snapshot) => {
+    snapshot = next;
+    listeners.forEach((listener) => listener());
+  };
+  const session = {
+    operations,
+    getSnapshot: () => snapshot,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    connect: vi.fn(async (key: string) => {
+      generation += 1;
+      publish({ phase: 'connected', wallets, selectedKey: key, account, generation });
+      return snapshot;
+    }),
+    refreshDiscovery: () => undefined,
+    readAccount: () => snapshot.account,
+    disconnect: vi.fn(async () => {
+      generation += 1;
+      publish({ phase: 'selection-required', wallets, selectedKey: null, account: null, generation });
+    }),
+    destroy: () => undefined,
+  } satisfies WalletSession;
+  return session;
+}
 
 function connectedSession(account: string, operations: FakePrivacyOperations): WalletSession {
   const snapshot = {

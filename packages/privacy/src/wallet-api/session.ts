@@ -667,7 +667,11 @@ export function createProductionWalletSession(
           return () => portListeners.delete(listener);
         },
         async disconnect() {
-          await wallet.features['standard:disconnect'].disconnect();
+          // D-120: ask the wallet to disconnect only where it offers the
+          // standard feature. The session has already forgotten the account
+          // and its operations, which is the whole local sign-out.
+          const disconnect = standardDisconnect(wallet);
+          if (disconnect) await disconnect();
         },
         destroy() {
           portListeners.clear();
@@ -676,6 +680,26 @@ export function createProductionWalletSession(
       };
     },
   });
+}
+
+/**
+ * The wallet's `standard:disconnect` call, bound, or null where the wallet
+ * does not offer it. Read guarded: a wallet's feature map is page-owned.
+ */
+function standardDisconnect(wallet: WalletWithStarknetFeatures): (() => Promise<void>) | null {
+  try {
+    const features: unknown = wallet.features;
+    if (typeof features !== 'object' || features === null) return null;
+    const feature: unknown = Reflect.get(features, 'standard:disconnect');
+    if (typeof feature !== 'object' || feature === null) return null;
+    const disconnect: unknown = Reflect.get(feature, 'disconnect');
+    if (typeof disconnect !== 'function') return null;
+    return async () => {
+      await Reflect.apply(disconnect, feature, []);
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

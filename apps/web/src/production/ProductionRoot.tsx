@@ -6,7 +6,7 @@ import type {
   WalletSession,
   WalletSessionSnapshot,
 } from '@strkworld/privacy';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
 import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
 import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
@@ -15,6 +15,7 @@ import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { DiscoveryRescan } from '../connect/DiscoveryRescan.js';
 import { EntryGate } from '../connect/EntryGate.js';
+import { createEntryPassMemory } from '../connect/entry-pass.js';
 import { GetAWallet } from '../connect/GetAWallet.js';
 import { TitleScreen } from '../connect/TitleScreen.js';
 import { selectedWalletName, unsupportedRoomCopy } from '../connect/unsupported-copy.js';
@@ -340,6 +341,27 @@ function ConnectedProductionApp({
     };
   }, [createPresence]);
 
+  // D-120: the wallet pill's "Disconnect & return to menu". Disconnecting the
+  // session is the whole teardown: it forgets the account at once, so
+  // ProductionApp renders the D-115 title screen in place of this subtree,
+  // and unmounting it destroys the presence owner (the effect above, which
+  // leaves the lobby), releases the World and its three.js engine
+  // (WorldHost), and drops the capability flow and the providers. Connecting
+  // again builds every one of them fresh, in the same tab, with no reload.
+  const signOut = useCallback(async () => {
+    const pass = createEntryPassMemory({ account: session.getSnapshot().account });
+    // A logout: the next connection of this account checks the gate again.
+    const forgetting = pass?.forget();
+    try {
+      // Forgets the account and its operations first, then asks the wallet to
+      // disconnect where it supports that; a wallet that refuses has still
+      // been forgotten here.
+      await session.disconnect();
+    } finally {
+      await forgetting;
+    }
+  }, [session]);
+
   if (!activePresence) {
     return (
       <TitleScreen>
@@ -366,6 +388,7 @@ function ConnectedProductionApp({
       }}
       degenCatalog={degenCatalog}
       poolStats={poolStats}
+      onSignOut={signOut}
     />
   );
 }
