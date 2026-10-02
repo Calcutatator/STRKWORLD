@@ -5,7 +5,7 @@
  * wire. None of them is a secret and none of them is per-player.
  */
 
-import { SANDBOX_MAX_BLOCKS, type Facing } from '@strkworld/shared';
+import { JUMP_AIR_MS, SANDBOX_MAX_BLOCKS, type Facing } from '@strkworld/shared';
 import {
   SANDBOX_FAST_SPAWN_LIMIT,
   SANDBOX_SLOW_SPAWN_INTERVAL_MS,
@@ -123,18 +123,20 @@ export const FOOTBALL_CLIENT_KICK_INTERVAL_MS = 300;
 /**
  * Server-side floor between two accepted jumps from the same session, in ms.
  * D-097. Strict, like the kick's: a jump is a key press. A jump inside it is
- * dropped silently, and nothing about it reaches anyone.
+ * dropped silently, and nothing about it reaches anyone. Since D-097's
+ * amendment it is the jump's whole air time (`JUMP_AIR_MS`, 800 ms), so two
+ * accepted jumps never overlap and each opens its own climb window.
  */
-export const JUMP_MIN_INTERVAL_MS = 400;
+export const JUMP_MIN_INTERVAL_MS = JUMP_AIR_MS;
 
 /**
- * The floor the client wrapper holds its own jumps to, in ms: above the
+ * The floor the client wrapper holds its own jumps to, in ms: 50 ms above the
  * server floor, so jitter never drops an honest jump. The World's own jump
- * (500 ms in the air, then a 150 ms cooldown) is slower still. Moves, sandbox
- * actions, kicks and jumps together stay under `MAX_MESSAGES_PER_SECOND`:
- * 20 + 5 + 3.3 + 2.2 a second, against 40.
+ * (800 ms in the air, then a 150 ms cooldown: 950 ms) is slower still. Moves,
+ * sandbox actions, kicks and jumps together stay under
+ * `MAX_MESSAGES_PER_SECOND`: 20 + 5 + 3.3 + 1.2 a second, against 40.
  */
-export const JUMP_CLIENT_INTERVAL_MS = 450;
+export const JUMP_CLIENT_INTERVAL_MS = JUMP_AIR_MS + 50;
 
 /**
  * D-106: the room sends a session at most one `resync` per this many ms,

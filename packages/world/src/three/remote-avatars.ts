@@ -155,6 +155,12 @@ interface RemoteAvatar {
   jumpSquash: boolean;
   /** D-106: this jump climbed onto a stack; the hop carries the figure, so the arc adds no more lift. */
   jumpClimbed: boolean;
+  /**
+   * D-106 (amended with D-097's block-high jump): how far the ground rose
+   * under this jump when it climbed with the feet already above the block
+   * top. The arc carries on, measured from the new ground, and lands there.
+   */
+  jumpRaise: number;
   /** Built on the first jump, then kept (hidden) until retirement. */
   jumpShadow: JumpShadow | null;
   /** Set once figure.update has thrown: the figure stops animating, the loop does not. */
@@ -367,6 +373,7 @@ export function createRemoteAvatarLayer3D({
     avatar.jumpSquash = !reduced;
     avatar.jumpElapsed = 0;
     avatar.jumpClimbed = false;
+    avatar.jumpRaise = 0;
   };
 
   /** D-097: the peer's jump this frame: lift, pose and shadow. Returns the pose. */
@@ -375,10 +382,11 @@ export function createRemoteAvatarLayer3D({
     avatar.jumpElapsed += deltaMs;
     const elapsed = avatar.jumpElapsed;
     const pose = jumpPose(elapsed, avatar.jumpSquash);
-    const lift = avatar.jumpClimbed ? 0 : jumpLift(elapsed, avatar.jumpHeight);
+    const lift = jumpLiftOf(avatar, elapsed);
     if (elapsed >= JUMP_TOTAL_MS) {
       avatar.jumpElapsed = null;
       avatar.jumpClimbed = false;
+      avatar.jumpRaise = 0;
     }
     avatar.figure.object.position.y = avatar.elevation + lift;
     let shadow = avatar.jumpShadow;
@@ -539,7 +547,7 @@ export function createRemoteAvatarLayer3D({
           const goal = surfaceGoal(avatar);
           if (destroyed) break;
           // D-106: a peer that climbs mid-jump hops on from the top of its arc.
-          const lift = avatar.jumpElapsed !== null && !avatar.jumpClimbed ? jumpLift(avatar.jumpElapsed, avatar.jumpHeight) : 0;
+          const lift = avatar.jumpElapsed !== null ? jumpLiftOf(avatar, avatar.jumpElapsed) : 0;
           stepElevation(avatar, dt, goal, lift);
           place(avatar);
         }
@@ -597,6 +605,7 @@ function standingAvatar(
     jumpHeight: JUMP_HEIGHT,
     jumpSquash: true,
     jumpClimbed: false,
+    jumpRaise: 0,
     jumpShadow: null,
     frozen: false,
     disposed: false,
@@ -703,6 +712,14 @@ function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number, lift
     avatar.air = rise > 0 ? 'hop' : 'fall';
     avatar.airFrom = avatar.elevation;
     if (rise > 0 && lift > 0) {
+      if (avatar.elevation + lift >= goal) {
+        // D-106: the arc already has the feet above the block: no hop. The
+        // ground rises under the jump and the arc lands on the block.
+        avatar.jumpRaise += rise;
+        avatar.elevation = goal;
+        avatar.air = null;
+        return;
+      }
       // D-106: a climb mid-jump starts its hop where the arc has the feet.
       avatar.airFrom += lift;
       avatar.jumpClimbed = true;
@@ -728,6 +745,12 @@ function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number, lift
     avatar.elevation = goal;
   }
   avatar.air = null;
+}
+
+/** D-097: the peer's lift this far into its jump, above whatever it now stands on (D-106). */
+function jumpLiftOf(avatar: RemoteAvatar, elapsedMs: number): number {
+  if (avatar.jumpClimbed) return 0;
+  return Math.max(0, jumpLift(elapsedMs, avatar.jumpHeight) - avatar.jumpRaise);
 }
 
 /**

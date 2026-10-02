@@ -19,6 +19,7 @@ import {
 import type { BufferAttribute, Object3D } from 'three';
 import {
   SANDBOX_AREA,
+  SANDBOX_BLOCK_HEIGHT,
   SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_MAX_BLOCKS,
@@ -367,7 +368,8 @@ export function buildSandbox(options: SandboxViewOptions = {}): SandboxView {
   const group = new Group();
   group.name = 'sandbox';
 
-  const geometry = bevelledBlockGeometry(1, 0.07);
+  // A block is a cube `SANDBOX_BLOCK_HEIGHT` on a side: the jump's apex is derived from it (D-097).
+  const geometry = bevelledBlockGeometry(SANDBOX_BLOCK_HEIGHT, 0.07);
   // Toy plastic: a touch glossier than the city.
   const material = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0, flatShading: true });
   const mesh = new InstancedMesh(geometry, material, SANDBOX_INSTANCE_CAPACITY);
@@ -432,7 +434,7 @@ export function buildSandbox(options: SandboxViewOptions = {}): SandboxView {
   /** A block's drawn centre height and scale, in every state but a burst's flight. */
   const posed = { y: 0, s: 1, sy: 1 };
   const pose = (block: Block): void => {
-    const rest = block.k + 0.5;
+    const rest = (block.k + 0.5) * SANDBOX_BLOCK_HEIGHT;
     let y = rest;
     let s = 1;
     let sy = 1;

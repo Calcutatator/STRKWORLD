@@ -232,6 +232,14 @@ export const SANDBOX_COLOURS = 8;
  */
 export const SANDBOX_STEP_HEIGHT = 1;
 
+/**
+ * A block's height in World units (one unit is a street tile): blocks are
+ * cubes one tile on a side. The 3D sandbox draws them at this size, and the
+ * jump's apex is derived from it (D-097, amended), so a jump always clears
+ * the block it climbs (`SANDBOX_STEP_HEIGHT` of these).
+ */
+export const SANDBOX_BLOCK_HEIGHT = 1;
+
 // ---------------------------------------------------------------------------
 // Jump to climb — D-106
 // ---------------------------------------------------------------------------
@@ -244,6 +252,20 @@ export const SANDBOX_STEP_HEIGHT = 1;
 // `CLIMB_WINDOW_MS` of receiving the jump.
 
 /**
+ * D-097, amended: how long every jump is in the air, ms: every avatar's, and
+ * reduced motion's (which only lowers the hop). The World's arc runs on it;
+ * the lobby's climb window and jump floor are derived from it, so the two
+ * cannot drift apart.
+ */
+export const JUMP_AIR_MS = 800;
+
+/**
+ * D-106: latency the lobby tolerates between a jump and the move that climbs:
+ * the 50 ms move floor plus 100 ms of jitter.
+ */
+export const CLIMB_LATENCY_MS = 150;
+
+/**
  * From this fraction of a jump's air time until it lands, the jumper may step
  * onto a surface one block higher. Normalised, so a lower or shorter jump
  * clears the same block: the rule never reads the jump's height.
@@ -252,10 +274,11 @@ export const CLIMB_FROM_PHASE = 0.35;
 
 /**
  * The lobby accepts one step up for this long after it receives the jump: the
- * World's 500 ms of air time, plus 150 ms for the move floor (50 ms) and
- * jitter between the jump and the move that climbs.
+ * World's air time (`JUMP_AIR_MS`, 800 ms), plus `CLIMB_LATENCY_MS` (150 ms)
+ * for the move floor and jitter between the jump and the move that climbs:
+ * 950 ms.
  */
-export const CLIMB_WINDOW_MS = 650;
+export const CLIMB_WINDOW_MS = JUMP_AIR_MS + CLIMB_LATENCY_MS;
 
 /**
  * The avatar's square collision body, in World pixels. The World collides

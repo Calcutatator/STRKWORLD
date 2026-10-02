@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Box3, Color, Group, Mesh, Vector3, type Material, type Object3D } from 'three';
-import type { AvatarSpriteKey } from '@strkworld/shared';
+import { SANDBOX_BLOCK_HEIGHT, SANDBOX_STEP_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
 import { AVATAR_SPRITE_KEYS } from '../avatar-state.js';
+import { JUMP_AIR_MS, jumpLift, jumpPose } from '../jump.js';
 import {
   AVATAR_FIGURE_HEIGHT,
   avatarFigureHeight,
@@ -115,6 +116,29 @@ describe('avatar figure shape', () => {
       }
     }
     expect(tallest).toBeGreaterThan(AVATAR_FIGURE_HEIGHT - 0.06);
+  });
+
+  it('clears the top of a one-block stack with its feet at the jump\'s apex, every look of every build (D-097, amended)', () => {
+    const blockTop = SANDBOX_STEP_HEIGHT * SANDBOX_BLOCK_HEIGHT;
+    const builds = new Set<AvatarBuild>();
+    for (const key of AVATAR_SPRITE_KEYS) {
+      builds.add(avatarLook(key).character.build);
+      for (const motion of [IDLE, SPRINT]) {
+        const figure = createAvatarFigure(key);
+        for (let frame = 0; frame < 20; frame += 1) figure.update(FRAME_MS, motion);
+        // Play the jump frame by frame up to the apex, as the presenter does.
+        let elapsed = 0;
+        while (elapsed < JUMP_AIR_MS / 2) {
+          const step = Math.min(FRAME_MS, JUMP_AIR_MS / 2 - elapsed);
+          elapsed += step;
+          figure.update(step, { ...motion, jump: jumpPose(elapsed) });
+        }
+        figure.object.position.y = jumpLift(elapsed);
+        const feet = new Box3().setFromObject(figure.object, true).min.y;
+        expect(feet, `${key} ${motion.moving ? 'sprinting' : 'standing'}`).toBeGreaterThanOrEqual(blockTop + 0.05);
+      }
+    }
+    expect([...builds].sort()).toEqual(['large', 'small', 'standard']);
   });
 
   it('reports each look’s true standing top, build scale included, falling back for unknown keys', () => {
