@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { matchMaker } from '@colyseus/core';
 import { ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID } from '@strkworld/shared';
 import { LobbyClient } from './client';
+import { JUMP_CLIENT_INTERVAL_MS } from './config';
 import type { PresenceRoom } from './room';
 import { startPresenceServer, type PresenceServer } from './server';
 
@@ -128,7 +129,7 @@ describe('the jump over the wire (D-097)', () => {
     expect(jumper.jump()).toBe(true);
     expect(jumper.jump()).toBe(false);
     await waitFor(() => peerOf(watcher, jumper)?.jumps, (jumps) => jumps === 1, 'the first jump');
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, JUMP_CLIENT_INTERVAL_MS + 50));
     expect(jumper.jump()).toBe(true);
     await waitFor(() => peerOf(watcher, jumper)?.jumps, (jumps) => jumps === 2, 'the second jump');
   }, WIRE_TIMEOUT_MS);

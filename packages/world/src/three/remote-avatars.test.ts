@@ -9,6 +9,7 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from '../remote-peer.js';
+import { JUMP_AIR_MS, jumpLift } from '../jump.js';
 import { avatarFigureHeight } from './avatar-figure.js';
 import { angleDelta, facingToYaw, pixelToGround } from './coords.js';
 import {
@@ -1153,6 +1154,34 @@ describe('remote avatar layer 3D: standing on stacks (D-060)', () => {
     }
     expect(lowest).toBeGreaterThanOrEqual(atClimb - 0.05);
     for (let elapsed = 0; elapsed < 400; elapsed += 10) layer.update(10);
+    expect(figure.object.position.y).toBeCloseTo(1);
+  });
+
+  it('plays a peer\'s jump on the same arc as the local one, and carries a climb near the peak on along it onto the block (D-097, D-106)', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(0);
+    const peers = createRemotePeerSource([peer({ jumps: 0 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight: surface.surfaceHeight });
+    const figure = at(created, 0);
+    layer.update(16);
+    peers.publish([peer({ jumps: 1 })]);
+    let elapsed = 0;
+    for (; elapsed < 0.4 * JUMP_AIR_MS; elapsed += 10) {
+      layer.update(10);
+      expect(figure.object.position.y).toBeCloseTo(jumpLift(elapsed + 10), 5);
+    }
+    const atClimb = figure.object.position.y;
+    expect(atClimb).toBeGreaterThan(1);
+    surface.state.level = 1;
+    let lowest = Number.POSITIVE_INFINITY;
+    for (; elapsed < JUMP_AIR_MS + 40; elapsed += 10) {
+      layer.update(10);
+      const y = figure.object.position.y;
+      lowest = Math.min(lowest, y);
+      expect(y).toBeCloseTo(Math.max(1, jumpLift(elapsed + 10)), 5);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(1 - 1e-9);
+    for (let ms = 0; ms < 400; ms += 10) layer.update(10);
     expect(figure.object.position.y).toBeCloseTo(1);
   });
 

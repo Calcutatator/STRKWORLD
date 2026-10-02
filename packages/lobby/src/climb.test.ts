@@ -8,7 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CLIMB_FROM_PHASE,
+  CLIMB_LATENCY_MS,
   CLIMB_WINDOW_MS,
+  JUMP_AIR_MS,
   PLAYER_BODY_SIZE,
   SANDBOX_AREA,
   SANDBOX_COLOURS,
@@ -21,8 +23,8 @@ import { SANDBOX_TILE_SIZE, bodyLevelAt, isEntranceTile, sandboxTileKey } from '
 
 const T = SANDBOX_TILE_SIZE;
 const HALF = PLAYER_BODY_SIZE / 2;
-/** The World's air time (`JUMP_AIR_MS` in packages/world): every avatar's, reduced motion's too. */
-const AIR_MS = 500;
+/** The World's air time (the shared `JUMP_AIR_MS`): every avatar's, reduced motion's too. */
+const AIR_MS = JUMP_AIR_MS;
 /** The client's move floor: a climb can wait this long to leave. */
 const MOVE_FLOOR_MS = 50;
 const X = SANDBOX_AREA.x + 6;
@@ -115,7 +117,9 @@ describe('jump to climb (D-106)', () => {
   });
 
   it('tolerates latency up to CLIMB_WINDOW_MS after the jump arrived, and not a millisecond more', () => {
-    expect(CLIMB_WINDOW_MS).toBeGreaterThanOrEqual(600);
+    // D-097, amended: the 800 ms air time plus 150 ms of latency.
+    expect(CLIMB_WINDOW_MS).toBe(AIR_MS + CLIMB_LATENCY_MS);
+    expect(CLIMB_WINDOW_MS).toBe(950);
     const edge = world(ONE, against(X + 1, Y));
     edge.registry.jump('p', 1000);
     expect(edge.registry.move('p', centre(X + 1, Y), 1000 + CLIMB_WINDOW_MS)).toBe('applied');

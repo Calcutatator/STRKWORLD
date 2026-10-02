@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type SandboxSnapshot, type SandboxTile } from '@strkworld/shared';
+import { CLIMB_FROM_PHASE, SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type SandboxSnapshot, type SandboxTile } from '@strkworld/shared';
+import { JUMP_AIR_MS, JUMP_COOLDOWN_MS } from './jump.js';
 import { TILE_SIZE } from './map/street.js';
 import type { SandboxChannel } from './sandbox-channel.js';
 import type { MovementInput } from './street-movement.js';
@@ -246,11 +247,12 @@ describe('WorldSession block sandbox (D-060)', () => {
     world.keyboard.hold({ right: true });
     world.session.update(16);
     world.keyboard.press('keydown-Space');
-    // Before the window opens, the stack is still a wall.
-    for (let elapsed = 0; elapsed + 16 < 0.35 * 500; elapsed += 16) world.session.update(16);
+    // Before the window opens (35% of the air time), the stack is still a wall.
+    let elapsed = 0;
+    for (; elapsed + 16 < CLIMB_FROM_PHASE * JUMP_AIR_MS; elapsed += 16) world.session.update(16);
     expect(world.session.elevation).toBe(0);
-    // Into the window: the next frames carry the body onto the stack.
-    for (let frame = 0; frame < 6; frame += 1) world.session.update(16);
+    // By 40% of the air time the body is on the stack.
+    for (; elapsed < 0.4 * JUMP_AIR_MS; elapsed += 16) world.session.update(16);
     expect(world.session.elevation).toBe(1);
     expect(world.recording.last('setPlayerElevation')).toEqual([1]);
     // Landed on top, standing still, it stays there.
@@ -273,7 +275,7 @@ describe('WorldSession block sandbox (D-060)', () => {
     place(world.session, centre(X, Y));
     world.keyboard.press('keydown-Space');
     // Land first, standing still, then walk in.
-    for (let frame = 0; frame < 34; frame += 1) world.session.update(16);
+    for (let frame = 0; frame < Math.ceil(JUMP_AIR_MS / 16) + 2; frame += 1) world.session.update(16);
     expect(world.session.jump).not.toBe('airborne');
     world.keyboard.hold({ right: true });
     for (let frame = 0; frame < 60; frame += 1) world.session.update(16);
@@ -297,7 +299,8 @@ describe('WorldSession block sandbox (D-060)', () => {
     place(world.session, { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y });
     world.keyboard.hold({ right: true });
     world.keyboard.press('keydown-Space');
-    for (let frame = 0; frame < 45; frame += 1) world.session.update(16);
+    // The whole jump and its cooldown, so the next press takes off.
+    for (let frame = 0; frame < Math.ceil((JUMP_AIR_MS + JUMP_COOLDOWN_MS) / 16) + 1; frame += 1) world.session.update(16);
     // One jump, one step: stopped at the foot of the second.
     expect(world.session.elevation).toBe(1);
     expect(world.session.player.x).toBeLessThanOrEqual((X + 2) * TILE_SIZE - 12);
@@ -322,7 +325,7 @@ describe('WorldSession block sandbox (D-060)', () => {
     world.keyboard.hold({ right: true });
     world.session.update(16);
     world.keyboard.press('keydown-Space');
-    for (let frame = 0; frame < 16; frame += 1) world.session.update(16);
+    for (let frame = 0; frame < Math.ceil((0.4 * JUMP_AIR_MS) / 16); frame += 1) world.session.update(16);
     expect(world.session.elevation).toBe(1);
     const held = { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y };
     world.sandbox.resync(held);
