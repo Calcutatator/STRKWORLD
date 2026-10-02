@@ -1297,6 +1297,22 @@ describe('bank panel — fault injection', () => {
     expect(flow.name === 'failed' && flow.message).toBe(COPY.errors['not-registered']);
   });
 
+  it.each(['prepare', 'confirm'] as const)('names the failing route to onError when the %s fails, for the debug log', async (on) => {
+    const operations = fake();
+    const failures: ShellFailure[] = [];
+    const panel = await openPanel(operations, { onError: (failure) => failures.push(failure) });
+    operations.injectFault({ kind: 'unknown', on });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    if (on === 'confirm') await panel.confirm();
+
+    const kind = panel.store.getState().batch[0]?.kind;
+    expect(kind).toBeDefined();
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({ kind: 'unknown', operation: kind });
+  });
+
   describe('a Post Office send whose recipient the pool has never seen (D-074)', () => {
     async function postOffice(operations: FakePrivacyOperations) {
       const connect = createConnectFlow(operations);

@@ -1,4 +1,4 @@
-import type { PrivacyErrorKind } from '@strkworld/privacy';
+import type { Intent, PrivacyErrorKind } from '@strkworld/privacy';
 
 /**
  * Failure classification, structurally rather than by `instanceof`.
@@ -35,6 +35,12 @@ export interface ShellFailure {
   kind: PrivacyErrorKind;
   /** The original throw, for logging. Never rendered. */
   cause: unknown;
+  /**
+   * The route that failed, when the panel knows it: a wallet's 114 maps to
+   * kind `unknown`, which alone does not say a stake failed. Logged, never
+   * rendered.
+   */
+  operation?: Intent['kind'];
 }
 
 function isKind(value: unknown): value is PrivacyErrorKind {

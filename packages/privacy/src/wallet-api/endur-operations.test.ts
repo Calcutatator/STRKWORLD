@@ -138,10 +138,16 @@ describe('Endur staking, switched on (D-085)', () => {
     const stake: Intent = { kind: 'stake', tokenIn: STRK, tokenOut: XSTRK, amountIn: 5n * ONE };
     const batch = await f.operations.prepare([stake]);
     await batch.confirm({ feeCeiling: POOL_FEE });
+    // Every felt unpadded, as the Wallet API's FELT requires (a padded one is a 114).
+    const felt = (value: string) => `0x${BigInt(value).toString(16)}`;
     expect(f.invoked).toEqual([[
-      { type: 'withdraw', token: STRK, amount: '0x4563918244f40000', recipient: ENDUR_DEPOSIT_ANONYMIZER },
-      { type: 'transfer', token: XSTRK, amount: 'OPEN', recipient: PLAYER },
-      { type: 'invoke', contract: ENDUR_DEPOSIT_ANONYMIZER, calldata: [STRK, XSTRK, '0x4563918244f40000', '0x0', '${openNoteIds[0]}'] },
+      { type: 'withdraw', token: felt(STRK), amount: '0x4563918244f40000', recipient: felt(ENDUR_DEPOSIT_ANONYMIZER) },
+      { type: 'transfer', token: felt(XSTRK), amount: 'OPEN', recipient: PLAYER },
+      {
+        type: 'invoke',
+        contract: felt(ENDUR_DEPOSIT_ANONYMIZER),
+        calldata: [felt(STRK), felt(XSTRK), '0x4563918244f40000', '0x0', '${openNoteIds[0]}'],
+      },
     ]]);
     // Staking never touches a shadow account.
     expect(f.commitments).toEqual([]);

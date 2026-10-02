@@ -259,6 +259,60 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — Ready refused the first wallet-submitted stake as 114 because an `invoke` action carried padded felts (D-063, D-082, D-085)
+
+The owner's Bank → Stake 10 STRK failed twice in Ready right after
+`stage=proving`: `code=114 INVALID_REQUEST_PAYLOAD`. Shield, unshield and the
+Vault's `shadow_account_invoke` worked on the same wallet. The stake's
+`invoke` action sent its contract and calldata as the pinned constants are
+written, padded to 64 hex digits: `contract` and the withdraw's `recipient`
+`0x030dee…30698`, calldata `0x04718f…938d` (STRK) and `0x028d70…4b0a`
+(xSTRK). Wallet API 0.10.4 (`@starknet-io/types-js`, `api/components.d.ts`)
+defines `FELT`, and so `ADDRESS`, as
+`^0x(0|[a-fA-F1-9]{1}[a-fA-F0-9]{0,62})$`: no leading zero, at most 63
+digits. An `invoke` calldata item must be a `FELT` or match
+`STRK20_CALLDATA_PLACEHOLDER`
+(`^\$\{(?:openNoteIds\[[0-9]+\]|poolAddress)\}$`), so a padded felt is
+neither. The flows that worked never sent a padded calldata item:
+starknet.js 10.8's `toWalletApiActions` re-encodes a
+`shadow_account_invoke`'s calls with `CallData.toHex`, but passes an `invoke`
+action through untouched. The only other `invoke` payload known to work in
+Ready, avnu's `buildStrk20Actions` (`@avnu/avnu-sdk` 4.2), writes every felt
+with `num.toHex`, and avnu's API answers addresses unpadded. Ready accepts
+padded `token`/`recipient` fields (the Vault and unshield send padded STRK),
+so it appears strict only where it must tell a felt from a placeholder. That
+last point is inferred: Ready's source is not public.
+
+The protocol shape was never the problem. The pool shows 78 transactions
+through the Endur anonymizer (`ExternalContractInvoked`, blocks 12,114,775 to
+15,641,127). The latest, `0x601eadc2…e37`, was relayed through avnu's
+forwarder `0x127021…584f` like Ready's own submissions (D-082). Its actions
+are this route's: withdraw to the anonymizer, an open note, then `invoke`
+with calldata `[in_token, out_token, low, high, note_id]`.
+
+Fix: `stakeActions` writes every felt in one spelling (`0x`, lowercase, no
+leading zeros), including the wallet's own address. It also refuses a stake
+above u128 before the wallet is asked: a pool balance is a u128, and a u256
+withdraw amount is not a `FELT`. `wallet-api-schema.test.ts` reads both
+patterns from the installed 0.10.4 schema and checks the built request
+against them. The Bank's failures now carry the route
+(`ShellFailure.operation`), so the debug log reads
+`op=stake kind=unknown code=114 …` instead of a bare `kind=unknown`.
+
+*Verified:* the types-js 0.10.4 schema and the starknet.js 10.8 and avnu SDK
+4.2 sources in `node_modules`; `starknet_getEvents`,
+`starknet_getTransactionByHash` and `starknet_getTransactionReceipt` over
+`api.cartridge.gg/x/starknet/mainnet`; a keyless avnu quote for the address
+spelling. **Not verified:** a live stake after the fix. With about 4 STRK in
+the pool, a 10 STRK stake now gets past the payload check and should fail as
+119 `INSUFFICIENT_PRIVATE_BALANCE`. The probe should stake less than the pool
+holds after the fee.
+
+- **Trap:** every `invoke` calldata item must be a canonical felt, because
+  starknet.js does not normalize `invoke` the way it does shadow calls.
+  Canonicalize the action's addresses as well (`contract`, `token`,
+  `recipient`).
+
 ### 2026-10-02 — The plaza's total was already shown twice; it now has one face and one row, and the deposit count is gone from the client (D-098)
 
 The owner asked for the pool's total dollar value in place of "Deposits in the last 24 hours". The total was already on the monument (as the first frame of the die's cycling held face) and in the window (the "Held in the pool" row), so a plain swap would have shown it twice. The shaft face now carries the total ("TOTAL IN POOL"), the die cycles the top holdings alone, and the window's held row is the total row. `deposits24h` is out of `plaza:stats`, the web parser, the demo figures and the poller's incomplete check; the backend still computes it (removing it is a separate, safe change). The tests that read `deposits24h` or the old captions moved with it.
