@@ -36,7 +36,7 @@ All three are Google Fonts under the SIL Open Font License, so commercial use is
 | Ember | `#F56A16` | Wordmark base; primary buttons |
 | Sun gold | `#FFC12E` | Wordmark top; highlights |
 | Outline | `#24120A` | Wordmark outline; button and window outlines and drops |
-| Horizon | `#F2DCC0` | The game's horizon and fog (`SKY_HORIZON` in `packages/world/src/three/world-engine.ts`) |
+| Horizon | `#F2DCC0` | The game's horizon and fog (`SKY_HORIZON` in `packages/world/src/three/sky.ts`) |
 | Sky | `#6F9EDB` | The game's sky dome top (`SKY_TOP`, same file) |
 | Grass | `#86AD55` | Street grass (`PALETTE.grassWarm` in `packages/world/src/three/palette.ts`) |
 

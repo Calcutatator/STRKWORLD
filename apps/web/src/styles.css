@@ -27,8 +27,9 @@
  * The Exchange's degen counter carries `data-brand="degen"` the same way: the
  * avnu window, louder, in neon pink and cyan on navy (D-067).
  *
- * Fonts are system stacks only. This build loads no web fonts and makes no
- * font requests; the brand faces are approximated, never shipped.
+ * This file loads no fonts. The game's theme below uses system stacks; the
+ * brand's three faces (D-113) are self-hosted by brand/brand.css, and only
+ * the title screen wears them so far.
  *
  * Disclosures, warnings and the ConfirmGate are never smaller, fainter or less
  * prominent than body copy (D-024). Every text pair here was checked against
@@ -1249,6 +1250,252 @@ button[data-locked="true"] {
 
 .panel-body .room > h2 {
   font-size: 1.15rem;
+}
+
+/* ------------------------------------------------------------------------
+ * The title screen (D-115), after Cube World's: the live overworld floats
+ * behind, the wordmark sits big at the top, and the way in stacks below it as
+ * a simple menu. It wears the brand (D-113) by pointing the theme's `--ui-*`
+ * tokens at `--brand-*` ones (brand/brand.css), which is how the game-wide
+ * theme will adopt them too. The steps keep their own markup; only their
+ * frame changes here.
+ * --------------------------------------------------------------------- */
+
+.title-screen {
+  --ui-font: var(--brand-font-body);
+  --ui-heading-font: var(--brand-font-headline);
+  --ui-number-font: var(--brand-font-numeric);
+  --ui-btn-font: var(--brand-font-menu);
+  --ui-heading-weight: 400;
+  --ui-heading-case: none;
+  --ui-heading-tracking: 0.01em;
+  --ui-text: var(--brand-cream);
+  --ui-text-dim: #f2dcc0;
+  --ui-heading: var(--brand-sun-gold);
+  --ui-accent: var(--brand-sun-gold);
+  --ui-focus: var(--brand-sun-gold);
+  --ui-surface: var(--brand-window-dark);
+  --ui-surface-raised: #33200f;
+  --ui-surface-sunken: #1b0f08;
+  --ui-line: var(--brand-window-rim);
+  --ui-input-border: #a8683a;
+  --ui-input-border-hover: #c98048;
+  --ui-radius-control: 3px;
+  --ui-radius-inner: 3px;
+  --ui-radius-button: 4px;
+
+  /* Buttons: Silkscreen caps on a block with a dark outline and a hard drop. */
+  --ui-btn-size: 0.95rem;
+  --ui-btn-weight: 700;
+  --ui-btn-case: uppercase;
+  --ui-btn-tracking: 0.06em;
+  --ui-btn-pad: 0.85rem 1rem 0.8rem;
+  --ui-btn-bg: var(--brand-window-dark);
+  --ui-btn-bg-hover: #3a2414;
+  --ui-btn-text: var(--brand-cream);
+  --ui-btn-border: var(--brand-outline);
+  --ui-btn-border-hover: var(--brand-outline);
+  --ui-btn-edge: var(--brand-outline);
+  --ui-btn-inset: inset 0 0 0 2px var(--brand-window-rim);
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 5px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 4px;
+  --ui-primary-bg: var(--brand-ember);
+  --ui-primary-bg-hover: #ff7c24;
+  --ui-primary-text: var(--brand-cream);
+  --ui-primary-border: var(--brand-outline);
+  --ui-primary-border-hover: var(--brand-outline);
+  --ui-primary-edge: var(--brand-outline);
+  --ui-primary-inset: inset 0 3px 0 rgb(255 193 46 / 0.6), inset 0 -3px 0 rgb(184 64 12 / 0.55);
+  --ui-primary-glow: 0 0 #0000;
+
+  /* A hard pixel outline, so menu copy reads over the city without a panel. */
+  --title-text-outline:
+    2px 0 0 var(--brand-outline), -2px 0 0 var(--brand-outline), 0 2px 0 var(--brand-outline),
+    0 -2px 0 var(--brand-outline), 2px 2px 0 var(--brand-outline), -2px 2px 0 var(--brand-outline),
+    2px -2px 0 var(--brand-outline), -2px -2px 0 var(--brand-outline), 0 4px 0 var(--brand-outline);
+
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--ui-text);
+  font-family: var(--brand-font-body);
+  font-size: var(--brand-body-size);
+  line-height: var(--brand-body-leading);
+}
+
+.title-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--brand-sky-gradient);
+}
+
+/* A warm golden-hour haze over the city, deepest where the menu reads. */
+.title-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 50% 74%, rgb(36 18 10 / 0.5), rgb(36 18 10 / 0) 72%),
+    linear-gradient(180deg, rgb(242 220 192 / 0.22) 0%, rgb(255 193 46 / 0.06) 38%, rgb(36 18 10 / 0.28) 100%);
+}
+
+.title-front {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.5rem, 2.5vh, 1.75rem);
+  min-height: 100%;
+  padding: clamp(1rem, 4.5vh, 3rem) 16px max(2rem, env(safe-area-inset-bottom));
+}
+
+.brand-wordmark {
+  margin: 0;
+  line-height: 0;
+}
+
+.brand-wordmark img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+/* Big, but never so tall the menu falls off a short screen. */
+.title-wordmark {
+  flex: none;
+  width: min(860px, 100%, 76vh);
+  filter: drop-shadow(0 12px 0 rgb(36 18 10 / 0.18));
+}
+
+.title-menu {
+  width: min(25rem, 100%);
+}
+
+/* The step's own room, unframed: a stacked menu, not a card. */
+.title-menu .room {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  align-items: stretch;
+  gap: 0.7rem;
+  width: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ui-text);
+  font-size: var(--brand-body-size);
+  line-height: var(--brand-body-leading);
+  text-align: center;
+  text-shadow: var(--title-text-outline);
+}
+
+.title-menu .room > h2 {
+  color: var(--ui-heading);
+  font-family: var(--brand-font-headline);
+  font-size: clamp(1.9rem, 6vw, 2.4rem);
+  line-height: 0.95;
+}
+
+/* The connect menu's header is the menu's selected item: ▶ CONNECT WALLET. */
+.title-menu .room-connect > h2 {
+  font-family: var(--brand-font-menu);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.title-menu .room-connect > h2::before {
+  content: "\25B6\FE0E\00A0";
+  color: var(--brand-ember);
+}
+
+.title-menu .room-detail {
+  color: var(--ui-text-dim);
+  font-size: 1.25rem;
+}
+
+.title-menu .room-links a {
+  color: var(--brand-sun-gold);
+}
+
+.title-menu .room button {
+  border-width: 3px;
+  text-shadow: none;
+}
+
+/* The wallet choices are the menu's items; "Look again" stays the quiet one. */
+.title-menu .room-connect > button:not(:last-of-type) {
+  --btn-bg: var(--ui-primary-bg);
+  --btn-bg-hover: var(--ui-primary-bg-hover);
+  --btn-text: var(--ui-primary-text);
+  --btn-border: var(--ui-primary-border);
+  --btn-border-hover: var(--ui-primary-border-hover);
+  --btn-edge: var(--ui-primary-edge);
+  --btn-inset: var(--ui-primary-inset);
+  --btn-glow: var(--ui-primary-glow);
+}
+
+/* Rooms with forms or longer copy (the entry gate's cards, the capability
+ * rooms) sit in a dark brand window, so a form never floats over the city. */
+.title-menu .room:not(.room-connect) {
+  padding: 1.1rem 1.1rem 1.2rem;
+  border: 4px solid var(--brand-outline);
+  border-radius: 4px;
+  background: rgb(38 24 16 / 0.94);
+  box-shadow: inset 0 0 0 3px var(--brand-window-rim), 0 6px 0 var(--brand-outline), 0 18px 40px rgb(36 18 10 / 0.4);
+  text-shadow: none;
+}
+
+/* Amounts and balances: VT323's digits blur small, so numbers take Jersey 15. */
+.title-menu .room-entry input[name="amount"],
+.title-menu .room-entry .review-costs dd,
+.title-menu .room-entry .batch-list li {
+  font-family: var(--brand-font-numeric);
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+}
+
+.title-menu .room-entry label,
+.title-menu .room-entry .panel-hint,
+.title-menu .commit-disclosures {
+  font-size: 1.25rem;
+}
+
+.title-menu .shell-boot {
+  height: auto;
+  padding: 0.5rem 0;
+  font-family: var(--brand-font-menu);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: var(--title-text-outline);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-menu .room {
+    animation: none;
+  }
 }
 
 .shell-boot,

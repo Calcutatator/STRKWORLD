@@ -98,6 +98,31 @@ jobs:
       - run: npm ci
       - run: node scripts/check-headers.mjs
 
+  cairo:
+    name: ReceiptLedger contract (Cairo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The first STRKWORLD-owned contract. Tests it, and checks that the compiled
+    # class bundled into the deploy page is the one this source produces, so the
+    # page can never declare something the tests did not cover.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.12'
+          cache: npm
+      # Pinned release tarballs checked against their sha256, not mutable setup actions.
+      - run: ./scripts/install-cairo-toolchain.sh
+      - name: Format, test and build
+        working-directory: contracts/receipt-ledger
+        run: |
+          scarb fmt --check
+          snforge test
+          scarb --release build
+      - run: npm ci --ignore-scripts
+      - name: Deploy page carries the class this source compiles to
+        run: node contracts/receipt-ledger/deploy/build-artifact.mjs --check
+
   drift:
     name: Protocol drift canary
     runs-on: ubuntu-latest

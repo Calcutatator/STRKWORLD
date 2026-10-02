@@ -4,6 +4,9 @@ import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from './bus/event-bus.js';
 import { App } from './App.js';
 import './styles.css';
+// The brand's tokens and self-hosted faces (D-113). Tokens only: it styles nothing by itself.
+import './brand/brand.css';
+import { TitleScreen } from './connect/TitleScreen.js';
 import { createPresenceController, type PresenceController } from './presence/presence-controller.js';
 import { lobbyEndpoint } from './presence/config.js';
 import { LobbyClient } from '@strkworld/lobby/client';
@@ -122,7 +125,9 @@ async function loadProductionBridgeRuntime() {
 if (usesProductionWallet(environment)) {
   root.render(
     <StrictMode>
-      <div className="shell-boot" role="status">Loading the wallet connection…</div>
+      <TitleScreen>
+        <div className="shell-boot" role="status">Loading the wallet connection…</div>
+      </TitleScreen>
     </StrictMode>,
   );
   try {
