@@ -340,6 +340,10 @@ function createRecordingView(journal: Journal) {
     setArenaPrompt: (text) => record('setArenaPrompt', [text]),
     playerSwing: () => record('playerSwing', []),
     setPlayerFacing: (facing) => record('setPlayerFacing', [facing]),
+    arenaGateObject: () => {
+      record('arenaGateObject', []);
+      return null;
+    },
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>

@@ -120,6 +120,8 @@ export interface ArenaRoomView extends RoomView {
   readonly fxMount: Group;
   /** The training dummy: a group at the dummy tile's centre, its pivot at the post's foot. */
   readonly dummy: Object3D;
+  /** The ring gate's leaves (`arena:gate`), for the press-E cues' glow on the gate station. */
+  readonly gate: Object3D;
 }
 
 const TRAVERTINE = 0xd8c6a2;
@@ -203,6 +205,7 @@ export function buildArenaRoom(
   let boxText = '';
   let setGateTarget: (open: number) => void = () => {};
   let lampMaterial: MeshBasicMaterial | null = null;
+  let gateMesh: Object3D | null = null;
   const fxMount = new Group();
   fxMount.name = 'arena:fx-mount';
   const dummy = new Group();
@@ -252,6 +255,7 @@ export function buildArenaRoom(
     group.add(flames(res, torches, animators, reduced));
     const gate = gateLeaves(res);
     group.add(gate.mesh);
+    gateMesh = gate.mesh;
     setGateTarget = gate.setTarget;
     animators.push((elapsed) => gate.update(elapsed, reduced()));
 
@@ -325,6 +329,7 @@ export function buildArenaRoom(
     occluders,
     fxMount,
     dummy,
+    gate: gateMesh!,
     setGate(state) {
       if (disposed || (state !== 'open' && state !== 'busy')) return;
       gateState = state;

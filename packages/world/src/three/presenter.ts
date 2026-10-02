@@ -1,5 +1,5 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import { ARENA_SWING_MS, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
+import { ARENA_SWING_MS, arenaTileAt, type AvatarSpriteKey, type BuildingId, type Facing, type GameId, type SandboxColumn, type StationId } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_LEVELS,
@@ -446,14 +446,36 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
 
   /** D-114: peers' swings, through the remote layer once it can play them (C). */
+  /**
+   * D-114: peers' swings and the fighter's battle stance, through the remote
+   * layer once it can show them (C's remote-avatars.ts). Optional members are
+   * read at call time, so the port works with any layer.
+   */
   const remoteSwings = (): RemoteSwingPort | null => {
-    const layer = remote as (RemoteAvatarLayer3D & { playSwing?: (gameId: GameId) => void }) | null;
+    const layer = remote as
+      | (RemoteAvatarLayer3D & { playSwing?: (gameId: GameId) => void; setFighter?: (gameId: GameId | null) => void })
+      | null;
     if (!layer) return null;
-    return {
-      playSwing(gameId) {
+    const port = {
+      playSwing(gameId: GameId) {
         layer.playSwing?.(gameId);
       },
+      setFighter(gameId: GameId | null) {
+        layer.setFighter?.(gameId);
+      },
     };
+    return port;
+  };
+
+  /**
+   * D-114: whether a World pixel point is an arena seat (a tier tile), while
+   * the arena is the room shown: remote spectators standing still there sit.
+   */
+  const arenaSeatAt = (xPx: number, yPx: number): boolean => {
+    if (streetVisible || visibleRoom !== 'arena' || !Number.isFinite(xPx) || !Number.isFinite(yPx)) return false;
+    const tileX = Math.floor((xPx - ROOM_ORIGIN.x) / PIXELS_PER_UNIT);
+    const tileY = Math.floor((yPx - ROOM_ORIGIN.y) / PIXELS_PER_UNIT);
+    return arenaTileAt(tileX, tileY) === 'tier';
   };
 
   const retireRemote = (): void => {
@@ -501,11 +523,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
       retireRemote();
       resetPresentation();
       if (remotePeers) {
+        // D-114: remote spectators sit on the arena's tiers (the layer reads
+        // `seatAt` once C's remote-avatars.ts takes it; others ignore it).
+        const seats: Record<string, unknown> = { seatAt: arenaSeatAt };
         const layer = createRemoteAvatarLayer3D({
           source: remotePeers,
           figures: options.figures,
           surfaceHeight: remoteHeight,
           ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+          ...seats,
         });
         remote = layer;
         root.add(layer.group);
@@ -664,6 +690,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
         footballMoment(moment) {
           if (!live()) return;
           football.celebrate(moment);
+        },
+        arenaGateObject() {
+          if (!live()) return null;
+          ensureRoom('arena');
+          return arenaRoom?.gate ?? null;
         },
         syncArena(frame) {
           if (!live()) return;

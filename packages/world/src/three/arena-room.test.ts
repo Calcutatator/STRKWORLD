@@ -403,6 +403,8 @@ describe('the presenter in the arena (D-114)', () => {
     expect(room.getObjectByName('arena-fx')?.parent?.name).toBe('arena:fx-mount');
     const lamp = (room.getObjectByName('arena:gate-lamp') as Mesh).material as MeshBasicMaterial;
     expect(lamp.color.getHex()).toBe(ARENA_GATE_LAMP.busy);
+    // The gate's mesh, for the gate station's press-E cues (D-117).
+    expect((view.arenaGateObject() as Mesh).name).toBe('arena:gate');
     view.showRoom(null);
     expect(room.visible).toBe(false);
     view.showRoom('arena');

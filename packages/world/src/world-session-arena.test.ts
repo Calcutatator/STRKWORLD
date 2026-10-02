@@ -40,6 +40,10 @@ const ring = vi.hoisted(() => ({
   updates: 0,
   frame: null as ArenaViewFrame | null,
   destroyed: 0,
+  /** Whether the stand-in offers C's press-E members (gateTargets, onAttack). */
+  pressE: false,
+  gate: [] as Array<{ id: string; label: string; rect: { x: number; y: number; width: number; height: number }; activate(): unknown }>,
+  attacks: 0,
 }));
 
 vi.mock('./arena-session.js', () => ({
@@ -61,6 +65,15 @@ vi.mock('./arena-session.js', () => ({
       },
       frame: () => ring.frame,
       destroy: () => void (ring.destroyed += 1),
+      ...(ring.pressE
+        ? {
+          gateTargets: () => ring.gate,
+          onAttack: () => {
+            ring.attacks += 1;
+            return true;
+          },
+        }
+        : {}),
     };
   },
 }));
@@ -184,6 +197,9 @@ beforeEach(() => {
   ring.updates = 0;
   ring.frame = null;
   ring.destroyed = 0;
+  ring.pressE = false;
+  ring.gate = [];
+  ring.attacks = 0;
 });
 
 describe('the arena in the session (D-114)', () => {
@@ -371,6 +387,47 @@ describe('the arena in the session (D-114)', () => {
     expect(ring.interacts).toBe(before);
     world.session.destroy();
     expect(ring.destroyed).toBe(1);
+  });
+
+  it('puts the ring gate on press-E as a station, E in a fight as the attack, and lends the session the combat yield', () => {
+    ring.pressE = true;
+    const world = setup();
+    // C's optional host members, read structurally (they join the contract with C).
+    const host = ring.host! as ArenaSessionHost & {
+      suspendInteractions?(reason: string): () => void;
+      inputSuspended?(): boolean;
+      gateObject?(): unknown;
+    };
+    world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
+    world.inRoom(20, 22);
+    // C's gate target: CLAIM, on the gate's footprint (World pixels).
+    let claimed = 0;
+    const gate = world.roomTile(20, 20);
+    ring.gate = [{ id: 'arena:gate', label: 'CLAIM', rect: { x: gate.x - 48, y: gate.y - 16, width: 96, height: 32 }, activate: () => void (claimed += 1) }];
+    world.walk({ up: true }, 60);
+    expect(world.session.interactionPrompt).toMatchObject({ id: 'arena:gate', label: 'CLAIM' });
+    world.keyboard.press('keydown-E');
+    expect([claimed, ring.attacks, ring.interacts]).toEqual([1, 0, 0]);
+    // A fight: the session holds the yield, so no station is prompted and E attacks.
+    const release = host.suspendInteractions!('combat');
+    world.session.update(16);
+    expect(world.session.interactionPrompt).toBeNull();
+    world.keyboard.press('keydown-E');
+    expect([claimed, ring.attacks]).toEqual([1, 1]);
+    release();
+    world.session.update(16);
+    expect(world.session.interactionPrompt).toMatchObject({ id: 'arena:gate' });
+    // The host reports a Shell claim on the keys, and hands over the gate's mesh.
+    expect(host.inputSuspended!()).toBe(false);
+    world.shellEmit('world:control-owner', { building: 'arena', owner: 'shell' });
+    expect(host.inputSuspended!()).toBe(true);
+    world.shellEmit('world:control-owner', { building: 'arena', owner: 'world' });
+    host.gateObject!();
+    expect(world.count('arenaGateObject')).toBe(1);
+    // Off the arena, the gate offers nothing.
+    world.inRoom(ARENA_EXIT.x + 1, ARENA_EXIT.y);
+    expect(world.session.area).toBe('street');
+    expect(world.session.interactionPrompt).toBeNull();
   });
 
   it('locks F while the session says so, and switches into the paired fighting look and back', () => {

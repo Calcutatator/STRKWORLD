@@ -71,6 +71,7 @@ import {
   type InteractionPrompt,
   type InteractionSource,
   type InteractionSystem,
+  type InteractionTarget,
 } from './interaction.js';
 import { isEditableTarget } from './dom-keyboard.js';
 import { PLAZA_STATIONS } from './map/plaza.js';
@@ -221,6 +222,8 @@ export interface WorldSessionView {
   playerSwing?(): void;
   /** Turn the local avatar to a facing at once (a leap's landing, a street return). */
   setPlayerFacing?(facing: Facing): void;
+  /** The ring gate's mesh in the arena room, for the gate station's press-E cues; null if none. */
+  arenaGateObject?(): unknown;
 }
 
 /** The World's one-shot action keys. */
@@ -392,6 +395,16 @@ export function cardinalMovementInput(velocity: MovementVelocity): MovementInput
   return { left: x < 0, right: x > 0, up: false, down: false };
 }
 
+/**
+ * D-114: the arena session as the press-E system (D-117) can use it: C's
+ * optional `gateTargets` (the gate as a station) and `onAttack` (E in a
+ * fight). Read structurally, so PR 0's stub and C's session both fit.
+ */
+type ArenaSessionPressE = ArenaSession & {
+  gateTargets?(): readonly InteractionTarget[];
+  onAttack?(): boolean;
+};
+
 export function createWorldSession(options: WorldSessionOptions): WorldSession {
   return new Session(options);
 }
@@ -463,6 +476,8 @@ class Session implements WorldSession {
   private arenaSession?: ArenaSession;
   /** D-114: removes the arena's use of E from the interaction system. */
   private stopArenaAction?: () => void;
+  /** D-114: removes the ring gate's station (C's `gateTargets`) from the interaction system. */
+  private stopArenaSource?: () => void;
   private arenaPrimary?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   /** Whether the view was last given a ring frame, so leaving clears it once. */
   private arenaShown = false;
@@ -677,6 +692,9 @@ class Session implements WorldSession {
     const stopArenaAction = this.stopArenaAction;
     this.stopArenaAction = undefined;
     if (stopArenaAction) attempt(stopArenaAction);
+    const stopArenaSource = this.stopArenaSource;
+    this.stopArenaSource = undefined;
+    if (stopArenaSource) attempt(stopArenaSource);
     const arenaPrimary = this.arenaPrimary;
     this.arenaPrimary = undefined;
     if (arenaPrimary && this.keyboard) {
@@ -1499,18 +1517,28 @@ class Session implements WorldSession {
   private createArena(): void {
     const channel = this.arenaChannel;
     if (!channel) return;
-    this.arenaSession = createArenaSession(channel, this.arenaHost());
-    // D-117: E is interact. The arena's use of it (claim at the gate, strike
-    // in a fight) is an action, so a focused station still comes first; the
-    // ring floor has none in range, and C's session may suspend stations
-    // for a fight through the interaction system.
+    const session: ArenaSessionPressE = createArenaSession(channel, this.arenaHost());
+    this.arenaSession = session;
+    // D-117: E is interact. The ring's gate is a station (C's `gateTargets`:
+    // CLAIM, or IN USE), so the shared system prompts and uses it like any
+    // counter; E in a fight is an action (`onAttack`), which C's session
+    // makes win outright by suspending the stations while it fights. A
+    // session without them (PR 0's stub) gets the press as a plain action.
+    if (typeof session.gateTargets === 'function') {
+      this.stopArenaSource = this.interactionSystem.register({
+        targets: () => {
+          if (this.cleanedUp || !this.arenaInputLive()) return [];
+          return session.gateTargets?.() ?? [];
+        },
+      });
+    }
     this.stopArenaAction = this.interactionSystem.addAction({
       id: 'arena',
       priority: 10,
       run: () => {
         if (this.cleanedUp || !this.arenaInputLive()) return false;
         try {
-          return this.arenaSession?.onInteract() === true;
+          return typeof session.onAttack === 'function' ? session.onAttack() === true : session.onInteract() === true;
         } catch {
           return false;
         }
@@ -1598,6 +1626,11 @@ class Session implements WorldSession {
       },
       selectLook: (mode: 'fighting' | 'restore') => this.selectArenaLook(mode),
       reducedMotion: () => this.prefersReducedMotion(),
+      // C's optional host members (D-117): the World not owning the keys, the
+      // combat yield, and the gate's mesh for its station's cues.
+      inputSuspended: () => this.cleanedUp || !this.worldOwnsKeys(),
+      suspendInteractions: (reason: string) => this.interactionSystem.suspend(reason),
+      gateObject: () => (this.cleanedUp ? null : this.view.arenaGateObject?.() ?? null),
     });
   }
 
