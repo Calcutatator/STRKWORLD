@@ -46,6 +46,7 @@ function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }, o
   let state: ((snapshot: SandboxSnapshot) => void) | undefined;
   let drops: ((tile: SandboxTile) => void) | undefined;
   let bursts: ((tile: SandboxTile) => void) | undefined;
+  let resyncs: ((position: { x: number; y: number }) => void) | undefined;
   const client: SandboxLobbyClient & { picks: SandboxTile[]; places: SandboxTile[] } = {
     picks: [],
     places: [],
@@ -72,6 +73,12 @@ function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }, o
           };
         },
       }),
+    onResync: (listener) => {
+      resyncs = listener;
+      return () => {
+        resyncs = undefined;
+      };
+    },
     pickBlock(tile) {
       this.picks.push(tile);
     },
@@ -91,8 +98,9 @@ function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }, o
     publish: (snapshot: SandboxSnapshot) => state?.(snapshot),
     drop: (tile: SandboxTile) => drops?.(tile),
     burst: (tile: SandboxTile) => bursts?.(tile),
+    resync: (position: { x: number; y: number }) => resyncs?.(position),
     get listening() {
-      return Boolean(state || drops || bursts);
+      return Boolean(state || drops || bursts || resyncs);
     },
   };
 }
@@ -324,6 +332,24 @@ describe('sandbox controller (D-060)', () => {
     lobby.burst({ x: X, y: 2 });
     expect(world.bursts).toHaveLength(1);
     expect(tap).toHaveBeenCalledTimes(1);
+  });
+
+  it('relays a lobby resync to the World while that client is the authority (D-106)', () => {
+    const world = setup();
+    const heard: Array<{ x: number; y: number }> = [];
+    world.controller.channel.subscribeResync?.((position) => heard.push(position));
+    const lobby = fakeLobby();
+    world.controller.adopt(lobby.client);
+    lobby.status('connected');
+    lobby.resync({ x: 4000, y: 450 });
+    expect(heard).toEqual([{ x: 4000, y: 450 }]);
+    lobby.status('closed');
+    lobby.resync({ x: 1, y: 2 });
+    expect(heard).toHaveLength(1);
+    // Solo play is never refused: its rain and its rules never resync.
+    world.move({ x: X, y: Y });
+    for (let tick = 0; tick < 5; tick += 1) world.timers.runNext();
+    expect(heard).toHaveLength(1);
   });
 
   it('still adopts a lobby client without bursts: its blocks go with the state', () => {

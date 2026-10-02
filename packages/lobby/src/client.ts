@@ -92,6 +92,7 @@ import {
   type FootballPhase,
   type FootballSnapshot,
   type GameId,
+  type Position,
   type PresenceArea,
   type SandboxColumn,
   type SandboxSnapshot,
@@ -214,6 +215,7 @@ type StatusListener = (event: LobbyStatusEvent) => void;
 type SandboxListener = (snapshot: SandboxSnapshot) => void;
 type SandboxDropListener = (tile: SandboxTile) => void;
 type SandboxBurstListener = (tile: SandboxTile) => void;
+type ResyncListener = (position: Position) => void;
 type FootballListener = (snapshot: FootballSnapshot | null) => void;
 type GoalListener = (goal: FootballGoal) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
@@ -284,6 +286,7 @@ export class LobbyClient {
   readonly #sandboxListeners = new Map<SandboxListener, symbol>();
   readonly #dropListeners = new Map<SandboxDropListener, symbol>();
   readonly #burstListeners = new Map<SandboxBurstListener, symbol>();
+  readonly #resyncListeners = new Map<ResyncListener, symbol>();
   readonly #sandboxDeliveries: SandboxDelivery[] = [];
   readonly #dropDeliveries: SandboxDropDelivery[] = [];
   readonly #burstDeliveries: SandboxBurstDelivery[] = [];
@@ -753,6 +756,22 @@ export class LobbyClient {
   }
 
   /**
+   * D-106: subscribe to resyncs. The room refused a step up onto a higher
+   * stack and holds this avatar at the delivered street position (frozen,
+   * validated, World pixels); the World stands the player there again. No
+   * replay. The client stops re-sending the refused position as it delivers.
+   */
+  onResync(listener: ResyncListener): () => void {
+    const owner = Symbol('resync listener');
+    this.#resyncListeners.set(listener, owner);
+    return () => {
+      if (this.#resyncListeners.get(listener) === owner) {
+        this.#resyncListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
    * Ask to pick up the top block of `tile`.
    *
    * A no-op unless connected (not suspended) and for anything but an integer
@@ -979,6 +998,19 @@ export class LobbyClient {
         const tile = normalizeSandboxTile(payload);
         if (tile === null) return;
         this.#emitBurst(tile);
+      });
+
+      // D-106 resyncs, likewise: only a finite street position in the world,
+      // and only while live on the street, where the room sends them.
+      room.onMessage(SERVER_MESSAGE.resync, (payload: unknown) => {
+        if (!this.#isCurrentRoom(generation, room) || !this.#onStreet()) return;
+        const position = normalizeResync(payload);
+        if (position === null) return;
+        // Stop re-sending the refused position: the World's next report is
+        // the held one, which already matches the room.
+        this.#desired = null;
+        this.#cancelReconcile();
+        this.#emitResync(position);
       });
 
       // D-078 goal cues, likewise: anything but a side never reaches anyone.
@@ -1459,6 +1491,17 @@ export class LobbyClient {
     }
   }
 
+  #emitResync(position: Position): void {
+    for (const [listener, owner] of [...this.#resyncListeners]) {
+      if (this.#resyncListeners.get(listener) !== owner) continue;
+      try {
+        listener(position);
+      } catch {
+        console.error('lobby client: resync subscriber threw');
+      }
+    }
+  }
+
   #notifyBurst(listener: SandboxBurstListener, tile: SandboxTile): void {
     try {
       listener(tile);
@@ -1673,6 +1716,28 @@ function ownDataField(value: object, key: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** D-106: a resync's `{ x, y }`, as the room's own coordinate rule reads one; null otherwise. */
+function normalizeResync(payload: unknown): Position | null {
+  if (payload === null || typeof payload !== 'object') return null;
+  let x: unknown;
+  let y: unknown;
+  try {
+    // Own data properties only: an accessor is never invoked.
+    const own = (key: string): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(payload, key);
+      return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
+    };
+    x = own('x');
+    y = own('y');
+  } catch {
+    return null;
+  }
+  const nx = normalizeCoordinate(x);
+  const ny = normalizeCoordinate(y);
+  if (nx === null || ny === null || nx !== x || ny !== y) return null;
+  return Object.freeze({ x: nx, y: ny });
 }
 
 function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {

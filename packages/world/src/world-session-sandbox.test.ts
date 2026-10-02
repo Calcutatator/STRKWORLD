@@ -33,6 +33,7 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
   const listeners = new Set<(snapshot: SandboxSnapshot) => void>();
   const drops = new Set<(tile: SandboxTile) => void>();
   const bursts = new Set<(tile: SandboxTile) => void>();
+  const resyncs = new Set<(position: { x: number; y: number }) => void>();
   const picks: SandboxTile[] = [];
   const places: SandboxTile[] = [];
   const channel: SandboxChannel = {
@@ -48,6 +49,10 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
     subscribeBursts(listener) {
       bursts.add(listener);
       return () => bursts.delete(listener);
+    },
+    subscribeResync(listener) {
+      resyncs.add(listener);
+      return () => resyncs.delete(listener);
     },
     pick: (tile) => picks.push({ x: tile.x, y: tile.y }),
     place: (tile) => places.push({ x: tile.x, y: tile.y }),
@@ -66,8 +71,11 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
     burst(tile: SandboxTile) {
       for (const listener of [...bursts]) listener(tile);
     },
+    resync(position: unknown) {
+      for (const listener of [...resyncs]) listener(position as { x: number; y: number });
+    },
     get listeners() {
-      return listeners.size + drops.size + bursts.size;
+      return listeners.size + drops.size + bursts.size + resyncs.size;
     },
   };
 }
@@ -79,7 +87,7 @@ function fakeKeyboard() {
   let pressed: MovementInput = NO_KEYS;
   const keyboard: WorldKeyboard & {
     hold(keys: Partial<MovementInput>): void;
-    press(event: 'keydown-E' | 'keydown-F', repeat?: boolean): void;
+    press(event: 'keydown-E' | 'keydown-F' | 'keydown-Space', repeat?: boolean): void;
     count(event: string): number;
   } = {
     enabled: true,
@@ -221,22 +229,116 @@ describe('WorldSession block sandbox (D-060)', () => {
     expect(world.sandbox.picks).toEqual([]);
   });
 
-  it('steps up onto a one-block stack and reports the new elevation', () => {
+  it('walks into a one-block stack as into a wall: no auto-climb (D-106)', () => {
     const world = setup({ columns: [stack(X + 1, Y, 1)], carrying: null });
-    place(world.session, centre(X, Y));
-    world.keyboard.hold({ right: true });
-    for (let frame = 0; frame < 14; frame += 1) world.session.update(16);
-    expect(world.session.elevation).toBe(1);
-    expect(world.recording.last('setPlayerElevation')).toEqual([1]);
-  });
-
-  it('is stopped by a stack two blocks higher', () => {
-    const world = setup({ columns: [stack(X + 1, Y, 2)], carrying: null });
     place(world.session, centre(X, Y));
     world.keyboard.hold({ right: true });
     for (let frame = 0; frame < 60; frame += 1) world.session.update(16);
     expect(world.session.elevation).toBe(0);
     expect(world.session.player.x).toBeLessThanOrEqual((X + 1) * TILE_SIZE - 12);
+    expect(world.recording.count('setPlayerElevation')).toBe(0);
+  });
+
+  it('jumps up onto a one-block stack near the peak and reports the new elevation (D-106)', () => {
+    const world = setup({ columns: [stack(X + 1, Y, 1)], carrying: null });
+    // Pressed against the stack, then Space.
+    place(world.session, { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y });
+    world.keyboard.hold({ right: true });
+    world.session.update(16);
+    world.keyboard.press('keydown-Space');
+    // Before the window opens, the stack is still a wall.
+    for (let elapsed = 0; elapsed + 16 < 0.35 * 500; elapsed += 16) world.session.update(16);
+    expect(world.session.elevation).toBe(0);
+    // Into the window: the next frames carry the body onto the stack.
+    for (let frame = 0; frame < 6; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(1);
+    expect(world.recording.last('setPlayerElevation')).toEqual([1]);
+    // Landed on top, standing still, it stays there.
+    world.keyboard.hold({});
+    for (let frame = 0; frame < 30; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(1);
+  });
+
+  it('climbs when the jump started before reaching the stack, while still in the air', () => {
+    const world = setup({ columns: [stack(X + 2, Y, 1)], carrying: null });
+    place(world.session, centre(X, Y));
+    world.keyboard.hold({ right: true });
+    world.keyboard.press('keydown-Space');
+    for (let frame = 0; frame < 30; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(1);
+  });
+
+  it('is not carried up by a jump that has already landed', () => {
+    const world = setup({ columns: [stack(X + 3, Y, 1)], carrying: null });
+    place(world.session, centre(X, Y));
+    world.keyboard.press('keydown-Space');
+    // Land first, standing still, then walk in.
+    for (let frame = 0; frame < 34; frame += 1) world.session.update(16);
+    expect(world.session.jump).not.toBe('airborne');
+    world.keyboard.hold({ right: true });
+    for (let frame = 0; frame < 60; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(0);
+  });
+
+  it('is stopped by a stack two blocks higher, jump or not', () => {
+    const world = setup({ columns: [stack(X + 1, Y, 2)], carrying: null });
+    place(world.session, centre(X, Y));
+    world.keyboard.hold({ right: true });
+    for (let frame = 0; frame < 60; frame += 1) {
+      if (frame % 45 === 5) world.keyboard.press('keydown-Space');
+      world.session.update(16);
+    }
+    expect(world.session.elevation).toBe(0);
+    expect(world.session.player.x).toBeLessThanOrEqual((X + 1) * TILE_SIZE - 12);
+  });
+
+  it('climbs one block per jump: a staircase takes a jump per step, and two-block steps need the block below', () => {
+    const world = setup({ columns: [stack(X + 1, Y, 1), stack(X + 2, Y, 2)], carrying: null });
+    place(world.session, { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y });
+    world.keyboard.hold({ right: true });
+    world.keyboard.press('keydown-Space');
+    for (let frame = 0; frame < 45; frame += 1) world.session.update(16);
+    // One jump, one step: stopped at the foot of the second.
+    expect(world.session.elevation).toBe(1);
+    expect(world.session.player.x).toBeLessThanOrEqual((X + 2) * TILE_SIZE - 12);
+    world.keyboard.press('keydown-Space');
+    for (let frame = 0; frame < 30; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(2);
+  });
+
+  it('steps down without a jump, as before', () => {
+    const world = setup({ columns: [stack(X, Y, 1)], carrying: null });
+    place(world.session, centre(X, Y));
+    world.session.update(16);
+    expect(world.session.elevation).toBe(1);
+    world.keyboard.hold({ right: true });
+    for (let frame = 0; frame < 20; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(0);
+  });
+
+  it('stands where the lobby holds the player after a refused climb, and does not retry in that jump', () => {
+    const world = setup({ columns: [stack(X + 1, Y, 1), stack(X + 1, Y + 1, 1)], carrying: null });
+    place(world.session, { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y });
+    world.keyboard.hold({ right: true });
+    world.session.update(16);
+    world.keyboard.press('keydown-Space');
+    for (let frame = 0; frame < 16; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(1);
+    const held = { x: (X + 1) * TILE_SIZE - 12, y: centre(X, Y).y };
+    world.sandbox.resync(held);
+    expect(world.session.player).toEqual(held);
+    expect(world.session.elevation).toBe(0);
+    expect(world.recording.last('setPlayerPosition')).toEqual([held, false]);
+    // Still airborne, still walking into the stack: no second climb this jump.
+    for (let frame = 0; frame < 10; frame += 1) world.session.update(16);
+    expect(world.session.elevation).toBe(0);
+    // Junk and far-away resyncs: junk ignored, a far one snaps.
+    world.sandbox.resync({ x: Number.NaN, y: 0 });
+    world.sandbox.resync(null);
+    expect(world.session.elevation).toBe(0);
+    world.sandbox.resync(centre(X - 6, Y));
+    expect(world.session.player).toEqual(centre(X - 6, Y));
+    expect(world.recording.last('setPlayerPosition')).toEqual([centre(X - 6, Y), true]);
   });
 
   it('walks in through the gate, but not through the wall beside it', () => {
@@ -313,7 +415,7 @@ describe('WorldSession block sandbox (D-060)', () => {
 
   it('unsubscribes and releases the block key on destroy', () => {
     const world = setup();
-    expect(world.sandbox.listeners).toBe(3);
+    expect(world.sandbox.listeners).toBe(4);
     expect(world.keyboard.count('keydown-E')).toBe(1);
     world.session.destroy();
     expect(world.sandbox.listeners).toBe(0);

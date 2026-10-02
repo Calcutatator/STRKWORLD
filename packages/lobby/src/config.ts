@@ -136,6 +136,13 @@ export const JUMP_MIN_INTERVAL_MS = 400;
  */
 export const JUMP_CLIENT_INTERVAL_MS = 450;
 
+/**
+ * D-106: the room sends a session at most one `resync` per this many ms,
+ * however many of its step ups it refuses: the client re-sends its last
+ * position until the World stands it where the room holds it.
+ */
+export const RESYNC_MIN_INTERVAL_MS = 250;
+
 /** How often the room encodes state changes, in ms. 20fps. */
 export const PATCH_RATE_MS = 50;
 
@@ -275,11 +282,11 @@ export const MESSAGE = Object.freeze({
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
 
 /**
- * Server-to-client messages. Four, and none says anything about another
+ * Server-to-client messages. Five, and none says anything about another
  * player: `welcome` carries only the recipient's own server-assigned session
  * identifier, so the client can recognise its own avatar in the shared state,
- * `sandbox:drop` and `sandbox:burst` carry only a tile, and `football:goal`
- * only a side.
+ * `sandbox:drop` and `sandbox:burst` carry only a tile, `football:goal`
+ * only a side, and `resync` only the recipient's own position.
  */
 export const SERVER_MESSAGE = Object.freeze({
   /** `{ gameId }` — sent once, right after a join is admitted. */
@@ -304,6 +311,14 @@ export const SERVER_MESSAGE = Object.freeze({
    * who scored.
    */
   goal: 'football:goal',
+  /**
+   * `{ x, y }` — D-106: the room refused this client's step up onto a higher
+   * sandbox stack (no jump inside `CLIMB_WINDOW_MS`, a second climb in one
+   * jump, or two blocks at once) and holds its avatar here, in street World
+   * pixels. Sent to that client alone, at most once per
+   * `RESYNC_MIN_INTERVAL_MS`: the recipient's own position, nothing else.
+   */
+  resync: 'resync',
 } as const);
 
 export type ServerMessageType =

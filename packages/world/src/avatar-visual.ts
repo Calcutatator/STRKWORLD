@@ -9,5 +9,10 @@
  * coloured from (`three/avatar-looks.ts`); nothing bundles them.
  */
 
-/** The gameplay collision body, in pixels: the prior 24 px footprint. */
-export const AVATAR_BODY_SIZE = 24;
+import { PLAYER_BODY_SIZE } from '@strkworld/shared';
+
+/**
+ * The gameplay collision body, in pixels: the prior 24 px footprint. The
+ * lobby measures climbs with the same shared body (D-106).
+ */
+export const AVATAR_BODY_SIZE = PLAYER_BODY_SIZE;

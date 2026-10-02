@@ -169,7 +169,9 @@ async function gather(
   stand: SandboxTile,
 ): Promise<{ x: number; y: number }> {
   const spot = centreOf(stand);
-  observer.updatePosition(spot.x + 8, spot.y + 8, 'left');
+  // Inside the stand tile with the whole body: since D-106 a body edge over
+  // the stack beside it would be a step up, refused without a jump.
+  observer.updatePosition(spot.x + 4, spot.y + 4, 'left');
   mover.updatePosition(spot.x, spot.y, 'right');
   await waitFor(
     () => peerOf(observer, mover),

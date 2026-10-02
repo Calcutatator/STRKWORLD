@@ -14,6 +14,7 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
+import { CLIMB_WINDOW_MS, SANDBOX_STEP_HEIGHT } from '@strkworld/shared';
 import type {
   Facing,
   FootballSnapshot,
@@ -23,7 +24,7 @@ import type {
   SandboxTile,
 } from '@strkworld/shared';
 import { isAreaStepAllowed, isAreaWalkable, isOverAreaGrid, normalizePresenceArea } from './areas.js';
-import { JUMP_MIN_INTERVAL_MS, MOVE_BURST, resolveRoomConfig } from './config.js';
+import { JUMP_MIN_INTERVAL_MS, MOVE_BURST, RESYNC_MIN_INTERVAL_MS, resolveRoomConfig } from './config.js';
 import {
   UpdateThrottle,
   createGameId,
@@ -97,6 +98,13 @@ export type MoveOutcome =
    * area allows: off its walkable tiles, or across a solid one.
    */
   | 'rejected'
+  /**
+   * D-106: a step up onto a higher sandbox stack outside a jump window — no
+   * jump received in the last `CLIMB_WINDOW_MS`, a second climb in one jump,
+   * or more than one block at once. Nothing changed; the room resyncs the
+   * client to where it holds it (`resyncFor`).
+   */
+  | 'refused'
   /** No live entry — unknown or currently suspended. */
   | 'absent';
 
@@ -114,7 +122,10 @@ export interface PresenceCounters {
   readonly suspensions: number;
   readonly resumptions: number;
   readonly throttled: number;
-  /** Moves refused as malformed or, in a shared area, off its walkable tiles (D-087). */
+  /**
+   * Moves refused as malformed or, in a shared area, off its walkable tiles
+   * (D-087), and step ups refused outside a jump window (D-106).
+   */
   readonly rejected: number;
   /** Accepted changes of presence area (D-087). */
   readonly areaSwitches: number;
@@ -190,6 +201,14 @@ export class LobbyPresence {
   readonly #throttle: UpdateThrottle;
   /** D-097: the jump floor, strict and per session. */
   readonly #jumpThrottle = new UpdateThrottle(JUMP_MIN_INTERVAL_MS);
+  /**
+   * D-106: each session's climb window — when its last accepted jump arrived,
+   * and whether that jump has already stepped up. Server-side only; gone on
+   * suspend, area change and leave.
+   */
+  readonly #climbs = new Map<string, { readonly at: number; used: boolean }>();
+  /** D-106: at most one resync a session per `RESYNC_MIN_INTERVAL_MS`, however many moves are refused. */
+  readonly #resyncThrottle = new UpdateThrottle(RESYNC_MIN_INTERVAL_MS);
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
   /** D-060: the room's block sandbox, mirrored into `state.sandbox`. */
   readonly #sandbox: LobbySandbox;
@@ -309,17 +328,61 @@ export class LobbyPresence {
       this.#rejected += 1;
       return 'rejected';
     }
+    // D-106: on the street, walking never steps up onto a higher stack; a
+    // jump the room heard, inside its window, may step up one block, once.
+    let climb: { readonly at: number; used: boolean } | null = null;
+    if (session.area === 'street') {
+      const rise = this.#sandbox.rise(entry.position, { x, y });
+      if (rise > 0) {
+        climb = this.#climbWindow(sessionKey, rise, now);
+        if (climb === null) {
+          this.#rejected += 1;
+          return 'refused';
+        }
+      }
+    }
 
     if (!this.#throttle.accept(sessionKey, now)) {
       this.#throttled += 1;
       return 'throttled';
     }
+    // Spent only once the climb is written: a throttled one is resent.
+    if (climb !== null) climb.used = true;
 
     entry.position.x = x;
     entry.position.y = y;
     entry.facing = normalizeFacing(ownDataField(request, 'facing'));
     this.#movedAt.set(sessionKey, now);
     return 'applied';
+  }
+
+  /**
+   * D-106: the open climb window a step up of `rise` blocks may use, or null:
+   * at most one block, from a jump received no more than `CLIMB_WINDOW_MS`
+   * ago that has not climbed yet.
+   */
+  #climbWindow(sessionKey: string, rise: number, now: number): { readonly at: number; used: boolean } | null {
+    if (rise > SANDBOX_STEP_HEIGHT) return null;
+    const window = this.#climbs.get(sessionKey);
+    if (window === undefined || window.used) return null;
+    const since = now - window.at;
+    if (!(since >= 0 && since <= CLIMB_WINDOW_MS)) return null;
+    return window;
+  }
+
+  /**
+   * D-106: where the room holds a session whose step up it just refused, for
+   * the room to send back so the client stands there again; null when the
+   * session has no live entry or was resynced within `RESYNC_MIN_INTERVAL_MS`
+   * (a client keeps re-sending its last position until it hears).
+   */
+  resyncFor(sessionKey: string, now: number): { readonly x: number; readonly y: number } | null {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended || session.area !== 'street') return null;
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return null;
+    if (!this.#resyncThrottle.accept(sessionKey, now)) return null;
+    return Object.freeze({ x: entry.position.x, y: entry.position.y });
   }
 
   /**
@@ -353,6 +416,7 @@ export class LobbyPresence {
     // Off the street, off the pitch: the ball stops following them (D-078).
     this.#football.lose(sessionKey);
     this.#movedAt.delete(sessionKey);
+    this.#climbs.delete(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -459,7 +523,10 @@ export class LobbyPresence {
         this.#defaultSprite,
       );
     }
-    if (session.area !== area) this.#areaSwitches += 1;
+    if (session.area !== area) {
+      this.#areaSwitches += 1;
+      this.#climbs.delete(sessionKey);
+    }
     session.area = area;
     this.#movedAt.set(sessionKey, now);
     this.#peak = Math.max(this.#peak, this.peers.size);
@@ -485,6 +552,8 @@ export class LobbyPresence {
     this.#sessions.delete(sessionKey);
     this.#throttle.forget(sessionKey);
     this.#jumpThrottle.forget(sessionKey);
+    this.#resyncThrottle.forget(sessionKey);
+    this.#climbs.delete(sessionKey);
     this.#announce(this.#sandbox.forget(sessionKey, players));
     this.#football.forget(sessionKey);
     this.#movedAt.delete(sessionKey);
@@ -603,7 +672,8 @@ export class LobbyPresence {
    * so only peers in the same presence area, inside the interest radius. Live
    * on the street or the roof only: the Studio is for changing clothes, and a
    * suspended session has no entry. Throttled strictly; every refusal is
-   * silent.
+   * silent. An accepted jump opens the session's climb window (D-106); a
+   * throttled one does not.
    */
   jump(sessionKey: string, now: number): JumpOutcome {
     const session = this.#sessions.get(sessionKey);
@@ -612,6 +682,7 @@ export class LobbyPresence {
     if (entry === undefined) return 'absent';
     if (!this.#jumpThrottle.accept(sessionKey, now)) return 'throttled';
     entry.jumps = ((entry.jumps ?? 0) + 1) & 0xff;
+    this.#climbs.set(sessionKey, { at: now, used: false });
     return 'applied';
   }
 

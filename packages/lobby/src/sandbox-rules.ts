@@ -60,6 +60,7 @@ import {
   SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
+  PLAYER_BODY_SIZE,
   SANDBOX_REACH_ABOVE,
   SANDBOX_REACH_BELOW,
   SANDBOX_STEP_HEIGHT,
@@ -118,6 +119,8 @@ export function isSandboxBurst(landing: SandboxLanding): landing is SandboxBurst
 export interface SandboxAuthority {
   /** Every non-empty stack, sorted by `(y, x)`. Frozen; the same array until the next change. */
   columns(): readonly SandboxColumn[];
+  /** Blocks stacked on a street tile; 0 outside the area or on an empty tile. */
+  heightAt(tileX: number, tileY: number): number;
   /** The colour `key` is carrying, or null. */
   carrying(key: string): number | null;
   /** What `key` needs to draw the sandbox. Frozen. */
@@ -223,6 +226,39 @@ export function sandboxTileAt(x: number, y: number): SandboxTile | null {
 }
 
 /**
+ * D-106: the level a player's body stands on, as the World stands it: the
+ * tallest stack its square body (`PLAYER_BODY_SIZE`) overlaps, touching an
+ * edge exactly not counting. 0 outside the area and for a non-finite
+ * position. Climbs are measured with it, so the lobby sees a step up on the
+ * same move the World made it, not when the centre later crosses the edge.
+ * (Reach keeps the centre tile: `sandboxLevelAt`.)
+ */
+export function bodyLevelAt(
+  heightAt: (tileX: number, tileY: number) => number,
+  x: number,
+  y: number,
+  halfSize = PLAYER_BODY_SIZE / 2,
+): number {
+  if (typeof x !== 'number' || typeof y !== 'number') return 0;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+  const half = Math.max(0, halfSize);
+  // The World's inset, exactly: a body flush against a tile is not on it.
+  const inset = Math.min(half / 2, 1e-6 * SANDBOX_TILE_SIZE);
+  const minX = Math.floor((x - half + inset) / SANDBOX_TILE_SIZE);
+  const maxX = Math.floor((x + half - inset) / SANDBOX_TILE_SIZE);
+  const minY = Math.floor((y - half + inset) / SANDBOX_TILE_SIZE);
+  const maxY = Math.floor((y + half - inset) / SANDBOX_TILE_SIZE);
+  let level = 0;
+  for (let tileY = minY; tileY <= maxY; tileY += 1) {
+    for (let tileX = minX; tileX <= maxX; tileX += 1) {
+      if (!isSandboxTile(tileX, tileY)) continue;
+      level = Math.max(level, heightAt(tileX, tileY));
+    }
+  }
+  return Math.min(level, SANDBOX_MAX_HEIGHT);
+}
+
+/**
  * The level someone standing on a tile stands at: its stack height, and 0
  * outside the area or on an empty tile.
  *
@@ -294,6 +330,11 @@ class Authority implements SandboxAuthority {
   columns(): readonly SandboxColumn[] {
     if (this.#view === null) this.#view = freezeColumns(this.#stacks);
     return this.#view;
+  }
+
+  heightAt(tileX: number, tileY: number): number {
+    if (!isSandboxTile(tileX, tileY)) return 0;
+    return this.#stacks.get(sandboxTileKey(tileX, tileY))?.colours.length ?? 0;
   }
 
   carrying(key: string): number | null {

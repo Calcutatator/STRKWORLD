@@ -10,6 +10,7 @@ import type {
   StationId,
   WorldEvents,
 } from '@strkworld/shared';
+import { SANDBOX_STEP_HEIGHT } from '@strkworld/shared';
 import {
   createStreetMap,
   isAvatarStudioEntrance,
@@ -84,8 +85,8 @@ import {
   bodyNearSandbox,
   createSandboxHeights,
   levelUnderBody,
-  moveOnHeightmap,
   sandboxAim,
+  stepOnHeightmap,
   type SandboxAim,
   type SandboxHeights,
 } from './sandbox.js';
@@ -377,6 +378,7 @@ class Session implements WorldSession {
   private stopSandbox?: () => void;
   private stopSandboxDrops?: () => void;
   private stopSandboxBursts?: () => void;
+  private stopSandboxResync?: () => void;
   private sandboxKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   private elevationLevel = 0;
   private aim: SandboxAim | null = null;
@@ -542,6 +544,9 @@ class Session implements WorldSession {
     const stopSandboxBursts = this.stopSandboxBursts;
     this.stopSandboxBursts = undefined;
     if (stopSandboxBursts) attempt(stopSandboxBursts);
+    const stopSandboxResync = this.stopSandboxResync;
+    this.stopSandboxResync = undefined;
+    if (stopSandboxResync) attempt(stopSandboxResync);
     const sandboxKey = this.sandboxKey;
     this.sandboxKey = undefined;
     if (sandboxKey && this.keyboard) {
@@ -1004,6 +1009,8 @@ class Session implements WorldSession {
       toTile: worldToTile,
       isSolidAt: (x, y) => isSolidAt(this.map, x, y),
       heights,
+      // D-106: only a jump near or past its peak steps up, once.
+      climb: this.jumpState.canClimb ? SANDBOX_STEP_HEIGHT : 0,
     });
     const input = cardinalMovementInput(velocity);
     this.presentSandboxStance(input);
@@ -1065,6 +1072,8 @@ class Session implements WorldSession {
       readonly isSolidAt: (x: number, y: number) => boolean;
       /** Sandbox stacks; present only near the sandbox (D-060). */
       readonly heights?: SandboxHeights;
+      /** D-106: blocks this step may climb onto, once; 0 (walking) by default. */
+      readonly climb?: number;
     },
   ): boolean {
     if (velocity.x === 0 && velocity.y === 0) return false;
@@ -1077,9 +1086,14 @@ class Session implements WorldSession {
       toTile: grid.toTile,
       isSolidAt: grid.isSolidAt,
     };
-    const next = grid.heights
-      ? moveOnHeightmap({ ...movement, heights: grid.heights })
-      : moveWithCollisionSubsteps(movement);
+    let next: { x: number; y: number };
+    if (grid.heights) {
+      const step = stepOnHeightmap({ ...movement, heights: grid.heights, climb: grid.climb ?? 0 });
+      next = step.position;
+      if (step.climbed) this.jumpState.climbed();
+    } else {
+      next = moveWithCollisionSubsteps(movement);
+    }
     this.position = clampToRect(next, this.bounds);
     this.view.setPlayerPosition(this.position, false);
     return true;
@@ -1115,6 +1129,9 @@ class Session implements WorldSession {
         const burst = normalizeSandboxTile(tile);
         if (burst) this.view.sandboxBurst?.(burst);
       });
+    }
+    if (typeof channel.subscribeResync === 'function') {
+      this.stopSandboxResync = channel.subscribeResync((position) => this.resyncStreetPosition(position));
     }
     const keyboard = this.keyboard;
     if (!keyboard) return;
@@ -1279,6 +1296,32 @@ class Session implements WorldSession {
       halfSize,
       tileSize: TILE_SIZE,
     }));
+  }
+
+  /**
+   * D-106: the lobby refused a step up (no jump it heard of, or a second climb
+   * in one jump) and holds the player where it last accepted them. Stand
+   * there again: a short drop back off the stack, never a teleport across the
+   * map. Street only; a room or the Studio has no stacks to be refused.
+   */
+  private resyncStreetPosition(value: unknown): void {
+    if (this.cleanedUp || this.area !== 'street') return;
+    if (value === null || typeof value !== 'object') return;
+    let x: unknown;
+    let y: unknown;
+    try {
+      ({ x, y } = value as { x?: unknown; y?: unknown });
+    } catch {
+      return;
+    }
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const target = clampToRect({ x, y }, this.bounds);
+    const far = Math.hypot(target.x - this.position.x, target.y - this.position.y) > 2 * TILE_SIZE;
+    this.position = target;
+    this.view.setPlayerPosition(this.position, far);
+    // No second try in the same jump: the lobby would refuse that too.
+    this.jumpState.climbed();
+    this.presentSandboxStance(null);
   }
 
   private setElevation(level: number): void {

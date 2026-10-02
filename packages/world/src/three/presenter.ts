@@ -255,6 +255,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let jumpHeight = JUMP_HEIGHT;
   let jumpSquash = true;
   let lift = 0;
+  /**
+   * D-106: this jump stepped up onto a stack. The climb's hop carries the
+   * figure from where the jump had it onto the top, so the rest of the arc
+   * adds no lift: the pose plays on, and the feet land on the block.
+   */
+  let jumpClimbed = false;
   let targetYaw = 0;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -302,6 +308,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     hop = null;
     jumpElapsed = null;
     lift = 0;
+    jumpClimbed = false;
     jumpShadow.place(0, 0, 0, 0);
   };
 
@@ -428,8 +435,14 @@ export function createPresenter(options: PresenterOptions): Presenter {
           // becomes the new landing: the fall carries on down to it.
           if (next > elevationShown && !pendingSnap) {
             // Re-plan from wherever the feet are now, so they never jump.
-            hop = next - elevationShown <= MAX_HOP_RISE ? { from: elevationShown, to: next, elapsed: 0 } : null;
+            // D-106: a climb mid-jump hops on from the top of the arc.
+            const from = jumpElapsed !== null && lift > 0 ? elevationShown + lift : elevationShown;
+            hop = next - elevationShown <= MAX_HOP_RISE ? { from, to: next, elapsed: 0 } : null;
             if (!hop) elevationShown = next;
+            if (hop && from !== elevationShown) {
+              jumpClimbed = true;
+              lift = 0;
+            }
             fallSpeed = 0;
           } else if (hop) {
             hop = null;
@@ -492,6 +505,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
           jumpHeight = reduced ? REDUCED_JUMP_HEIGHT : JUMP_HEIGHT;
           jumpSquash = !reduced;
           jumpElapsed = 0;
+          jumpClimbed = false;
         },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;
@@ -548,9 +562,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (jumpElapsed !== null) {
         jumpElapsed += dt;
         pose = jumpPose(jumpElapsed, jumpSquash);
-        lift = jumpLift(jumpElapsed, jumpHeight);
+        lift = jumpClimbed ? 0 : jumpLift(jumpElapsed, jumpHeight);
         if (jumpElapsed >= JUMP_TOTAL_MS) {
           jumpElapsed = null;
+          jumpClimbed = false;
           lift = 0;
         }
       }

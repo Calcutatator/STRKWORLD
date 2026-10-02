@@ -280,7 +280,14 @@ the rules do not have is no ball at all.
   entry, so only observers whose view already holds the jumper (same area,
   inside the interest radius) are told: 4 bytes in one patch.
   `PeerSnapshot.jumps` is that byte, or 0; a peer plays a jump when it
-  changes, never on first sight.
+  changes, never on first sight. An accepted jump also opens the session's
+  climb window (D-106, below).
+- **`onResync(listener)`** (D-106) delivers the street position the room
+  holds after it refused this client's step up onto a higher stack: frozen,
+  validated (finite whole numbers in the world, own data properties only),
+  only while live on the street. The client stops re-sending the refused
+  position as it delivers; the Shell hands it to the World through the
+  sandbox channel, and the World stands the player there again.
 - **`kick()`** sends `football:kick` with no payload: the room kicks from the
   position and facing it holds. It returns false unless connected (not
   suspended) and outside the client floor, `FOOTBALL_CLIENT_KICK_INTERVAL_MS`
@@ -350,6 +357,17 @@ nothing.
 
 ### What the sandbox reveals, and what it trusts
 
+- **Jump to climb (D-106).** On the street, a move whose body (the shared
+  `PLAYER_BODY_SIZE` square, measured as the World measures it) stands
+  higher than at the held position is a step up. It is accepted only if it
+  rises one block (`SANDBOX_STEP_HEIGHT`), within `CLIMB_WINDOW_MS` (650 ms)
+  of the session's last accepted `jump`, and that jump has not climbed yet;
+  the climb is spent only once the move is written, so a throttled one is
+  resent. Anything else is `refused`: the position stays, and the room sends
+  that client alone `resync` with the held position, at most once per
+  `RESYNC_MIN_INTERVAL_MS` (250 ms). Level ground and stepping down are
+  unchanged. The window is server-side only and is dropped on suspend, a
+  change of area and leave.
 - **The rules are advisory against a hostile client.** Reach, adjacency and the
   one-block step are judged from the position the client reports. The server
   does not enforce movement continuity — legitimate jumps exist (leaving a
@@ -415,7 +433,9 @@ or `studio`), `sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer
 sandbox tile), and `football:kick`, whose payload is never read — and a join
 payload. There is
 no message through which a client could tell the room anything else, because
-there is no field for it. The server sends four messages: `welcome`
+there is no field for it. The server sends five messages: `resync`
+(`{ x, y }`, D-106: the recipient's own held street position after a refused
+climb, to that client alone), `welcome`
 (`{ gameId }`, the recipient's own id), `sandbox:drop` (`{ x, y }`, a sky-drop
 animation hint broadcast to every client after the patch that adds the block),
 `sandbox:burst` (`{ x, y }`, D-071: the column that burst the sandbox,

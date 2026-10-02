@@ -7,10 +7,14 @@ import {
   JUMP_TOTAL_MS,
   REDUCED_JUMP_HEIGHT,
   createJumpState,
+  inClimbWindow,
+  jumpAirPhase,
   jumpLift,
   jumpPose,
   jumpShadowScale,
 } from './jump.js';
+import { CLIMB_FROM_PHASE, CLIMB_WINDOW_MS } from '@strkworld/shared';
+import { AVATAR_SPRITE_KEYS } from './avatar-state.js';
 
 /** The cosmetic jump's numbers and state machine (D-097). */
 
@@ -107,5 +111,73 @@ describe('the jump state machine', () => {
     expect(jump.phase).toBe('airborne');
     jump.reset();
     expect(jump.phase).toBe('ready');
+  });
+});
+
+/** D-106: a jump near or past its peak may step up one block, once. */
+describe('the climb window', () => {
+  it('opens at 35-40% of the air time and closes on landing', () => {
+    expect(CLIMB_FROM_PHASE).toBeGreaterThanOrEqual(0.35);
+    expect(CLIMB_FROM_PHASE).toBeLessThanOrEqual(0.4);
+    const opens = CLIMB_FROM_PHASE * JUMP_AIR_MS;
+    expect(inClimbWindow(0)).toBe(false);
+    expect(inClimbWindow(opens - 1)).toBe(false);
+    expect(inClimbWindow(opens)).toBe(true);
+    expect(inClimbWindow(JUMP_AIR_MS / 2)).toBe(true);
+    expect(inClimbWindow(JUMP_AIR_MS - 1)).toBe(true);
+    expect(inClimbWindow(JUMP_AIR_MS)).toBe(false);
+    expect(inClimbWindow(Number.NaN)).toBe(false);
+    expect(inClimbWindow(100, 0)).toBe(false);
+    expect(jumpAirPhase(250)).toBe(0.5);
+  });
+
+  it('is judged on the normalised phase, so every jump clears a block: each avatar, reduced motion, and smaller or shorter jumps', () => {
+    // Every avatar jumps with the same numbers today; reduced motion halves the
+    // height. Any future per-character profile, lower or shorter, gets the same
+    // window by phase: the rule never reads the height.
+    const profiles: Array<{ airMs: number; height: number }> = [];
+    for (const _sprite of AVATAR_SPRITE_KEYS) {
+      profiles.push({ airMs: JUMP_AIR_MS, height: JUMP_HEIGHT }, { airMs: JUMP_AIR_MS, height: REDUCED_JUMP_HEIGHT });
+    }
+    for (const airMs of [300, 400, 650, 800]) for (const height of [0.15, 0.3, 0.6, 0.9]) profiles.push({ airMs, height });
+    for (const { airMs, height } of profiles) {
+      const state = createJumpState(airMs);
+      expect(state.tryStart()).toBe(true);
+      const opens = Math.ceil(CLIMB_FROM_PHASE * airMs);
+      state.advance(opens - 1);
+      expect(state.canClimb).toBe(false);
+      state.advance(1);
+      expect(state.canClimb).toBe(true);
+      // Near the peak: at least 90% of this jump's own height, whatever it is.
+      expect(jumpLift((opens / airMs) * JUMP_AIR_MS, height)).toBeGreaterThanOrEqual(0.9 * height);
+      state.advance(airMs - opens - 1);
+      expect(state.canClimb).toBe(true);
+      state.advance(1);
+      expect(state.phase).toBe('cooldown');
+      expect(state.canClimb).toBe(false);
+    }
+  });
+
+  it('allows one climb per jump, and a fresh one with the next jump', () => {
+    const state = createJumpState();
+    expect(state.canClimb).toBe(false);
+    state.climbed();
+    state.tryStart();
+    state.advance(JUMP_AIR_MS / 2);
+    expect(state.canClimb).toBe(true);
+    state.climbed();
+    expect(state.canClimb).toBe(false);
+    state.advance(JUMP_AIR_MS / 2 + JUMP_COOLDOWN_MS);
+    expect(state.phase).toBe('ready');
+    state.tryStart();
+    state.advance(JUMP_AIR_MS / 2);
+    expect(state.canClimb).toBe(true);
+    state.reset();
+    expect(state.canClimb).toBe(false);
+  });
+
+  it('fits inside the lobby window: a climb on the last frame of the air still lands with room for the move floor', () => {
+    // The move floor is 50 ms; the rest is jitter between the jump and the move.
+    expect(CLIMB_WINDOW_MS - JUMP_AIR_MS).toBeGreaterThanOrEqual(100);
   });
 });

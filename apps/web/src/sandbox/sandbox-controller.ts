@@ -1,4 +1,4 @@
-import type { EventBus, SandboxSnapshot, SandboxTile, WorldEvents } from '@strkworld/shared';
+import type { EventBus, Position, SandboxSnapshot, SandboxTile, WorldEvents } from '@strkworld/shared';
 import type { SandboxChannel } from '@strkworld/world';
 import {
   SANDBOX_FAST_SPAWN_LIMIT,
@@ -32,6 +32,8 @@ export interface SandboxLobbyClient {
   onSandboxDrop(listener: (tile: SandboxTile) => void): () => void;
   /** D-071 bursts. Optional: without it a burst's blocks just pop out with the state. */
   onSandboxBurst?(listener: (tile: SandboxTile) => void): () => void;
+  /** D-106 resyncs after a refused climb. Optional: without it the World is never corrected. */
+  onResync?(listener: (position: Position) => void): () => void;
   pickBlock(tile: SandboxTile): void;
   placeBlock(tile: SandboxTile): void;
   onStatus(listener: (event: { readonly status: string }) => void): () => void;
@@ -74,6 +76,7 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
   const listeners = new Set<(snapshot: SandboxSnapshot) => void>();
   const dropListeners = new Set<(tile: SandboxTile) => void>();
   const burstListeners = new Set<(tile: SandboxTile) => void>();
+  const resyncListeners = new Set<(position: Position) => void>();
   let snapshot: SandboxSnapshot = authority.snapshotFor(LOCAL_PLAYER);
   let player: SandboxPlayer | null = null;
   let away = false;
@@ -179,12 +182,19 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
         if (lobby?.client === client) emitBurst(tile);
       })
       : () => undefined;
+    // D-106: only the lobby refuses a climb; solo play predicts the same rule.
+    const stopResync = typeof client.onResync === 'function'
+      ? client.onResync((position) => {
+        if (lobby?.client === client) notify(resyncListeners, position);
+      })
+      : () => undefined;
     lobby = {
       client,
       stop: () => {
         stopState();
         stopDrops();
         stopBursts();
+        stopResync();
       },
     };
     publish(client.sandbox());
@@ -218,6 +228,12 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
       burstListeners.add(listener);
       return () => {
         burstListeners.delete(listener);
+      };
+    },
+    subscribeResync(listener: (position: Position) => void): () => void {
+      resyncListeners.add(listener);
+      return () => {
+        resyncListeners.delete(listener);
       };
     },
     pick(tile: SandboxTile): void {
@@ -309,6 +325,7 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
       listeners.clear();
       dropListeners.clear();
       burstListeners.clear();
+      resyncListeners.clear();
     },
   };
 }

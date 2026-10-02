@@ -225,8 +225,44 @@ export const SANDBOX_MAX_BLOCKS = 900;
 /** Block colours are opaque palette indices `0 .. SANDBOX_COLOURS - 1`. */
 export const SANDBOX_COLOURS = 8;
 
-/** A player climbs at most this many blocks when stepping onto a neighbour. */
+/**
+ * A player climbs at most this many blocks when stepping onto a neighbour,
+ * and since D-106 only with a jump: walking into any higher surface is a
+ * wall. Stepping down is free.
+ */
 export const SANDBOX_STEP_HEIGHT = 1;
+
+// ---------------------------------------------------------------------------
+// Jump to climb — D-106
+// ---------------------------------------------------------------------------
+//
+// A general movement rule for every raised walkable surface (today, only
+// sandbox stacks: every other raised thing in the World is a solid fixture).
+// Walking never steps up. A jump past `CLIMB_FROM_PHASE` of its air time and
+// not yet landed may step up `SANDBOX_STEP_HEIGHT`, once per jump. The World
+// predicts it from the jump's phase; the lobby accepts it within
+// `CLIMB_WINDOW_MS` of receiving the jump.
+
+/**
+ * From this fraction of a jump's air time until it lands, the jumper may step
+ * onto a surface one block higher. Normalised, so a lower or shorter jump
+ * clears the same block: the rule never reads the jump's height.
+ */
+export const CLIMB_FROM_PHASE = 0.35;
+
+/**
+ * The lobby accepts one step up for this long after it receives the jump: the
+ * World's 500 ms of air time, plus 150 ms for the move floor (50 ms) and
+ * jitter between the jump and the move that climbs.
+ */
+export const CLIMB_WINDOW_MS = 650;
+
+/**
+ * The avatar's square collision body, in World pixels. The World collides
+ * with it and stands it on the tallest stack it overlaps; the lobby measures
+ * a step up with the same body (D-106), so both agree on when a climb began.
+ */
+export const PLAYER_BODY_SIZE = 24;
 
 /**
  * Block tops a player can pick up or place onto, relative to the level they

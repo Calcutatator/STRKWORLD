@@ -153,6 +153,8 @@ interface RemoteAvatar {
   jumpElapsed: number | null;
   jumpHeight: number;
   jumpSquash: boolean;
+  /** D-106: this jump climbed onto a stack; the hop carries the figure, so the arc adds no more lift. */
+  jumpClimbed: boolean;
   /** Built on the first jump, then kept (hidden) until retirement. */
   jumpShadow: JumpShadow | null;
   /** Set once figure.update has thrown: the figure stops animating, the loop does not. */
@@ -364,6 +366,7 @@ export function createRemoteAvatarLayer3D({
     avatar.jumpHeight = reduced ? REDUCED_JUMP_HEIGHT : JUMP_HEIGHT;
     avatar.jumpSquash = !reduced;
     avatar.jumpElapsed = 0;
+    avatar.jumpClimbed = false;
   };
 
   /** D-097: the peer's jump this frame: lift, pose and shadow. Returns the pose. */
@@ -372,8 +375,11 @@ export function createRemoteAvatarLayer3D({
     avatar.jumpElapsed += deltaMs;
     const elapsed = avatar.jumpElapsed;
     const pose = jumpPose(elapsed, avatar.jumpSquash);
-    const lift = jumpLift(elapsed, avatar.jumpHeight);
-    if (elapsed >= JUMP_TOTAL_MS) avatar.jumpElapsed = null;
+    const lift = avatar.jumpClimbed ? 0 : jumpLift(elapsed, avatar.jumpHeight);
+    if (elapsed >= JUMP_TOTAL_MS) {
+      avatar.jumpElapsed = null;
+      avatar.jumpClimbed = false;
+    }
     avatar.figure.object.position.y = avatar.elevation + lift;
     let shadow = avatar.jumpShadow;
     if (shadow === null && lift > 0) {
@@ -532,7 +538,9 @@ export function createRemoteAvatarLayer3D({
           stepGround(avatar, dt, moving);
           const goal = surfaceGoal(avatar);
           if (destroyed) break;
-          stepElevation(avatar, dt, goal);
+          // D-106: a peer that climbs mid-jump hops on from the top of its arc.
+          const lift = avatar.jumpElapsed !== null && !avatar.jumpClimbed ? jumpLift(avatar.jumpElapsed, avatar.jumpHeight) : 0;
+          stepElevation(avatar, dt, goal, lift);
           place(avatar);
         }
         const jump = dt > 0 ? stepJump(avatar, dt) : null;
@@ -588,6 +596,7 @@ function standingAvatar(
     jumpElapsed: null,
     jumpHeight: JUMP_HEIGHT,
     jumpSquash: true,
+    jumpClimbed: false,
     jumpShadow: null,
     frozen: false,
     disposed: false,
@@ -675,7 +684,7 @@ function landOn(avatar: RemoteAvatar, height: number): void {
  * eases up, any drop falls. Hops and falls are closed-form in their elapsed
  * time, so they are deterministic and frame-rate independent.
  */
-function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number): void {
+function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number, lift = 0): void {
   // A hop flies on while its landing holds, and a fall while nothing rises to
   // meet the feet. Anything else re-plans from the current height, so the
   // feet never jump between frames.
@@ -693,6 +702,11 @@ function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number): voi
     }
     avatar.air = rise > 0 ? 'hop' : 'fall';
     avatar.airFrom = avatar.elevation;
+    if (rise > 0 && lift > 0) {
+      // D-106: a climb mid-jump starts its hop where the arc has the feet.
+      avatar.airFrom += lift;
+      avatar.jumpClimbed = true;
+    }
     avatar.airTo = goal;
     avatar.airElapsed = 0;
   }

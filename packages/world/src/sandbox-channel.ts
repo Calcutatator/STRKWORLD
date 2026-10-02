@@ -4,6 +4,7 @@ import {
   SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
+  type Position,
   type SandboxColumn,
   type SandboxSnapshot,
   type SandboxTile,
@@ -28,6 +29,13 @@ export interface SandboxChannel {
    * the board; either order draws the same burst.
    */
   subscribeBursts?(listener: (tile: SandboxTile) => void): () => void;
+  /**
+   * D-106: the authority refused a step up onto a higher stack (no jump it
+   * heard of, or a second climb in one jump) and holds the player at this
+   * street position. The World stands the player there again. Only the
+   * lobby sends it; solo play predicts the same rule and is never refused.
+   */
+  subscribeResync?(listener: (position: Position) => void): () => void;
   pick(tile: SandboxTile): void;
   place(tile: SandboxTile): void;
 }

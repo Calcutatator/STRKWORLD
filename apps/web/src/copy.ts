@@ -908,7 +908,7 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Space', effect: 'Jump. Works standing, walking or sprinting; not while a counter or Menu Mode is open, or in the Avatar Studio.' },
+      { input: 'Space', effect: 'Jump. Works standing, walking or sprinting; not while a counter or Menu Mode is open, or in the Avatar Studio. Jump to climb onto a block one higher than you: walking into it just stops you.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
@@ -929,7 +929,7 @@ export const COPY = freezeCopy({
     routeNote: 'You review every action before you confirm it, and nothing moves until you do.',
     sandboxTitle: 'The sandbox',
     sandbox:
-      'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there.',
+      'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there. Press Space to jump up onto a block, one at a time.',
     plazaTitle: 'The Privacy Plaza',
     plaza:
       "At the street's west end, beside the football pitch, a square with no money in it. Press E at the monument for the pool's live figures, or at the table to play Where's the note?",

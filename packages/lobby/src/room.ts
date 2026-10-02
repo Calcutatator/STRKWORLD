@@ -201,6 +201,11 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       if (outcome === 'applied') {
         this.#viewsStale = true;
         this.#moved = true;
+      } else if (outcome === 'refused') {
+        // D-106: a step up with no jump to carry it. Tell the climber where
+        // the room holds them, so they stand there again.
+        const at = this.#registry.resyncFor(client.sessionId, performance.now());
+        if (at !== null) client.send(SERVER_MESSAGE.resync, { x: at.x, y: at.y });
       }
     });
 
