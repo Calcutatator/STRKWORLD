@@ -15,6 +15,8 @@
  *      patch names a player.
  *   6. So is the football (D-078): the ball, the score and the phase, and a
  *      goal cue naming a side, never a player.
+ *   7. The arena ring (D-114) holds bytes and, for a player slot, the
+ *      presence id arena peers already hold, and reaches arena members only.
  *
  * The vocabulary they scan for lives in `testing/forbidden-vocabulary.json`
  * rather than in this file, because check 5 of `scripts/check-invariants.sh`
@@ -23,10 +25,12 @@
  */
 
 import type { Client } from '@colyseus/core';
-import { Encoder, Metadata, Reflection } from '@colyseus/schema';
+import { Encoder, Metadata, Reflection, StateView } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
+  arenaTileCentre,
+  type ArenaSlot,
   type FootballSnapshot,
   type GameId,
   type Position,
@@ -44,6 +48,8 @@ import {
 import { LobbyPresence } from './presence';
 import { PresenceRoom, definePresenceRoom } from './room';
 import {
+  ArenaRingEntry,
+  ArenaSlotEntry,
   FootballEntry,
   LobbyState,
   PositionSchema,
@@ -91,6 +97,15 @@ const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
   west: true,
   east: true,
   phase: true,
+};
+
+/** D-114's ring slot, likewise: the frozen slot, field for field. */
+const FROZEN_ARENA_SLOT_FIELDS: Record<keyof ArenaSlot, true> = {
+  kind: true,
+  gameId: true,
+  hp: true,
+  swings: true,
+  hits: true,
 };
 
 function fieldNames(klass: unknown): string[] {
@@ -154,14 +169,37 @@ describe('the schema is the enforcement point', () => {
     );
   });
 
-  it('has three fields at the root: interest-filtered presence, the shared sandbox and the shared ball', () => {
-    expect(fieldNames(LobbyState)).toEqual(['football', 'peers', 'sandbox']);
+  it('has four fields at the root: interest-filtered presence, the shared sandbox, the shared ball and the view-filtered arena ring', () => {
+    expect(fieldNames(LobbyState)).toEqual(['arena', 'football', 'peers', 'sandbox']);
     const fields = Metadata.getFields(LobbyState) as Record<string, unknown>;
     expect(fields['peers']).toEqual({ map: PresenceEntry, view: true });
     // D-060: everyone shares one sandbox, so it is deliberately not a view.
     expect(fields['sandbox']).toEqual({ map: SandboxColumnEntry });
     // D-078: and one ball, likewise.
     expect(fields['football']).toBe(FootballEntry);
+    // D-114: the ring is a view, like peers: only arena members are sent it.
+    expect(fields['arena']).toEqual({ map: ArenaRingEntry, view: true });
+  });
+
+  it('carries exactly the frozen ArenaRingSnapshot shape, in bytes, one 16-bit round and a presence id per slot (D-114)', () => {
+    const ring = Metadata.getFields(ArenaRingEntry) as Record<string, unknown>;
+    // The snapshot's fields, with the outcome split into its two codes.
+    expect(Object.keys(ring).sort()).toEqual(
+      ['challenger', 'opponent', 'phase', 'reason', 'round', 'secondsLeft', 'winner'],
+    );
+    expect(ring).toEqual({
+      phase: 'uint8',
+      round: 'uint16',
+      challenger: ArenaSlotEntry,
+      opponent: ArenaSlotEntry,
+      secondsLeft: 'uint8',
+      reason: 'uint8',
+      winner: 'uint8',
+    });
+    const slot = Metadata.getFields(ArenaSlotEntry) as Record<string, unknown>;
+    expect(Object.keys(slot).sort()).toEqual(Object.keys(FROZEN_ARENA_SLOT_FIELDS).sort());
+    // Numbers only, plus the one presence id string a player slot carries.
+    expect(slot).toEqual({ kind: 'uint8', gameId: 'string', hp: 'uint8', swings: 'uint8', hits: 'uint8' });
   });
 
   it('carries exactly the frozen FootballSnapshot field set, in fields that hold numbers only', () => {
@@ -766,5 +804,82 @@ describe('the football is anonymous (D-078)', () => {
     expect(JSON.stringify(seen)).not.toMatch(/[a-z]{3,}"?:"[a-z]/);
     expect(findLeak(JSON.stringify(registry.state))).toBeNull();
     expect(findLeak(wireOf(new Encoder(registry.state)))).toBeNull();
+  });
+});
+
+describe('the arena ring names only its fighter, to arena members only (D-114)', () => {
+  /** A decoder fed one view's full state and then its patches. */
+  function viewer(encoder: Encoder, view: StateView): { read: () => Record<string, unknown>; patch: () => string } {
+    const decoder = Reflection.decode(Reflection.encode(encoder));
+    const full = { offset: 0 };
+    encoder.encodeAll(full);
+    const sharedOffset = full.offset;
+    decoder.decode(Uint8Array.from(encoder.encodeAllView(view, sharedOffset, full)));
+    return {
+      read: () => (decoder.state as unknown as { toJSON(): Record<string, unknown> }).toJSON(),
+      patch: () => {
+        const it = { offset: 0 };
+        encoder.encode(it);
+        const shared = it.offset;
+        const bytes = Uint8Array.from(encoder.encodeView(view, shared, it));
+        decoder.decode(bytes);
+        return Buffer.from(bytes).toString('latin1');
+      },
+    };
+  }
+
+  it('a fight with hostile looks and facings leaks nothing, and a street view never decodes the ring', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 0 });
+    const place = (key: string, tile: { x: number; y: number }) => {
+      const outcome = registry.admit(key, { x: 100, y: 100 });
+      if (!outcome.ok) throw new Error(outcome.reason);
+      expect(registry.enterArea(key, { area: 'arena', ...arenaTileCentre(tile), facing: 'up' }, 0)).toBe(true);
+      return outcome.gameId;
+    };
+    const fighter = place('fighter', { x: 20, y: 22 });
+    const watcher = place('watcher', { x: 13, y: 18 });
+    const walker = join(registry, 'walker', 100, 100);
+
+    const encoder = new Encoder(registry.state);
+    const arenaView = new StateView();
+    arenaView.add(registry.arenaRingEntry);
+    for (const entry of [registry.entryFor('watcher'), ...registry.visibleTo('watcher')]) arenaView.add(entry!);
+    const streetView = new StateView();
+    streetView.add(registry.entryFor('walker')!);
+    const member = viewer(encoder, arenaView);
+    const street = viewer(encoder, streetView);
+    encoder.discardChanges();
+
+    const attempts = vocabulary.smuggleAttempts;
+    let now = 10;
+    expect(registry.arenaClaim('fighter', now)).toBe('applied');
+    const wires: string[] = [];
+    for (let step = 0; step < 80; step += 1) {
+      now += 100;
+      // A look change mid-fight with a hostile sprite, and hostile facings on moves.
+      registry.enterArea('fighter', { area: 'arena', x: 0, y: 0, sprite: attempts[step % attempts.length] }, now);
+      registry.move('fighter', { ...arenaTileCentre({ x: 20, y: 15 }), facing: step % 2 ? 'up' : attempts[step % attempts.length] }, now + 1);
+      registry.arenaAttack('fighter', now + 2);
+      registry.arenaTick(now + 3);
+      wires.push(member.patch(), street.patch());
+      encoder.discardChanges();
+    }
+    for (const wire of wires) expect(findLeak(wire)).toBeNull();
+
+    const seen = member.read() as { arena: Record<string, Record<string, unknown>> };
+    expect(Object.keys(seen.arena)).toEqual(['ring']);
+    const ring = seen.arena['ring'] as Record<string, unknown>;
+    // Only the fighter's presence id, which the watcher already holds for that avatar.
+    const strings = JSON.stringify(ring).match(/"[0-9a-f]{16}"/g) ?? [];
+    expect([...new Set(strings)]).toEqual([`"${fighter}"`]);
+    expect(JSON.stringify(ring)).not.toContain(watcher);
+    expect(JSON.stringify(ring)).not.toContain(walker);
+    expect(findLeak(JSON.stringify(ring))).toBeNull();
+
+    // The street view has no ring and no arena player, ever.
+    const elsewhere = street.read() as { arena?: Record<string, unknown>; peers: Record<string, unknown> };
+    expect(Object.keys(elsewhere.arena ?? {})).toEqual([]);
+    expect(Object.keys(elsewhere.peers)).toEqual([walker]);
+    for (const wire of wires.filter((_, n) => n % 2 === 1)) expect(wire).not.toContain(fighter);
   });
 });

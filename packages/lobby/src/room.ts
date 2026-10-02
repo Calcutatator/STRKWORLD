@@ -1,9 +1,9 @@
 /**
  * The Colyseus room. Wiring only — every rule lives in `presence.ts`,
- * `policy.ts`, `sandbox.ts`, `sandbox-rules.ts`, `football.ts` and
- * `football-rules.ts`.
+ * `policy.ts`, `sandbox.ts`, `sandbox-rules.ts`, `football.ts`,
+ * `football-rules.ts`, `arena.ts` and `arena-rules.ts`.
  *
- * The room's whole client-facing surface is seven message types and a join
+ * The room's whole client-facing surface is ten message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
  * to hold. The area verb (D-087) names one of the presence areas —
  * `street`, `roof`, `studio`, `bunker` (D-112) — and a placement, and the area is kept on the
@@ -11,7 +11,9 @@
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
  * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky
  * drop and a burst (D-071), each name a tile and nothing else. The kick
- * (D-078) takes nothing at all, and the goal broadcast names a side.
+ * (D-078) takes nothing at all, and the goal broadcast names a side. The
+ * arena ring's three verbs (D-114) take nothing either, and the ring answers
+ * only through its one view-filtered state entry, sent to arena members.
  *
  * ## Configuration is trusted; onCreate options are not
  *
@@ -46,6 +48,13 @@
 import { ClientState, Room, ServerError, type Client, type Delayed } from '@colyseus/core';
 import { Encoder, StateView } from '@colyseus/schema';
 import { FOOTBALL_TICK_MS, type FootballSide, type GameId, type SandboxTile } from '@strkworld/shared';
+
+/**
+ * How often the room runs the arena ring's clock while a fight is on, in ms
+ * (D-114): deadlines land within this, and `secondsLeft` is refreshed. Only
+ * while the ring has a deadline; an idle ring costs nothing.
+ */
+export const ARENA_TICK_MS = 100;
 import {
   DEFAULT_ROOM_CONFIG,
   MESSAGE,
@@ -121,6 +130,9 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
 
   /** The ball's step, while anyone is on or near the pitch. D-078. */
   #footballTimer: Delayed | undefined;
+
+  /** The arena ring's clock, while it has a deadline. D-114. */
+  #arenaTimer: Delayed | undefined;
 
   /**
    * Set when someone moved, arrived, left, stepped inside or came back out:
@@ -213,10 +225,11 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       // A placement still held is dropped: the player went back inside
       // before it was applied.
       this.#held.delete(client.sessionId);
-      if (this.#erasing(client.sessionId, () => this.#registry.suspend(client.sessionId))) {
+      if (this.#erasing(client.sessionId, () => this.#registry.suspend(client.sessionId, performance.now()))) {
         this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
+        this.#scheduleArena();
       }
     });
 
@@ -249,6 +262,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#viewsStale = true;
         this.#scheduleSpawn();
         this.#scheduleFootball();
+        this.#scheduleArena();
       });
     });
 
@@ -289,6 +303,33 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.onMessage(MESSAGE.jump, (client: Client) => {
       this.#registry.jump(client.sessionId, performance.now());
     });
+
+    /*
+     * D-114. The arena ring's three intents. No payload is read: the claim
+     * is judged from where the registry holds the sender, an attack from
+     * that position and facing, and damage is the rules' constant. Colyseus
+     * hands this room one message at a time, so of two claims in one patch
+     * the first takes the ring and the second finds it busy. Every refusal is
+     * silent; the ring entry is the only answer. An accepted claim moves the
+     * fighter into the ring, so views are stale; the clock runs while the
+     * ring has a deadline.
+     */
+    this.onMessage(MESSAGE.arenaClaim, (client: Client) => {
+      if (this.#registry.arenaClaim(client.sessionId, performance.now()) === 'applied') {
+        this.#viewsStale = true;
+      }
+      this.#scheduleArena();
+    });
+
+    this.onMessage(MESSAGE.arenaAttack, (client: Client) => {
+      this.#registry.arenaAttack(client.sessionId, performance.now());
+      this.#scheduleArena();
+    });
+
+    this.onMessage(MESSAGE.arenaLeave, (client: Client) => {
+      this.#registry.arenaLeave(client.sessionId, performance.now());
+      this.#scheduleArena();
+    });
   }
 
   override onJoin(client: Client, options?: unknown): void {
@@ -320,12 +361,13 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     // Colyseus also routes a failed onJoin through onLeave, so this must be
     // safe for a session the registry never admitted. release() is a no-op on
     // an unknown session, so it is.
-    this.#registry.release(client.sessionId);
+    this.#registry.release(client.sessionId, performance.now());
     this.#held.delete(client.sessionId);
     this.#erasedAt.delete(client.sessionId);
     this.#viewsStale = true;
     this.#scheduleSpawn();
     this.#scheduleFootball();
+    this.#scheduleArena();
   }
 
   /**
@@ -422,6 +464,35 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#spawnTimer = undefined;
     this.#footballTimer?.clear();
     this.#footballTimer = undefined;
+    this.#arenaTimer?.clear();
+    this.#arenaTimer = undefined;
+  }
+
+  /**
+   * Keep the arena ring's clock running while the ring has a deadline, and
+   * stopped otherwise (D-114). Called after every arena intent and every
+   * change to who is in the room; idempotent.
+   */
+  #scheduleArena(): void {
+    const active = this.#registry.arenaActive;
+    if (active && this.#arenaTimer === undefined) {
+      this.#arenaTimer = this.clock.setInterval(() => this.#arenaTick(), ARENA_TICK_MS);
+    } else if (!active && this.#arenaTimer !== undefined) {
+      this.#arenaTimer.clear();
+      this.#arenaTimer = undefined;
+    }
+  }
+
+  #arenaTick(): void {
+    try {
+      // The close returns the fighter to the gate: a move, so views are stale.
+      if (this.#registry.arenaTick(performance.now())) this.#viewsStale = true;
+    } catch {
+      // The room clock runs this outside any handler; an escape would take
+      // the process down with every room in it. A fixed, content-free line.
+      console.error('lobby: arena step failed');
+    }
+    this.#scheduleArena();
   }
 
   /**
@@ -558,8 +629,8 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /**
    * Make one observer's view hold exactly its own entry and the entries the
    * registry says it should see: inside the interest radius, nearest first,
-   * capped. Only the difference is written, so an unchanged view costs the
-   * encoder nothing.
+   * capped; and, for an arena member only, the ring entry (D-114). Only the
+   * difference is written, so an unchanged view costs the encoder nothing.
    */
   #syncView(client: Client): void {
     const view = (client.view ??= new StateView());
@@ -578,6 +649,14 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       }
     });
     wanted.clear();
+
+    // D-114: the ring entry is in a view exactly while its client is live in
+    // the arena. No one elsewhere is ever sent who is fighting.
+    const ring = this.#registry.arenaRingEntry;
+    const member = this.#registry.isArenaMember(client.sessionId);
+    const holds = view.has(ring);
+    if (member && !holds) view.add(ring);
+    else if (!member && holds) view.remove(ring);
   }
 }
 

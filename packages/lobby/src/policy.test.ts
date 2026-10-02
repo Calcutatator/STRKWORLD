@@ -67,7 +67,18 @@ describe('default lobby vocabulary ownership', () => {
     expect(Reflect.set(SERVER_MESSAGE, 'goal', 'untrusted')).toBe(false);
     expect(MESSAGE.kick).toBe('football:kick');
     expect(SERVER_MESSAGE.goal).toBe('football:goal');
-    expect(Object.keys(MESSAGE).sort()).toEqual(['area', 'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend']);
+    expect(Object.keys(MESSAGE).sort()).toEqual([
+      'area', 'arenaAttack', 'arenaClaim', 'arenaLeave', 'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
+    ]);
+  });
+
+  it('does not expose mutable arena protocol names (D-114)', () => {
+    expect(Reflect.set(MESSAGE, 'arenaClaim', 'untrusted')).toBe(false);
+    expect(MESSAGE.arenaClaim).toBe('arena:claim');
+    expect(MESSAGE.arenaAttack).toBe('arena:attack');
+    expect(MESSAGE.arenaLeave).toBe('arena:leave');
+    // No new server message: swings, hits and results ride the ring entry.
+    expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['goal', 'resync', 'sandboxBurst', 'sandboxDrop', 'welcome']);
   });
 });
 
@@ -248,6 +259,16 @@ describe('interest', () => {
     const chosen = selectVisible(observer, crowd, 1000, 5);
     expect(chosen).toHaveLength(5);
     expect(chosen.map((item) => item.position.x)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('D-114: puts pinned candidates first, whatever their distance, and still caps', () => {
+    const observer = { position: { x: 0, y: 0 } };
+    const crowd = Array.from({ length: 10 }, (_unused, index) => ({ position: { x: index + 1, y: 0 } }));
+    const fighter = { position: { x: 900, y: 0 } };
+    const chosen = selectVisible(observer, [...crowd, fighter], 100, 4, new Set([fighter]));
+    expect(chosen).toEqual([fighter, crowd[0], crowd[1], crowd[2]]);
+    // A pinned item that is not a candidate is not invented.
+    expect(selectVisible(observer, crowd, 100, 2, new Set([fighter]))).toEqual([crowd[0], crowd[1]]);
   });
 });
 

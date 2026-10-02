@@ -78,11 +78,33 @@
  * a kick inside the floor is dropped, not held, because a late kick is a
  * different kick. A newer position still waiting on the move floor goes
  * first, so the room judges the kick from where the player stands now.
+ *
+ * ## The arena ring (D-114)
+ *
+ * `arena()` is a frozen snapshot of the arena ring — phase, round, the two
+ * slots, seconds left and the result — validated through
+ * `normalizeArenaRing`, or null unless this client is live in the arena (the
+ * room sends the ring to arena members only). `onArena` delivers it whenever
+ * it changes. `arenaClaim()`, `arenaAttack()` and `arenaLeave()` send the
+ * three payload-less intents, only while live in the arena, each held to its
+ * client floor (`ARENA_INTENT_CLIENT_INTERVAL_MS`, shared by claim and leave;
+ * `ARENA_ATTACK_CLIENT_INTERVAL_MS` for attacks). A call inside its floor is
+ * dropped, not held. A claim or an attack lets a newer position still
+ * waiting on the move floor go first, so the room judges it from where the
+ * player stands and faces now. Swings, hits and results arrive only as state.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
 import {
+  ARENA_ATTACK_CLIENT_INTERVAL_MS,
+  ARENA_END_REASONS,
+  ARENA_INTENT_CLIENT_INTERVAL_MS,
+  ARENA_PHASES,
+  ARENA_SIDES,
+  ARENA_SLOT_KINDS,
   FOOTBALL_WIN_SCORE,
+  normalizeArenaRing,
+  type ArenaRingSnapshot,
   PITCH_AREA,
   PRESENCE_AREAS,
   SANDBOX_MAX_BLOCKS,
@@ -218,6 +240,7 @@ type SandboxBurstListener = (tile: SandboxTile) => void;
 type ResyncListener = (position: Position) => void;
 type FootballListener = (snapshot: FootballSnapshot | null) => void;
 type GoalListener = (goal: FootballGoal) => void;
+type ArenaListener = (ring: ArenaRingSnapshot | null) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -248,6 +271,11 @@ interface SandboxBurstDelivery {
 interface FootballDelivery {
   readonly listeners: readonly ListenerOwner<FootballListener>[];
   readonly snapshot: FootballSnapshot | null;
+}
+
+interface ArenaDelivery {
+  readonly listeners: readonly ListenerOwner<ArenaListener>[];
+  readonly ring: ArenaRingSnapshot | null;
 }
 
 interface GoalDelivery {
@@ -294,6 +322,8 @@ export class LobbyClient {
   readonly #goalListeners = new Map<GoalListener, symbol>();
   readonly #footballDeliveries: FootballDelivery[] = [];
   readonly #goalDeliveries: GoalDelivery[] = [];
+  readonly #arenaListeners = new Map<ArenaListener, symbol>();
+  readonly #arenaDeliveries: ArenaDelivery[] = [];
 
   #deliveringPeers = false;
   #deliveringStatus = false;
@@ -302,6 +332,7 @@ export class LobbyClient {
   #deliveringBursts = false;
   #deliveringFootball = false;
   #deliveringGoals = false;
+  #deliveringArena = false;
 
   /** The last value `sandbox()` returned, reused while nothing changes. */
   #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
@@ -353,6 +384,18 @@ export class LobbyClient {
   #lastJumpAt: number | null = null;
   /** A kick waiting only for a newer position to go first. */
   #kickHandle: ReturnType<typeof setTimeout> | null = null;
+
+  /** D-114: the last value `arena()` returned, reused while nothing changes. */
+  #arenaView: ArenaRingSnapshot | null = null;
+  /** The last value delivered to arena listeners, for change detection. */
+  #arenaPublished: ArenaRingSnapshot | null = null;
+  /** When the last claim or leave left this client: their shared client floor. */
+  #lastArenaIntentAt: number | null = null;
+  /** When the last attack left this client, for its client floor. */
+  #lastArenaAttackAt: number | null = null;
+  /** A claim or an attack waiting only for a newer position to go first. */
+  #arenaClaimHandle: ReturnType<typeof setTimeout> | null = null;
+  #arenaAttackHandle: ReturnType<typeof setTimeout> | null = null;
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joinAttempt: JoinAttempt | null = null;
@@ -490,6 +533,7 @@ export class LobbyClient {
     this.#cancelReconcile();
     this.#cancelSandboxAction();
     this.#cancelKick();
+    this.#cancelArena();
     this.#desired = null;
     const room = this.#room;
     room.send(MESSAGE.suspend);
@@ -503,6 +547,7 @@ export class LobbyClient {
     // street (D-087), stale street peers would otherwise show for a patch.
     this.#emitPeers();
     this.#emitSandbox();
+    this.#emitArena();
   }
 
   /**
@@ -598,6 +643,8 @@ export class LobbyClient {
       this.#cancelSandboxAction();
       this.#cancelKick();
     }
+    // D-114: a held claim or swing was meant for the arena.
+    if (area !== 'arena') this.#cancelArena();
     const room = this.#room;
     room.send(MESSAGE.area, {
       area,
@@ -893,6 +940,153 @@ export class LobbyClient {
     return true;
   }
 
+  /**
+   * D-114: the arena ring, or null unless live in the arena and a valid ring
+   * has arrived. Frozen, and the same object for as long as nothing in it
+   * changes. Validated through `normalizeArenaRing`, so it fails closed.
+   */
+  arena(): ArenaRingSnapshot | null {
+    const next = this.#readArena();
+    if (sameArena(this.#arenaView, next)) return this.#arenaView;
+    this.#arenaView = next;
+    return next;
+  }
+
+  /**
+   * Subscribe to the arena ring. Returns an unsubscribe function.
+   *
+   * Opens nothing. Fires once immediately with the current ring, then
+   * whenever it changes (null on leaving the arena). Delivery follows
+   * `onFootball`: FIFO, generation-owned, and a throwing subscriber is
+   * isolated behind a fixed diagnostic.
+   */
+  onArena(listener: ArenaListener): () => void {
+    const owner = Symbol('arena listener');
+    this.#arenaListeners.set(listener, owner);
+    this.#notifyArena(listener, this.arena());
+    return () => {
+      if (this.#arenaListeners.get(listener) === owner) {
+        this.#arenaListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * D-114: claim the arena ring. No payload: the room judges the claim from
+   * where it holds this player (the gate approach, while the ring is idle)
+   * and moves them into the ring itself. Returns whether a claim was sent or
+   * is about to be; false unless live in the arena, or inside the intent
+   * floor it shares with `arenaLeave`.
+   */
+  arenaClaim(): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    if (this.#arenaClaimHandle !== null) return true;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastArenaIntentAt;
+    if (last !== null && now - last < ARENA_INTENT_CLIENT_INTERVAL_MS) return false;
+    const wait = this.#unsentMoveWait(now);
+    if (wait !== null && wait > 0) {
+      // Claim the floor now, so a second press while this one waits is dropped.
+      this.#lastArenaIntentAt = now;
+      this.#arenaClaimHandle = setTimeout(() => {
+        this.#arenaClaimHandle = null;
+        this.#sendArena(MESSAGE.arenaClaim, true, 'intent');
+      }, wait);
+      return true;
+    }
+    return this.#sendArena(MESSAGE.arenaClaim, wait !== null, 'intent');
+  }
+
+  /**
+   * D-114: one swing. No payload: the room judges it from the position and
+   * facing it holds, so a newer position still waiting on the move floor
+   * goes first (at most one move interval later). Returns whether a swing
+   * was sent or is about to be; false unless live in the arena, or inside
+   * `ARENA_ATTACK_CLIENT_INTERVAL_MS` since the last one. Only state answers.
+   */
+  arenaAttack(): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    if (this.#arenaAttackHandle !== null) return true;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastArenaAttackAt;
+    if (last !== null && now - last < ARENA_ATTACK_CLIENT_INTERVAL_MS) return false;
+    const wait = this.#unsentMoveWait(now);
+    if (wait !== null && wait > 0) {
+      this.#lastArenaAttackAt = now;
+      this.#arenaAttackHandle = setTimeout(() => {
+        this.#arenaAttackHandle = null;
+        this.#sendArena(MESSAGE.arenaAttack, true, 'attack');
+      }, wait);
+      return true;
+    }
+    return this.#sendArena(MESSAGE.arenaAttack, wait !== null, 'attack');
+  }
+
+  /**
+   * D-114: forfeit this player's fight. No payload. Returns whether it was
+   * sent; false unless live in the arena, or inside the intent floor it
+   * shares with `arenaClaim`.
+   */
+  arenaLeave(): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastArenaIntentAt;
+    if (last !== null && now - last < ARENA_INTENT_CLIENT_INTERVAL_MS) return false;
+    return this.#sendArena(MESSAGE.arenaLeave, false, 'intent');
+  }
+
+  /**
+   * How long a newer position must wait before it can go, or null when none
+   * is waiting: 0 when it may go now, the rest of the move floor otherwise.
+   */
+  #unsentMoveWait(now: number): number | null {
+    const desired = this.#desired;
+    const unsent = desired !== null &&
+      (this.#lastSentPlacement === null || !samePlacement(desired, this.#lastSentPlacement));
+    if (!unsent) return null;
+    const sinceMove = this.#lastSentAt === null ? null : now - this.#lastSentAt;
+    if (sinceMove !== null && sinceMove < this.#minSendIntervalMs) {
+      return Math.min(this.#minSendIntervalMs - sinceMove, MAX_TIMER_DELAY_MS);
+    }
+    return 0;
+  }
+
+  /** Send an arena intent, after the waiting position if `moveFirst`, and stamp its floor. */
+  #sendArena(message: string, moveFirst: boolean, floor: 'intent' | 'attack'): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    const now = performance.now();
+    if (moveFirst) {
+      const before = this.#room;
+      this.#pump(now);
+      if (this.#room !== before || !this.#inArena() || this.#room === null) return false;
+    }
+    const room = this.#room;
+    room.send(message);
+    // A transport can report closure synchronously from send; a retired room
+    // must not stamp the floor of whatever replaces it.
+    if (this.#room !== room || !this.#inArena()) return false;
+    if (isValidMonotonicTime(now)) {
+      if (floor === 'intent') this.#lastArenaIntentAt = now;
+      else this.#lastArenaAttackAt = now;
+    }
+    return true;
+  }
+
+  /** Forget a held claim or swing. Called wherever this client stops sending to the arena. */
+  #cancelArena(): void {
+    if (this.#arenaClaimHandle !== null) {
+      clearTimeout(this.#arenaClaimHandle);
+      this.#arenaClaimHandle = null;
+    }
+    if (this.#arenaAttackHandle !== null) {
+      clearTimeout(this.#arenaAttackHandle);
+      this.#arenaAttackHandle = null;
+    }
+  }
+
   /** Send the kick, after the waiting position if `moveFirst`. */
   #sendKick(moveFirst: boolean): boolean {
     if (!this.#onStreet() || this.#room === null) return false;
@@ -924,6 +1118,7 @@ export class LobbyClient {
     this.#cancelReconcile();
     this.#cancelSandboxAction();
     this.#cancelKick();
+    this.#cancelArena();
     this.#desired = null;
     const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
@@ -1045,6 +1240,7 @@ export class LobbyClient {
             this.#cancelReconcile();
             this.#cancelSandboxAction();
             this.#cancelKick();
+            this.#cancelArena();
             this.#setStatus('closed', 'error');
             this.#emitRoomState();
             rejectWelcome(new Error(INVALID_WELCOME_ERROR));
@@ -1069,8 +1265,11 @@ export class LobbyClient {
       this.#lastSandboxActionAt = null;
       this.#lastKickAt = null;
       this.#lastJumpAt = null;
+      this.#lastArenaIntentAt = null;
+      this.#lastArenaAttackAt = null;
       this.#cancelSandboxAction();
       this.#cancelKick();
+      this.#cancelArena();
       this.#setStatus('connected');
       // Status delivery is synchronous. A listener may retire this exact
       // room before lifecycle callbacks are installed; do not attach stale
@@ -1096,6 +1295,7 @@ export class LobbyClient {
         this.#cancelReconcile();
         this.#cancelSandboxAction();
         this.#cancelKick();
+        this.#cancelArena();
         this.#setStatus('closed', 'error', code);
         this.#emitRoomState();
         rejectWelcome(new Error('Lobby room error before welcome'));
@@ -1111,6 +1311,7 @@ export class LobbyClient {
         this.#cancelReconcile();
         this.#cancelSandboxAction();
         this.#cancelKick();
+        this.#cancelArena();
         this.#setStatus('closed', 'server-dropped', code);
         this.#emitRoomState();
         rejectWelcome(new Error('Lobby room left before welcome'));
@@ -1129,6 +1330,7 @@ export class LobbyClient {
           this.#cancelReconcile();
           this.#cancelSandboxAction();
           this.#cancelKick();
+          this.#cancelArena();
           this.#desired = null;
           this.#setStatus('closed', 'error');
           this.#emitRoomState();
@@ -1138,6 +1340,7 @@ export class LobbyClient {
           this.#cancelReconcile();
           this.#cancelSandboxAction();
           this.#cancelKick();
+          this.#cancelArena();
           this.#desired = null;
           this.#setStatus('closed', 'error');
           this.#emitRoomState();
@@ -1326,11 +1529,63 @@ export class LobbyClient {
     }
   }
 
-  /** Publish everything read from room state: peers, the sandbox, then the ball. */
+  /** Publish everything read from room state: peers, the sandbox, the ball, then the arena ring. */
   #emitRoomState(): void {
     this.#emitPeers();
     this.#emitSandbox();
     this.#emitFootball();
+    this.#emitArena();
+  }
+
+  /** Deliver the current arena ring if it differs from the last one delivered (D-114). */
+  #emitArena(): void {
+    const ring = this.arena();
+    if (sameArena(ring, this.#arenaPublished)) return;
+    this.#arenaPublished = ring;
+    if (this.#arenaListeners.size === 0) return;
+    this.#arenaDeliveries.push({ listeners: [...this.#arenaListeners], ring });
+    if (this.#deliveringArena) return;
+
+    this.#deliveringArena = true;
+    try {
+      for (;;) {
+        const delivery = this.#arenaDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#arenaListeners.get(listener) !== owner) continue;
+          this.#notifyArena(listener, delivery.ring);
+        }
+      }
+    } finally {
+      this.#deliveringArena = false;
+    }
+  }
+
+  #notifyArena(listener: ArenaListener, ring: ArenaRingSnapshot | null): void {
+    try {
+      listener(ring);
+    } catch {
+      console.error('lobby client: arena subscriber threw');
+    }
+  }
+
+  /** The arena ring from room state, validated; null unless live in the arena. */
+  #readArena(): ArenaRingSnapshot | null {
+    const room = this.#room;
+    if (room === null || !this.#inArena()) return null;
+    let entry: unknown;
+    try {
+      const map = (room.state as { arena?: { get?: (key: string) => unknown } } | undefined)?.arena;
+      entry = typeof map?.get === 'function' ? map.get('ring') : undefined;
+    } catch {
+      return null;
+    }
+    return readArenaEntry(entry);
+  }
+
+  /** Live in the arena (D-114): the only place the ring is sent, and its intents mean anything. */
+  #inArena(): boolean {
+    return this.#status === 'connected' && this.#area === 'arena';
   }
 
   /** Deliver the current ball if it differs from the last one delivered. */
@@ -1962,6 +2217,66 @@ function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): b
     a.west === b.west &&
     a.east === b.east &&
     a.phase === b.phase
+  );
+}
+
+/**
+ * The arena ring entry as `ArenaRingSnapshot`, validated (D-114): wire codes
+ * to names, an empty presence id to null, a zero result to none, then
+ * `normalizeArenaRing`. Null for anything malformed.
+ */
+function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  try {
+    const record = value as Partial<Record<'phase' | 'round' | 'challenger' | 'opponent' | 'secondsLeft' | 'reason' | 'winner', unknown>>;
+    const code = (table: readonly string[], raw: unknown, offset: number): string | null | undefined => {
+      if (typeof raw !== 'number' || !Number.isInteger(raw)) return undefined;
+      if (offset === 1 && raw === 0) return null;
+      return table[raw - offset];
+    };
+    const slot = (raw: unknown): unknown => {
+      if (raw === null || typeof raw !== 'object') return null;
+      const fields = raw as Partial<Record<'kind' | 'gameId' | 'hp' | 'swings' | 'hits', unknown>>;
+      const kind = code(ARENA_SLOT_KINDS, fields.kind, 0);
+      const gameId = fields.gameId;
+      if (typeof gameId !== 'string') return null;
+      // A presence id rides only a player slot; anywhere else it is malformed.
+      if (kind !== 'player' && gameId !== '') return null;
+      return { kind, gameId: kind === 'player' ? gameId : null, hp: fields.hp, swings: fields.swings, hits: fields.hits };
+    };
+    const phase = code(ARENA_PHASES, record.phase, 0);
+    const reason = code(ARENA_END_REASONS, record.reason, 1);
+    const winner = code(ARENA_SIDES, record.winner, 1);
+    if (reason === undefined || winner === undefined) return null;
+    if (reason === null && winner !== null) return null;
+    return normalizeArenaRing({
+      phase,
+      round: record.round,
+      challenger: slot(record.challenger),
+      opponent: slot(record.opponent),
+      secondsLeft: record.secondsLeft,
+      outcome: reason === null ? null : { reason, winner },
+    });
+  } catch {
+    return null;
+  }
+}
+
+function sameArenaSlot(a: ArenaRingSnapshot['challenger'], b: ArenaRingSnapshot['challenger']): boolean {
+  return a.kind === b.kind && a.gameId === b.gameId && a.hp === b.hp && a.swings === b.swings && a.hits === b.hits;
+}
+
+function sameArena(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.phase === b.phase &&
+    a.round === b.round &&
+    a.secondsLeft === b.secondsLeft &&
+    sameArenaSlot(a.challenger, b.challenger) &&
+    sameArenaSlot(a.opponent, b.opponent) &&
+    (a.outcome === b.outcome ||
+      (a.outcome !== null && b.outcome !== null && a.outcome.reason === b.outcome.reason && a.outcome.winner === b.outcome.winner))
   );
 }
 

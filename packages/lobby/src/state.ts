@@ -22,6 +22,11 @@
  * an observer who sees a peer beside the ball when it moves can guess who
  * touched it, as with the sandbox, and nothing more.
  *
+ * And D-114's arena ring: a phase, a round, two slots of counters and the
+ * result, all bytes but the round. A player slot carries the presence id
+ * arena peers already hold for that avatar, and the entry is view-filtered
+ * to arena members, so nobody outside the arena learns who is fighting.
+ *
  * `privacy.test.ts` reads the field sets back out of the schema at runtime and
  * compares them with the frozen types, so drift fails a test rather than
  * shipping.
@@ -118,6 +123,53 @@ export const FootballEntry = schema(
 export type FootballEntry = SchemaType<typeof FootballEntry>;
 
 /**
+ * One slot of the arena ring (D-114): who or what stands there and its
+ * counters, written only by the room from its ring authority.
+ *
+ * `kind` is a byte (0 empty, 1 player, 2 dummy: `ARENA_SLOT_KINDS`'s
+ * index). `gameId` is the ephemeral presence id when `kind` is a player and
+ * empty otherwise: the same id every peer in the arena already holds for
+ * that avatar, and nothing else. `hp` is 0..100, and `swings` and `hits`
+ * are counters that wrap at 256 so peers can animate a swing or a hit from a
+ * change. No field could hold anything else.
+ */
+export const ArenaSlotEntry = schema(
+  {
+    kind: 'uint8',
+    gameId: 'string',
+    hp: 'uint8',
+    swings: 'uint8',
+    hits: 'uint8',
+  },
+  'ArenaSlot',
+);
+export type ArenaSlotEntry = SchemaType<typeof ArenaSlotEntry>;
+
+/**
+ * The arena ring (D-114): the phase (`ARENA_PHASES`'s index), the round
+ * (mod 65536, +1 per accepted claim), the two slots, the whole seconds left
+ * in a countdown or a fight, and the result (`reason` and `winner` are
+ * `ARENA_END_REASONS`'s and `ARENA_SIDES`'s index plus one; 0 is none).
+ * Bytes and one 16-bit counter, plus the slots' presence ids.
+ */
+export const ArenaRingEntry = schema(
+  {
+    phase: 'uint8',
+    round: 'uint16',
+    challenger: ArenaSlotEntry,
+    opponent: ArenaSlotEntry,
+    secondsLeft: 'uint8',
+    reason: 'uint8',
+    winner: 'uint8',
+  },
+  'ArenaRing',
+);
+export type ArenaRingEntry = SchemaType<typeof ArenaRingEntry>;
+
+/** The one key the `arena` map holds. */
+export const ARENA_RING_KEY = 'ring';
+
+/**
  * The room's root state.
  *
  * `peers` holds one entry per visible session, keyed by `gameId`. Keyed by
@@ -137,12 +189,19 @@ export type FootballEntry = SchemaType<typeof FootballEntry>;
  *
  * `football` is the one ball (D-078), shared the same way: every client sees
  * the same ball and scoreboard.
+ *
+ * `arena` (D-114) holds one entry, key `'ring'`, and is `view: true` like
+ * `peers`: the room adds the entry to a client's view only while that client
+ * is live in the arena, so no street, roof, Studio or bunker player is ever
+ * sent who is fighting. That keeps D-087's rule that no field says which area
+ * anyone is in.
  */
 export const LobbyState = schema(
   {
     peers: { map: PresenceEntry, view: true },
     sandbox: { map: SandboxColumnEntry },
     football: FootballEntry,
+    arena: { map: ArenaRingEntry, view: true },
   },
   'LobbyState',
 );
