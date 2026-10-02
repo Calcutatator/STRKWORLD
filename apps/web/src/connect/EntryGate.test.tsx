@@ -52,6 +52,21 @@ async function settle(): Promise<void> {
   }
 }
 
+/**
+ * Settle until `done` holds. Work that leaves the event loop, like the pass
+ * memory's real `crypto.subtle` digest, finishes after no fixed number of
+ * turns: on a loaded CI runner it can outlast `settle()`. Bounded by time,
+ * with the step named, so a real hang still fails plainly.
+ */
+async function settleUntil(done: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  await settle();
+  while (!done()) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}`);
+    await settle();
+  }
+}
+
 async function mount({
   operations,
   policy = SHIELD_POLICY,
@@ -75,7 +90,9 @@ async function mount({
       </EntryGate>,
     );
   });
-  await settle();
+  // With an account and no memory override, the gate opens on 'recalling'
+  // (Enter disabled) until this tab's pass memory hashes the account.
+  await settleUntil(() => gate()?.getAttribute('data-gate') !== 'recalling', 'the pass memory to answer');
 }
 
 function gate(): HTMLElement | null {
@@ -420,7 +437,7 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     await click(button('Enter STRKWORLD'));
     expect(city()).not.toBeNull();
     // The pass is written after the city shows; let its hash and write finish.
-    for (let turn = 0; turn < 20 && sessionStorage.length === 0; turn += 1) await settle();
+    await settleUntil(() => sessionStorage.length > 0, 'the pass to be written');
     expect(sessionStorage.length).toBe(1);
     act(() => root!.unmount());
     root = null;
