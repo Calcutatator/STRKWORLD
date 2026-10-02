@@ -117,9 +117,12 @@ describe('the gladiator pit in the street scene (D-114)', () => {
     expect(stone.min.y).toBeLessThan(-1.15);
     // Nothing but the arch rises above knee height.
     expect(stone.max.y).toBeLessThan(1.4);
-    // The threshold is level with the pavement; the bowl's tiles are solid ground level.
-    expect(streetSurfaceHeightAt(map, ARENA_PIT_DOOR.x + 0.5, ARENA_PIT_DOOR.y + 0.5)).toBe(PAVEMENT_HEIGHT);
-    expect(streetSurfaceHeightAt(map, ARENA_PIT_DOOR.x + 0.5, ARENA_PIT_DOOR.y + 2.5)).toBe(0);
+    // The whole threshold is level with the pavement; the bowl east of it is
+    // solid ground level.
+    for (let row = 0; row < ARENA_PIT_DOOR.height; row++) {
+      expect(streetSurfaceHeightAt(map, ARENA_PIT_DOOR.x + 0.5, ARENA_PIT_DOOR.y + row + 0.5), `row ${row}`).toBe(PAVEMENT_HEIGHT);
+    }
+    expect(streetSurfaceHeightAt(map, ARENA_PIT_DOOR.x + 1.5, ARENA_PIT_DOOR.y + 0.5)).toBe(0);
     view.dispose();
   });
 
@@ -135,8 +138,13 @@ describe('the gladiator pit in the street scene (D-114)', () => {
     const occluder = occluders[0]!;
     expect(occluder.object).toBe(arch);
     expect(occluder.boxes).toHaveLength(3);
-    expect(occluder.bounds.minX).toBeLessThanOrEqual(ARENA_PIT_DOOR.x - 0.5);
-    expect(occluder.bounds.maxX).toBeGreaterThanOrEqual(ARENA_PIT_DOOR.x + ARENA_PIT_DOOR.width + 0.5);
+    // The arch stands across the west front, so its span runs north to south:
+    // past the opening at both ends, onto its two gateposts.
+    expect(occluder.bounds.minZ).toBeLessThanOrEqual(ARENA_PIT_DOOR.y - 0.5);
+    expect(occluder.bounds.maxZ).toBeGreaterThanOrEqual(ARENA_PIT_DOOR.y + ARENA_PIT_DOOR.height + 0.5);
+    // And only through the door's own column in x.
+    expect(occluder.bounds.minX).toBeGreaterThanOrEqual(ARENA_PIT_DOOR.x);
+    expect(occluder.bounds.maxX).toBeLessThanOrEqual(ARENA_PIT_DOOR.x + 1);
     const own = materialsOf(arch);
     const others = materialsOf(view.ground).filter((material) => !own.includes(material));
     occluder.setOpacity(0.3);

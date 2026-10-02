@@ -131,9 +131,9 @@ describe('arena fx: hits come from server state', () => {
     fx.sync(frame(), null);
     fx.sync(frame({ hp: 90, hits: 1 }), null);
     run(48);
-    expect(Math.abs(pivot().rotation.x)).toBeGreaterThan(0.01);
+    expect(Math.abs(pivot().rotation.z)).toBeGreaterThan(0.01);
     run(3000);
-    expect(Math.abs(pivot().rotation.x)).toBeLessThan(0.001);
+    expect(Math.abs(pivot().rotation.z)).toBeLessThan(0.001);
   });
 
   it('knockout topples the dummy over 500 ms; a new fight stands it back up', () => {
@@ -141,19 +141,19 @@ describe('arena fx: hits come from server state', () => {
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     run(ARENA_FX_TOPPLE_MS / 2);
-    const halfway = pivot().rotation.x;
+    const halfway = pivot().rotation.z;
     expect(halfway).toBeLessThan(-0.3);
     expect(halfway).toBeGreaterThan(-Math.PI / 2);
     run(ARENA_FX_TOPPLE_MS);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     fx.sync(frame({ phase: 'idle' }), null);
-    expect(pivot().rotation.x).toBeCloseTo(0, 5);
+    expect(pivot().rotation.z).toBeCloseTo(0, 5);
   });
 
   it('joining after a knockout shows the dummy already down', () => {
     const { fx, pivot } = setup();
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 3);
   });
 });
 
@@ -167,7 +167,7 @@ describe('arena fx: reduced motion', () => {
     const number = shownNumbers()[0]!;
     const startY = number.position.y;
     run(ARENA_FX_REDUCED_NUMBER_MS - 20, 10);
-    expect(pivot().rotation.x).toBe(-0);
+    expect(pivot().rotation.z).toBe(-0);
     expect(number.position.y).toBe(startY);
     expect(find('arena:straw').visible).toBe(false);
     run(40, 10);
@@ -178,7 +178,7 @@ describe('arena fx: reduced motion', () => {
     const { fx, pivot, dummyMaterial, find } = setup(true);
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 5);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 5);
     expect(dummyMaterial().color.r).toBeLessThan(0.7);
     expect(find('arena:straw').visible).toBe(false);
   });
@@ -232,7 +232,7 @@ describe('arena fx: lifecycle', () => {
     const { fx, find, pivot } = setup(true);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     fx.sync(null, null);
-    expect(pivot().rotation.x).toBeCloseTo(0, 5);
+    expect(pivot().rotation.z).toBeCloseTo(0, 5);
     expect(find('arena-hp-bar').visible).toBe(false);
     fx.dispose();
     expect(fx.group.children).toHaveLength(0);
@@ -265,10 +265,10 @@ describe('arena fx: the room’s own dummy', () => {
     expect(shared.emissive.getHex()).toBe(0);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     for (let t = 0; t < 600; t += 16) fx.update(16);
-    expect(dummy.rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(dummy.rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     fx.dispose();
     expect(body.material).toBe(shared);
-    expect(dummy.rotation.x).toBe(0);
+    expect(dummy.rotation.z).toBe(0);
   });
 });
 
@@ -293,7 +293,7 @@ describe('arena fx: finding the room’s dummy once mounted', () => {
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     for (let t = 0; t < 600; t += 16) fx.update(16);
-    expect(dummy.rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(dummy.rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     expect(shared.emissive.getHex()).toBe(0);
     fx.dispose();
     expect((dummy.children[0] as Mesh).material).toBe(shared);
