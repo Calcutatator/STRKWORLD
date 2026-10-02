@@ -28,6 +28,7 @@ import {
 import {
   AVATAR_STUDIO_DEFINITION,
   AVATAR_STUDIO_PROMPT,
+  studioFigureTargetId,
   AVATAR_STUDIO_HEIGHT,
   AVATAR_STUDIO_TILE_SIZE,
   AVATAR_STUDIO_WIDTH,
@@ -825,7 +826,7 @@ class Session implements WorldSession {
         const usable = studio.interaction();
         if (!usable) return [];
         return [{
-          id: `studio:figure-${usable.figure}`,
+          id: studioFigureTargetId(usable.figure),
           label: AVATAR_STUDIO_PROMPT,
           rect: {
             x: ROOM_ORIGIN.x + usable.rect.x * AVATAR_STUDIO_TILE_SIZE,

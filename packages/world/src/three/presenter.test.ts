@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Group, InstancedMesh, Mesh, Vector3, type Material } from 'three';
 import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
 import {
+  BANK_ROOM_DEFINITION,
   EXCHANGE_DEGEN_LEVEL,
   EXCHANGE_DEGEN_STATION,
   EXCHANGE_ROOF_HEIGHT,
@@ -15,8 +16,8 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
-import { DEFAULT_PROMPT_HEIGHT } from './interaction-prompt.js';
-import { INTERACTION_PROMPT_STYLE } from './palette.js';
+import { affordanceClock } from './affordance.js';
+import { BoxGeometry, MeshBasicMaterial, ShaderMaterial } from 'three';
 import { createRemotePeerSource } from '../remote-peer.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
 import { JUMP_AIR_MS, JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift } from '../jump.js';
@@ -737,45 +738,171 @@ describe('presenter: one jump in every scene (D-111)', () => {
   });
 });
 
-describe('the shared E prompt (D-117)', () => {
-  const promptOf = (root: Group) => {
-    let found: import('three').Object3D | undefined;
+describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
+  /** The affordance mesh named `name` and its per-slot levels: [shimmer, glow] per id. */
+  const shells = (root: Group, name: string) => {
+    let found: Mesh | undefined;
     root.traverse((object) => {
-      if (!found && object.name === 'interaction-prompt') found = object;
+      if (!found && object instanceof Mesh && object.name === name) found = object;
     });
-    if (!found) throw new Error('no interaction prompt');
-    return found;
+    if (!found) throw new Error(`no affordance mesh ${name}`);
+    const mesh = found;
+    const ids = mesh.userData['affordance'] as string[];
+    const levels = (mesh.material as ShaderMaterial).uniforms['uSlots']!.value as Float32Array;
+    return {
+      mesh,
+      glow: (id: string) => levels[ids.indexOf(id) * 2 + 1],
+      usable: (id: string) => levels[ids.indexOf(id) * 2],
+    };
   };
-
-  it('floats one "E · …" prompt, in the plaza\'s style, over whatever the session focuses', () => {
+  const bank = (status: (station: string) => 'available' | 'locked' = () => 'available') => {
     const world = setup();
-    const prompt = promptOf(world.parent);
-    expect(prompt.visible).toBe(false);
-    expect(prompt.userData['options']).toEqual(INTERACTION_PROMPT_STYLE);
-    // A room counter: over its centre, at the default height.
-    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
-    expect(prompt.visible).toBe(true);
-    expect(prompt.userData['text']).toBe('E · SHIELD');
-    expect([prompt.position.x, prompt.position.y, prompt.position.z]).toEqual([5, DEFAULT_PROMPT_HEIGHT, 3]);
-    // The plaza's monument says how high: over its tip.
-    world.view.setInteractionPrompt({ id: 'plaza:monument', label: 'POOL STATS', x: 320, y: 736 });
-    expect(prompt.userData['text']).toBe('E · POOL STATS');
-    expect(prompt.position.y).toBeGreaterThan(5);
-    // It bobs while it shows, and hides on null.
-    const base = prompt.position.y;
-    world.presenter.update(300);
-    expect(prompt.position.y).not.toBe(base);
-    world.view.setInteractionPrompt(null);
-    expect(prompt.visible).toBe(false);
+    world.view.setStreetVisible(false);
+    world.view.showRoom('bank');
+    world.view.renderRoom('bank', fixedRoomStationPresentations(createFixedRoom(BANK_ROOM_DEFINITION), {
+      inRoom: true,
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: BANK_ROOM_DEFINITION.stations.map((station) => ({ station: station.station, label: station.label, status: status(station.station) })),
+    } as never));
+    return { ...world, room: shells(world.parent, 'room:bank:affordances') };
+  };
+  const SHIELD = { id: 'bank:shielding', label: 'SHIELD', x: 200, y: 160 };
+
+  it('draws no floating "E · …" prompt any more', () => {
+    const world = setup();
+    world.view.setInteractionPrompt(SHIELD);
+    let prompt = false;
+    world.parent.traverse((object) => {
+      if (object.name === 'interaction-prompt' || object.userData['text'] === 'E · SHIELD') prompt = true;
+    });
+    expect(prompt).toBe(false);
+    world.presenter.dispose();
   });
 
-  it('belongs to the session that set it', () => {
+  it('glows the chosen target only, fading in and out over about 200 ms', () => {
+    const world = bank();
+    const { room } = world;
+    for (const station of BANK_ROOM_DEFINITION.stations) expect(room.glow(station.station)).toBe(0);
+    world.view.setInteractionPrompt(SHIELD);
+    world.presenter.update(100);
+    expect(room.glow('bank:shielding')).toBeCloseTo(0.5, 5);
+    world.presenter.update(150);
+    expect(room.glow('bank:shielding')).toBe(1);
+    for (const station of BANK_ROOM_DEFINITION.stations.slice(1)) expect(room.glow(station.station)).toBe(0);
+    // Step to another counter: the first fades out as the second fades in.
+    world.view.setInteractionPrompt({ ...SHIELD, id: 'bank:unshielding', label: 'UNSHIELD' });
+    world.presenter.update(100);
+    expect(room.glow('bank:shielding')).toBeCloseTo(0.5, 5);
+    expect(room.glow('bank:unshielding')).toBeCloseTo(0.5, 5);
+    // Leave: nothing glows.
+    world.view.setInteractionPrompt(null);
+    world.presenter.update(250);
+    for (const station of BANK_ROOM_DEFINITION.stations) expect(room.glow(station.station)).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('shimmers every usable counter and never glows or shimmers a locked one', () => {
+    const world = bank((station) => (station === 'bank:shielding' ? 'locked' : 'available'));
+    const { room } = world;
+    expect(room.usable('bank:shielding')).toBe(0);
+    for (const station of BANK_ROOM_DEFINITION.stations.slice(1)) expect(room.usable(station.station)).toBe(1);
+    expect(room.mesh.visible).toBe(true);
+    world.view.setInteractionPrompt(SHIELD);
+    world.presenter.update(250);
+    expect(room.glow('bank:shielding')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('hides the whole shell while nothing in the room is usable: a locked room costs no draw call', () => {
+    const world = bank(() => 'locked');
+    expect(world.room.mesh.visible).toBe(false);
+    world.presenter.dispose();
+  });
+
+  it('shimmers the plaza\'s monument and table, and the Studio\'s figures, from the start', () => {
     const world = setup();
-    const prompt = promptOf(world.parent);
-    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
+    const plaza = shells(world.parent, 'plaza:affordances');
+    expect(plaza.usable('plaza:monument')).toBe(1);
+    expect(plaza.usable('plaza:shells')).toBe(1);
+    world.view.setInteractionPrompt({ id: 'plaza:monument', label: 'POOL STATS', x: 0, y: 0 });
+    world.presenter.update(250);
+    expect(plaza.glow('plaza:monument')).toBe(1);
+    expect(plaza.glow('plaza:shells')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('pulses on one shared clock, and holds still for reduced motion', () => {
+    const moving = setup(() => false);
+    moving.presenter.update(16);
+    const before = affordanceClock().time;
+    moving.presenter.update(200);
+    expect(affordanceClock().time).toBeCloseTo(before + 200, 5);
+    expect(affordanceClock().motion).toBe(1);
+    moving.presenter.dispose();
+    const still = setup(() => true);
+    still.presenter.update(16);
+    expect(affordanceClock().motion).toBe(0);
+    still.presenter.dispose();
+  });
+
+  it('belongs to the session that chose it', () => {
+    const world = bank();
+    world.view.setInteractionPrompt(SHIELD);
+    world.presenter.update(250);
     world.presenter.bindSession();
-    expect(prompt.visible).toBe(false);
-    world.view.setInteractionPrompt({ id: 'bank:shielding', label: 'SHIELD', x: 160, y: 96 });
-    expect(prompt.visible).toBe(false);
+    world.presenter.update(250);
+    expect(world.room.glow('bank:shielding')).toBe(0);
+    // The retired session's view can no longer light anything.
+    world.view.setInteractionPrompt(SHIELD);
+    world.presenter.update(250);
+    expect(world.room.glow('bank:shielding')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('shimmers the arena\'s ring gate while the ring is free, and glows it when the gate target carries it', () => {
+    const world = setup();
+    world.view.setStreetVisible(false);
+    world.view.showRoom('arena');
+    const gate = world.view.arenaGateObject() as import('three').Object3D;
+    expect(gate).not.toBeNull();
+    const shell = shells(world.parent, 'affordance:arena:gate');
+    expect(shell.mesh.parent).toBe(gate);
+    expect(shell.usable('arena:gate')).toBe(1);
+    world.view.setInteractionPrompt({ id: 'arena:gate', label: 'CLAIM', x: 0, y: 0, object: gate });
+    world.presenter.update(250);
+    expect(shell.glow('arena:gate')).toBe(1);
+    // A fight holds the ring: the gate is not usable, so it neither shimmers nor glows.
+    world.view.syncArena({ phase: 'fighting', gate: 'busy', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false } as never);
+    expect(shell.usable('arena:gate')).toBe(0);
+    expect(shell.glow('arena:gate')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('gives a station drawn elsewhere the same cues: registered by id, or carried on its target', () => {
+    const world = setup();
+    const gate = new Group();
+    gate.add(new Mesh(new BoxGeometry(1, 2, 0.4), new MeshBasicMaterial()));
+    world.parent.add(gate);
+    const remove = world.presenter.registerAffordance('arena:gate', gate);
+    const registered = shells(world.parent, 'affordance:arena:gate');
+    expect(registered.mesh.parent).toBe(gate);
+    expect(registered.usable('arena:gate')).toBe(1);
+    world.view.setInteractionPrompt({ id: 'arena:gate', label: 'FIGHT', x: 0, y: 0 });
+    world.presenter.update(250);
+    expect(registered.glow('arena:gate')).toBe(1);
+    remove();
+    expect(registered.mesh.parent).toBeNull();
+
+    // A target that names its object glows it, built on first use.
+    const stand = new Group();
+    stand.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    world.parent.add(stand);
+    world.view.setInteractionPrompt({ id: 'leaderboard:stand', label: 'LEADERBOARD', x: 0, y: 0, object: stand });
+    world.presenter.update(250);
+    const carried = shells(world.parent, 'affordance:leaderboard:stand');
+    expect(carried.mesh.parent).toBe(stand);
+    expect(carried.glow('leaderboard:stand')).toBe(1);
+    world.presenter.dispose();
   });
 });
