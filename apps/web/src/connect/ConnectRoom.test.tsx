@@ -88,6 +88,37 @@ describe('ConnectRoomView', () => {
     expect(detectCapability).toHaveBeenCalledOnce();
   });
 
+  it('asks a failing wallet to connect exactly once per click, and never detects (D-108)', async () => {
+    const connectWallet = vi.fn(async () => {
+      throw Object.assign(new Error('UNKNOWN_ERROR'), { code: 163 });
+    });
+    const detectCapability = vi.fn(async () => ({ name: 'disconnected' as const }));
+    const snapshot: WalletSessionSnapshot = {
+      phase: 'failed',
+      wallets: [
+        { key: 'wallet-1', name: 'Ready', icon: 'data:image/svg+xml,ready' },
+        { key: 'wallet-2', name: 'Xverse', icon: 'data:image/svg+xml,xverse' },
+      ],
+      selectedKey: null,
+      account: null,
+      generation: 1,
+    };
+    const view = ConnectRoomView({
+      connectState: { name: 'disconnected' },
+      connect: { connect: detectCapability, recheck: detectCapability },
+      wallet: { snapshot, connect: connectWallet, refreshDiscovery: vi.fn() },
+    });
+
+    await findButton(view, 'Xverse').props.onClick?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(connectWallet).toHaveBeenCalledOnce();
+    expect(connectWallet).toHaveBeenCalledWith('wallet-2');
+
+    await findButton(view, 'Xverse').props.onClick?.();
+    expect(connectWallet).toHaveBeenCalledTimes(2);
+    expect(detectCapability).not.toHaveBeenCalled();
+  });
+
   it('does not detect capability after the room unmounts during wallet connection', async () => {
     let resolveConnection!: () => void;
     const connection = new Promise<void>((resolve) => { resolveConnection = resolve; });

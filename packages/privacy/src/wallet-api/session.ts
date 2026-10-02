@@ -17,6 +17,7 @@ import { PragmaPriceReader } from './pragma-prices.js';
 import { RpcPublicBalanceReader } from './public-balance.js';
 import { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
 import { mapWalletError } from './errors.js';
+import { isUnsupportedWallet } from './unsupported-wallets.js';
 import { WalletApiPrivacyOperations } from './operations.js';
 import type { WalletRoutePolicy } from './types.js';
 
@@ -712,6 +713,10 @@ function ownDiscoveredWallets(value: unknown): WalletHandle[] {
   return value.filter((wallet): wallet is WalletHandle => {
     if ((typeof wallet !== 'object' && typeof wallet !== 'function') || wallet === null) return false;
     if (walletDisplayField(wallet, 'name') === null || walletDisplayField(wallet, 'icon') === null) return false;
+    // D-108: a wallet known not to implement the STRK20 Wallet API is never
+    // listed, so it can never be clicked. The one denylist and its reasons
+    // live in unsupported-wallets.ts.
+    if (isUnsupportedWallet(wallet)) return false;
     if (seen.has(wallet)) return false;
     seen.add(wallet);
     return true;

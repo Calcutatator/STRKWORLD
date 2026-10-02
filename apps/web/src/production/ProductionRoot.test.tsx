@@ -49,13 +49,23 @@ function fundedOperations(registration: 'unknown' | 'registered' = 'unknown'): F
   });
 }
 
-/** Let the gate finish recalling this tab's pass: its key is an async SHA-256. */
-async function settleGate(container: HTMLElement): Promise<void> {
-  for (let turn = 0; turn < 50 && container.querySelector('[data-gate="recalling"]'); turn += 1) {
+/**
+ * Flush until `done` holds. The pass memory's key is a real `crypto.subtle`
+ * SHA-256, which finishes after no fixed number of turns: on a loaded CI
+ * runner it can outlast any turn count. Bounded by time instead.
+ */
+async function flushUntil(done: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!done() && Date.now() <= deadline) {
     await act(async () => {
       await flushReact();
     });
   }
+}
+
+/** Let the gate finish recalling this tab's pass: its key is an async SHA-256. */
+async function settleGate(container: HTMLElement): Promise<void> {
+  await flushUntil(() => container.querySelector('[data-gate="recalling"]') === null);
   expect(container.querySelector('[data-gate="recalling"]')).toBeNull();
 }
 
@@ -1095,7 +1105,7 @@ describe('ProductionRoot entry gate (D-072)', () => {
     const check = vi.spyOn(operations, 'hasPrivateFunds');
     const first = await mount(sessionAt('connected', '0xabc', operations));
     await enterCity(first.container);
-    for (let turn = 0; turn < 20 && sessionStorage.length === 0; turn += 1) await act(async () => { await flushReact(); });
+    await flushUntil(() => sessionStorage.length > 0);
     await first.unmount();
 
     const reload = await mount(sessionAt('connected', '0xabc', operations));

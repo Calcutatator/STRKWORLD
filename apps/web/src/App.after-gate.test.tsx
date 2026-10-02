@@ -87,6 +87,18 @@ async function settle(): Promise<void> {
   }
 }
 
+/**
+ * Settle until the gate has recalled this tab's pass (Enter is disabled
+ * until then). Its key is a real `crypto.subtle` SHA-256, which finishes
+ * after no fixed number of turns, so the wait is bounded by time.
+ */
+async function settleGate(): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  await settle();
+  while (container!.querySelector('[data-gate="recalling"]') && Date.now() <= deadline) await settle();
+  expect(container!.querySelector('[data-gate="recalling"]')).toBeNull();
+}
+
 function button(label: string): HTMLButtonElement {
   const found = [...container!.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
   if (!found) throw new Error(`No button labelled ${label}`);
@@ -149,7 +161,7 @@ describe('the city behind the entry gate (D-072)', () => {
     const stations: ShellEvents['world:stations'][] = [];
     shellIn.on('world:stations', (payload) => stations.push(payload));
     mount(<App worldOut={worldOut} shellIn={shellIn} presence={createPresenceController({})} />);
-    await settle();
+    await settleGate();
     await click(button(COPY.entry.action));
 
     expect(container!.querySelector('[data-testid="world-host"]')).not.toBeNull();
@@ -189,7 +201,7 @@ describe('the city behind the entry gate (D-072)', () => {
         policy={null}
       />,
     );
-    await settle();
+    await settleGate();
     await click(button(COPY.entry.action));
 
     expect(container!.querySelector('[data-testid="world-host"]')).not.toBeNull();
