@@ -10,7 +10,7 @@ import {
   ARENA_PIT_TORCHES,
   arenaPitTileAt,
 } from './arena-pit.js';
-import { PLACEMENT_APRON, PLAZA_AREA } from './plaza.js';
+import { PLACEMENT_PATH, PLACEMENT_STAND, PLAZA_AREA } from './plaza.js';
 import { createStreetMap, doorAt, isSolidAt, TILES, type TileKind } from './street.js';
 
 /**
@@ -180,11 +180,12 @@ describe('the gladiator pit on the street (D-114)', () => {
       a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     for (const mine of [ARENA_PIT_AREA, ARENA_PIT_PATH]) {
       expect(overlaps(mine, PLAZA_AREA), 'plaza').toBe(false);
-      expect(overlaps(mine, PLACEMENT_APRON), 'placement apron').toBe(false);
+      expect(overlaps(mine, PLACEMENT_PATH), 'placement path').toBe(false);
+      expect(overlaps(mine, PLACEMENT_STAND), 'placement stand').toBe(false);
       expect(overlaps(mine, { x: X + 23, y: 17, width: 2, height: map.height - 17 }), 'studio path').toBe(false);
       expect(overlaps(mine, SANDBOX_AREA), 'sandbox').toBe(false);
     }
-    expect(ARENA_PIT_AREA.x).toBeGreaterThan(PLACEMENT_APRON.x + PLACEMENT_APRON.width);
+    expect(ARENA_PIT_AREA.x).toBeGreaterThan(PLACEMENT_STAND.x + PLACEMENT_STAND.width);
     expect(ARENA_PIT_AREA.x + ARENA_PIT_AREA.width).toBeLessThan(SANDBOX_AREA.x - 1);
     expect(map.spawn.y).toBeLessThan(ARENA_PIT_PATH.y);
   });
