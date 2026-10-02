@@ -13984,3 +13984,47 @@ code and seen to fail. Full suite (296 files, 6260 tests) and
 `npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
 
 ---
+
+## 6. Findings log
+
+### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
+
+The private leaderboard's first mainnet probe had every variable set, the
+ledger address in the bundle, `?lb=1` in the tab and the placement stand on
+the lawn — and attached no receipt at all. `ownPolicy` in
+`packages/privacy/src/wallet-api/session.ts` re-reads the route policy into a
+frozen copy of its own, and that copy is what every connection's operations
+are built from. It listed `maxIntents`, `maxRelayFee`, `enabledRoutes`,
+`allowedTokens` and `swap`, and not `leaderboard`, so the ledger was dropped
+one step before `WalletApiPrivacyOperations` could see it. With no ledger that
+class builds no receipts object, which is byte-for-byte a build with the
+leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
+line, and no error anywhere.
+
+Two things make this class of bug worth writing down. First, the stand kept
+working, which argued the probe was fine: it reads
+`placementStandFrom(environment)`, a seam that never passes through the
+session's policy copy. When one of several seams for the same switch works,
+compare the seams rather than the switch. Second, the feature fails open by
+design, and open failure with no log is indistinguishable from off — so the
+fix ships with `packages/privacy/src/leaderboard-notice.ts`, a sink on D-069's
+channel that reports every decision as a reason code (`no-ledger`,
+`no-reads`, `unsupported-route`, `no-nonce`, `scan-failed`) and whose
+formatter admits each field from a fixed list, so `p`, a commitment, a shadow
+address, the account, a nonce and a transaction hash cannot be written even by
+a caller that offers them.
+
+*Verified:* reproduced red first — with `ownPolicy` restored,
+`apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
+policy's missing ledger. That file now drives the real production wiring (a
+tab with `?lb=1`, Railway's own variables, `parseProductionWalletConfig` and
+the real `createWalletSession`) to a receipt on shield, unshield and send;
+`apps/web/src/panels/placement-review.test.tsx` asserts the review line inside
+the `ConfirmGate` subtree on all seven fee-paying flows and its absence on all
+seven otherwise; the notices are checked against the real operations in
+`packages/privacy/src/wallet-api/leaderboard-operations.test.ts` and as the
+backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
+(298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
+was used; the live ledger's `leaf_count()` has not been re-read.
+
+---

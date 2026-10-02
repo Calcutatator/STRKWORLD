@@ -827,6 +827,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
   }
+  // Optional (D-122, amended 2026-10-02): the private placement's ledger. It
+  // must be carried through here — this copy is the policy every connection's
+  // operations are built from, so a `leaderboard` dropped here switches
+  // receipts off for the whole session however the build is configured.
+  const leaderboard = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['leaderboard']>>(policy, 'leaderboard');
+  if (leaderboard !== undefined && !hasOwnDataProperties(leaderboard, ['ledger'])) throw invalidPolicy();
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
@@ -855,6 +861,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
     }
     ownedSwap = Object.freeze({ expectedChainId, slippageBps, ...(degen === true ? { degen: true } : {}) });
   }
+  let ownedLeaderboard: NonNullable<WalletRoutePolicy['leaderboard']> | undefined;
+  if (leaderboard !== undefined) {
+    const ledger = readPolicyValue<Address>(leaderboard, 'ledger');
+    if (typeof ledger !== 'string' || !isNonzeroFelt(ledger) || BigInt(ledger) >= 1n << 251n) throw invalidPolicy();
+    ownedLeaderboard = Object.freeze({ ledger: `0x${BigInt(ledger).toString(16)}` as Address });
+  }
   return Object.freeze({
     maxIntents,
     maxRelayFee,
@@ -871,6 +883,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
     ...(ownedSwap
       ? { swap: ownedSwap }
       : {}),
+    ...(ownedLeaderboard ? { leaderboard: ownedLeaderboard } : {}),
   });
 }
 

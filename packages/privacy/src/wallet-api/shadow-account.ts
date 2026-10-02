@@ -12,6 +12,7 @@ import type {
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback, type TxResult } from '../types.js';
 import { isContractAddress, shadowAccountAddress, vaultOutcomeFromReceipt } from '../vault.js';
 import { shadowCommitment, withLedgerTick } from '../leaderboard.js';
+import { noticeLeaderboard, type LeaderboardFeature } from '../leaderboard-notice.js';
 import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import type { PoolReadClient, VaultReadClient, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet, waitForReceipt } from './wallet-submission.js';
@@ -181,10 +182,17 @@ export async function withPlacementTick(
   built: STRK20_ACTION[],
   ledger: Address | undefined,
   identity: Pick<ShadowAccountResolver, 'fullCommitment'>,
+  /** Which counter this is, for D-069's debug line. The route's name, nothing more. */
+  feature: LeaderboardFeature,
 ): Promise<{ readonly actions: STRK20_ACTION[]; readonly extra: { readonly countsTowardPlacement?: true } }> {
-  if (!ledger) return { actions: built, extra: {} };
+  if (!ledger) {
+    noticeLeaderboard({ event: 'receipt', attached: false, reason: 'no-ledger' });
+    return { actions: built, extra: {} };
+  }
   const commitment = await identity.fullCommitment();
-  return { actions: withLedgerTick(built, ledger, commitment), extra: { countsTowardPlacement: true } };
+  const actions = withLedgerTick(built, ledger, commitment);
+  noticeLeaderboard({ event: 'tick', feature });
+  return { actions, extra: { countsTowardPlacement: true } };
 }
 
 /** What a shadow-account batch needs from its counter to confirm. */

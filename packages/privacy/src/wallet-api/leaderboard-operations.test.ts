@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import {
   ENDUR_XSTRK,
   ENDUR_XSTRK_ASSET,
   VAULT_MARKETS,
   WalletApiPrivacyOperations,
+  setLeaderboardNoticeSink,
   type EndurReadClient,
+  type LeaderboardNotice,
   type EndurUnstakeRead,
   type Intent,
   type LeaderboardReadClient,
@@ -329,6 +331,93 @@ describe('leaderboard on: DeFi mode (the feature shadow ticks)', () => {
     const invoke = f.invoked[0]!.find((action) => action.type === 'shadow_account_invoke') as Extract<STRK20_ACTION, { type: 'shadow_account_invoke' }>;
     expect(invoke.calls.at(-1)).toEqual({ contractAddress: LEDGER, entrypoint: 'tick', calldata: [shadowCommitment(PARTIALS['strkworld-endur']!, '0x0')] });
     expect(invoke.calls.map((call) => call.entrypoint)).toEqual(['redeem', 'tick']);
+  });
+});
+
+/**
+ * D-069's channel, added 2026-10-02: receipts fail open and silently, and that
+ * silence is what made the first probe deploy unreadable. Every decision now
+ * reports itself as a reason code — and only as a reason code. The season
+ * partial commitment `p` is the one secret here, so nothing that reaches the
+ * sink may contain it, nor a feature commitment, a shadow address, the
+ * account, a nonce or a transaction hash.
+ */
+describe('what the placement reports on the debug channel', () => {
+  const notices: LeaderboardNotice[] = [];
+
+  beforeEach(() => {
+    notices.length = 0;
+    setLeaderboardNoticeSink((notice) => void notices.push(notice));
+  });
+  afterEach(() => {
+    setLeaderboardNoticeSink(null);
+  });
+
+  /** Nothing written may carry a secret, an address or a hash. */
+  function expectCodesOnly(): void {
+    const written = JSON.stringify(notices);
+    for (const secret of [...Object.values(PARTIALS), PLAYER, LEDGER, TX, BOB]) {
+      expect(written, secret).not.toContain(secret);
+      expect(written, secret).not.toContain(secret.slice(2));
+    }
+    for (const notice of notices) {
+      expect(Object.keys(notice).sort()).toEqual(
+        notice.event === 'tick' ? ['event', 'feature'] : notice.attached ? ['attached', 'event'] : ['attached', 'event', 'reason'],
+      );
+    }
+  }
+
+  it.each([['shield', SHIELD], ['unshield', UNSHIELD], ['send', SEND]] as const)(
+    'reports the receipt %s carries, and nothing about it',
+    async (_label, intent) => {
+      const f = fixture();
+      await run(f.operations, intent);
+      expect(notices).toEqual([{ event: 'receipt', attached: true }]);
+      expectCodesOnly();
+    },
+  );
+
+  it.each([
+    ['no-ledger', { leaderboard: false }, () => undefined],
+    ['no-reads', { withLeaderboardReads: false }, () => undefined],
+    ['unsupported-route', { versions: ['0.10.3'] }, () => undefined],
+    ['scan-failed', {}, (f: ReturnType<typeof fixture>) => { f.state.shadowsFail = true; }],
+    ['scan-failed', { refuse: ['strkworld-lb-s1'] }, () => undefined],
+  ] as const)('reports a skipped receipt as reason=%s', async (reason, options, arrange) => {
+    const f = fixture(options);
+    arrange(f);
+    await run(f.operations, SEND);
+    expect(notices).toEqual([{ event: 'receipt', attached: false, reason }]);
+    expectCodesOnly();
+  });
+
+  it('reports a DeFi tick by its counter, and the Vault and Endur separately', async () => {
+    const f = fixture();
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    await (await f.operations.prepareEndurUnstake(ONE)).confirm({ feeCeiling: POOL_FEE });
+    expect(notices).toEqual([{ event: 'tick', feature: 'vault' }, { event: 'tick', feature: 'unstake' }]);
+    expectCodesOnly();
+  });
+
+  it('reports a DeFi counter with the leaderboard off as reason=no-ledger', async () => {
+    const f = fixture({ leaderboard: false });
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    expect(notices).toEqual([{ event: 'receipt', attached: false, reason: 'no-ledger' }]);
+    expectCodesOnly();
+  });
+
+  it('cannot be disturbed by a sink that throws, and says nothing once detached', async () => {
+    setLeaderboardNoticeSink(() => { throw new Error('the logger broke'); });
+    const f = fixture();
+    const batch = await run(f.operations, SHIELD);
+    expect(batch.countsTowardPlacement).toBe(true);
+    expect(f.invoked[0]!.at(-1)).toEqual(receipt(0n));
+
+    setLeaderboardNoticeSink(null);
+    setLeaderboardNoticeSink((notice) => void notices.push(notice));
+    setLeaderboardNoticeSink(null);
+    await run(fixture().operations, SHIELD);
+    expect(notices).toEqual([]);
   });
 });
 

@@ -39,6 +39,7 @@ import { ShadowBorrow } from './borrow-operations.js';
 import { EndurUnstake } from './endur-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import { withReceipt } from '../leaderboard.js';
+import { noticeLeaderboard } from '../leaderboard-notice.js';
 import { LeaderboardReceipts, type PlacementCheck, type PreparedReceipt } from './leaderboard-operations.js';
 import type { ReceiptNonceStore } from './receipt-nonce-store.js';
 import type {
@@ -502,7 +503,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   /** The receipt for a shield, unshield or send, or null: off, unsupported, refused or unreadable (fail open). */
   private async receiptFor(signal?: AbortSignal): Promise<PreparedReceipt | null> {
-    if (!this.leaderboard) return null;
+    if (!this.leaderboard) {
+      // D-069: the one skip the receipts object cannot report, since the build
+      // never built one. A reason code, nothing else.
+      noticeLeaderboard({ event: 'receipt', attached: false, reason: 'no-ledger' });
+      return null;
+    }
     const receipt = await this.leaderboard.receiptFor(signal);
     throwIfAborted(signal);
     return receipt;

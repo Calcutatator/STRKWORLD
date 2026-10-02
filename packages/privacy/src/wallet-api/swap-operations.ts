@@ -5,6 +5,7 @@ import { MAINNET_CHAIN_ID, SWAP_DAPP_NAME, SWAP_SHADOW_NONCE, ownSwapQuote, swap
 import { SWAP_MAX_SLIPPAGE_BPS, checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
 import { mapShadowWalletError, mapWalletError } from './errors.js';
 import { withLedgerTick } from '../leaderboard.js';
+import { noticeLeaderboard } from '../leaderboard-notice.js';
 import { ShadowAccountResolver } from './shadow-account.js';
 import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
@@ -133,6 +134,8 @@ export class ShadowSwap {
     // partial `resolve` already asked for. Null with the leaderboard off.
     const tick = this.ledger ? await this.identity.fullCommitment() : null;
     const reviewed = freezeActions(this.actions(quote, identity.address, tick));
+    // D-069: reported once for the prepare, not again for a re-quote's rebuild.
+    noticeLeaderboard(tick ? { event: 'tick', feature: 'swap' } : { event: 'receipt', attached: false, reason: 'no-ledger' });
     const owner = this;
     let discarded = false;
     let attempted = false;
