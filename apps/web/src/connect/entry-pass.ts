@@ -24,7 +24,7 @@ export interface EntryPassMemory {
   /** Remember the pass for this tab. Never rejects; a lost write only means checking again. */
   remember(): Promise<void>;
   /**
-   * D-119: forget the pass, so the next connection of this account checks
+   * D-120: forget the pass, so the next connection of this account checks
    * again. Signing out is a logout. Never rejects.
    */
   forget(): Promise<void>;

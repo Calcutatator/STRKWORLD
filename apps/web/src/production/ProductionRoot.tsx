@@ -341,7 +341,7 @@ function ConnectedProductionApp({
     };
   }, [createPresence]);
 
-  // D-119: the wallet pill's "Disconnect & return to menu". Disconnecting the
+  // D-120: the wallet pill's "Disconnect & return to menu". Disconnecting the
   // session is the whole teardown: it forgets the account at once, so
   // ProductionApp renders the D-115 title screen in place of this subtree,
   // and unmounting it destroys the presence owner (the effect above, which

@@ -46,11 +46,11 @@ React (useStrk20Balances)
   → walletV6.strk20Balances([])
   → wallet resolves from its own note discovery
   → React state → the Bank's own window
-  → `hud:balance` on the Shell bus (pre-formatted; no Shell consumer since D-119)
+  → `hud:balance` on the Shell bus (pre-formatted; no Shell consumer since D-120)
 ```
 
 The World never calls Starknet. The HUD is a Shell overlay, a wallet pill and
-its menu (D-119), that only listens to `hud:pending` and `wallet:status`; it
+its menu (D-120), that only listens to `hud:pending` and `wallet:status`; it
 shows no balance. The World receives every `hud:*` event too and ignores them.
 
 ### Performing a shielded action
@@ -410,7 +410,7 @@ is different: a supported connected wallet is its entry gate, so no World or
 lobby surface exists before wallet admission (D-055). Both the production
 root and the demo composition then hold the World, the HUD and the lobby
 behind D-072's funds check, which the demo runs against its own seam. The
-wallet pill's "Disconnect & return to menu" (D-119) disconnects the session;
+wallet pill's "Disconnect & return to menu" (D-120) disconnects the session;
 the production root then renders the title screen in place of that subtree,
 and unmounting it is the teardown: the presence owner leaves the lobby, the
 World lease is released and the engine destroyed.

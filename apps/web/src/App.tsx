@@ -75,7 +75,7 @@ export function App({
   /** The Privacy Plaza's pool stats from the backend (D-076); the demo uses sample figures. */
   poolStats?: PoolStatsSource;
   /**
-   * D-119: the wallet pill's "Disconnect & return to menu". The production
+   * D-120: the wallet pill's "Disconnect & return to menu". The production
    * root supplies it; the demo has no title screen to return to, so its pill
    * offers Help alone.
    */

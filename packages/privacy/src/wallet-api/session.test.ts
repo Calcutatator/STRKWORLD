@@ -1586,7 +1586,7 @@ describe('WalletSession', () => {
     expect(request.mock.calls.map(([input]) => input.type)).toContain('wallet_supportedWalletApi');
   });
 
-  it('D-119: signs out through standard:disconnect where offered, locally where not, and connects again', async () => {
+  it('D-120: signs out through standard:disconnect where offered, locally where not, and connects again', async () => {
     function standardWallet(withDisconnect: boolean) {
       const disconnect = vi.fn(async () => undefined);
       const request = vi.fn(async ({ type }: { type: string }) => {

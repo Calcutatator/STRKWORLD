@@ -119,7 +119,7 @@ describe('HudLayer', () => {
     expect(pillLabel(view)).toBe(COPY.hud.wallet.disconnected);
   });
 
-  it('D-119: shows no balance row, no Hide toggle and no ? button, whatever the Bank publishes', () => {
+  it('D-120: shows no balance row, no Hide toggle and no ? button, whatever the Bank publishes', () => {
     const bus = createEventBus<ShellEvents>();
     const view = mount(<HudLayer shell={bus} storage={memory().storage} onSignOut={async () => undefined} />);
     act(() => {

@@ -21,7 +21,7 @@ describe('HUD model', () => {
     expect(model.store.getState().pending).toBe(0);
   });
 
-  it('D-119: holds no balance, whatever the Bank publishes', () => {
+  it('D-120: holds no balance, whatever the Bank publishes', () => {
     const bus = createEventBus<ShellEvents>();
     const model = createHudModel();
     model.listen(bus);

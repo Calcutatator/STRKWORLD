@@ -667,7 +667,7 @@ export function createProductionWalletSession(
           return () => portListeners.delete(listener);
         },
         async disconnect() {
-          // D-119: ask the wallet to disconnect only where it offers the
+          // D-120: ask the wallet to disconnect only where it offers the
           // standard feature. The session has already forgotten the account
           // and its operations, which is the whole local sign-out.
           const disconnect = standardDisconnect(wallet);

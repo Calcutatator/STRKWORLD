@@ -13,7 +13,7 @@ import { createHudModel, type HudState } from './hud-model.js';
 export const HUD_GUIDE_DISMISSED_KEY = 'strkworld.hud.guide-dismissed.v1';
 
 /**
- * The street HUD (D-119): one quiet wallet pill in the top-left corner, what
+ * The street HUD (D-120): one quiet wallet pill in the top-left corner, what
  * is in flight, the D-021 Bridge nudge and the Getting started card.
  *
  * The pill shows the wallet's status lamp and one word. Pressing it opens a

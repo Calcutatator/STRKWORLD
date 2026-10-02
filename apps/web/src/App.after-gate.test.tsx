@@ -226,7 +226,7 @@ describe('the city behind the entry gate (D-072)', () => {
   });
 });
 
-describe('signing out from the wallet pill (D-119)', () => {
+describe('signing out from the wallet pill (D-120)', () => {
   it('production: Disconnect & return to menu disconnects, leaves the lobby, releases the World, shows the title screen, and connecting again works', async () => {
     const worldOut = createEventBus<WorldEvents>();
     const shellIn = createEventBus<ShellEvents>();

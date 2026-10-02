@@ -180,7 +180,7 @@ describe('the Vault window\'s theme (D-077)', () => {
     expect(css).toMatch(/\.panel\[data-building="vault"\] :is\(\.panel-header h2, [^{]*\)\s*\{[^}]*font-stretch:\s*125%/);
   });
 
-  it('loads no font and fetches nothing: its one image, Vesu\'s mark, is inline', () => {
+  it('loads no font itself and fetches nothing: its one image, Vesu\'s mark, is inline', () => {
     expect(css).not.toMatch(/@font-face|@import/);
     // Every stylesheet url() is a quoted inline SVG (whose own url(#…) fills
     // stay inside it); nothing else names a resource.
@@ -414,5 +414,65 @@ describe('the panel kit', () => {
     for (const rule of kitRules.filter((candidate) => candidate.prelude !== '.ui-quote-timer-bar')) {
       expect(rule.body, rule.prelude).not.toMatch(/(^|[;\s])(animation|transition)\s*:/);
     }
+  });
+});
+
+describe("the game theme's type (D-119)", () => {
+  const root = customProperties(ruleBody(':root'));
+  const partners = [
+    '.panel[data-building="bank"]',
+    '.panel[data-building="bank"][data-brand="endur"]',
+    '.panel[data-building="exchange"]',
+    '.panel[data-building="exchange"][data-brand="degen"]',
+    '.panel[data-building="bridge"]',
+    '.panel[data-building="vault"]',
+  ];
+  const brandFaces = /"(Jersey 15|VT323|Silkscreen)"/;
+
+  it('sets Jersey 15 headings, VT323 body and figures, and Silkscreen buttons and labels, from the brand\'s tokens', () => {
+    expect(root.get('--ui-heading-font')).toBe('var(--brand-font-headline)');
+    expect(root.get('--ui-font')).toBe('var(--brand-font-body)');
+    expect(root.get('--ui-btn-font')).toBe('var(--brand-font-menu)');
+    expect(root.get('--ui-label-font')).toBe('var(--ui-btn-font)');
+  });
+
+  it('keeps every amount in VT323, never the scoreboard face', () => {
+    expect(root.get('--ui-number-font')).toBe('var(--ui-font)');
+  });
+
+  it('asks the one-weight faces for their only weight', () => {
+    expect(root.get('--ui-heading-weight')).toBe('400');
+  });
+
+  it('normalises the pixel faces\' cap height across the base theme, the HUD and the game windows', () => {
+    expect(root.get('--ui-type-adjust')).toBe('cap-height 0.73');
+    expect(ruleBody('body')).toMatch(/font-size-adjust:\s*var\(--ui-type-adjust\);/);
+    expect(ruleBody('.panel')).toMatch(/font-size-adjust:\s*var\(--ui-type-adjust\);/);
+  });
+
+  it('leaves every partner theme its own faces, unadjusted', () => {
+    for (const selector of partners) {
+      const theme = customProperties(ruleBody(selector));
+      expect(theme.get('--ui-type-adjust'), selector).toBe('none');
+      expect(theme.get('--ui-label-font'), selector).toBe('var(--ui-font)');
+      for (const token of ['--ui-font', '--ui-heading-font', '--ui-number-font', '--ui-btn-font']) {
+        expect(theme.get(token), `${selector} ${token}`).toBeDefined();
+        expect(theme.get(token), `${selector} ${token}`).not.toMatch(brandFaces);
+      }
+    }
+  });
+
+  it('gives a field the body face even inside a label set in the label face', () => {
+    expect(ruleBody('.panel label,\n.room-entry label')).toMatch(/font-family:\s*var\(--ui-label-font\);/);
+    const fields = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .find((match) => match[1]!.trim().startsWith('.panel input:not([type="checkbox"]):not([type="radio"]),'));
+    expect(fields?.[2]).toMatch(/font: inherit;\s*font-family:\s*var\(--ui-font\);/);
+  });
+
+  it('leaves the title screen its own type sizes (D-115)', () => {
+    const title = customProperties(ruleBody('.title-screen'));
+    expect(title.get('--ui-type-adjust')).toBe('none');
+    expect(title.get('--ui-label-font')).toBe('var(--ui-font)');
+    expect(ruleBody('.title-screen')).toMatch(/font-size-adjust:\s*var\(--ui-type-adjust\);/);
   });
 });

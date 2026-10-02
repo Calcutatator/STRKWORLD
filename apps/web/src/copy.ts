@@ -881,7 +881,7 @@ export const COPY = freezeCopy({
 
   /**
    * The street HUD (`hud/HudLayer.tsx`): one quiet wallet pill and its menu
-   * (D-119). Status words only; no privacy claim and no balance.
+   * (D-120). Status words only; no privacy claim and no balance.
    */
   hud: {
     label: 'Your wallet',

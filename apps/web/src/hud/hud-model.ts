@@ -9,7 +9,7 @@ import { createStore, type ReadableStore } from '../store/store.js';
  * and it is a listener and nothing else: it never emits, never asks the wallet
  * for anything and holds no money.
  *
- * D-119: the HUD no longer shows a balance. The Bank still publishes
+ * D-120: the HUD no longer shows a balance. The Bank still publishes
  * `hud:balance` on the shared bus (the seam is unchanged), but the street HUD
  * is only the wallet pill, so this model does not listen to it.
  *

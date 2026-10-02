@@ -693,7 +693,7 @@ function capturedSignOut(): (() => Promise<void>) | undefined {
   return captured.current?.onSignOut as (() => Promise<void>) | undefined;
 }
 
-describe('ProductionRoot sign-out (D-119)', () => {
+describe('ProductionRoot sign-out (D-120)', () => {
   it('disconnects, leaves the lobby, drops the city for the title screen, forgets the pass, and connects again in the same tab', async () => {
     captured.current = null;
     const first = fakePresence();
