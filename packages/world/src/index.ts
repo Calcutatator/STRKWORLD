@@ -233,6 +233,10 @@ export type { SandboxChannel } from './sandbox-channel.js';
 // sandbox, and the World never imports the lobby or moves the ball.
 export { normalizeFootballFrame, normalizeFootballMoment } from './football-channel.js';
 export type { FootballChannel, FootballFrame, FootballMoment } from './football-channel.js';
+
+// The gladiator pit's arena (D-114): the Shell supplies the channel, as for
+// the football, and the World never imports the lobby.
+export type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 export {
   PITCH_FIXTURES,
   PITCH_FULL_TIME_TEXT,

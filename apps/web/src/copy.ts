@@ -37,6 +37,8 @@ export const COPY = freezeCopy({
      * would read as this ellipsis, never as a name.
      */
     bunker: '…',
+    /** D-114: the gladiator pit's arena is a codename too: no window, so never titled; the same ellipsis. */
+    arena: '…',
   },
 
   connect: {

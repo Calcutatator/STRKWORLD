@@ -31,6 +31,10 @@ describe('normalizePresenceArea (D-087)', () => {
       expect(normalizePresenceArea(hostile)).toBeNull();
     }
   });
+
+  it('D-114: refuses the arena until its ring authority lands (stream B lifts this)', () => {
+    expect(normalizePresenceArea('arena')).toBeNull();
+  });
 });
 
 describe('isAreaWalkable (D-087)', () => {

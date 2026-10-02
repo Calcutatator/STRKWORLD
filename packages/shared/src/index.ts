@@ -41,7 +41,9 @@ export type BuildingId =
    * `building:entered` suspends presence like any private interior's
    * (D-019, D-087).
    */
-  | 'bunker';
+  | 'bunker'
+  /** D-114: the gladiator pit's arena. A codename only: no route, panel or money; BUILDINGS leaves it out. */
+  | 'arena';
 
 /** The five buildings with a street door. The Privacy Plaza has none (D-076); the bunker's door is hidden (D-107). */
 export const BUILDINGS: readonly BuildingId[] = [
@@ -416,23 +418,27 @@ export interface FootballGoal {
  * Where a live player is. `street` is the overworld (the road, the sandbox,
  * the pitch and the plaza); `roof` is the Exchange tower's roof, reached by
  * lift; `studio` is the Avatar Studio; `bunker` is the hidden room under the
- * alley (D-107, shared since D-112). A suspended player is in none.
+ * alley (D-107, shared since D-112); `arena` is the gladiator pit's arena
+ * (D-114). A suspended player is in none.
  */
-export type PresenceArea = 'street' | 'roof' | 'studio' | 'bunker';
+export type PresenceArea = 'street' | 'roof' | 'studio' | 'bunker' | 'arena';
 
 /** Every presence area, street first. */
-export const PRESENCE_AREAS: readonly PresenceArea[] = Object.freeze(['street', 'roof', 'studio', 'bunker'] as const);
+export const PRESENCE_AREAS: readonly PresenceArea[] = Object.freeze(['street', 'roof', 'studio', 'bunker', 'arena'] as const);
 
 /**
  * D-112: the presence area a building's whole interior is, or null for a
- * private one. Only the hidden bunker: its door is a building door, so the
+ * private one. The hidden bunker, and since D-114 the gladiator pit's arena:
+ * each door is a building door, so the
  * World announces it with `building:entered` / `building:exited`, and the
  * Shell goes live in this area instead of suspending. (The roof is one floor
  * of the Exchange and has its own events; the Studio is not a building.)
  * Takes anything, so an untrusted payload can be asked directly.
  */
 export function presenceAreaOfBuilding(building: unknown): PresenceArea | null {
-  return building === 'bunker' ? 'bunker' : null;
+  if (building === 'bunker') return 'bunker';
+  if (building === 'arena') return 'arena';
+  return null;
 }
 
 /**
@@ -675,3 +681,6 @@ export interface EventBus<Events extends Record<string, unknown>> {
 
 /** What the world receives: it emits WorldEvents and listens for ShellEvents. */
 export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
+
+// D-114: the gladiator pit's arena: geometry, the ring as the wire carries it, combat constants.
+export * from './arena.js';

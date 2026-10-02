@@ -15,6 +15,7 @@
  */
 
 import {
+  ARENA_PRESENCE_GRID,
   BUNKER_PRESENCE_GRID,
   PRESENCE_AREAS,
   ROOF_PRESENCE_GRID,
@@ -32,7 +33,16 @@ export const SHARED_AREA_GRIDS: Readonly<Record<SharedPresenceArea, PresenceArea
   roof: ROOF_PRESENCE_GRID,
   studio: STUDIO_PRESENCE_GRID,
   bunker: BUNKER_PRESENCE_GRID,
+  arena: ARENA_PRESENCE_GRID,
 });
+
+/**
+ * D-114: the arena is a presence area in the shared contract, but the lobby
+ * does not accept it until its ring authority lands (stream B): an `area`
+ * request naming it is refused like any unknown area, so the session is
+ * suspended, exactly as a private interior is. Stream B deletes this set.
+ */
+const NOT_YET_ACCEPTED_AREAS: ReadonlySet<PresenceArea> = new Set<PresenceArea>(['arena']);
 
 /**
  * How far a move may travel without its path being checked, in World pixels:
@@ -51,7 +61,8 @@ const PATH_SAMPLE_PX = 4;
 /** Accept a requested area, or reject it outright. A missing one is the street. */
 export function normalizePresenceArea(raw: unknown): PresenceArea | null {
   if (raw === undefined) return 'street';
-  return PRESENCE_AREAS.includes(raw as PresenceArea) ? (raw as PresenceArea) : null;
+  if (!PRESENCE_AREAS.includes(raw as PresenceArea)) return null;
+  return NOT_YET_ACCEPTED_AREAS.has(raw as PresenceArea) ? null : (raw as PresenceArea);
 }
 
 /**
