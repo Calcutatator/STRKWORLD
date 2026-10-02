@@ -91,8 +91,10 @@ const MAX_STEP_MS = 100;
 
 const BAR_WIDTH = 1.1;
 const BAR_HEIGHT = 0.13;
-const BAR_Y = 2.15;
-const NUMBER_Y = 1.75;
+const BAR_Y = 2.3;
+const NUMBER_Y = 1.45;
+/** Numbers rise beside the bar's right end, clear of the bar and the dummy's head. */
+const NUMBER_X = 0.55;
 const VOXEL = 0.075;
 
 const COLOURS = Object.freeze({
@@ -181,8 +183,9 @@ export function damageNumberGeometry(text: string): BufferGeometry {
         if (bit !== '1') return;
         const x = (index * 4 + c - (columns - 1) / 2) * VOXEL;
         const y = (2 - r) * VOXEL;
-        boxes.push([[VOXEL, VOXEL, VOXEL * 0.6], [x, y, 0.02], COLOURS.number]);
-        boxes.push([[VOXEL * 1.5, VOXEL * 1.5, VOXEL * 0.5], [x + VOXEL * 0.2, y - VOXEL * 0.2, -0.03], COLOURS.numberEdge]);
+        boxes.push([[VOXEL, VOXEL, VOXEL * 0.6], [x, y, 0.03], COLOURS.number]);
+        // The brand's hard drop: the same cube behind, down and to the right.
+        boxes.push([[VOXEL, VOXEL, VOXEL * 0.6], [x + VOXEL * 0.3, y - VOXEL * 0.3, -0.02], COLOURS.numberEdge]);
       });
     });
   });
@@ -392,7 +395,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     slot.age = 0;
     slot.life = quiet ? ARENA_FX_REDUCED_NUMBER_MS : ARENA_FX_NUMBER_MS;
     slot.rise = quiet ? 0 : ARENA_FX_NUMBER_RISE;
-    slot.baseX = anchor.x + offset;
+    slot.baseX = anchor.x + NUMBER_X + offset;
     slot.mesh.position.set(slot.baseX, NUMBER_Y, anchor.z + 0.3);
     slot.mesh.material.opacity = 1;
     slot.mesh.visible = true;

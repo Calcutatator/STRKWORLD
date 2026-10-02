@@ -179,18 +179,23 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
     tickTimer = null;
   };
 
+  /** Run the solo deadlines up to now and apply its `place` events (the solo player's own moves). */
+  const advanceSolo = (now: number): void => {
+    if (authority === null) return;
+    for (const event of authority.advance(now)) {
+      // The solo authority moves its own player; the World snaps itself from the ring.
+      if (event.kind === 'place' && event.key === SOLO_KEY) {
+        const centre = arenaTileCentre(event.tile);
+        here = { x: centre.x, y: centre.y, facing: event.facing };
+      }
+    }
+  };
+
   const tick = (): void => {
     tickTimer = null;
     if (destroyed || authority === null || lobby !== null) return;
     try {
-      const events = authority.advance(clock());
-      for (const event of events) {
-        // The solo authority moves its own player; the World snaps itself from the ring.
-        if (event.kind === 'place' && event.key === SOLO_KEY) {
-          const centre = arenaTileCentre(event.tile);
-          here = { x: centre.x, y: centre.y, facing: event.facing };
-        }
-      }
+      advanceSolo(clock());
       publish(soloRing());
     } finally {
       schedule();
@@ -205,7 +210,10 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
 
   const soloAct = (act: (auth: SoloArenaAuthority, now: number) => void): void => {
     if (authority === null || lobby !== null || !inArena) return;
-    act(authority, clock());
+    const now = clock();
+    act(authority, now);
+    // As the lobby does after each intent: the claim's move into the ring, at once.
+    advanceSolo(now);
     publish(soloRing());
     schedule();
   };

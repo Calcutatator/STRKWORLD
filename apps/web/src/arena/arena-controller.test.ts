@@ -176,13 +176,15 @@ describe('arena controller: solo play runs the injected authority', () => {
     let phase: ArenaRingSnapshot['phase'] = 'idle';
     let round = 0;
     let hp = ARENA_MAX_HP;
+    let claimedAt = 0;
     const calls: string[] = [];
     const authority: SoloArenaAuthority = {
       snapshot: () => ring(phase, { round, hp, gameId: SOLO_ARENA_ID }),
       get active() {
         return phase !== 'idle';
       },
-      claim(claimant) {
+      claim(claimant, now) {
+        claimedAt = now;
         calls.push(`claim ${claimant.key} ${claimant.area} ${claimant.x},${claimant.y}`);
         phase = 'countdown';
         round += 1;
@@ -202,8 +204,8 @@ describe('arena controller: solo play runs the injected authority', () => {
         calls.push(`gone ${key} ${reason}`);
         return true;
       },
-      advance() {
-        if (phase === 'countdown') {
+      advance(now) {
+        if (phase === 'countdown' && now - claimedAt >= SOLO_ARENA_TICK_MS) {
           phase = 'fighting';
           return [{ kind: 'place', key: 'local', tile: { x: 20, y: 18 }, facing: 'up' }];
         }
