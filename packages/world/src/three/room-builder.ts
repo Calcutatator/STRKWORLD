@@ -493,7 +493,7 @@ export function buildFixedRoom(
     const halos: HaloQuads[] = [];
     try {
       for (const station of map.stations) {
-        // Counters built into their rooms (D-104) dress their own fixtures; the rest stand on the floor.
+        // Counters built into their rooms (D-105) dress their own fixtures; the rest stand on the floor.
         const counter = BUILT_IN_COUNTERS[station.station];
         const built = counter
           ? buildBuiltInStation(station, counter, map, theme, shell, labels, res, group, textLabels, counters)

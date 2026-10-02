@@ -222,6 +222,13 @@ third, with one `exchange:swap` station labelled `SWAP`. All use the same
 18×12, 32 px envelope. Shell remains the authorization boundary: every visit
 begins with stations locked until the matching current snapshot arrives.
 
+A floor may also list `fixtures`: solid furniture (`fixture` tiles) that a
+counter is built into, or, with a `prop`, free-standing furniture (D-105).
+The validator keeps every counter, lift pad and the exit reachable from the
+spawn. The Exchange, Degen floor, Post Office and Bridge counters are built
+into their rooms this way, and paint the Shell's label on a sign of their own
+architecture (`BUILT_IN_COUNTER_STATIONS` in `three/room-builder.ts`).
+
 The Vault's room (`VAULT_ROOM_DEFINITION`, one `vault:lending` station
 labelled `SUPPLY / REDEEM`) exists only when the Shell opens the Vault
 (D-077), so it is not in the always-open `FIXED_ROOM_DEFINITIONS`: the
