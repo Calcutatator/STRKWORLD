@@ -221,6 +221,10 @@ export const COPY = freezeCopy({
     stake: 'Stake',
     amount: 'Amount',
     recipient: 'To',
+    /** An unshield goes to the connected wallet unless the player chooses another address. */
+    toYourWallet: 'To: your wallet',
+    sendToAnother: 'Send to another address',
+    useMyWallet: 'Use my wallet',
     max: 'Max',
     /** D-091: the send's primary button before it has a recipient. */
     enterRecipient: 'Enter a recipient',
