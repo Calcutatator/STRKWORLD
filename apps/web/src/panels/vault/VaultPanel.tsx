@@ -559,7 +559,6 @@ function CommitBlock({
       ) : null}
       <ConfirmGate
         disclosures={summary.disclosures}
-        requiresDisclosure={summary.requiresDisclosure}
         busy={flow.name === 'submitting'}
         onConfirm={onConfirm}
         onCancel={onCancel}

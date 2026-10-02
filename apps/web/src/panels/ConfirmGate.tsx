@@ -4,37 +4,21 @@ import type { ReactNode } from 'react';
 /**
  * The commit point, and the only place a confirm button exists.
  *
- * `disclosures` is a required prop rendered immediately above the button, so
- * the approved copy for what is being signed cannot be off screen at the moment
- * it is signed. The earlier arrangement put the disclosure in the panel header,
- * keyed to whichever control the player last touched — queue a shield, click
- * the transfer tab, and the header disclosure unmounted while the shield stayed
- * queued and confirmable. The player then committed a public deposit with the
- * approved copy nowhere on screen, which is precisely the silent downgrade
- * D-020 and D-024 exist to prevent.
- *
- * Anything that needs a confirm button renders this. That is the enforcement:
- * a new panel cannot ship a confirm button without passing the disclosures for
- * what it is about to commit.
+ * `disclosures` holds the register's pre-commit lines for the batch being
+ * committed, if any, rendered immediately above the button so a line about
+ * what is being signed sits with the button rather than with whichever tab
+ * was touched last. The lines are product copy and optional (D-118): an empty
+ * list is not an error and never blocks the button.
  */
 export function ConfirmGate({
   disclosures,
-  requiresDisclosure,
   busy,
   onConfirm,
   onCancel,
   children,
 }: {
-  /** Approved copy for the routes in the batch being committed, verbatim. */
+  /** The register's pre-commit lines for the routes in the batch, if any. */
   disclosures: readonly string[];
-  /**
-   * Whether the batch contains a below-private route. With no disclosures for
-   * such a batch, this gate refuses to enable the button: the register already
-   * makes an undisclosed deviation unplayable, so arriving here means something
-   * between the register and the screen dropped the copy, and confirming would
-   * be the silent downgrade with extra steps.
-   */
-  requiresDisclosure: boolean;
   /** True while the submission is in flight. */
   busy: boolean;
   onConfirm: () => void;
@@ -42,8 +26,6 @@ export function ConfirmGate({
   /** Immutable review figures belong at the same commit point as the button. */
   children?: ReactNode;
 }) {
-  const missingDisclosure = requiresDisclosure && disclosures.length === 0;
-
   return (
     <div className="confirm-gate">
       {children}
@@ -55,17 +37,11 @@ export function ConfirmGate({
         </ul>
       ) : null}
 
-      {missingDisclosure ? (
-        <p className="confirm-blocked" role="alert">
-          {COPY.notices.disclosureMissing}
-        </p>
-      ) : null}
-
       <button
         type="button"
         className="confirm"
         onClick={onConfirm}
-        disabled={busy || missingDisclosure}
+        disabled={busy}
       >
         {COPY.flow.confirm}
       </button>

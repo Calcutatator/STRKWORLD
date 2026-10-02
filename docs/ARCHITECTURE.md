@@ -80,10 +80,10 @@ frontend fallback (D-018).
 
 Route admission is also graded (D-020): **absolute privacy is the default**,
 and any route below `private` is a deviation needing the project lead's
-recorded approval *plus* player-facing disclosure, both stored in
-`packages/shared/src/privacy-grades.ts`. An unapproved or undisclosed
-deviation renders a locked door — CI check 8 enforces this rather than
-trusting anyone to remember. A route that leaves player-held value sitting in
+recorded approval, stored in `packages/shared/src/privacy-grades.ts`. An
+unapproved deviation renders a locked door — CI check 8 enforces this rather
+than trusting anyone to remember. A route's pre-commit line (`disclosure`) is
+optional product copy, changed freely (D-118). A route that leaves player-held value sitting in
 public (`bridge.deposit`) must offer the next step back into the pool — the
 `returnToPool` property on the register entry (D-021). The swap is the
 exception because its bought asset lands directly in an OPEN pool note: since

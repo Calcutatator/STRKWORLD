@@ -2,8 +2,8 @@
  * The one place the shell reaches into the privacy register.
  *
  * `packages/shared` declares no `exports` map and `src/index.ts` does not
- * re-export `privacy-grades.ts`, so the canonical approved copy (D-024) is
- * only reachable by deep path today. That is fragile — adding an `exports`
+ * re-export `privacy-grades.ts`, so the register is only reachable by deep
+ * path today. That is fragile — adding an `exports`
  * field to that package breaks every such import at once — so the whole shell
  * imports the register from here and this file carries the only deep path.
  *
@@ -12,7 +12,6 @@
 
 import {
   PRIVACY_REGISTER as SHARED_PRIVACY_REGISTER,
-  isDisclosureWaived,
   isRoutePlayable,
 } from '@strkworld/shared/src/privacy-grades.js';
 import type { RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
@@ -25,5 +24,5 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = Object.freeze(
   SHARED_PRIVACY_REGISTER.map((entry) => Object.freeze({ ...entry })),
 );
 
-export { isDisclosureWaived, isRoutePlayable };
+export { isRoutePlayable };
 export type { PrivacyGrade, RouteGrade } from '@strkworld/shared/src/privacy-grades.js';

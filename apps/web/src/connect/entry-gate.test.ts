@@ -173,7 +173,6 @@ describe('the entry gate machine (D-072)', () => {
       review: {
         amount: 12_500000000000000000n,
         disclosures: [SHIELD_DISCLOSURE],
-        requiresDisclosure: true,
         feeCeiling: 6n * ONE,
       },
     });
@@ -492,17 +491,17 @@ describe('the entry gate machine (D-072)', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
-  it('never confirms a deposit whose disclosure is missing', async () => {
+  it('deposits with no pre-commit line at all: copy is not part of the gate (D-118)', async () => {
     const operations = new FakePrivacyOperations();
     const register = PRIVACY_REGISTER.map((entry) => entry.route === 'entry.shield' ? { ...entry, disclosure: null } : entry);
     open({ operations, register });
     await gate!.check();
-    // An undisclosed deviation is not playable, so the door is shut outright.
-    expect(gate!.door).toMatchObject({ open: false, reason: 'unapproved-route' });
+    expect(gate!.door.open).toBe(true);
     gate!.setAmount('3');
     await gate!.review();
-    expect(state().name).toBe('deposit');
-    expect(operations.submitted).toEqual([]);
+    expect(state()).toMatchObject({ name: 'review', review: { disclosures: [] } });
+    await gate!.confirm();
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 3n * ONE }]]);
   });
 
   it('keeps the deposit door shut when this build has not switched shield on', async () => {

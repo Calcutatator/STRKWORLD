@@ -596,7 +596,7 @@ street and make entry indistinguishable is superseded.
 
 ## D-020 — Absolute privacy is the default; every deviation needs approval
 
-**2026-08-16 · Accepted · strengthens D-018 · approval gate completed by D-024**
+**2026-08-16 · Accepted · strengthens D-018 · approval gate completed by D-024 · the disclosure half (requirement 2) superseded by D-118: approval is the whole gate; 2026-10-02: the lead removed the mandatory disclosure strings; copy is product copy, changed freely**
 
 **Context.** D-018 established that every financial building needs an approved
 private execution path. It did not say *how private*, and the routes differ
@@ -748,7 +748,7 @@ Wallet API artifact compatibility with AVNU's live paymaster.
 
 ## D-024 — The approved privacy disclosures are canonical product copy
 
-**2026-08-16 · Accepted · implements D-020**
+**2026-08-16 · Superseded by D-118 · implements D-020 · 2026-10-02: the lead removed the mandatory disclosure strings; copy is product copy, changed freely**
 
 **Context.** D-020 locked every below-private route until the project lead had
 approved both the deviation and plain-language player copy. The project lead
@@ -2885,7 +2885,7 @@ user chose a counter in the Bank, in Endur's look, built now and switched off.
 
 ## D-064 — The lead waives the in-game disclosure for Endur staking
 
-**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only · amended by D-085 (the unstaking note now points at the unstaking counter; the waiver itself is unchanged)**
+**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only · amended by D-085 (the unstaking note now points at the unstaking counter; the waiver itself is unchanged) · the waiver mechanism superseded by D-118 (no route needs a disclosure, so none needs a waiver; staking still shows no pre-commit line)**
 
 **Context.** D-063's staking counter is graded `anonymous`: who staked is
 hidden, while the STRK staked and the xSTRK received are public, as with the
@@ -2922,7 +2922,7 @@ own decision; there is no blanket switch.
 
 ## D-065 — A first transfer reveals its recipient; no note, one recipient per send
 
-**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver**
+**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver · the waiver mechanism superseded by D-118 (the transfer still shows no pre-commit line; the grade and the one-recipient rule stand)**
 
 **Context.** The 2026-09-27 privacy audit verified on mainnet that a first
 transfer to a new recipient opens a channel keyed by the recipient's address:
@@ -5916,7 +5916,7 @@ Not verified: a real browser (nothing is reachable until A and B land).
 
 ## D-115 — The way in is a title screen: the live overworld floats behind the wordmark, and each step stacks below it as a simple menu
 
-**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in**
+**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in · amended by D-118: the connect paragraph ("STRKWORLD asks your wallet to do the private part…") removed from the launch menu at the lead's request, 2026-10-02, and the menu restacked without it**
 
 **Context.** The connect flow and the entry gate (D-055, D-072, D-073) were dark `.room` cards on a blank page in rounded system type. D-113 approved a brand built from the game itself, with Cube World's title and menu screens as the reference, and left the web UI's type to a separate change.
 
@@ -6001,3 +6001,28 @@ The lead's decisions:
 **For the arena (D-114), and any later station.** E is interact everywhere; inside an active ring fight, with no station in range, E attacks. The session exposes `WorldSession.interactions` (`register`, `addAction`, `suspend`, `suspended`). Stream A wires D-114's `ArenaSession.onInteract()` as an action, `interactions.addAction({ id: 'arena', priority: 10, run: () => this.area === 'arena' && arena.onInteract() })`, which already follows the rule because the ring holds no station. When a fight must own E outright, for instance when the gate's own target is within the fighters' reach, it calls `const release = interactions.suspend('combat')` at the countdown and `release()` when the fight ends. While held, no station is focused or prompted and E goes straight to the actions. The ring gate and the leaderboard stand by the plaza can each register an `InteractionSource` and get the prompt, the touch button and the gates with it. `ArenaSessionHost.setPrompt` can route to the same prompt.
 
 **Consequences.** One more key press per counter visit. In exchange a player can walk the halls, the plaza and the Studio without opening anything, and every station looks and behaves the same. Tests: `interaction.test.ts` (nearest, faced, behind, the prompt on change only, stations before actions and action priority, the combat suspension, blocked and fail-closed, a throwing source, re-pick on interact, teardown, the ring and label helpers). `world-session.test.ts` checks every counter on every floor, the bunker's lift and the opened Vault's included: proximity alone never opens it, the prompt shows with its label, E opens it (the lift shows its notice), and walking away hides the prompt. It also checks a Studio figure and a plaza station, that no E comes from a text field, a repeat or while a panel holds the keyboard, that the nearest or faced of two registered stations wins, the combat yield, and that every building door and the Studio entrance still walk in. `touch-interact.test.ts` (jsdom) covers touch detection, the button showing and hiding, and a tap opening the Bank's SHIELD counter through a real session. `fixed-room.test.ts`, `bank-room.test.ts`, `bunker.test.ts`, `avatar-studio.test.ts`, `presenter.test.ts`, `plaza-builder.test.ts`, `bunker-room.test.ts` and the session suites were moved from walk-to-open to E. Help: the "Getting started" E line, the "Inside a building" paragraph and the station hint now say to press E. Not verified: a real browser or a real touch device.
+
+---
+
+## D-118 — No mandatory disclosures: pre-commit lines are product copy, and approval is the whole privacy gate
+
+**2026-10-02 · Accepted (the lead: "I never asked for privacy disclosures. If there is something forcing we add weird disclosures like this that I do not request, please remove it.") · supersedes D-024 · supersedes D-020's disclosure requirement (its approval gate stands) · supersedes the D-064 and D-065 waiver mechanism · amends D-115 (the connect paragraph is gone from the launch menu)**
+
+**Context.** The lead asked for the launch menu's connect paragraph ("STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it, …") to be removed, then said they never asked for privacy disclosures and that anything forcing them should go. The paragraph itself was ordinary shell copy (`COPY.connect.body`), not a register string. What forced disclosures was elsewhere:
+- D-024 froze the register's `disclosure` strings: changing one needed a decision entry, and `copy.test.ts` failed if shell copy restated one.
+- D-020's second requirement made a disclosure mandatory for every below-`private` route. `isRoutePlayable()` locked a route without one, CI check 8 failed the build ("approved deviation(s) still missing player-facing copy"), and `ConfirmGate` disabled the confirm button when a deviation reached it with none (`requiresDisclosure`, `COPY.notices.disclosureMissing`).
+- D-064 and D-065 added a waiver (`disclosureWaivedBy`, `DISCLOSURE_WAIVERS`) as the only way out.
+
+**Decision.**
+- **The connect paragraph is removed everywhere it showed**: the title screen's wallet card and its capability "Try again" room (`production/ProductionRoot.tsx`), and the in-city connect room (`connect/ConnectRoom.tsx`). The `COPY.connect.body` string is deleted. The no-wallet, wrong-network and unreachable lines still show, since they say what went wrong.
+- **The launch menu restacks without it** (D-115): the wordmark, then ▶ CONNECT WALLET, then the wallet buttons, as one tight centred stack sitting in the upper-middle of the screen.
+- **A register entry's `disclosure` is optional product copy**, changed freely like anything in `copy.ts`. No decision entry is needed to change or remove one.
+- **Approval is the whole privacy gate.** A below-`private` route still needs `approvedBy`, `approvedOn` and `rationale`, or its door stays locked (D-020, check 8). A missing pre-commit line no longer locks a door, fails CI or disables a confirm button.
+- **The waiver machinery is gone**: `disclosureWaivedBy`, `DISCLOSURE_WAIVERS`, `isDisclosureWaived`, `routesAwaitingCopy`, `batchRequiresDisclosure`, `routeRequiresDisclosure`, `ConfirmGate`'s `requiresDisclosure` prop and `COPY.notices.disclosureMissing`.
+- **Tests no longer pin disclosure wording.** Tests that check copy never overclaims privacy (no "untraceable", no hidden-amount claims) stay. They stop copy from promising more than a route delivers; they do not force any text to be shown.
+- **The other pre-commit lines and privacy-themed copy stay on screen for now.** That includes the Bank shield and unshield lines, the Exchange, Bridge, Vault, Borrow and Unstake lines, and the stand-in-address and Plaza explanations. The lead will decide which of them go.
+
+**Consequences.**
+- Copy edits to the register's lines or to shell copy are ordinary product changes.
+- `scripts/privacy-report.sh` now reports grades and approvals only.
+- `observable` is still the reviewer's exact record of what an observer sees. It was never player copy, and it is unchanged.

@@ -16,7 +16,6 @@ import {
   ENTRY_SHIELD_ROUTE,
   routeDisclosure,
   routeDoor,
-  routeRequiresDisclosure,
   type DoorState,
 } from '../panels/routes.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
@@ -85,9 +84,8 @@ export interface DepositReview {
   /** From the prepared batch: the exact amount being signed. */
   readonly amount: bigint;
   readonly warnings: readonly BatchWarning[];
-  /** The register's approved copy for `entry.shield`, verbatim (D-024). */
+  /** The register's pre-commit line for `entry.shield`, if it has one. */
   readonly disclosures: readonly string[];
-  readonly requiresDisclosure: boolean;
   /** The hard guard passed to `confirm`: never sign above the prepared fee. */
   readonly feeCeiling: bigint;
   /**
@@ -270,7 +268,6 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
   const door = routeDoor(ENTRY_SHIELD_ROUTE, register, policy);
   const disclosure = routeDisclosure(ENTRY_SHIELD_ROUTE, register);
   const disclosures: readonly string[] = Object.freeze(disclosure ? [disclosure] : []);
-  const requiresDisclosure = routeRequiresDisclosure(ENTRY_SHIELD_ROUTE, register);
   const memory = options.memory ?? null;
   const account = options.account ?? null;
   const readAccount = options.readAccount ?? null;
@@ -566,7 +563,6 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
           amount: reviewed.amount,
           warnings: reviewed.warnings,
           disclosures,
-          requiresDisclosure,
           feeCeiling: reviewed.feeCeiling,
           poolFee: reviewed.poolFee,
         },
@@ -585,8 +581,6 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
       const state = stateStore.getState();
       const batch = prepared;
       if (!live || state.name !== 'review' || !batch) return;
-      // ConfirmGate refuses this too; the machine does not trust the screen.
-      if (state.review.requiresDisclosure && state.review.disclosures.length === 0) return;
       const { form, review } = state;
       const id = begin();
       publish({ name: 'depositing', form, review, stage: 'composing' });

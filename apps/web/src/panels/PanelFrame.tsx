@@ -5,10 +5,8 @@ import { COPY } from '../copy.js';
 /**
  * The chrome every building panel sits in.
  *
- * The disclosure slot is the reason this is a shared frame rather than a
- * per-panel layout. Approved disclosure copy is rendered here, verbatim, from
- * the string the caller read out of the privacy register (D-024) — a panel
- * cannot forget to show one, and cannot quietly reword the one it shows.
+ * It carries one optional note slot: the route's pre-commit line from the
+ * privacy register, when it has one. That line is product copy (D-118).
  */
 export function PanelFrame({
   title,
@@ -34,7 +32,7 @@ export function PanelFrame({
    * route or changes a control.
    */
   brand?: 'endur' | 'degen';
-  /** Canonical approved copy, or null for a route graded `private` or with a waived disclosure (D-064, D-065). */
+  /** The route's pre-commit line from the register, or null for none. */
   disclosure: string | null;
   onClose: () => void;
   /**

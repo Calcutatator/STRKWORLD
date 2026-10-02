@@ -67,11 +67,10 @@ describe('next-step prompts', () => {
     const swapLocked = withRoute('exchange.swap', unapproved);
     expect(nextStepAfterIntents([shield], swapLocked)).toBe(COPY.next.afterShieldSend);
     // Since D-065 `post-office.transfer` is an approved deviation, so losing its
-    // approval or its waiver shuts it as surely as removing it.
+    // approval shuts it as surely as removing it.
     for (const sendShut of [
       withRoute('post-office.transfer', null),
       withRoute('post-office.transfer', unapproved),
-      withRoute('post-office.transfer', { disclosureWaivedBy: null }),
     ]) {
       expect(nextStepAfterIntents([shield], sendShut)).toBe(COPY.next.afterShieldSwap);
       expect(nextStepAfterIntents([swapInto(STRK)], sendShut)).toBeNull();

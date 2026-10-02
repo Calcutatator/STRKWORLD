@@ -929,7 +929,6 @@ function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onCon
       ) : null}
       <ConfirmGate
         disclosures={summary.disclosures}
-        requiresDisclosure={summary.requiresDisclosure}
         busy={flow.name === 'submitting'}
         onConfirm={onConfirm}
         onCancel={onCancel}

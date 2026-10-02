@@ -429,20 +429,22 @@ function WalletEntryGate({
     );
   }
 
+  // A line only when something needs saying: the wrong network, an
+  // unreachable wallet, or no wallet found. A plain wallet list has none.
   const body = snapshot.phase === 'wrong-network'
     ? COPY.connect.wrongNetwork
     : snapshot.phase === 'failed'
       ? COPY.unreachable.body
       : snapshot.wallets.length === 0
         ? COPY.connect.none
-        : COPY.connect.body;
+        : null;
   // The title screen's menu (D-115): "Connect wallet", then the choices.
   const title = snapshot.wallets.length === 0 ? COPY.connect.title : COPY.connect.action;
 
   return (
     <section className="room room-connect" data-testid="wallet-entry-gate">
       <h2>{title}</h2>
-      <p>{body}</p>
+      {body ? <p>{body}</p> : null}
       {snapshot.wallets.length === 0 ? <GetAWallet /> : null}
       {snapshot.wallets.map((choice) => (
         <button
@@ -483,7 +485,6 @@ function WalletCapabilityGateView({
     return (
       <section className="room room-connect" data-testid="wallet-capability-gate">
         <h2>{COPY.connect.title}</h2>
-        <p>{COPY.connect.body}</p>
         <button type="button" onClick={onRetry}>{COPY.connect.retry}</button>
       </section>
     );

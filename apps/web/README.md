@@ -193,7 +193,7 @@ D-065 then limits every batch to one transfer, one recipient per send: the
 accumulator refuses a second with a notice, and Menu Mode composes a transfer
 as one action, as it does a stake, while the station remains limited to one
 action. Both surfaces therefore reuse typed intents,
-recipient preflight where applicable, `ConfirmGate`, approved disclosures,
+recipient preflight where applicable, `ConfirmGate`, pre-commit lines,
 uncertainty handling and the session receipt ledger; only their allowed
 controls and batch policy differ. The World never receives either station's
 route or financial meaning.
@@ -203,8 +203,7 @@ beside shielding so no station mixes privacy grades (D-030). The same machine
 runs it in a Stake mode, which Bank Menu Mode also offers as a tab; a stake
 settles on its own, so neither surface uses batch vocabulary. The review shows
 the exact STRK in and names xSTRK out without a figure, because the prepared
-batch carries none. D-064 waives the route's disclosure, so `ConfirmGate`
-enables with none while every other deviation still needs its own. While it is
+batch carries none. The route has no pre-commit line (D-064). While it is
 the stake view the window carries `data-brand="endur"` and wears Endur's light
 palette. Like every route, it stays locked until the build's policy enables it.
 
@@ -242,7 +241,7 @@ shadow accounts yet" and gets no form, and the connect flow does not move.
 The review shows the exact amount in its token, the pool fee in STRK (and,
 for another token, that the wallet chooses which token pays it), and leaves
 the network fee to the wallet, which submits the Vault itself; `ConfirmGate`
-carries the route's approved disclosure. The
+carries the route's pre-commit line. The
 window wears Vesu's light palette (`.panel[data-building="vault"]`). The
 street door follows `vaultDoorOpen()`, the register plus this build's
 `VITE_STRK20_VAULT_*` policy, which `App` hands the World once as
@@ -348,10 +347,10 @@ between observations. What is already queued counts too — cancelling a review
 does not empty the visit.
 
 **The confirm button lives in `ConfirmGate`, and nowhere else.** It takes the
-approved disclosures for the batch being committed as a required prop and
-renders them immediately above itself. Disclosures follow what is *queued*, not
-what control was last touched — otherwise queuing a shield and switching tab
-hides the disclosure while leaving the deposit confirmable.
+register's pre-commit lines for the batch being committed, if any, and renders
+them immediately above itself. They follow what is *queued*, not what control
+was last touched. The lines are product copy and optional (D-118): an empty
+list never blocks the button.
 
 **Move state before you await, and guard everything after one.** A guard that
 reads the flow, awaits, and then transitions is not a guard: two clicks in one
@@ -385,9 +384,9 @@ closed: only an explicit development signal counts as development, because
 `import.meta.env` is absent outside Vite and "cannot tell" must not permit
 balances nobody holds.
 
-**Disclosures are imported, never written here.** The approved strings live in
-`packages/shared/src/privacy-grades.ts` (D-024). `copy.test.ts` fails if any of
-them is restated in shell copy.
+**Copy is product copy.** The per-route pre-commit lines live beside their
+grade in `packages/shared/src/privacy-grades.ts`; they, and everything in
+`copy.ts`, change freely (D-118, superseding D-024's frozen strings).
 
 **"Your wallet", never "your extension".** v1 ships against browser wallets, but
 the forward-compatibility design exists so a web or embedded wallet works with

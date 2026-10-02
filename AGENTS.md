@@ -259,6 +259,12 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-02 — No disclosure is mandatory any more: approval is the whole privacy gate, and every player-facing line is product copy (D-118)
+
+The lead never asked for privacy disclosures. D-024's frozen strings, D-020's "every deviation must disclose" and the D-064/D-065 waivers are gone. A register entry's `disclosure` is optional copy, edited freely with no decision entry. `isRoutePlayable()`, check 8 and `ConfirmGate` check approval only (`approvedBy`, `approvedOn`, `rationale`). Do not reintroduce a test or check that requires a line to exist or pins its wording. Tests that stop copy overclaiming privacy ("untraceable", hidden amounts) are a different thing and stay. The launch menu's connect paragraph (`COPY.connect.body`) is deleted. The title stack (`.title-front`) is now centred with a deeper bottom padding, plus a portrait rule, so it sits upper-middle without the paragraph.
+
+*Verified:* `npx vitest run --reporter=default` (the full suite), `npm run typecheck`, `bash scripts/check-invariants.sh`, and Chromium WebGL renders of the title screen at 1440×900 and 390×844 (wallet list, no wallets, entry gate).
+
 ### 2026-10-02 — Every station's E goes through one interaction system; register a source or an action there, never a new `keydown-E` listener (D-117)
 
 `packages/world/src/interaction.ts` owns the session's only `keydown-E` binding. A station registers an `InteractionSource` and gets the shared "E · …" prompt, the touch button, the input-gate and text-field gates, and nearest-or-faced choice when two are in reach. A non-station use of E (sandbox, kick, the arena's attack) registers an `InteractionAction`, which gets E only when no station is focused. A fight that must own E calls `session.interactions.suspend('combat')`. Traps: (1) the interior movement reporter never updates `facing` (`interiorUpdate` only runs the callback), so facing for interaction is the session's own `heading`, the last non-zero velocity, (0, 0) until the first step. Tests that teleport with `place()` and never move therefore face everything. (2) A step reported while a Shell window holds the controls must still move a room's highlight. Before, `update` returned early under a Shell claim, so after the window closed E would have opened a counter the player had walked away from. (3) `SessionView` is `Required<WorldSessionView>`, so a new optional view method must be implemented by the presenter and every recording view in the tests.
@@ -2100,6 +2106,8 @@ xSTRK views against the Cartridge public RPC; `packages/privacy` and
 `apps/backend` tests pin the action order and the relay's exact admission.
 
 ### 2026-09-27 — A disclosure can be waived only by a decision that names the route (D-064)
+
+*Superseded by D-118 (2026-10-02): no disclosure is required, so the waiver mechanism below no longer exists.*
 
 The privacy register's `disclosureWaivedBy` replaces a deviation's in-game
 disclosure and nothing else: approval, date and rationale are still required,
