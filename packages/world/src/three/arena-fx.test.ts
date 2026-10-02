@@ -39,7 +39,7 @@ function setup(reduced = false) {
   const numbers = (): Mesh<never, MeshBasicMaterial>[] =>
     fx.group.children.filter((c): c is Mesh<never, MeshBasicMaterial> => c instanceof Mesh && c.name === 'arena:damage-number');
   const shownNumbers = () => numbers().filter((n) => n.visible);
-  const dummyMaterial = () => (find('arena:dummy') as Mesh<never, MeshStandardMaterial>).material;
+  const dummyMaterial = () => (find('arena-fx:dummy') as Mesh<never, MeshStandardMaterial>).material;
   const pivot = () => find('arena-dummy-pivot');
   const fill = () => find('arena:hp-fill');
   const run = (ms: number, step = 16) => {
@@ -52,7 +52,7 @@ describe('arena fx: the dummy and its HP bar', () => {
   it('stands the dummy on its tile in the room, with the bar hidden while the ring is idle', () => {
     const { fx, find } = setup();
     const ground = tileCenterToGround(ARENA_DUMMY_TILE.x, ARENA_DUMMY_TILE.y, { x: 64, y: 64 });
-    const dummy = find('arena-dummy');
+    const dummy = find('arena-fx-dummy');
     expect(dummy.position.x).toBeCloseTo(ground.x);
     expect(dummy.position.z).toBeCloseTo(ground.z);
     fx.sync(frame({ phase: 'idle' }), null);
@@ -255,7 +255,7 @@ describe('arena fx: the room’s own dummy', () => {
   it('flashes and topples the room’s dummy on its own material, and builds none of its own', () => {
     const { dummy, body, shared } = roomDummy();
     const fx = createArenaFx({ reducedMotion: () => false, dummy });
-    expect(fx.group.getObjectByName('arena:dummy')).toBeUndefined();
+    expect(fx.group.getObjectByName('arena-fx:dummy')).toBeUndefined();
     expect(body.material).not.toBe(shared);
     // The bar sits over the room's dummy, in the same frame.
     expect(fx.group.getObjectByName('arena-hp-bar')!.position.x).toBeCloseTo(20.5);
@@ -269,5 +269,42 @@ describe('arena fx: the room’s own dummy', () => {
     fx.dispose();
     expect(body.material).toBe(shared);
     expect(dummy.rotation.x).toBe(0);
+  });
+});
+
+describe('arena fx: finding the room’s dummy once mounted', () => {
+  it('adopts the arena room’s `arena:dummy` beside its mount, and drops its own', () => {
+    const room = new Group();
+    const mount = new Group();
+    mount.name = 'arena:fx-mount';
+    const dummy = new Group();
+    dummy.name = 'arena:dummy';
+    dummy.position.set(20.5, 0, 14.5);
+    const shared = new MeshStandardMaterial();
+    dummy.add(new Mesh(new BoxGeometry(0.5, 1, 0.3), shared));
+    room.add(dummy, mount);
+    const fx = createArenaFx({ reducedMotion: () => false });
+    expect(fx.group.getObjectByName('arena-fx:dummy')).toBeDefined();
+    mount.add(fx.group);
+    fx.update(16);
+    expect(fx.group.getObjectByName('arena-fx:dummy')).toBeUndefined();
+    // The bar is over the room's dummy, in the room's own frame.
+    expect(fx.group.getObjectByName('arena-hp-bar')!.position.x).toBeCloseTo(20.5);
+    fx.sync(frame({ hp: 10, hits: 9 }), null);
+    fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
+    for (let t = 0; t < 600; t += 16) fx.update(16);
+    expect(dummy.rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(shared.emissive.getHex()).toBe(0);
+    fx.dispose();
+    expect((dummy.children[0] as Mesh).material).toBe(shared);
+  });
+
+  it('keeps its own dummy where the room has none', () => {
+    const mount = new Group();
+    const fx = createArenaFx({ reducedMotion: () => false });
+    mount.add(fx.group);
+    fx.update(16);
+    expect(fx.group.getObjectByName('arena-fx:dummy')).toBeDefined();
+    fx.dispose();
   });
 });

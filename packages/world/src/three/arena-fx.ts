@@ -40,6 +40,10 @@ import { tileCenterToGround } from './coords.js';
  * in the arena room.
  */
 
+/** The arena room's dummy group (stream A's `arena-room.ts`): its origin is the post's foot. */
+export const ARENA_ROOM_DUMMY_NAME = 'arena:dummy';
+const ROOM_DUMMY_NAME = ARENA_ROOM_DUMMY_NAME;
+
 /** How the fx asks the remote avatar layer (C's `remote-avatars.ts`) to play a peer's swing. */
 export interface RemoteSwingPort {
   playSwing(gameId: GameId): void;
@@ -55,8 +59,10 @@ export interface ArenaFxDeps {
    * post's foot, in the same frame as the fx group's parent (the room's
    * `fxMount` beside it). The fx then flashes, wobbles and topples it (on
    * cloned materials, so nothing else in the room flashes) and builds no
-   * dummy of its own. Absent, the fx builds one at the dummy tile in World
-   * units with the room origin applied.
+   * dummy of its own. Absent, the fx adopts the room's `arena:dummy`
+   * (`ARENA_ROOM_DUMMY_NAME`) once it is mounted beside it, and until then
+   * draws its own at the dummy tile in World units with the room origin
+   * applied.
    */
   readonly dummy?: Object3D | null;
 }
@@ -228,20 +234,52 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
 
   // The dummy: the room's own when it has one, else ours at the tile. Either
   // way `pivot` turns about the post's foot for the wobble and the topple.
-  const adopted = deps.dummy ?? null;
-  const owned: { geometry: BufferGeometry; material: MeshStandardMaterial } | null = adopted
-    ? null
-    : { geometry: mergeBoxes(DUMMY_BOXES), material: new MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }) };
+  let adopted: Object3D | null = null;
+  let owned: { readonly root: Group; readonly geometry: BufferGeometry; readonly material: MeshStandardMaterial } | null = null;
   let pivot: Object3D;
   /** The materials that flash, with the colour each started as. */
-  const flashing: Array<{ readonly material: MeshStandardMaterial; readonly base: Color; readonly cloned: boolean }> = [];
+  let flashing: Array<{ readonly material: MeshStandardMaterial; readonly base: Color }> = [];
   let anchor: { readonly x: number; readonly z: number } = ground;
   /** Puts the room's own materials back on its dummy at dispose. */
   const restores: Array<() => void> = [];
-  if (adopted) {
-    pivot = adopted;
-    anchor = { x: adopted.position.x, z: adopted.position.z };
-    adopted.traverse((object) => {
+
+  {
+    const root = new Group();
+    root.name = 'arena-fx-dummy';
+    root.position.set(ground.x, 0, ground.z);
+    const ownPivot = new Group();
+    ownPivot.name = 'arena-dummy-pivot';
+    const geometry = mergeBoxes(DUMMY_BOXES);
+    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
+    material.name = 'arena-fx:dummy';
+    const mesh = new Mesh(geometry, material);
+    mesh.name = 'arena-fx:dummy';
+    mesh.castShadow = true;
+    ownPivot.add(mesh);
+    root.add(ownPivot);
+    group.add(root);
+    owned = { root, geometry, material };
+    pivot = ownPivot;
+    flashing = [{ material, base: material.color.clone() }];
+  }
+
+  /**
+   * Take over the room's dummy: drop our own, flash cloned materials (so
+   * nothing else in the room flashes) and put the bar and numbers over it.
+   */
+  const adoptDummy = (dummy: Object3D): void => {
+    if (adopted !== null) return;
+    adopted = dummy;
+    if (owned !== null) {
+      owned.root.removeFromParent();
+      owned.geometry.dispose();
+      owned.material.dispose();
+      owned = null;
+    }
+    pivot = dummy;
+    anchor = { x: dummy.position.x, z: dummy.position.z };
+    flashing = [];
+    dummy.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       const source = object.material;
       if (!(source instanceof MeshStandardMaterial)) return;
@@ -250,23 +288,37 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       restores.push(() => {
         object.material = source;
       });
-      flashing.push({ material, base: material.color.clone(), cloned: true });
+      flashing.push({ material, base: material.color.clone() });
     });
-  } else {
-    const dummyRoot = new Group();
-    dummyRoot.name = 'arena-dummy';
-    dummyRoot.position.set(ground.x, 0, ground.z);
-    pivot = new Group();
-    pivot.name = 'arena-dummy-pivot';
-    owned!.material.name = 'arena:dummy';
-    const dummy = new Mesh(owned!.geometry, owned!.material);
-    dummy.name = 'arena:dummy';
-    dummy.castShadow = true;
-    pivot.add(dummy);
-    dummyRoot.add(pivot);
-    group.add(dummyRoot);
-    flashing.push({ material: owned!.material, base: owned!.material.color.clone(), cloned: false });
-  }
+  };
+
+  /**
+   * Without a `dummy` dep, the fx finds the room's dummy once it is mounted:
+   * the arena room names its dummy group `arena:dummy` beside the fx mount.
+   * Searched once per new parent, never inside the fx's own group.
+   */
+  let searchedParent: Object3D | null = null;
+  const findRoomDummy = (): void => {
+    if (adopted !== null) return;
+    const mount = group.parent;
+    if (mount === searchedParent) return;
+    searchedParent = mount;
+    const room = mount?.parent ?? mount;
+    if (!room) return;
+    let found: Object3D | null = null;
+    room.traverse((object) => {
+      if (found || object.name !== ROOM_DUMMY_NAME) return;
+      let inside = false;
+      for (let p: Object3D | null = object; p; p = p.parent) if (p === group) inside = true;
+      if (!inside) found = object;
+    });
+    if (found) {
+      adoptDummy(found);
+      placeOverDummy();
+      applyPivot();
+      applyFlash();
+    }
+  };
 
   // The HP bar: dark back, ember fill anchored at its left edge, tilted to face the camera.
   const bar = new Group();
@@ -306,6 +358,20 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     mesh.renderOrder = 10;
     group.add(mesh);
     numbers.push({ mesh, age: 0, life: 0, rise: 0, baseX: 0 });
+  }
+
+  /** The bar (and any numbers showing) over wherever the dummy stands. */
+  const placeOverDummy = (): void => {
+    bar.position.set(anchor.x, BAR_Y, anchor.z);
+    for (const n of numbers) {
+      if (!n.mesh.visible) continue;
+      n.mesh.position.x = anchor.x + NUMBER_X;
+      n.mesh.position.z = anchor.z + 0.3;
+    }
+  };
+  if (deps.dummy) {
+    adoptDummy(deps.dummy);
+    placeOverDummy();
   }
 
   // Straw flecks: one instanced mesh, full motion only.
@@ -467,6 +533,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
   return Object.freeze({
     sync(frame: ArenaViewFrame | null, remote: RemoteSwingPort | null): void {
       if (disposed) return;
+      findRoomDummy();
       syncFighter(frame, remote);
       const prev = previous;
       previous = frame;
@@ -515,6 +582,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     },
     update(dt: number): void {
       if (disposed) return;
+      findRoomDummy();
       const ms = Number.isFinite(dt) && dt > 0 ? Math.min(dt, MAX_STEP_MS) : 0;
       if (ms === 0) return;
       const s = ms / 1000;
@@ -589,7 +657,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       owned?.geometry.dispose();
       for (const restore of restores) restore();
       for (const { material } of flashing) material.dispose();
-      if (adopted) adopted.rotation.x = 0;
+      if (adopted) (adopted as Object3D).rotation.x = 0;
       barBack.geometry.dispose();
       barBackMaterial.dispose();
       fillGeometry.dispose();
