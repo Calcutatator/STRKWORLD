@@ -13775,3 +13775,38 @@ side by side with the pre-mirror `renders/arena-final-*.png`; the raised-path
 regression caught by `three/street-builder.test.ts`'s
 `streetSurfaceHeightAt(map, X + 23, 22)` assertion, which is why that test
 exists.
+
+### 2026-10-02 — A modal over a panel must stop keystrokes at the window in the capture phase
+
+The consent pop-up on the placement stand (D-122, amended) is a dialog inside
+the Shell's panel layer. Two listeners sit on `window` and would otherwise
+both act on its keystrokes: the visit layer's Escape handler, which closes the
+whole station window (`VisitLayer.handleVisitKeyDown`), and the World's own
+keyboard (`packages/world/src/dom-keyboard.ts`), which reads E, movement and
+Space. Both are **bubble-phase** listeners on `window`. A React `onKeyDown`
+inside the dialog is not enough to be sure of beating them, and `preventDefault`
+is wrong for a dialog (Space on a focused button activates it). The reliable
+shape is a `keydown` listener on `window` with `capture: true` that calls
+`stopPropagation()` on everything, handles Escape and Tab itself, and leaves
+`keyup` alone — `dom-keyboard` clears a held key on release whatever else is
+open, and swallowing that would leave a key held after the dialog closes.
+
+Two smaller traps found with it. A button styled with a plain `background` is
+undone by the shared `button:hover:not(:disabled)` rule, which is more
+specific and resets `--btn-bg-hover`: a hovered ember cap went grey in the
+first render. Styling through the `--btn-*` tokens instead keeps hover, press
+and focus (`.placement-check` has the same latent bug). And under this
+runner's `localStorage` shim there are no `key()`, `length` or even
+`getItem()` methods, so a test cannot enumerate or read storage directly —
+assert through `ViewerStorage` with an injected backing map instead.
+
+*Verified:* `apps/web/src/plaza/placement-consent.test.tsx` (7 tests), which
+includes a window-level bubble listener that hears nothing while the dialog is
+open and both keys again once it closes, and a real `VisitLayer` where the
+first Escape answers the dialog while the station window stays open and the
+Shell keeps the controls. The hover trap was seen in a Playwright render of
+the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
+(295 files, 6232 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
