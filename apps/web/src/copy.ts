@@ -822,6 +822,19 @@ export const COPY = freezeCopy({
       demo: 'Demo placement: this practice city shows sample numbers.',
       /** The review step's quiet line, only when the transaction carries a receipt. */
       reviewHint: 'Counts toward your private placement',
+      /**
+       * The consent pop-up, before every check (D-122, amended 2026-10-02 at
+       * the lead's request). A check hands the app owner's tally the season
+       * commitment, which tells it which of this season's private actions are
+       * this player's, so the player is asked first, every time. It is a
+       * disclosure to our own app, not a privacy claim about a route (D-118).
+       */
+      consent: {
+        title: 'Check your placement',
+        body: "Checking your placement shares tracking information with the STRKWORLD app owner only — which of your private actions this season are yours. It's never public or shown to other players. Only continue if you're comfortable sharing this.",
+        confirm: 'Continue',
+        cancel: 'Cancel',
+      },
     },
   },
 

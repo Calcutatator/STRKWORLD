@@ -1,4 +1,5 @@
 import type { WalletSessionOptions } from '@strkworld/privacy';
+import { detectLeaderboardProbe } from './leaderboard-probe.js';
 import { VAULT_MARKET_METADATA } from './vesu-markets.js';
 
 const MAINNET_NAME = 'SN_MAIN';
@@ -76,7 +77,39 @@ export function routePolicyFrom(environment: WalletEnvironment | undefined): Wal
 }
 
 export function detectRoutePolicy(): WalletSessionOptions['policy'] | null {
-  return routePolicyFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
+  return routePolicyFrom(probedEnvironment());
+}
+
+/**
+ * Probe mode (D-122, amended 2026-10-02): the leaderboard's build flag counts
+ * only in a tab that opted in with `?lb=1` (`leaderboard-probe.ts`). Outside
+ * one, this build reads exactly as it would with the flag unset: no
+ * `leaderboard` in the route policy, so nothing asks the wallet for a season
+ * commitment and no action carries a receipt, and no placement stand. Pure, so
+ * both answers are a test; every other variable is passed through untouched.
+ */
+export function withLeaderboardProbe(environment: WalletEnvironment, optedIn: boolean): WalletEnvironment;
+export function withLeaderboardProbe(
+  environment: WalletEnvironment | undefined,
+  optedIn: boolean,
+): WalletEnvironment | undefined;
+export function withLeaderboardProbe(
+  environment: WalletEnvironment | undefined,
+  optedIn: boolean,
+): WalletEnvironment | undefined {
+  if (!environment || optedIn) return environment;
+  if (environment.VITE_STRK20_LEADERBOARD_ENABLED === undefined) return environment;
+  const probed: WalletEnvironment = { ...environment };
+  delete probed.VITE_STRK20_LEADERBOARD_ENABLED;
+  return Object.freeze(probed);
+}
+
+/** This build's environment with the probe applied, or undefined where there is none. */
+function probedEnvironment(): WalletEnvironment | undefined {
+  return withLeaderboardProbe(
+    (import.meta as ImportMeta & { env?: WalletEnvironment }).env,
+    detectLeaderboardProbe(),
+  );
 }
 
 /**
@@ -259,7 +292,9 @@ export function parseLeaderboard(environment: WalletEnvironment): { readonly led
  * Whether this build stands the placement stand by the plaza. Production
  * needs the whole leaderboard (switch and ledger), the same answer the route
  * policy gives; a demo build needs only the switch, and shows the fake's
- * clearly-labelled demo placement.
+ * clearly-labelled demo placement. Either way the tab must be probing
+ * (`detectPlacementStand`), so the stand appears for whoever opened the page
+ * with `?lb=1` and for nobody else.
  */
 export function placementStandFrom(environment: WalletEnvironment | undefined): boolean {
   if (!environment || environment.VITE_STRK20_LEADERBOARD_ENABLED !== 'true') return false;
@@ -267,7 +302,7 @@ export function placementStandFrom(environment: WalletEnvironment | undefined): 
 }
 
 export function detectPlacementStand(): boolean {
-  return placementStandFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
+  return placementStandFrom(probedEnvironment());
 }
 
 /**
