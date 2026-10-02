@@ -95,6 +95,51 @@ describe('ExchangePanel review render', () => {
     expect(gate).not.toContain('type="checkbox"');
   });
 
+  it('shows only Sell, Expected buy and Rate until Details is opened', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000,
+        priceCheck: { status: 'checked', boundBps: 300, shortfallBps: 120, sellUsd: 123_456_789_000n, expectedBuyUsd: 121_975_000_000n },
+      },
+    });
+    const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
+    const summary = gate.slice(gate.indexOf('<dl class="exchange-review-summary">'), gate.indexOf('</dl>'));
+    expect([...summary.matchAll(/<dt>(.*?)<\/dt>/g)].map((match) => match[1])).toEqual([COPY.exchange.sell, COPY.exchange.expectedBuy, COPY.exchange.rate]);
+    expect(summary).toContain('1 STRK');
+    expect(summary).toContain('2 ETH');
+    expect(summary).toContain('1 STRK ≈ 2 ETH');
+    for (const hidden of ['1.99 ETH', '0.50%', '6 STRK', '$1,234.57', "Pragma&#x27;s oracle price"]) expect(summary).not.toContain(hidden);
+
+    // Details is a closed disclosure holding everything else, and the route row is gone.
+    expect(gate).toMatch(/<details class="exchange-review-details"><summary>Details<\/summary>/);
+    expect(gate).not.toMatch(/<details[^>]* open/); // no disclosure, nested glossary terms included, starts open
+    const details = gate.slice(gate.indexOf('<details class="exchange-review-details"'), gate.indexOf('</dl></details>'));
+    for (const shown of ['1.99 ETH', '0.50%', '2100-01-01T00:00:00.000Z', '6 STRK', '0 STRK', '≈ $1,234.57', '≈ $1,219.75', "1.20% below Pragma&#x27;s oracle price, within the 3% allowed."]) expect(details).toContain(shown);
+    expect(markup).not.toContain('via avnu');
+    expect(markup).not.toContain('Route');
+  });
+
+  it('keeps the D-024 disclosure, the confirm button and an unchecked-price warning outside Details', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000, priceCheck: { status: 'unchecked', boundBps: 300 } },
+    });
+    const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    const outside = markup.slice(markup.indexOf('class="confirm-gate"')).replace(/<details class="exchange-review-details">[\s\S]*?<\/dl><\/details>/, '');
+    expect(outside).toContain('This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.');
+    expect(outside).toContain('class="confirm"');
+    expect(outside).toContain('type="checkbox"');
+    expect(outside).toContain(COPY.exchange.acknowledgeUnchecked);
+    expect(outside).toContain('data-status="unchecked"');
+    expect(outside).toContain("Pragma&#x27;s oracle has no price");
+  });
+
   it('asks for an explicit acknowledgement when nothing independent prices the pair (D-084)', async () => {
     const operations = new FakePrivacyOperations({
       balances: { [strk!.token]: 100n * 10n ** 18n },

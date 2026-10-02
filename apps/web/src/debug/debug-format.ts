@@ -114,13 +114,18 @@ export function failureLevel(error: unknown): DebugLevel {
 }
 
 /**
- * A privacy or wallet failure: its PrivacyError kind, the wallet's error code
- * where one is available, and the messages along its cause chain, e.g.
- * `kind=not-registered code=118 NOT_REGISTERED message="…" cause="…"`.
+ * A privacy or wallet failure: the route that failed when the panel named it,
+ * its PrivacyError kind, the wallet's error code where one is available, and
+ * the messages along its cause chain, e.g.
+ * `op=stake kind=unknown code=114 INVALID_REQUEST_PAYLOAD message="…" cause="…"`.
+ * Without `op`, a 114 reads only as kind `unknown`, which does not say which
+ * route the wallet refused.
  */
 export function describeFailure(error: unknown): string {
   const facts = failureFacts(error);
   const parts: string[] = [];
+  const operation = readData(error, 'operation');
+  if (INTENT_KINDS.has(operation)) parts.push(`op=${String(operation)}`);
   if (facts.kind) parts.push(`kind=${facts.kind}`);
   if (facts.code !== null) parts.push(`code=${formatCode(facts.code)}`);
   if (!facts.kind && facts.name) parts.push(`name=${facts.name}`);
