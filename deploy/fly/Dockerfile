@@ -55,6 +55,9 @@ ARG VITE_STRK20_SWAP_ENABLED
 ARG VITE_STRK20_SWAP_ALLOWED_TOKENS
 ARG VITE_STRK20_SWAP_SLIPPAGE_BPS
 ARG VITE_STRK20_SWAP_DEGEN_ENABLED
+# D-116: the private leaderboard's ReceiptLedger contract address. Unset, no
+# action carries a receipt and the leaderboard stand stays shut.
+ARG VITE_STRK20_LEADERBOARD_LEDGER
 # D-069: test deployments only. Unset, as on every launch, the debug logger is
 # not compiled into the bundle at all.
 ARG VITE_DEBUG_LOGS

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReceiptLedger deploy</title>
+<!--
+  Wallet-signed deploy of the STRKWORLD ReceiptLedger to Starknet mainnet.
+  No dependencies and no build step: serve this folder over http://localhost and open it.
+  Keys never leave the wallet: this page only asks the wallet to sign, through the
+  get-starknet wallet protocol (wallet-standard `starknet:walletApi`, or the injected
+  `window.starknet_*` object for older extensions).
+-->
+<style>
+  :root { --bg:#f6f6f2; --fg:#1c1c1c; --muted:#666; --card:#fff; --line:#ddd; --ok:#1d7a3a; --bad:#b3261e; --accent:#2f5bd3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#eee; --muted:#aaa; --card:#1e1e1e; --line:#333; --ok:#5fcf80; --bad:#ff8a80; --accent:#8fb0ff; } }
+  body { background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; margin:0; padding:16px; }
+  main { max-width:760px; margin:0 auto; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:12px 0; }
+  h1 { font-size:20px; } h2 { font-size:16px; margin:0 0 6px; }
+  code, .mono { font-family: ui-monospace, Menlo, monospace; font-size:13px; word-break:break-all; }
+  button { font:inherit; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--accent); color:#fff; cursor:pointer; margin:4px 6px 4px 0; }
+  button.secondary { background:transparent; color:var(--fg); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .muted { color:var(--muted); } .ok { color:var(--ok); } .bad { color:var(--bad); }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0; } dt { color:var(--muted); }
+  #log { white-space:pre-wrap; max-height:220px; overflow:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>STRKWORLD ReceiptLedger: deploy to mainnet</h1>
+  <p class="muted">Two wallet prompts: declare the class, then deploy it through the Universal Deployer.
+  The contract has no owner and cannot be upgraded, so it does not matter which account deploys it.</p>
+
+  <section>
+    <h2>What will be deployed</h2>
+    <dl id="facts"></dl>
+  </section>
+
+  <section>
+    <h2>1. Connect a wallet</h2>
+    <div id="wallets" class="muted">Looking for wallets…</div>
+    <p id="account" class="mono"></p>
+  </section>
+
+  <section>
+    <h2>2. Declare the class</h2>
+    <p id="declareState" class="muted">Connect first.</p>
+    <button id="declareBtn" disabled>Declare with wallet</button>
+  </section>
+
+  <section>
+    <h2>3. Deploy the contract</h2>
+    <p id="deployState" class="muted">Declare first.</p>
+    <button id="deployBtn" disabled>Deploy with wallet</button>
+  </section>
+
+  <section>
+    <h2>Result</h2>
+    <dl id="result"><dt>Class hash</dt><dd class="mono">–</dd><dt>Contract</dt><dd class="mono">–</dd></dl>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log" class="mono muted"></div>
+  </section>
+</main>
+<script src="ledger-artifact.js"></script>
+<script>
+(() => {
+  const A = window.LEDGER_ARTIFACT;
+  // Public read-only RPC (the one the repo's drift canary uses). Reads only, never signs.
+  const RPC = 'https://api.cartridge.gg/x/starknet/mainnet';
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $('log').textContent += `${new Date().toISOString().slice(11, 19)}  ${m}\n`; $('log').scrollTop = 1e9; };
+  const norm = (h) => '0x' + BigInt(h).toString(16);
+  const same = (a, b) => a != null && b != null && BigInt(a) === BigInt(b);
+  let wallet = null; // { name, request(call) }
+
+  function copyBtn(text) {
+    const b = document.createElement('button');
+    b.className = 'secondary'; b.textContent = 'Copy';
+    b.onclick = async () => { try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; } };
+    return b;
+  }
+  function fact(dl, label, value, copy) {
+    const dt = document.createElement('dt'); dt.textContent = label;
+    const dd = document.createElement('dd'); dd.className = 'mono'; dd.textContent = value + ' ';
+    if (copy) dd.appendChild(copyBtn(value));
+    dl.append(dt, dd);
+  }
+  fact($('facts'), 'Network', 'Starknet mainnet');
+  fact($('facts'), 'Class hash', A.classHash, true);
+  fact($('facts'), 'Compiled class hash', A.compiledClassHash);
+  fact($('facts'), 'Anonymizer (arg 1)', A.constructorCalldata[0]);
+  fact($('facts'), 'STRK20 pool (arg 2)', A.constructorCalldata[1]);
+  fact($('facts'), 'Contract address', A.expectedAddress, true);
+
+  async function rpc(method, params) {
+    const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    const j = await r.json();
+    if (j.error) { const e = new Error(j.error.message); e.code = j.error.code; throw e; }
+    return j.result;
+  }
+  async function isDeclared() {
+    try { await rpc('starknet_getClass', ['latest', A.classHash]); return true; }
+    catch (e) { if (e.code === 28) return false; throw e; } // 28 = CLASS_HASH_NOT_FOUND
+  }
+  async function deployedClass() {
+    try { return await rpc('starknet_getClassHashAt', ['latest', A.expectedAddress]); }
+    catch (e) { if (e.code === 20) return null; throw e; } // 20 = CONTRACT_NOT_FOUND
+  }
+  async function waitFor(txHash) {
+    log(`waiting for ${txHash}`);
+    for (let i = 0; i < 120; i++) {
+      try {
+        const r = await rpc('starknet_getTransactionReceipt', [txHash]);
+        if (r.execution_status === 'REVERTED') throw new Error(`reverted: ${r.revert_reason || ''}`);
+        if (r.finality_status === 'ACCEPTED_ON_L2' || r.finality_status === 'ACCEPTED_ON_L1') return r;
+      } catch (e) { if (e.code !== 29) throw e; } // 29 = TXN_HASH_NOT_FOUND (not yet seen)
+      await new Promise((res) => setTimeout(res, 3000));
+    }
+    throw new Error('timed out after 6 minutes; check the hash on Voyager');
+  }
+
+  // ---- wallet discovery: the protocol get-starknet uses, without bundling it ----
+  const found = new Map();
+  function addWallet(name, icon, request) {
+    if (found.has(name)) return;
+    found.set(name, { name, request });
+    const box = $('wallets');
+    if (box.dataset.init !== '1') { box.textContent = ''; box.dataset.init = '1'; }
+    const b = document.createElement('button'); b.textContent = `Connect ${name}`;
+    b.onclick = () => connect(found.get(name));
+    box.appendChild(b);
+  }
+  function considerStandard(w) {
+    const f = w && w.features && w.features['starknet:walletApi'];
+    if (f && typeof f.request === 'function') addWallet(w.name, w.icon, (c) => f.request(c));
+  }
+  const api = { register: (...ws) => { ws.forEach(considerStandard); return () => {}; } };
+  window.addEventListener('wallet-standard:register-wallet', (e) => { try { e.detail(api); } catch {} });
+  try { window.dispatchEvent(new CustomEvent('wallet-standard:app-ready', { detail: api })); } catch {}
+  // Extensions often define window.starknet_* as non-enumerable, so Object.keys misses them:
+  // check the well-known ids explicitly as well as every own property name.
+  const KNOWN_IDS = ['starknet_argentX', 'starknet_ready', 'starknet_braavos', 'starknet_okxwallet', 'starknet_keplr', 'starknet_bitkeep', 'starknet'];
+  function scanInjected() {
+    const names = new Set([...KNOWN_IDS, ...Object.getOwnPropertyNames(window).filter((k) => k.startsWith('starknet'))]);
+    for (const k of names) {
+      let w;
+      try { w = window[k]; } catch { continue; }
+      if (!w || typeof w.request !== 'function') continue;
+      if (/metamask/i.test(k) || /metamask/i.test(w.id || '')) continue;
+      const name = w.name || k;
+      if (k === 'starknet' && [...found.values()].length) continue; // the generic alias duplicates a named wallet
+      addWallet(name, w.icon, (c) => w.request(c));
+    }
+  }
+  // Extensions inject late: keep looking for a few seconds instead of a single check.
+  let scans = 0;
+  const scanTimer = setInterval(() => {
+    scanInjected();
+    scans += 1;
+    if (found.size || scans >= 20) {
+      clearInterval(scanTimer);
+      if (!found.size) $('wallets').textContent = 'No Starknet wallet found. Unlock the extension and reload.';
+    }
+  }, 300);
+
+  async function connect(w) {
+    try {
+      const accounts = await w.request({ type: 'wallet_requestAccounts' });
+      const chain = await w.request({ type: 'wallet_requestChainId' });
+      if (!same(chain, A.chainId)) { $('account').innerHTML = `<span class="bad">Wallet is on ${chain}; switch it to Starknet mainnet and reconnect.</span>`; return; }
+      wallet = w;
+      $('account').textContent = `${w.name}: ${accounts[0]}`;
+      log(`connected ${w.name} ${accounts[0]}`);
+      await refresh();
+    } catch (e) { log(`connect failed: ${e.message || e}`); }
+  }
+
+  async function refresh() {
+    const declared = await isDeclared();
+    const at = await deployedClass();
+    if (declared) {
+      $('declareState').innerHTML = '<span class="ok">Class is declared on mainnet.</span>';
+      $('declareBtn').disabled = true;
+      $('result').children[1].textContent = A.classHash + ' ';
+      $('result').children[1].appendChild(copyBtn(A.classHash));
+    } else {
+      $('declareState').textContent = 'Not declared yet. Your wallet will show a DECLARE transaction.';
+      $('declareBtn').disabled = !wallet;
+    }
+    if (at && same(at, A.classHash)) {
+      $('deployState').innerHTML = '<span class="ok">Contract is live at the address below.</span>';
+      $('deployBtn').disabled = true;
+      await showContract();
+    } else if (at) {
+      $('deployState').innerHTML = `<span class="bad">Address is taken by another class (${at}). Stop and report this.</span>`;
+      $('deployBtn').disabled = true;
+    } else {
+      $('deployState').textContent = declared ? 'Ready. Your wallet will show one call to the Universal Deployer.' : 'Declare first.';
+      $('deployBtn').disabled = !(wallet && declared);
+    }
+  }
+
+  async function showContract() {
+    const dd = $('result').children[3];
+    dd.textContent = A.expectedAddress + ' ';
+    dd.appendChild(copyBtn(A.expectedAddress));
+    // Read back both constructor arguments to prove the right contract is there.
+    try {
+      const [anon] = await rpc('starknet_call', [{ contract_address: A.expectedAddress, entry_point_selector: selector('anonymizer'), calldata: [] }, 'latest']);
+      const [pool] = await rpc('starknet_call', [{ contract_address: A.expectedAddress, entry_point_selector: selector('pool'), calldata: [] }, 'latest']);
+      const ok = same(anon, A.constructorCalldata[0]) && same(pool, A.constructorCalldata[1]);
+      log(ok ? 'read back: anonymizer and pool match' : `read back MISMATCH: ${anon} ${pool}`);
+    } catch (e) { log(`read back failed: ${e.message}`); }
+  }
+  // Selectors of the two views, precomputed (sn_keccak of the name) so the page needs no hashing library.
+  function selector(name) { return A.selectors[name]; }
+
+  $('declareBtn').onclick = async () => {
+    $('declareBtn').disabled = true;
+    try {
+      log('asking the wallet to DECLARE');
+      const res = await wallet.request({ type: 'wallet_addDeclareTransaction', params: {
+        compiled_class_hash: A.compiledClassHash, contract_class: A.contractClass } });
+      log(`declare sent: tx ${res.transaction_hash}, class ${res.class_hash}`);
+      if (res.class_hash && !same(res.class_hash, A.classHash)) log('WARNING: wallet reports a different class hash');
+      await waitFor(res.transaction_hash);
+      log('declared');
+    } catch (e) {
+      log(`declare failed: ${e.message || JSON.stringify(e)}`);
+      log('If the wallet does not support declaring, use the fallback in README.md (sncast), then reload this page to deploy.');
+    }
+    await refresh();
+  };
+
+  $('deployBtn').onclick = async () => {
+    $('deployBtn').disabled = true;
+    try {
+      const calldata = [A.classHash, A.salt, '0x0', norm(A.constructorCalldata.length), ...A.constructorCalldata];
+      log('asking the wallet to call the Universal Deployer');
+      const res = await wallet.request({ type: 'wallet_addInvokeTransaction', params: {
+        calls: [{ contract_address: A.udc, entry_point: A.udcEntryPoint, calldata }] } });
+      log(`deploy sent: tx ${res.transaction_hash}`);
+      await waitFor(res.transaction_hash);
+      log('deployed');
+    } catch (e) { log(`deploy failed: ${e.message || JSON.stringify(e)}`); }
+    await refresh();
+  };
+
+  refresh().catch((e) => log(`RPC read failed: ${e.message}`));
+})();
+</script>
+</body>
+</html>

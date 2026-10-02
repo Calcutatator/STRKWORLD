@@ -3656,7 +3656,7 @@ facts: the stats show the crowd, and nothing about who is in it.
 
 ## D-077 — The Vault opens on shadow accounts
 
-**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market, some through curated pools; a collateral-only market is not supplied) · amended by D-085 (its commitment, address cross-check and wallet submission, shared with the Borrow counter since D-083, now serve Endur unstaking too, under unstaking's own dapp name) · amended by D-103 (SUPPLY and REDEEM are separate counters; `vault:lending` is an alias of `vault:supply`)**
+**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29) · amended by D-079 (five tokens, a position per token with the stand-in address shown, Vesu's supply APY, and the fee's token explained) · amended by D-081 (every Vesu market, some through curated pools; a collateral-only market is not supplied) · amended by D-085 (its commitment, address cross-check and wallet submission, shared with the Borrow counter since D-083, now serve Endur unstaking too, under unstaking's own dapp name) · amended by D-103 (SUPPLY and REDEEM are separate counters; `vault:lending` is an alias of `vault:supply`) · amended by D-116 (STRKWORLD owns one Cairo contract, the private leaderboard's ReceiptLedger, which shadow accounts call; the Vault itself still adds none)**
 
 **Context.** D-007 kept Vesu out of v1 because the Vault was the only
 building needing new Cairo: a project-owned `privacy_invoke` adapter, the
@@ -5911,3 +5911,69 @@ The windows do not come from STRKWORLD retrying. The click handlers call `sessio
 - C (combat client): _placeholder — `arena-session.test.ts`, `arena-fx.test.ts`, `avatar-figure` attack pose, `arena-controller.test.ts`, `ArenaHud.test.tsx`, real-lobby integration._
 
 Not verified: a real browser (nothing is reachable until A and B land).
+
+---
+
+## D-115 — The way in is a title screen: the live overworld floats behind the wordmark, and each step stacks below it as a simple menu
+
+**2026-10-02 · Accepted (the project lead asked for Cube World's title screen, with the real game floating behind, the title and the menu below it, the map fully set up, and the approved brand system) · presentation only: no connect, capability, entry-gate, privacy, seam or lobby change · applies D-113 to the way in**
+
+**Context.** The connect flow and the entry gate (D-055, D-072, D-073) were dark `.room` cards on a blank page in rounded system type. D-113 approved a brand built from the game itself, with Cube World's title and menu screens as the reference, and left the web UI's type to a separate change.
+
+**Decision.**
+
+- **One title screen for every step before the city.** `connect/TitleScreen.tsx` frames the production root's boot line, the wallet entry card, the capability rooms, the entry gate's cards and the "Starting the city" line. Each step keeps its own markup, copy, test ids and behaviour; only the frame changes. The in-city connect room (`ConnectRoom`) is not on it.
+- **The backdrop is the real overworld, live.** `@strkworld/world/title` draws `buildStreet()` on the game's own map (the plaza, every building, the pitch, the props and the country), under the game's sky dome (now `three/sky.ts`, shared with the engine), sun and hemisphere light, with the game's Horizon fog pushed out for a high view. The camera drifts slowly along the street and back. It runs no session and reads no input. One ref-counted backdrop serves every title screen, and the next step takes its canvas over, so the drift never restarts.
+- **It is cheap and leaves nothing behind.**
+  - The pixel ratio is capped at 1.5 and frames at 30 a second.
+  - The shadow map is drawn once.
+  - The loop stops while the tab is hidden.
+  - With `prefers-reduced-motion`, it holds one still frame and follows the setting live.
+  - The scene builds after the menu has painted. The palette gradient underneath is the first frame, and the only frame without WebGL; there, the shell never loads the scene module at all.
+  - The last release tears down everything after a 250 ms grace: renderer, render lists, the forced context loss, the street, the sky, the clouds, the canvas and the listeners. So nothing is left once the city's engine starts.
+  - The scene loads lazily, so `three` stays out of the entry chunk.
+- **The front.**
+  - The wordmark (`brand/Wordmark.tsx`, the one swappable title) sits big at the top. It uses web copies of the approved master at 1200 and 2400 px.
+  - Below it, the menu reads ▶ CONNECT WALLET, then the wallet choices as Silkscreen caps on Ember blocks with a dark outline and a hard drop, then "Look again". The wallet entry card's heading is now "Connect wallet" while wallets are listed.
+  - Menu copy is VT323 with a hard pixel outline, so it reads over the city without a panel. Steps with forms or longer copy (the gate's cards, the capability rooms) sit in a dark brand window.
+  - Amounts take Jersey 15, because VT323's digits blur at small sizes.
+  - At phone width it keeps a 16 px gutter and doesn't scroll sideways, and the wordmark scales with the screen.
+- **Brand tokens live in one module.**
+  - `apps/web/src/brand/brand.css` declares the palette and the three faces as `--brand-*` tokens and styles nothing itself. It self-hosts Jersey 15, VT323 and Silkscreen (latin WOFF2, about 50 kB, OFL licence beside them), bundled same-origin, so a `font-src 'self'` policy would hold.
+  - `brand/tokens.ts` carries the same values for code, and a test keeps the two files in step.
+  - The title screen wears the brand by pointing the theme's `--ui-*` tokens at the `--brand-*` ones. The game-wide theme can adopt them the same way.
+
+**Consequences.**
+- Everything that was true of the way in still is: the connect flow, the capability check, D-072's gate and its deposit, the `VITE_ENTRY_GATE_BYPASS` switch, D-108's unsupported-wallet hiding and D-073's Ready and Xverse links. The frozen D-024 disclosures are untouched.
+- The page now shows two WebGL contexts for at most the grace period while the city starts.
+- The title screen loads the brand faces; the rest of the game UI still uses system stacks until the game-wide theme change.
+- Not verified here: frame times on low-end phones, and the look in Safari and Firefox. The renders were made in Chromium.
+
+## D-116 — The private leaderboard's ReceiptLedger: STRKWORLD's first own Cairo contract, written to by shadow accounts, deployed from the lead's wallet
+
+**2026-10-02 · Accepted (the lead decided what counts, the privacy bar, where it is checked and who deploys) · amends D-077 (STRKWORLD now owns one Cairo contract; the Vault itself still adds none) · amends D-018 only as a call target: the ledger is reached through the D-077 shadow-account route, not a new route · adds the build key `VITE_STRK20_LEADERBOARD_LEDGER`, unset by default · no web, seam, lobby or backend change in this entry**
+
+**Context.** The lead wants a private leaderboard of actions. Research (`private-leaderboard.md`, 2026-10-02) found that nobody can count a player's private actions from public data, that the Wallet API exposes no history or activity proof, and that the one account-bound, unforgeable primitive reachable through the Wallet API is the shadow account. When a canonical shadow calls a contract, that call is inside a pool transaction that already paid the fee (`collect_fee` at `privacy.cairo:792` runs before any action), and the shadow's commitment `C = h(h(identity_key, dapp_name), nonce)` is bound to the signing account. D-077 said the Vault needed "no project-owned Cairo"; a ledger that only shadows can write needs a contract.
+
+The lead's decisions:
+- **What counts:** one receipt each time the pool fee is charged on a transaction STRKWORLD sends: shield, unshield, private send, and the DeFi flows through shadow accounts.
+- **Privacy:** a contract is fine if it never publicly links an account to a position.
+- **Placement:** checked privately at a stand near the plaza (the web side is separate work).
+- **Deploy:** the lead deploys from their own funded Argent wallet; no agent touches keys.
+
+**Decision.**
+
+- **`contracts/receipt-ledger/`, a Scarb project (Scarb 2.13.1, Starknet Foundry 0.52.0), about 200 lines of Cairo.** `tick(commitment)` asserts `anonymizer.get_shadow_account(commitment) == caller` (non-zero), skips without reverting if `pool.get_fee_amount()` is zero, rejects a second receipt in the same transaction (`counted_tx[tx_hash]`), appends `poseidon(commitment, tx_hash)` to a depth-20 Poseidon incremental Merkle tree, keeps every past root as known, increments `count_of(commitment)` and emits `Receipt(commitment, index, leaf, root)`. Views: `count_of`, `root`, `leaf_count`, `is_known_root`, `is_counted`, `distinct_commitments`, `anonymizer`, `pool`.
+- **Both view names were checked on mainnet, not taken from docs.** The anonymizer `0x04f33230…888a7` (class `0xb61dee4f…af409`) exposes `get_shadow_account(identity_commitment: felt252) -> ContractAddress`, and returns the deployed shadow for a commitment taken from a live `ShadowAccountDeployed` event. The pool `0x040337b1…fe812a` exposes `get_fee_amount() -> u128`, which returned 6 STRK. The anonymizer's `get_privacy_contract()` is that pool. The source shows the anonymizer records the shadow before running its calls, so the check holds during `tick`. Read on 2026-10-02 around block 15,783,400.
+- **Not upgradeable, no owner.** The anonymizer and pool addresses are immutable constructor arguments.
+- **No on-chain histogram.** With a fresh shadow per action every commitment holds one receipt, so a per-commitment histogram carries no information. Per-player grouping needs the player's `p` and belongs to the off-chain tallier or the Phase 2 registry.
+- **A zero fee skips; it does not revert.** A revert would break every STRKWORLD private action that carries a receipt the moment governance zeroed the fee.
+- **Deploy from the lead's wallet through a dependency-free page.** `contracts/receipt-ledger/deploy/index.html` discovers wallets the way get-starknet does (wallet-standard `starknet:walletApi`, then injected `window.starknet_*`), sends `wallet_addDeclareTransaction` with the bundled Sierra class and its Blake2s compiled class hash, then a `wallet_addInvokeTransaction` to the UDC (`0x02ceed65…2a2125`, `deploy_contract`, `not_from_zero = false`, salt `'strkworld-lb-ledger-v1'`). The address, `0x2ff2a244…8f7346`, is then fixed by class, salt and arguments alone, and the page reads back `anonymizer()` and `pool()` once it is live. Whether Ready's current build honours `wallet_addDeclareTransaction` is unverified; the README gives the fallbacks (declare from another wallet, or `sncast` run by the lead with their own account), since declaring is permissionless.
+- **CI** gains a `cairo` job: the pinned toolchain from checksummed release tarballs (`scripts/install-cairo-toolchain.sh`), `scarb fmt --check`, `snforge test`, a release build, and `build-artifact.mjs --check`, so the page can only declare the class the tests covered.
+
+**Consequences.**
+- The trust anchors are the pool and the anonymizer, both upgradeable by their own governance, which is the Vault's exposure already. An upgrade that removes either view makes `tick` revert. That is why receipts sit behind `VITE_STRK20_LEADERBOARD_LEDGER`, which stays unset until the contract is live and the web side ships.
+- The ledger stores and emits commitments that are already public as shadow deploy salts. It adds no account-to-position link.
+- A `tick` costs about 1.5M L2 gas (about 0.03 STRK on 2026-10-02). A fresh shadow per receipt adds a deploy whose cost has not been measured.
+- Wash trading still costs a full 6 STRK pool fee per receipt; scoring and any prize must stay under that (research §4).
+- Not verified: Ready's declare support; Ready accepting a fresh-nonce `shadow_account_invoke` to this contract with no open notes (the research's Phase 0 probe); the constructor's zero-address assert, which snforge 0.52 cannot observe.
