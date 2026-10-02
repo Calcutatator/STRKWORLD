@@ -278,9 +278,22 @@ empty shell to fetchers, so a 200 there means nothing.
   - the session holds `suspend('combat')` from the new round to idle, so E always attacks in a fight.
 
   Without the system, the session draws its own prompt.
-- **Fonts.** The brand guide says to self-host Jersey 15, VT323 and Silkscreen, but `styles.test.ts` pins "loads no font": no `@font-face`. The HUD names the brand faces first and falls back to system stacks.
+- **Fonts.** The HUD takes its faces and colours from `brand/brand.css` (D-115, self-hosted) through `--brand-*` tokens, switches off the game's `font-size-adjust` (D-119) because it sizes its own type, and keeps Jersey 15 to the countdown and banner titles: its small digits merge, so HP and the timer are VT323.
 
 *Verified:* the C line of D-114's tests; the full suite and typecheck with streams A and B merged (A, B and C together on main: 286 files, 6056 tests). One swing timeline (`arena-swing.ts` `attackPoseAt`), one seat rule (`isArenaSeatAt` behind the presenter's room gate, since the Studio and bunker share the arena's pixels) and one attack path (E, a click and STRIKE all reach the session's single floor) serve both streams. Renders of a mid-fight frame from the offline rasterizer, with A's real room, are `renders/arena-fight.png` and `renders/arena-fight-close.png` in the working scratchpad, not committed. Not verified: a real browser.
+
+### 2026-10-02 — Pixel faces need `font-size-adjust` on cap height, not x-height; a new `:root` token needs every partner theme to re-declare it (D-119)
+
+Traps met moving the game theme to Jersey 15, VT323 and Silkscreen:
+
+- **Use cap height to normalise all-caps faces.** Silkscreen's lowercase is as tall as its capitals (its drawn `x` is 0.625 em), so `font-size-adjust: 0.52` (x-height) scaled it to 0.83× while VT323 grew to 1.30×. Buttons and labels came out tiny. `cap-height 0.73` gives VT323 1.30×, Jersey 15 1.31× and Silkscreen 1.04×. Chrome takes Silkscreen's cap height from OS/2 `sCapHeight` (700), not its drawn `H` (625). Measure the scale per face, `width(adjusted) / width(none)` of a run of `M`s, rather than trusting the metrics.
+- **`font-size-adjust` is inherited, so it leaks into partner windows** unless they switch it off. Every partner block sets `--ui-type-adjust: none`. `styles.test.ts` also requires the Vault (and the degen floor, against the Exchange) to re-declare every `:root` token, so a new token needs a value in each partner block, or that test fails.
+- **A field inside a `<label>` takes the label's face**, because the field rule says `font: inherit`. Once labels moved to Silkscreen, the field rule had to name `font-family: var(--ui-font)` after it.
+- **`em` and unitless line heights follow the computed size, not the adjusted one.** Body copy at line-height 1.45 is about 1.1 of VT323's drawn size. That is fine, because VT323's ascent and descent total exactly 1 em.
+- **Jersey 15 is unsafe for amounts below about 1.8rem.** Its 8 and B, and 6 and 8, merge, and its 1 and l are near-identical. VT323 is monospaced and keeps them apart, but its 0 and O share a glyph. This contradicts `brand.css`'s `--brand-font-numeric` comment, and the lead has to decide between them; D-119 records the disagreement.
+- **The faces are already self-hosted by `brand/brand.css` (D-115).** Point `--ui-*` at `--brand-font-*` rather than adding a font package, or every face loads twice under the same family name. Any surface that sizes its own type (`.title-screen`) must switch the adjustment off itself, because `font-size-adjust` inherits as a computed value from `body`.
+
+*Verified:* fontTools metrics of the shipped woff files; the per-face scale measured in headless Chrome; `styles.test.ts` (new D-119 block) and the web suite, typecheck and build; Playwright screenshots at 1280, 768 and 390 wide; and a pixel diff of the Bank's four windows before and after (no window pixel differs by more than 9/255, which is the World behind the window).
 
 ### 2026-10-02 — No disclosure is mandatory any more: approval is the whole privacy gate, and every player-facing line is product copy (D-118)
 
