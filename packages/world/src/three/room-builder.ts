@@ -32,9 +32,15 @@ import {
   ResourceBag,
   STRK20,
   AVNU,
+  AVNU_COUNTER_HEADER,
+  DEGEN_COUNTER_HEADER,
   BANK_HALL,
   ENDUR,
   NEAR,
+  NEAR_DEPARTURE_HEADER,
+  POST_OFFICE_SEND_SIGN,
+  POST_OFFICE_SEND_TEXT,
+  POST_OFFICE_WINDOW_SIGN,
   VESU,
   VESU_MARK,
   addVesuMark,
@@ -62,6 +68,7 @@ import {
   liftGoesUp,
   liftLabelText,
   mixColor,
+  mixHex,
   pick,
   prismX,
   prismZ,
@@ -488,10 +495,16 @@ export function buildFixedRoom(
     const halos: HaloQuads[] = [];
     try {
       decorateRoom(theme, shell, map, res, animators, labels, textLabels, images, roomFurniture(counters, labels, textLabels, group));
+      fixtureProps(map, theme, shell);
       exitDecor(map, theme, shell);
       liftDecor(map, theme, shell, labels, textLabels, group);
       for (const station of map.stations) {
-        const built = buildStation(station, map, theme, labels, res, group, textLabels, counters);
+        // The Exchange's, Degen floor's, Post Office's and Bridge's counters
+        // (D-105) dress their own fixtures; the rest go through `buildStation`.
+        const counter = BUILT_IN_COUNTERS[station.station];
+        const built = counter
+          ? buildCounterInRoom(station, counter, map, theme, shell, labels, res, group, textLabels, counters)
+          : buildStation(station, map, theme, labels, res, group, textLabels, counters);
         stations.push(built.view);
         halos.push(built.halo);
       }
@@ -1584,6 +1597,639 @@ function vaultDoor(bin: GeometryBin, x0: number, x1: number, row: number, zf: nu
   addVesuMark(bin, 'unlit', { normal: 'z+', plane: front + 0.225 }, cx, cy - 0.15, 0.32, 0, 0.012, 'light');
 }
 
+// ---------------------------------------------------------------------------
+// Counters built into their rooms (D-105)
+// ---------------------------------------------------------------------------
+
+/** Where a built-in counter paints the Shell's label: a sign on its own architecture. */
+interface CounterHeader {
+  readonly position: readonly [number, number, number];
+  readonly style: SignStyleOptions;
+}
+
+interface CounterContext {
+  readonly station: FixedRoomStationDefinition;
+  readonly map: FixedRoomLevelMap;
+  readonly theme: RoomTheme;
+  readonly dress: StationTheme;
+  /** The room's shared counters bin (D-103): 'body' (lit, vertex coloured) and 'unlit' (self-lit). */
+  readonly bin: GeometryBin;
+  /** The station's own 'accent' key: whatever lights in its state colour. */
+  readonly status: GeometryBin;
+  readonly shell: InteriorShell;
+  readonly group: Group;
+  readonly labels: LabelFactory;
+  readonly textLabels: TextLabel[];
+}
+
+type CounterBuilder = (ctx: CounterContext) => CounterHeader;
+
+/**
+ * Counters built into their room instead of standing on the floor: each
+ * dresses its station rect and the `fixtures` its floor authors round it
+ * (fixed-room.ts), and paints the Shell's label on a sign of its own
+ * architecture. The station ids, rects and approach are unchanged.
+ */
+const BUILT_IN_COUNTERS: Readonly<Partial<Record<StationId, CounterBuilder>>> = Object.freeze({
+  'exchange:swap': tradingDesk,
+  'exchange:degen': degenBar,
+  'post-office:transfer': postOfficeCounter,
+  'bridge:deposit': gatewayTerminal,
+});
+
+/** The stations whose counters are built into their rooms. */
+export const BUILT_IN_COUNTER_STATIONS: readonly StationId[] = Object.freeze(Object.keys(BUILT_IN_COUNTERS) as StationId[]);
+
+/**
+ * A counter built into its room (D-105): the room's furniture round the
+ * station, its status lights, D-104's halo on the approach tiles a player can
+ * stand on, and the Shell's label on the counter's own sign. No beacon, as
+ * D-104's built-in counters.
+ */
+function buildCounterInRoom(
+  station: FixedRoomStationDefinition,
+  build: CounterBuilder,
+  map: FixedRoomLevelMap,
+  theme: RoomTheme,
+  shell: InteriorShell,
+  labels: LabelFactory,
+  res: ResourceBag,
+  parent: Group,
+  textLabels: TextLabel[],
+  counters: GeometryBin,
+): { view: StationView; halo: HaloQuads } {
+  const group = new Group();
+  group.name = `station:${station.station}`;
+  group.userData['station'] = station.station;
+  parent.add(group);
+  const dress = stationTheme(theme, station.station);
+  const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
+  const status = new GeometryBin();
+  let header: CounterHeader;
+  try {
+    header = build({ station, map, theme, dress, bin: counters, status, shell, group, labels, textLabels });
+    flushBin(status, 'accent', accent, res, group, { name: `${group.name}:status` });
+  } finally {
+    status.dispose();
+  }
+  const cx = station.x + station.width / 2;
+  const cz = station.y + station.height / 2;
+
+  const label = labels.sign(station.label, header.style);
+  textLabels.push(label);
+  label.object.position.set(...header.position);
+  label.object.userData['station'] = station.station;
+  group.add(label.object);
+
+  const view: StationView = {
+    station: station.station,
+    group,
+    accent,
+    // As D-104's built-in counters: the architecture shows the state, no beacon.
+    beacon: null,
+    label,
+    phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
+    looks: dress.looks,
+    halo: null,
+    labelText: station.label,
+    look: dress.looks.locked,
+    highlighted: false,
+  };
+  return { view, halo: stationHalo(station, map) };
+}
+
+/** A screen on a face: a bezel and a self-lit card, rounded as avnu's cards are. */
+function avnuScreen(bin: GeometryBin, face: Face, u0: number, v0: number, u1: number, v1: number): void {
+  bin.add('unlit', facePanel(face, u0 - 0.03, v0 - 0.03, u1 + 0.03, v1 + 0.03, 0.006, 0.08), AVNU.indigoBorder);
+  bin.add('unlit', facePanel(face, u0, v0, u1, v1, 0.012, 0.06), AVNU.card);
+}
+
+/** Quote rows on a screen: a token dot, a name bar and a level bar per row. Bars only: nothing live. */
+function quoteRows(bin: GeometryBin, face: Face, u0: number, v0: number, u1: number, v1: number, seed: number): void {
+  const rows = 3;
+  const step = (v1 - v0) / rows;
+  const dots = [AVNU.lightBlue, AVNU.blue, AVNU.slate, DEGEN.cyan];
+  for (let i = 0; i < rows; i++) {
+    const mid = v1 - step * (i + 0.5);
+    bin.add('unlit', faceDisc(face, u0 + 0.12, mid, 0.012, 0.045, 0.006, 10), dots[(i + seed) % dots.length]!);
+    bin.add('unlit', facePanel(face, u0 + 0.24, mid - 0.022, u0 + 0.24 + 0.3 + 0.2 * hash01(seed, i, 611), mid + 0.022, 0.018, 0.02), AVNU.slate);
+    const length = 0.22 + 0.36 * hash01(seed, i, 612);
+    bin.add('unlit', facePanel(face, u1 - 0.1 - length, mid - 0.028, u1 - 0.1, mid + 0.028, 0.018, 0.028), i % 2 === 0 ? AVNU.blue : AVNU.lightBlue);
+  }
+}
+
+/**
+ * avnu's trading desk (the Exchange's SWAP): a long navy desk across the
+ * room's north-east corner on a raised pit, the counter its middle bay, and
+ * behind it a wall of boards standing in front of the north wall, three
+ * columns of screens: candlestick charts and avnu's swap card above, quote
+ * rows below, all bars and lines, nothing live. Low monitors face the floor
+ * from the desk's wings, and a gantry over the bay carries the label on a
+ * navy pill, its posts lit in the station's state. The room's ticker runs
+ * along the north wall just above the boards.
+ */
+function tradingDesk(ctx: CounterContext): CounterHeader {
+  const { station: s, bin, status, theme } = ctx;
+  const bx0 = s.x;
+  const bx1 = s.x + s.width;
+  const x0 = s.x - 2 + 0.06;
+  const x1 = s.x + s.width + 2 - 0.02;
+  const z0 = s.y + 0.1;
+  const z1 = s.y + s.height - 0.04;
+  const top = 1;
+  // The pit: a low plinth the desk and the boards stand on.
+  bin.add('body', boxGeometry(x0 - 0.04, 0, s.y - 2, x1, 0.06, z1 + 0.02), lift(AVNU.card, 0.03));
+  bin.add('unlit', boxGeometry(x0 - 0.04, 0.03, z1 + 0.02, x1, 0.06, z1 + 0.035), AVNU.indigoBorder);
+
+  // The wall of boards, in front of the north wall.
+  const [q0, q1, qTop] = [INTERIOR_WALL_THICKNESS + 0.06, s.y - 2 + 0.46, 1.98];
+  bin.add('body', boxGeometry(x0 - 0.04, 0.06, q0, x1, qTop, q1), aoPaint(AVNU.navy, 0.08));
+  bin.add('body', boxGeometry(x0 - 0.06, qTop, q0, x1, qTop + 0.05, q1 + 0.03), AVNU.indigoBorder);
+  const qf: Face = { normal: 'z+', plane: q1 };
+  const columns: ReadonlyArray<readonly [number, number]> = [
+    [x0 + 0.12, bx0 - 0.1],
+    [bx0 + 0.06, bx1 - 0.06],
+    [bx1 + 0.1, x1 - 0.12],
+  ];
+  const [r0, r1] = [[0.52, 1.1], [1.2, 1.88]] as const;
+  columns.forEach(([u0, u1], index) => {
+    avnuScreen(bin, qf, u0, r1[0], u1, r1[1]);
+    if (index === 1) {
+      // avnu's swap card: two token fields and the primary pill.
+      const fields: ReadonlyArray<readonly [number, number, number]> = [
+        [1.62, 1.8, AVNU.lightBlue],
+        [1.4, 1.58, AVNU.slate],
+      ];
+      for (const [v0, v1, token] of fields) {
+        const mid = (v0 + v1) / 2;
+        bin.add('unlit', facePanel(qf, u0 + 0.12, v0, u1 - 0.12, v1, 0.02, 0.09), AVNU.navy);
+        bin.add('unlit', faceDisc(qf, u0 + 0.26, mid, 0.022, 0.05, 0.006, 10), token);
+        bin.add('unlit', facePanel(qf, u1 - 0.7, mid - 0.02, u1 - 0.24, mid + 0.02, 0.026, 0.02), AVNU.slate);
+      }
+      bin.add('unlit', facePanel(qf, u0 + 0.12, 1.25, u1 - 0.12, 1.35, 0.02, 0.05), AVNU.blue);
+    } else {
+      candlesticks(bin, qf, u0 + 0.1, u1 - 0.1, r1[0] + 0.02, r1[1] - 0.04, index + 3, { up: AVNU.lightBlue, down: AVNU.slate, line: AVNU.blue });
+    }
+    avnuScreen(bin, qf, u0, r0[0], u1, r0[1]);
+    quoteRows(bin, qf, u0 + 0.02, r0[0] + 0.04, u1, r0[1] - 0.04, index);
+  });
+
+  // The desk: navy, a blue light line under its top, pill panels on the wings.
+  bin.add('body', boxGeometry(x0, 0.06, z0, x1, 0.9, z1), aoPaint(AVNU.card, 0.1));
+  bin.add('body', boxGeometry(x0 - 0.03, 0.9, z0 - 0.03, x1, top, z1 + 0.03), lift(AVNU.navy, 0.05));
+  bin.add('body', boxGeometry(bx0, top, z0 + 0.06, bx1, top + 0.012, z1 + 0.03), lift(AVNU.indigoBorder, 0.06));
+  bin.add('body', boxGeometry(x0 + 0.02, 0.06, z1, x1 - 0.02, 0.16, z1 + 0.015), AVNU.navy);
+  bin.add('unlit', boxGeometry(x0, 0.84, z1, x1, 0.87, z1 + 0.02), AVNU.blue);
+  const front: Face = { normal: 'z+', plane: z1 };
+  for (const [a, b] of [[x0, bx0], [bx1, x1]] as const) {
+    const mid = (a + b) / 2;
+    for (const u of [mid - 0.46, mid + 0.46]) {
+      bin.add('unlit', facePanel(front, u - 0.38, 0.32, u + 0.38, 0.66, 0.012, 0.17), AVNU.indigo);
+      bin.add('unlit', facePanel(front, u - 0.28, 0.45, u + 0.1, 0.53, 0.016, 0.04), AVNU.indigoBorder);
+    }
+    // Low monitors facing the floor, a mini chart each.
+    for (const u of [mid - 0.48, mid + 0.48]) {
+      const mz = s.y + 0.42;
+      const mf: Face = { normal: 'z+', plane: mz + 0.05 };
+      bin.add('body', boxGeometry(u - 0.04, top, mz - 0.06, u + 0.04, top + 0.12, mz), AVNU.navy);
+      bin.add('body', boxGeometry(u - 0.36, top + 0.1, mz, u + 0.36, top + 0.46, mz + 0.05), AVNU.navy);
+      bin.add('unlit', facePanel(mf, u - 0.32, top + 0.13, u + 0.32, top + 0.43, 0.004, 0.03), AVNU.card);
+      for (let i = 0; i < 5; i++) {
+        const h = 0.05 + 0.18 * hash01(Math.round(u * 10), i, 621);
+        const bu = u - 0.24 + i * 0.11;
+        bin.add('unlit', faceBox(mf, bu, top + 0.17, 0.006, bu + 0.06, top + 0.17 + h, 0.01), i % 2 === 0 ? AVNU.blue : AVNU.lightBlue);
+      }
+    }
+  }
+  // The counter: the status panel in the bay, avnu's swap card on the desk.
+  status.add('accent', boxGeometry(bx0 + 0.14, 0.28, z1, bx1 - 0.14, 0.72, z1 + 0.03), 0xffffff);
+  stationProps('avnu', theme, bin, bx0 + 0.1, bx1 - 0.1, s.y + 0.14, s.y + s.height - 0.1);
+
+  // The gantry over the bay: two posts, lit in the state colour, and a crossbar.
+  const gz = s.y + 0.5;
+  for (const u of [bx0, bx1]) {
+    bin.add('body', boxGeometry(u - 0.05, top, gz - 0.05, u + 0.05, 2.1, gz + 0.05), AVNU.navy);
+    status.add('accent', boxGeometry(u - 0.022, top + 0.04, gz + 0.05, u + 0.022, 1.68, gz + 0.062), 0xffffff);
+  }
+  bin.add('body', boxGeometry(bx0 - 0.08, 1.7, gz - 0.07, bx1 + 0.08, 2.12, gz + 0.07), AVNU.navy);
+  bin.add('unlit', boxGeometry(bx0 - 0.08, 2.12, gz - 0.07, bx1 + 0.08, 2.135, gz + 0.07), AVNU.blue);
+  return { position: [(bx0 + bx1) / 2, 1.91, gz + 0.076], style: AVNU_COUNTER_HEADER };
+}
+
+/**
+ * The Degen floor's back room (DEGEN SWAP): a booth set into the poster wall
+ * between the posters, its partitions edged in pink and violet neon and
+ * pink light pooled on its floor, the DEGEN MODE sign on its back wall over
+ * a back bar of neon chip stacks, and a black bar across its mouth with a
+ * cyan edge and pink underglow, the counter its middle. The label is a neon
+ * tube sign on the lintel, underlined in the station's state colour.
+ */
+function degenBar(ctx: CounterContext): CounterHeader {
+  const { station: s, bin, status, theme } = ctx;
+  const left = s.x - 1;
+  const right = s.x + s.width + 1;
+  const back = INTERIOR_WALL_THICKNESS;
+  const front = s.y + s.height - 0.04;
+  const height = INTERIOR_WALL_HEIGHT;
+  const panel = lift(AVNU.indigo, 0.06);
+  // The partitions, neon up their front edges and along their tops.
+  for (const [a, b] of [[left + 0.02, left + 0.18], [right - 0.18, right - 0.02]] as const) {
+    bin.add('body', boxGeometry(a, 0, back, b, height, front), aoPaint(panel, 0.08));
+    bin.add('unlit', boxGeometry(a + 0.05, 0.16, front, b - 0.05, height - 0.08, front + 0.03), DEGEN.pink);
+    bin.add('unlit', boxGeometry(a + 0.04, height, back, b - 0.04, height + 0.02, front), DEGEN.violet);
+  }
+  // The lintel across the mouth, its underline in the state colour.
+  bin.add('body', boxGeometry(left + 0.18, 1.84, front - 0.24, right - 0.18, height, front), AVNU.navy);
+  status.add('accent', boxGeometry(left + 0.22, 1.81, front - 0.03, right - 0.22, 1.845, front + 0.02), 0xffffff);
+  // Pink light pooled on the back room's floor.
+  const pink = new Color(DEGEN.pink);
+  ctx.shell.floor.addRGBA('light', flatQuad(left + 0.18, back, right - 0.18, s.y + 0.12, 0.013), (_x, _y, z) => [
+    pink.r,
+    pink.g,
+    pink.b,
+    0.22 * clamp01(0.4 + (z - back) / (s.y - back)),
+  ]);
+
+  // The back bar along the back wall, neon chip stacks and two glowing cubes on it.
+  const [b0, b1] = [back + 0.02, back + 0.42];
+  bin.add('body', boxGeometry(left + 0.22, 0, b0, right - 0.22, 0.86, b1), lift(AVNU.navy, 0.03));
+  bin.add('unlit', boxGeometry(left + 0.22, 0.86, b1 - 0.02, right - 0.22, 0.885, b1 + 0.01), DEGEN.lime);
+  const chips = [DEGEN.pink, DEGEN.lime, DEGEN.cyan, DEGEN.yellow, DEGEN.violet];
+  for (let i = 0; i < 7; i++) {
+    const u = left + 0.6 + i * 0.44;
+    const stack = 2 + Math.floor(hash01(i, 7, 631) * 5);
+    for (let k = 0; k < stack; k++) {
+      bin.add('unlit', cylinderGeometry(u, 0.885 + k * 0.035, (b0 + b1) / 2, 0.075, 0.075, 0.03, 10), chips[(i + k) % chips.length]!);
+    }
+  }
+  for (const [u, colour] of [[left + 0.9, DEGEN.cyan], [right - 0.9, DEGEN.pink]] as const) {
+    bin.add('unlit', boxGeometry(u - 0.09, 0.885, (b0 + b1) / 2 - 0.09, u + 0.09, 1.065, (b0 + b1) / 2 + 0.09), colour);
+  }
+
+  // The bar: glossy black, a cyan edge along its top, pink light under it.
+  const [z0, xa, xb] = [s.y + 0.12, left + 0.18, right - 0.18];
+  bin.add('body', boxGeometry(xa, 0, z0, xb, 0.92, front), aoPaint(lift(AVNU.navy, 0.03), 0.1));
+  bin.add('body', boxGeometry(xa, 0.92, z0 - 0.03, xb, 1, front + 0.03), lift(DEGEN.ink, 0.04));
+  bin.add('unlit', boxGeometry(xa, 0.95, front + 0.03, xb, 0.985, front + 0.045), DEGEN.cyan);
+  bin.add('unlit', boxGeometry(xa + 0.02, 0.02, front, xb - 0.02, 0.07, front + 0.02), DEGEN.pink);
+  // Violet slats on the bar's ends, the status panel in the middle.
+  const bf: Face = { normal: 'z+', plane: front };
+  for (const [a, b] of [[xa, s.x], [s.x + s.width, xb]] as const) {
+    for (let i = 0; i < 3; i++) {
+      const u = a + ((b - a) * (i + 1)) / 4;
+      bin.add('unlit', faceBox(bf, u - 0.025, 0.22, 0, u + 0.025, 0.78, 0.02), i === 1 ? DEGEN.lime : DEGEN.violet);
+    }
+  }
+  status.add('accent', boxGeometry(s.x + 0.14, 0.3, front, s.x + s.width - 0.14, 0.72, front + 0.03), 0xffffff);
+  stationProps('degen', theme, bin, s.x + 0.1, s.x + s.width - 0.1, s.y + 0.14, s.y + s.height - 0.1);
+  return { position: [(left + right) / 2, 2.02, front + 0.006], style: DEGEN_COUNTER_HEADER };
+}
+
+const POST_RED = 0xc23b2b;
+const POST_BLUE = 0x2f5fa3;
+const POST_CREAM = 0xfbf4e4;
+const POST_BRASS = 0xc9a54a;
+const POST_WOOD = 0x8a5a3a;
+const POST_WOOD_LIGHT = 0xc49a6c;
+const POST_WOOD_DARK = 0x5e3b25;
+
+/** An airmail border along a face: red and blue slants on white, from u0 to u1 between v0 and v1. */
+function airmailBand(bin: GeometryBin, face: Face, u0: number, u1: number, v0: number, v1: number, w: number): void {
+  bin.add('body', faceBox(face, u0, v0, 0, u1, v1, w), POST_CREAM);
+  const step = 0.2;
+  const slant = (v1 - v0) * 0.55;
+  for (let i = 0, u = u0 + 0.02; u + 0.1 + slant < u1; i++, u += step) {
+    const points: [number, number][] = [
+      [u, v0 + 0.02],
+      [u + 0.09, v0 + 0.02],
+      [u + 0.09 + slant, v1 - 0.02],
+      [u + slant, v1 - 0.02],
+    ];
+    bin.add('body', facePrism(face, points, w, w + 0.006), i % 2 === 0 ? POST_RED : POST_BLUE);
+  }
+}
+
+/**
+ * The Post Office's counter (TRANSFER): a long wooden counter across the
+ * room's north-west corner, an airmail border along its front, brass grilles
+ * standing on it and one open service window, the station, with the scale
+ * and a parcel on its sill and a service lamp on each jamb lit in its state. The label hangs over the window on an enamel
+ * ticket, and SEND runs along the fascia above it between airmail stripes.
+ * A red stamp machine stands at the counter's east end, and behind the
+ * grilles is the sorting room: a mail sack and a sorting table in front of
+ * the pigeonholes on the north wall (`postOfficeDecor`).
+ */
+function postOfficeCounter(ctx: CounterContext): CounterHeader {
+  const { station: s, bin, status, theme, labels, textLabels, group } = ctx;
+  const cx0 = s.x - 2;
+  const cx1 = s.x + s.width + 3;
+  const [w0, w1] = [s.x, s.x + s.width];
+  const z0 = s.y + 0.08;
+  const z1 = s.y + s.height - 0.04;
+  const top = 1.03;
+  const front: Face = { normal: 'z+', plane: z1 };
+  // The counter: panelled wood under a lighter top, the airmail border along it.
+  bin.add('body', boxGeometry(cx0 + 0.02, 0, z0, cx1, 0.95, z1), aoPaint(POST_WOOD, 0.1));
+  bin.add('body', boxGeometry(cx0 + 0.02, 0.95, z0 - 0.02, cx1 + 0.02, top, z1 + 0.03), POST_WOOD_LIGHT);
+  bin.add('body', boxGeometry(cx0 + 0.02, 0, z1, cx1, 0.12, z1 + 0.015), POST_WOOD_DARK);
+  for (let x = cx0; x < cx1; x++) {
+    if (x >= w0 && x < w1) continue;
+    bin.add('body', faceBox(front, x + 0.12, 0.2, 0, x + 0.88, 0.56, 0.016), lift(POST_WOOD, -0.06));
+  }
+  airmailBand(bin, front, cx0 + 0.04, cx1 - 0.02, 0.64, 0.84, 0.012);
+  status.add('accent', boxGeometry(w0 + 0.14, 0.2, z1, w1 - 0.14, 0.56, z1 + 0.03), 0xffffff);
+
+  // The grilles: brass bars on the counter, broken by the service window.
+  const gz = s.y + 0.34;
+  const [g0, g1] = [1.88, 1.06];
+  for (let u = cx0 + 0.16; u < cx1 - 0.08; u += 0.15) {
+    if (u > w0 - 0.06 && u < w1 + 0.06) continue;
+    bin.add('body', boxGeometry(u - 0.014, top, gz - 0.014, u + 0.014, 1.97, gz + 0.014), POST_BRASS);
+  }
+  for (const [a, b] of [[cx0 + 0.02, w0], [w1, cx1]] as const) {
+    for (const v of [g1, 1.5, g0]) bin.add('body', boxGeometry(a, v - 0.018, gz - 0.02, b, v + 0.018, gz + 0.02), POST_BRASS);
+  }
+  // Wooden posts at the ends and the window's jambs, the window's head, and the fascia.
+  for (const u of [cx0 + 0.07, w0, w1, cx1 - 0.05]) {
+    bin.add('body', boxGeometry(u - 0.05, top, gz - 0.06, u + 0.05, 1.98, gz + 0.06), POST_WOOD_DARK);
+  }
+  bin.add('body', boxGeometry(w0, 1.6, gz - 0.05, w1, 1.645, gz + 0.05), POST_BRASS);
+  // A service lamp on each jamb, lit in the window's state.
+  for (const u of [w0, w1]) {
+    bin.add('body', faceBox({ normal: 'z+', plane: gz + 0.06 }, u - 0.06, 1.72, 0, u + 0.06, 1.9, 0.02), POST_BRASS);
+    status.add('accent', sphereGeometry(u, 1.81, gz + 0.12, 0.055, { widthSegments: 8, heightSegments: 5 }), 0xffffff);
+  }
+  const [f0, f1] = [1.98, 2.32];
+  bin.add('body', boxGeometry(cx0 + 0.02, f0, gz - 0.1, cx1, f1, gz + 0.08), POST_BLUE);
+  bin.add('body', boxGeometry(cx0 + 0.02, f1, gz - 0.12, cx1, f1 + 0.04, gz + 0.1), theme.wallTop);
+  const fascia: Face = { normal: 'z+', plane: gz + 0.08 };
+  const mid = (w0 + w1) / 2;
+  airmailBand(bin, fascia, cx0 + 0.16, mid - 0.86, f0 + 0.08, f1 - 0.08, 0.004);
+  airmailBand(bin, fascia, mid + 0.86, cx1 - 0.12, f0 + 0.08, f1 - 0.08, 0.004);
+  const send = labels.sign(POST_OFFICE_SEND_TEXT, POST_OFFICE_SEND_SIGN);
+  textLabels.push(send);
+  send.object.position.set(mid, (f0 + f1) / 2, gz + 0.09);
+  send.object.userData['area'] = 'post-office-send';
+  group.add(send.object);
+  // The scale and a parcel on the window's sill.
+  stationProps('post-office', theme, bin, w0 + 0.1, w1 - 0.1, s.y + 0.14, s.y + s.height - 0.1);
+
+  // The stamp machine at the east end: red, a cream window of stamps, a slot and a knob.
+  const [m0, m1, mz0, mz1] = [cx1 + 0.12, cx1 + 0.88, s.y + 0.14, s.y + 0.9];
+  bin.add('body', boxGeometry(m0, 0, mz0, m1, 1.5, mz1), aoPaint(POST_RED, 0.12));
+  bin.add('body', boxGeometry(m0 - 0.04, 1.5, mz0 - 0.04, m1 + 0.04, 1.58, mz1 + 0.04), lift(POST_RED, -0.14));
+  bin.add('body', boxGeometry(m0 - 0.02, 0, mz0 - 0.02, m1 + 0.02, 0.1, mz1 + 0.02), lift(POST_RED, -0.2));
+  const mf: Face = { normal: 'z+', plane: mz1 };
+  bin.add('body', faceBox(mf, m0, 1.36, 0, m1, 1.44, 0.006), POST_BLUE);
+  bin.add('unlit', facePanel(mf, m0 + 0.12, 0.98, m1 - 0.12, 1.3, 0.008, 0.05), POST_CREAM);
+  for (const [i, colour] of [POST_BLUE, POST_RED, POST_BLUE].entries()) {
+    const u = m0 + 0.2 + i * 0.13;
+    bin.add('unlit', faceBox(mf, u, 1.06, 0.01, u + 0.09, 1.2, 0.014), colour);
+  }
+  bin.add('body', faceBox(mf, m0 + 0.32, 0.84, 0, m0 + 0.44, 0.9, 0.012), 0x2b2b30);
+  bin.add('body', faceDisc(mf, m1 - 0.16, 0.87, 0, 0.05, 0.05, 10), 0xc9ccd2);
+  bin.add('body', faceBox(mf, m0 + 0.16, 0.52, 0, m1 - 0.16, 0.6, 0.012), 0x2b2b30);
+  bin.add('body', faceBox(mf, m0 + 0.26, 0.44, 0.004, m1 - 0.26, 0.56, 0.05), POST_CREAM);
+  bin.add('body', faceBox(mf, m0 + 0.26, 0.44, 0.05, m1 - 0.26, 0.46, 0.052), POST_BLUE);
+
+  // The sorting room behind: a sorting table with bundles of letters, and a mail sack.
+  const [t0, t1, tz0, tz1] = [cx1 - 3.3, cx1 - 0.4, s.y - 1.25, s.y - 0.55];
+  bin.add('body', boxGeometry(t0, 0.76, tz0, t1, 0.82, tz1), POST_WOOD_LIGHT);
+  for (const u of [t0 + 0.06, t1 - 0.06]) {
+    for (const v of [tz0 + 0.06, tz1 - 0.06]) bin.add('body', boxGeometry(u - 0.03, 0, v - 0.03, u + 0.03, 0.76, v + 0.03), POST_WOOD_DARK);
+  }
+  for (let i = 0; i < 6; i++) {
+    const u = t0 + 0.25 + i * 0.45;
+    const colour = pick([0xf6efe0, 0xf4c7d0, 0xc9dcf2, 0xf2e2b0], hash01(i, 3, 641));
+    const h = 0.05 + 0.1 * hash01(i, 4, 642);
+    bin.add('body', boxGeometry(u - 0.14, 0.82, tz0 + 0.15, u + 0.14, 0.82 + h, tz1 - 0.2), colour);
+  }
+  const sx = cx0 + 0.75;
+  const sz = s.y - 0.8;
+  bin.add('body', sphereGeometry(sx, 0.36, sz, 0.34, { widthSegments: 8, heightSegments: 5, scaleY: 1.1 }), 0xd9c7a0);
+  bin.add('body', cylinderGeometry(sx, 0.68, sz, 0.08, 0.14, 0.16, 8), 0xc4b088);
+  bin.add('body', cylinderGeometry(sx, 0.3, sz, 0.345, 0.345, 0.08, 10), POST_BLUE);
+  return { position: [mid, 1.81, gz + 0.03], style: POST_OFFICE_WINDOW_SIGN };
+}
+
+/**
+ * The Bridge's gateway terminal (DEPOSIT), after the facade's steel pylons:
+ * two black pylons, a green light cable up each face, carry a lintel whose
+ * front is a departure board, the label heading it in NEAR's mono over rows
+ * of flap cells. Between the pylons a portal of nested frames glows teal and
+ * green over a pool of light, its nearest frame lit in the station's state,
+ * and the terminal stands in its mouth: a black console with its route
+ * screen on it.
+ */
+function gatewayTerminal(ctx: CounterContext): CounterHeader {
+  const { station: s, bin, status, theme, shell } = ctx;
+  const left = s.x - 2;
+  const right = s.x + s.width + 2;
+  const back = s.y - 2;
+  const front = s.y + s.height - 0.04;
+  const steel = lift(NEAR.raised, 0.1);
+  const frame = lift(NEAR.hairline, 0.16);
+  const pylonTop = 2.3;
+  const pylons: ReadonlyArray<readonly [number, number, number]> = [
+    [left + 0.1, s.x - 0.22, 1],
+    [s.x + s.width + 0.22, right - 0.1, -1],
+  ];
+  const pf: Face = { normal: 'z+', plane: front };
+  for (const [a, b, inward] of pylons) {
+    bin.add('body', boxGeometry(a, 0, back + 0.25, b, pylonTop, front), aoPaint(steel, 0.1));
+    bin.add('body', boxGeometry(a - 0.04, 0, back + 0.21, b + 0.04, 0.14, front + 0.04), NEAR.black);
+    // A hairline frame on the front face, and the cable: a green line from the outer foot to the inner head.
+    bin.add('body', faceBox(pf, a + 0.08, 0.2, 0, b - 0.08, 0.224, 0.008), frame);
+    bin.add('body', faceBox(pf, a + 0.08, pylonTop - 0.12, 0, b - 0.08, pylonTop - 0.096, 0.008), frame);
+    const [foot, head] = inward > 0 ? [a + 0.2, b - 0.16] : [b - 0.2, a + 0.16];
+    bin.add('unlit', beamGeometry(faceToWorld(pf, foot, 0.3, 0.012), faceToWorld(pf, head, pylonTop - 0.2, 0.012), 0.012, 0.03), theme.floorAccent);
+    crosshairMark(bin, pf, (a + b) / 2, 1.05, lift(NEAR.muted, 0.08));
+  }
+  // The lintel and its departure board.
+  const [l0, l1] = [pylonTop, 3.05];
+  bin.add('body', boxGeometry(left + 0.06, l0, front - 1.0, right - 0.06, l1, front), aoPaint(steel, 0.06, 3));
+  bin.add('body', boxGeometry(left + 0.02, l1, front - 1.04, right - 0.02, l1 + 0.05, front + 0.03), NEAR.black);
+  bin.add('unlit', facePanel(pf, left + 0.24, l0 + 0.05, right - 0.24, l1 - 0.05, 0.006, 0.04), NEAR.black);
+  // Two rows of flap cells, lit in words: a route (white), a lane (teal) and
+  // its status, the top row's green, the lower one's amber, still pending.
+  // Shapes only, never letters or figures.
+  const rows: ReadonlyArray<readonly [number, number, string]> = [
+    [2.54, 2.66, 'wwww.wwwwwww.tt..ggg'],
+    [2.39, 2.51, 'www.wwwwwwww..tt.aaa'],
+  ];
+  const lit: Readonly<Record<string, number>> = { w: NEAR.white, t: NEAR.teal, g: theme.floorAccent, a: NEAR.amber };
+  const [c0, c1] = [left + 0.34, right - 0.34];
+  for (const [v0, v1, word] of rows) {
+    const pitch = (c1 - c0) / word.length;
+    [...word].forEach((cell, i) => {
+      const u = c0 + i * pitch;
+      bin.add('unlit', faceBox(pf, u + 0.012, v0, 0.008, u + pitch - 0.012, v1, 0.012), lift(NEAR.elevated, 0.04));
+      bin.add('unlit', faceBox(pf, u + 0.012, (v0 + v1) / 2 - 0.004, 0.012, u + pitch - 0.012, (v0 + v1) / 2 + 0.004, 0.0125), NEAR.black);
+      const colour = lit[cell];
+      if (colour !== undefined) bin.add('unlit', faceBox(pf, u + 0.05, v0 + 0.028, 0.0125, u + pitch - 0.05, v1 - 0.028, 0.016), colour);
+    });
+  }
+
+  // The portal: nested frames between the pylons, the nearest in the state colour.
+  const [p0, p1] = [s.x - 0.22, s.x + s.width + 0.22];
+  const depths = [front - 1.0, front - 1.7, front - 2.4];
+  depths.forEach((z, k) => {
+    const [a, b, h] = [p0 + 0.1 + k * 0.14, p1 - 0.1 - k * 0.14, pylonTop - 0.08 - k * 0.16];
+    const [target, key] = k === 0 ? [status, 'accent'] : [bin, 'unlit'];
+    const colour = k === 0 ? 0xffffff : k === 1 ? NEAR.teal : mixHex(NEAR.teal, NEAR.periwinkle, 0.5);
+    const t = 0.05;
+    target.add(key, boxGeometry(a, 0.02, z - 0.03, a + t, h, z + 0.03), colour);
+    target.add(key, boxGeometry(b - t, 0.02, z - 0.03, b, h, z + 0.03), colour);
+    target.add(key, boxGeometry(a, h - t, z - 0.03, b, h, z + 0.03), colour);
+  });
+  const glow = new Color(NEAR.teal);
+  shell.floor.addRGBA('light', flatQuad(p0 + 0.05, back, p1 - 0.05, s.y + 0.1, 0.013), (_x, _y, z) => [
+    glow.r,
+    glow.g,
+    glow.b,
+    0.3 * clamp01((z - back) / (s.y - back)),
+  ]);
+  // The portal's far side: a wash of green light rising off the floor behind the last frame.
+  const far: Face = { normal: 'z+', plane: depths[2]! - 0.12 };
+  const green = new Color(theme.floorAccent);
+  shell.floor.addRGBA('light', faceQuad(far, p0 + 0.3, 0.02, p1 - 0.3, pylonTop - 0.3, 0), (_x, y) => [
+    green.r,
+    green.g,
+    green.b,
+    0.32 * (1 - clamp01(y / (pylonTop - 0.3))) ** 1.4,
+  ]);
+
+  // The terminal: a black console, a green edge, the status panel and its route screen.
+  const [k0, k1, kz0] = [s.x + 0.06, s.x + s.width - 0.06, s.y + 0.1];
+  bin.add('body', boxGeometry(k0, 0, kz0, k1, 0.92, front), aoPaint(lift(NEAR.raised, 0.06), 0.1));
+  bin.add('body', boxGeometry(k0 - 0.03, 0.92, kz0 - 0.03, k1 + 0.03, 1, front + 0.03), lift(NEAR.hairline, 0.12));
+  bin.add('unlit', boxGeometry(k0 - 0.03, 0.96, front + 0.03, k1 + 0.03, 0.985, front + 0.045), theme.floorAccent);
+  status.add('accent', boxGeometry(s.x + 0.18, 0.3, front, s.x + s.width - 0.18, 0.7, front + 0.03), 0xffffff);
+  stationProps('bridge', theme, bin, s.x + 0.1, s.x + s.width - 0.1, s.y + 0.14, s.y + s.height - 0.1);
+  return { position: [(left + right) / 2, 2.84, front + 0.02], style: NEAR_DEPARTURE_HEADER };
+}
+
+/** A NEAR Intents crosshair, a small plus standing just proud of a face. */
+function crosshairMark(bin: GeometryBin, face: Face, u: number, v: number, colour: number): void {
+  bin.add('body', faceBox(face, u - 0.06, v - 0.007, 0, u + 0.06, v + 0.007, 0.01), colour);
+  bin.add('body', faceBox(face, u - 0.007, v - 0.06, 0, u + 0.007, v + 0.06, 0.01), colour);
+}
+
+/**
+ * Free-standing furniture on a floor's `prop` fixtures, on the floor's own
+ * lit and glow bins, so it spends no draw call: avnu's traders' pods, the
+ * Degen floor's neon high tables, the Post Office's pillar box and writing
+ * desk, and the Bridge's lounge seats facing its gateway.
+ */
+function fixtureProps(map: FixedRoomLevelMap, theme: RoomTheme, shell: InteriorShell): void {
+  for (const fixture of map.fixtures) {
+    switch (fixture.prop) {
+      case 'trading-pod':
+        tradingPod(shell.floor, fixture);
+        break;
+      case 'high-table':
+        highTable(shell.floor, fixture);
+        break;
+      case 'pillar-box':
+        roomPillarBox(shell.floor, fixture);
+        break;
+      case 'writing-desk':
+        writingDesk(shell.floor, fixture);
+        break;
+      case 'bench':
+        loungeSeats(shell.floor, fixture, theme);
+        break;
+      case undefined:
+        break;
+    }
+  }
+}
+
+/** A traders' pod: a navy desk, back-to-back monitors down its middle, blue light along both edges. */
+function tradingPod(bin: GeometryBin, r: FixedRoomRect): void {
+  const [x0, x1, z0, z1] = [r.x + 0.1, r.x + r.width - 0.1, r.y + 0.12, r.y + r.height - 0.12];
+  const zc = (z0 + z1) / 2;
+  bin.add('floor', boxGeometry(x0 + 0.06, 0, z0 + 0.06, x1 - 0.06, 0.72, z1 - 0.06), aoPaint(AVNU.card, 0.1));
+  bin.add('floor', boxGeometry(x0, 0.72, z0, x1, 0.8, z1), lift(AVNU.navy, 0.05));
+  for (const z of [z0 - 0.005, z1 - 0.025]) bin.add('glow', boxGeometry(x0, 0.74, z, x1, 0.77, z + 0.03), AVNU.blue);
+  const count = Math.max(1, Math.round((x1 - x0) / 0.95));
+  const step = (x1 - x0) / count;
+  for (let i = 0; i < count; i++) {
+    const u = x0 + step * (i + 0.5);
+    bin.add('floor', boxGeometry(u - 0.04, 0.8, zc - 0.04, u + 0.04, 0.92, zc + 0.04), AVNU.navy);
+    bin.add('floor', boxGeometry(u - 0.36, 0.9, zc - 0.07, u + 0.36, 1.28, zc + 0.07), AVNU.navy);
+    for (const [plane, normal] of [[zc + 0.07, 'z+'], [zc - 0.07, 'z-']] as const) {
+      const face: Face = { normal, plane };
+      bin.add('glow', facePanel(face, u - 0.32, 0.93, u + 0.32, 1.25, 0.004, 0.03), AVNU.card);
+      for (let k = 0; k < 4; k++) {
+        const h = 0.05 + 0.2 * hash01(Math.round(u * 10), k + (normal === 'z+' ? 0 : 7), 661);
+        const bu = u - 0.22 + k * 0.12;
+        bin.add('glow', faceBox(face, bu, 0.97, 0.006, bu + 0.07, 0.97 + h, 0.01), k % 2 === 0 ? AVNU.blue : AVNU.lightBlue);
+      }
+    }
+  }
+}
+
+/** A neon high table: a black round top ringed in pink on a pole, two glowing drinks on it. */
+function highTable(bin: GeometryBin, r: FixedRoomRect): void {
+  const [x, z] = [r.x + r.width / 2, r.y + r.height / 2];
+  bin.add('floor', cylinderGeometry(x, 0, z, 0.26, 0.3, 0.06, 12), lift(AVNU.navy, 0.03));
+  bin.add('floor', cylinderGeometry(x, 0.06, z, 0.05, 0.05, 0.94, 8), lift(AVNU.indigo, 0.08));
+  bin.add('floor', cylinderGeometry(x, 1, z, 0.4, 0.4, 0.05, 16), DEGEN.ink);
+  bin.add('glow', cylinderGeometry(x, 0.99, z, 0.415, 0.415, 0.03, 16), DEGEN.pink);
+  bin.add('glow', cylinderGeometry(x - 0.12, 1.05, z + 0.06, 0.045, 0.04, 0.16, 8), DEGEN.cyan);
+  bin.add('glow', cylinderGeometry(x + 0.14, 1.05, z - 0.04, 0.045, 0.04, 0.13, 8), DEGEN.lime);
+}
+
+/** The street's pillar box, a little larger indoors: red, a dark base and slot, a cream plate. */
+function roomPillarBox(bin: GeometryBin, r: FixedRoomRect): void {
+  const [x, z] = [r.x + r.width / 2, r.y + r.height / 2];
+  const red = 0xc8302c;
+  const dark = 0x2a2a2e;
+  bin.add('floor', cylinderGeometry(x, 0, z, 0.3, 0.3, 0.1, 12), dark);
+  bin.add('floor', cylinderGeometry(x, 0.1, z, 0.26, 0.27, 1.18, 12), red);
+  bin.add('floor', cylinderGeometry(x, 1.28, z, 0.29, 0.29, 0.08, 12), red);
+  bin.add('floor', sphereGeometry(x, 1.36, z, 0.27, { widthSegments: 12, heightSegments: 3, hemisphere: true, scaleY: 0.6 }), red);
+  bin.add('floor', boxGeometry(x - 0.15, 1.0, z + 0.2, x + 0.15, 1.05, z + 0.275), dark);
+  bin.add('floor', boxGeometry(x - 0.1, 0.66, z + 0.22, x + 0.1, 0.82, z + 0.27), 0xf3ead6);
+}
+
+/** A standing desk for forms: wood, forms and an inkwell on its top, the airmail border along its front. */
+function writingDesk(bin: GeometryBin, r: FixedRoomRect): void {
+  const [x0, x1, z0, z1] = [r.x + 0.12, r.x + r.width - 0.12, r.y + 0.2, r.y + r.height - 0.2];
+  for (const x of [x0, x1 - 0.08]) bin.add('floor', boxGeometry(x, 0, z0, x + 0.08, 1.0, z1), POST_WOOD_DARK);
+  bin.add('floor', boxGeometry(x0, 0.28, z0 + 0.05, x1, 0.32, z1 - 0.05), POST_WOOD);
+  bin.add('floor', boxGeometry(x0 - 0.04, 1.0, z0 - 0.04, x1 + 0.04, 1.06, z1 + 0.04), POST_WOOD_LIGHT);
+  const front: Face = { normal: 'z+', plane: z1 + 0.04 };
+  bin.add('floor', faceBox(front, x0 + 0.1, 1.0, 0, x1 - 0.1, 1.06, 0.004), POST_CREAM);
+  for (let u = x0 + 0.14, i = 0; u + 0.1 < x1 - 0.1; u += 0.16, i++) {
+    bin.add('floor', faceBox(front, u, 1.008, 0.004, u + 0.08, 1.052, 0.008), i % 2 === 0 ? POST_RED : POST_BLUE);
+  }
+  for (let i = 0; i < 4; i++) {
+    const u = x0 + 0.35 + i * 0.6;
+    if (u + 0.2 > x1) break;
+    bin.add('floor', boxGeometry(u - 0.16, 1.06, z0 + 0.12, u + 0.16, 1.07, z1 - 0.1), i % 2 === 0 ? POST_CREAM : 0xf4c7d0);
+  }
+  bin.add('floor', cylinderGeometry(x1 - 0.3, 1.06, (z0 + z1) / 2, 0.05, 0.06, 0.08, 8), 0x2b2b30);
+}
+
+/** Lounge seats facing the gateway: three black seats on a beam, a green line along their backs. */
+function loungeSeats(bin: GeometryBin, r: FixedRoomRect, theme: RoomTheme): void {
+  const [x0, x1, z0, z1] = [r.x + 0.1, r.x + r.width - 0.1, r.y + 0.18, r.y + r.height - 0.14];
+  const seat = lift(NEAR.raised, 0.12);
+  bin.add('floor', boxGeometry(x0 + 0.1, 0.3, z0 + 0.2, x1 - 0.1, 0.36, z1 - 0.2), NEAR.black);
+  for (const x of [x0 + 0.3, x1 - 0.3]) bin.add('floor', boxGeometry(x - 0.05, 0, z0 + 0.2, x + 0.05, 0.3, z1 - 0.2), NEAR.black);
+  const count = Math.max(1, Math.round((x1 - x0) / 0.9));
+  const step = (x1 - x0) / count;
+  for (let i = 0; i < count; i++) {
+    const a = x0 + step * i + 0.05;
+    const b = x0 + step * (i + 1) - 0.05;
+    bin.add('floor', boxGeometry(a, 0.36, z0, b, 0.46, z1 - 0.1), seat);
+    bin.add('floor', boxGeometry(a, 0.46, z1 - 0.12, b, 0.98, z1), seat);
+    bin.add('glow', boxGeometry(a + 0.06, 0.9, z1, b - 0.06, 0.93, z1 + 0.012), theme.floorAccent);
+  }
+}
+
 /** Themed props on the counter top (y = 1), in the station's style. */
 function stationProps(
   style: StationPropStyle,
@@ -2132,31 +2778,14 @@ function pottedPlant(wall: InteriorWall, u: number): void {
 }
 
 /**
- * avnu: navy and indigo, a swap card with pill fields and the primary blue
- * pill button behind the desk, rounded chart cards and a blue LED ticker.
+ * avnu: navy and indigo, rounded chart cards and a blue LED ticker along the
+ * north wall, which runs on above the trading desk's wall of boards
+ * (`tradingDesk`), and chart cards and light strips down the side walls.
  */
 function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap, res: ResourceBag, animators: Animator[]): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
-  const cardA = anchor - 1.7;
-  const cardB = anchor + 1.7;
-  if (inSpans(north, cardA - 0.05, cardB + 0.05)) {
-    north.bins.add('unlit', facePanel(nf, cardA - 0.035, 0.86, cardB + 0.035, 2.03, 0.02, 0.2), AVNU.indigoBorder);
-    north.bins.add('unlit', facePanel(nf, cardA, 0.89, cardB, 2.0, 0.03, 0.18), AVNU.card);
-    const fields: ReadonlyArray<readonly [number, number, number]> = [
-      [1.62, 1.86, AVNU.lightBlue],
-      [1.32, 1.56, AVNU.slate],
-    ];
-    for (const [v0, v1, token] of fields) {
-      const mid = (v0 + v1) / 2;
-      north.bins.add('unlit', facePanel(nf, cardA + 0.16, v0, cardB - 0.16, v1, 0.04, 0.12), AVNU.navy);
-      north.bins.add('unlit', facePanel(nf, cardA + 0.26, mid - 0.075, cardA + 0.41, mid + 0.075, 0.05, 0.075), token);
-      north.bins.add('unlit', facePanel(nf, cardB - 1.0, mid - 0.028, cardB - 0.3, mid + 0.028, 0.05, 0.028), AVNU.slate);
-    }
-    north.bins.add('unlit', facePanel(nf, anchor - 0.1, 1.49, anchor + 0.1, 1.69, 0.055, 0.1), AVNU.indigoBorder);
-    north.bins.add('unlit', facePanel(nf, cardA + 0.16, 0.98, cardB - 0.16, 1.2, 0.04, 0.11), AVNU.blue);
-  }
   const charts: ReadonlyArray<readonly [number, number]> = [
     [anchor - 10.6, anchor - 7.2],
     [anchor - 6.6, anchor - 3.2],
@@ -2165,7 +2794,7 @@ function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMa
     if (!inSpans(north, u0 - 0.05, u1 + 0.05)) return;
     north.bins.add('unlit', facePanel(nf, u0 - 0.035, 1.02, u1 + 0.035, 2.01, 0.02, 0.17), AVNU.indigoBorder);
     north.bins.add('unlit', facePanel(nf, u0, 1.05, u1, 1.98, 0.03, 0.15), AVNU.card);
-    candlesticks(north, u0 + 0.15, u1 - 0.15, 1.1, 1.9, index, { up: AVNU.lightBlue, down: AVNU.slate, line: AVNU.blue });
+    candlesticks(north.bins, nf, u0 + 0.15, u1 - 0.15, 1.1, 1.9, index, { up: AVNU.lightBlue, down: AVNU.slate, line: AVNU.blue });
   });
   addTicker(north, map, res, animators, EXCHANGE_ROOM_TICKER);
 
@@ -2451,7 +3080,8 @@ function addTicker(
 }
 
 function candlesticks(
-  wall: InteriorWall,
+  bins: GeometryBin,
+  face: Face,
   u0: number,
   u1: number,
   v0: number,
@@ -2473,27 +3103,33 @@ function candlesticks(
     const u = u0 + step * (i + 0.5);
     const y = (value: number) => v0 + (v1 - v0) * (0.12 + value * 0.76);
     const colour = close >= open ? colours.up : colours.down;
-    wall.bins.add('unlit', faceBox(wall.face, u - step * 0.3, y(lo), 0.075, u + step * 0.3, Math.max(y(hi), y(lo) + 0.02), 0.08), colour);
-    wall.bins.add('unlit', faceBox(wall.face, u - 0.008, y(Math.max(0, lo - 0.06)), 0.075, u + 0.008, y(Math.min(1, hi + 0.06)), 0.078), colour);
+    bins.add('unlit', faceBox(face, u - step * 0.3, y(lo), 0.075, u + step * 0.3, Math.max(y(hi), y(lo) + 0.02), 0.08), colour);
+    bins.add('unlit', faceBox(face, u - 0.008, y(Math.max(0, lo - 0.06)), 0.075, u + 0.008, y(Math.min(1, hi + 0.06)), 0.078), colour);
     points.push([u, y(close) + 0.06]);
   }
   for (let i = 0; i + 1 < points.length; i++) {
     const [ua, va] = points[i]!;
     const [ub, vb] = points[i + 1]!;
-    wall.bins.add('unlit', beamGeometry(faceToWorld(wall.face, ua, va, 0.085), faceToWorld(wall.face, ub, vb, 0.085), 0.008, 0.018), colours.line);
+    bins.add('unlit', beamGeometry(faceToWorld(face, ua, va, 0.085), faceToWorld(face, ub, vb, 0.085), 0.008, 0.018), colours.line);
   }
 }
 
-/** Cream and blue, a pigeonhole cabinet, a clock and shelves of parcels. */
+/**
+ * Cream and blue: the pigeonholes of the sorting room along the north wall
+ * behind the counter (`postOfficeCounter`), a clock and an airmail poster
+ * past its end, and shelves of parcels down the side walls, clear of it.
+ */
 function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
   const north = shell.walls.north;
   const nf = north.face;
   const centre = map.width / 2;
-  const [c0, c1, v0, v1] = [centre - 3, centre + 3, 0.15, 1.95];
+  const station = map.stations[0];
+  // The pigeonholes span the counter's sorting room, or the wall's middle without one.
+  const [c0, c1, v0, v1] = station ? [station.x - 1.8, station.x + station.width + 3.8, 0.15, 1.95] : [centre - 3, centre + 3, 0.15, 1.95];
   if (inSpans(north, c0, c1)) {
     const depth = 0.32;
     north.bins.add('body', faceBox(nf, c0, v0, 0, c1, v1, depth), 0x8a5a3a);
-    const cols = 10;
+    const cols = Math.round((c1 - c0) / 0.6);
     const rows = 5;
     const cw = (c1 - c0 - 0.12) / cols;
     const ch = (v1 - v0 - 0.12) / rows;
@@ -2510,7 +3146,7 @@ function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomL
       }
     }
   }
-  const clockU = centre - 5.6;
+  const clockU = station ? c1 + 1.6 : centre - 5.6;
   if (inSpans(north, clockU - 0.35, clockU + 0.35)) {
     north.bins.add('body', faceDisc(nf, clockU, 1.55, 0, 0.3, 0.05, 16), 0xf6efe0);
     north.bins.add('body', faceTorus(nf, clockU, 1.55, 0.04, 0.3, 0.03, { tubularSegments: 16 }), theme.floorAccent);
@@ -2528,9 +3164,11 @@ function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomL
     }
     north.bins.add('body', faceBox(nf, posterU - 0.25, 1.25, 0.02, posterU + 0.25, 1.5, 0.025), theme.floorAccent);
   }
+  // Behind and beside the counter the west wall is the sorting room's: its shelves start past the counter.
+  const counterEnd = station ? station.y + station.height + 0.4 : 0;
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const [s0, s1] of wall.spans) {
-      const a = s0 + 1.2;
+      const a = wall === shell.walls.west ? Math.max(s0 + 1.2, counterEnd) : s0 + 1.2;
       const b = s1 - 0.8;
       if (b - a < 1) continue;
       for (const v of [0.85, 1.5]) {
@@ -2556,10 +3194,12 @@ function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomL
 
 /**
  * NEAR (deposits route through NEAR Intents): black walls and floor, a grey
- * grid of crosshair marks underfoot, and a dashed green route to the desk.
- * Behind the desk, a quiet route map in green light: five chains feed one
- * junction, three solver lanes race and the middle one wins, and a single
- * route runs on to Starknet, a pulse travelling along it. The side walls
+ * grid of crosshair marks underfoot, and a dashed green route to the desk,
+ * which stands in a gateway (`gatewayTerminal`). Along the north wall, a
+ * quiet route map in green light runs through that gateway: on a card west
+ * of it five chains feed one junction and three solver lanes race, the
+ * middle one winning; the single route runs on behind the gateway to
+ * Starknet on a card east of it, a pulse travelling along it. The side walls
  * carry cards with crosshair corners (one still pending, in amber) above a
  * run of slashes on the wainscot.
  */
@@ -2572,12 +3212,14 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
   const mark = lift(NEAR.muted, 0.08);
   const idle = lift(NEAR.muted, -0.22);
 
-  const [u0, u1, v0, v1] = [anchor - 3.6, anchor + 3.6, 1.04, 2.0];
-  if (inSpans(north, u0, u1)) {
-    nearCard(north, u0, v0, u1, v1, panel, frame, mark);
+  // The two cards either side of the gateway, the route running between them behind it.
+  const [west0, west1, east0, east1, v0, v1] = [anchor - 8.05, anchor - 3.35, anchor + 3.35, anchor + 8.05, 1.04, 2.0];
+  if (inSpans(north, west0, east1)) {
+    nearCard(north, west0, v0, west1, v1, panel, frame, mark);
+    nearCard(north, east0, v0, east1, v1, panel, frame, mark);
     const vc = (v0 + v1) / 2;
     const w = 0.04;
-    const [sources, junction, split, merge, destination] = [anchor - 3.1, anchor - 1.7, anchor - 1.2, anchor + 1.2, anchor + 2.7];
+    const [sources, junction, split, merge, destination] = [west0 + 0.55, west0 + 1.95, west0 + 2.45, west1 - 0.5, east1 - 1.4];
     const line = (ua: number, va: number, ub: number, vb: number, colour: number, width: number): void => {
       north.bins.add('unlit', beamGeometry(faceToWorld(nf, ua, va, w), faceToWorld(nf, ub, vb, w), 0.008, width), colour);
     };
@@ -2679,6 +3321,7 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
     for (let z = 2; z < map.height - 1; z += 2) {
       if (Math.abs(x - routeX) < 0.5) continue;
       if (station && x >= station.x - 1 && x <= station.x + station.width + 1 && z >= station.y - 1 && z <= station.y + station.height + 1) continue;
+      if ([[x - 1, z - 1], [x, z - 1], [x - 1, z], [x, z]].some(([tx, tz]) => map.tiles[tz!]?.[tx!] === 'fixture')) continue;
       shell.floor.add('floor', flatQuad(x - 0.08, z - 0.008, x + 0.08, z + 0.008, 0.004), cross);
       shell.floor.add('floor', flatQuad(x - 0.008, z - 0.08, x + 0.008, z + 0.08, 0.004), cross);
     }

@@ -5713,6 +5713,27 @@ the amount would arrive), and any wallet other than Ready.
 
 ---
 
+## D-105 — The Exchange, Degen floor, Post Office and Bridge counters are built into their rooms; furniture is solid `fixture` tiles
+
+**2026-10-02 · Accepted under the owner's interiors brief (counters that fit each building's scene) · art and level design, no product, privacy or seam change · amends D-059's interiors (the floor carries solid furniture, not only flat inlays) · keeps D-039's station ids, rects, approach and arming, D-042's and D-067's counters, D-040's Post Office counter and D-030's one grade per station · keeps D-103's shared counter and halo meshes · builds on D-104's fixtures (the Bank and Vault's half of the same brief): one solid-tile mechanism, D-104's field, validation and error codes**
+
+**Context.** The owner found the counters "aesthetically nice" but the same two-tile box mapped onto every floor, with a floating pill over it. He asked for setups built into each building's scene.
+
+**Decision.**
+
+- **Solid furniture is D-104's `fixtures`.** These floors author their furniture as D-104's fixtures (`fixture` tiles, solid in `isFixedRoomSolidAt`, so the session's collision honours them), under D-104's validation and codes (`invalid-fixture`, `unreachable-station`). D-105 adds one optional field: a fixture may name a `prop` (`trading-pod`, `high-table`, `pillar-box`, `writing-desk`, `bench`), free-standing furniture drawn on the floor's own meshes at no draw call; an unknown prop is an `invalid-fixture`. A fixture without one belongs to a counter.
+- **The counters,** each closed at its back and sides by its furniture, so only its front row is its approach:
+  - **Exchange SWAP (avnu):** a trading desk across the north-east corner on a raised pit, the counter its middle bay, in front of a wall of boards (candlestick charts, avnu's swap card, quote rows; bars and lines only), with the room's ticker running on above it. Two traders' pods stand on the floor.
+  - **Degen floor DEGEN SWAP:** a back-room booth set into the poster wall between the posters, pink and violet neon up its partitions, the DEGEN MODE sign over a back bar of neon chip stacks, and a black bar across its mouth. Two neon high tables stand on the floor.
+  - **Post Office TRANSFER:** a long wooden counter across the north-west corner with an airmail border, brass grilles and one open service window with the scale and a parcel, SEND on the fascia above it between airmail stripes, a red stamp machine at its east end, and the sorting room behind (pigeonholes, a sorting table, a mail sack). A pillar box and a writing desk stand on the floor.
+  - **Bridge DEPOSIT (NEAR):** a gateway after the facade's pylons, a green light cable up each, a departure board on its lintel (rows of flap cells lit in shapes, never letters or figures) and a portal of nested teal and green frames behind the terminal. The route map on the north wall runs through it, chains on a card west of it, Starknet on a card east. Two rows of lounge seats face it.
+- **The label is the architecture's.** These counters paint the Shell's label on a sign of their own (the desk's gantry, the booth's lintel, the window's enamel ticket, the departure board's header), with no floating pill; the label still follows the Shell's text and state. As D-104's built-in counters, they have no beacon: the state colour lights the architecture (the gantry's posts, the lintel's underline, the window's service lamps, the portal's nearest frame). The halo lies only on the approach tiles a player can stand on.
+- **Budget.** Draw calls, counted as the room budget test counts them, against main before this change: Exchange 20 → 19, Degen floor 30 → 29, Post Office 14 → 15 (the SEND sign and the stamp machine's lit window, less the beacon), Bridge 20 → 19, all under 40.
+
+**Consequences.** A player can no longer walk behind or through these counters or their furniture; D-104's validator keeps every counter reachable, and a test walks each of these floors to every counter, lift and the exit. The Bank and Vault rooms are D-104's. Tests: `fixed-room.test.ts` (props, the authored rooms' reachability), `room-builder.test.ts` (signs over the windows, halos on standing tiles only, furniture on its fixtures, props, colours, budget, no volume on walkable floor), `world-session.test.ts` (no step into a counter's furniture). Renders from the offline rasterizer in the working scratchpad (`renders/int-others-*.png`, not committed). Not verified: a real browser.
+
+---
+
 ## D-106 — Jump to climb: walking never steps up, a jump near its peak climbs one block, and the lobby holds it to the jump it heard
 
 **2026-10-02 · Accepted by the product owner ("auto-climbing the blocks should not be standard: a user must jump up the block … a character near the peak of their jump should always be able to jump on top of a block … a general rule for jumping on stuff going forward") · amends D-060 (stepping up one block no longer happens by walking) and D-097 (the jump stays cosmetic for the ground position but now gates a step up) · extends D-011's shared seam with `CLIMB_FROM_PHASE`, `CLIMB_WINDOW_MS` and `PLAYER_BODY_SIZE` (constants only) and the World's `SandboxChannel` with an optional `subscribeResync` · adds one server-to-client message, `resync`, and the move outcome `refused` · builds on D-086's move bucket · no D-024 disclosure change: nothing financial is added**

@@ -22,6 +22,19 @@ export interface FixedRoomRect {
   readonly height: number;
 }
 
+/**
+ * Free-standing furniture the room builder draws on a fixture (D-105). A
+ * fixture without one belongs to a counter: what it is built into.
+ */
+export type FixedRoomProp = 'trading-pod' | 'high-table' | 'pillar-box' | 'writing-desk' | 'bench';
+
+const FIXED_ROOM_PROPS: readonly FixedRoomProp[] = ['trading-pod', 'high-table', 'pillar-box', 'writing-desk', 'bench'];
+
+/** Built-in furniture on the floor (`fixture` tiles), optionally a named free-standing prop. */
+export interface FixedRoomFixture extends FixedRoomRect {
+  readonly prop?: FixedRoomProp;
+}
+
 export interface FixedRoomStationDefinition extends FixedRoomRect {
   readonly station: StationId;
   readonly label: string;
@@ -67,7 +80,7 @@ export interface FixedRoomFloorDefinition {
    * exit, a lift, the spawn or a lift's arrival, and every station keeps an
    * approach tile that can be walked to from the spawn.
    */
-  readonly fixtures?: readonly FixedRoomRect[];
+  readonly fixtures?: readonly FixedRoomFixture[];
 }
 
 /** A building's ground floor: the room its street door opens onto. */
@@ -109,7 +122,7 @@ export interface FixedRoomLevelMap {
   readonly stations: readonly FixedRoomStationDefinition[];
   readonly lifts: readonly FixedRoomLiftDefinition[];
   /** Built-in furniture; solid, like walls (`FixedRoomFloorDefinition.fixtures`). */
-  readonly fixtures: readonly FixedRoomRect[];
+  readonly fixtures: readonly FixedRoomFixture[];
   readonly rooftop: FixedRoomRooftop | null;
 }
 
@@ -375,6 +388,16 @@ export const POST_OFFICE_ROOM_DEFINITION = freezeAuthoredRoom({
       height: 1,
     },
   ],
+  // The long wooden counter the window is set into, the stamp machine at its
+  // east end, and the sorting room behind it, where nobody walks (D-105).
+  fixtures: [
+    { x: 1, y: 1, width: 8, height: 2 },
+    { x: 1, y: 3, width: 2, height: 1 },
+    { x: 5, y: 3, width: 4, height: 1 },
+    // A pillar box against the north wall, and a writing desk for forms.
+    { x: 13, y: 1, width: 1, height: 1, prop: 'pillar-box' },
+    { x: 12, y: 6, width: 3, height: 1, prop: 'writing-desk' },
+  ],
 } as const satisfies FixedRoomDefinition);
 
 export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
@@ -396,6 +419,16 @@ export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
   // The tower's lift, up to the Degen floor: in the north-west corner, clear
   // of everything the room already had.
   lifts: [{ to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 2, y: 2 } }],
+  // The trading desk's wings either side of the counter, and the wall of
+  // boards behind it with the traders' row in front of that (D-105).
+  fixtures: [
+    { x: 11, y: 1, width: 6, height: 2 },
+    { x: 11, y: 3, width: 2, height: 1 },
+    { x: 15, y: 3, width: 2, height: 1 },
+    // Two traders' pods on the floor.
+    { x: 3, y: 5, width: 3, height: 1, prop: 'trading-pod' },
+    { x: 3, y: 7, width: 3, height: 1, prop: 'trading-pod' },
+  ],
 } as const satisfies FixedRoomDefinition);
 
 /** The degen swap counter (avnu's degen-mode tokens); the Shell supplies its label and state. */
@@ -425,6 +458,16 @@ export const EXCHANGE_DEGEN_LEVEL = freezeAuthoredLevel({
   lifts: [
     { to: 'ground', x: 1, y: 10, width: 2, height: 1, arrival: { x: 2, y: 9 } },
     { to: 'roof', x: 15, y: 1, width: 2, height: 1, arrival: { x: 15, y: 2 } },
+  ],
+  // The back room set into the poster wall, and the bar's ends either side
+  // of the counter across its mouth (D-105).
+  fixtures: [
+    { x: 7, y: 1, width: 4, height: 2 },
+    { x: 7, y: 3, width: 1, height: 1 },
+    { x: 10, y: 3, width: 1, height: 1 },
+    // Two neon high tables on the floor.
+    { x: 4, y: 6, width: 1, height: 1, prop: 'high-table' },
+    { x: 13, y: 6, width: 1, height: 1, prop: 'high-table' },
   ],
 } as const satisfies FixedRoomLevelDefinition);
 
@@ -464,6 +507,16 @@ export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
       width: 2,
       height: 1,
     },
+  ],
+  // The gateway the terminal stands in: its two pylons, and the portal
+  // behind the desk (D-105).
+  fixtures: [
+    { x: 6, y: 1, width: 6, height: 2 },
+    { x: 6, y: 3, width: 2, height: 1 },
+    { x: 10, y: 3, width: 2, height: 1 },
+    // Two rows of departure-lounge seats.
+    { x: 3, y: 6, width: 3, height: 1, prop: 'bench' },
+    { x: 12, y: 6, width: 3, height: 1, prop: 'bench' },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -772,7 +825,8 @@ function validateFixtures(definition: FixedRoomFloorDefinition, exit: FixedRoomR
       !validRect(fixture) ||
       !rectStrictlyInside(fixture, width, height) ||
       definition.stations.some((station) => rectanglesOverlap(fixture, station)) ||
-      lifts.some((lift) => rectanglesOverlap(fixture, lift))
+      lifts.some((lift) => rectanglesOverlap(fixture, lift)) ||
+      (fixture.prop !== undefined && !FIXED_ROOM_PROPS.includes(fixture.prop))
     ) {
       rejectDefinition('invalid-fixture');
     }
