@@ -12,6 +12,7 @@ import { PresenceStatusLayer } from './presence/PresenceStatusLayer.js';
 import { BridgeProvider, type BridgeProviderProps } from './bridge/BridgeProvider.js';
 import { ArrivalNudgeProvider } from './bridge/ArrivalNudgeProvider.js';
 import { HudLayer } from './hud/HudLayer.js';
+import { ArenaHud } from './arena/ArenaHud.js';
 import type { DegenCatalogSource } from './panels/exchange/degen-catalog.js';
 import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js';
 import { SeamEntryGate } from './connect/EntryGate.js';
@@ -87,10 +88,12 @@ export function App({
         remotePeers={presence.remotePeers}
         sandbox={presence.sandbox}
         football={presence.football}
+        arena={presence.arena}
         vaultOpen={VAULT_DOOR_OPEN}
         placementStand={PLACEMENT_STAND}
       />
       <HudLayer shell={shellIn} />
+      {presence.arena ? <ArenaHud arena={presence.arena} /> : null}
       <VisitLayer world={worldOut} shell={shellIn} />
       <PresenceStatusLayer presence={presence} world={worldOut} />
       <SessionNoticeLayer />

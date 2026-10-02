@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
-import type { FootballChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
+import type { ArenaChannel, FootballChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
 import { worldLeaseManager } from './world-acquisition.js';
 
 /**
@@ -20,6 +20,7 @@ export function WorldHost({
   remotePeers,
   sandbox,
   football,
+  arena,
   vaultOpen = false,
   placementStand = false,
 }: {
@@ -30,6 +31,8 @@ export function WorldHost({
   sandbox?: SandboxChannel;
   /** The shared football (D-078); optional in test compositions. */
   football?: FootballChannel;
+  /** The gladiator pit's ring (D-114); optional in test compositions. */
+  arena?: ArenaChannel;
   /**
    * Whether the Vault's street door opens (D-077): the Shell's answer from
    * the register and this build's policy, never the World's to decide.
@@ -44,8 +47,8 @@ export function WorldHost({
 }) {
   const parent = useRef<HTMLDivElement>(null);
   const leaseKey = useMemo(
-    () => ({ out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand }),
-    [out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand],
+    () => ({ out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand }),
+    [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand],
   );
 
   useEffect(() => {
@@ -61,12 +64,13 @@ export function WorldHost({
         remotePeers,
         ...(sandbox ? { sandbox } : {}),
         ...(football ? { football } : {}),
+        ...(arena ? { arena } : {}),
         ...(vaultOpen ? { vaultOpen } : {}),
         ...(placementStand ? { placementStand } : {}),
       });
       return runtime.releaseWorld;
     }, leaseKey);
-  }, [out, shellIn, remotePeers, sandbox, football, vaultOpen, placementStand, leaseKey]);
+  }, [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand, leaseKey]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

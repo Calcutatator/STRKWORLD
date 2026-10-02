@@ -12,6 +12,7 @@ import {
 } from '@strkworld/world';
 import { LobbyClient } from '@strkworld/lobby/client';
 import { ownMovementPayload, ownSharedAreaBuildingPayload } from '../bus/world-event-payload.js';
+import type { ArenaShellChannel } from '../arena/arena-controller.js';
 
 export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'unavailable';
 export interface PresenceState { readonly status: PresenceAvailability; readonly canReconnect: boolean; }
@@ -45,6 +46,8 @@ export interface PresenceController {
   readonly sandbox?: SandboxChannel;
   /** The shared football (D-078), when the composition provides one. */
   readonly football?: FootballChannel;
+  /** The gladiator pit's ring (D-114), when the composition provides one. */
+  readonly arena?: ArenaShellChannel;
   reconnect(): void;
   destroy(): Promise<void>;
 }
@@ -59,7 +62,7 @@ function freezePresenceState(next: PresenceState): PresenceState {
  */
 type SharedArea = Exclude<PresenceArea, 'street'>;
 
-export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel }): PresenceController {
+export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football, arena }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel; arena?: ArenaShellChannel }): PresenceController {
   let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
@@ -726,6 +729,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     remotePeers: peerSource,
     ...(sandbox ? { sandbox } : {}),
     ...(football ? { football } : {}),
+    ...(arena ? { arena } : {}),
     getState: () => state,
     reconnect() {
       if (!endpoint || destroyed) return;

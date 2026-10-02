@@ -4330,6 +4330,273 @@ button.ui-link-button {
 }
 
 /* ===========================================================================
+ * The arena ring's HUD (D-114): the brand system (docs/brand/README.md).
+ * Jersey 15 for the big countdown and banner titles, VT323 for body and the
+ * small figures, Silkscreen for buttons, on the ember palette with a hard
+ * Outline drop. Faces and colours come from `brand/brand.css` (D-115), which
+ * self-hosts the fonts.
+ * The overlay never takes a click meant for the World; only its buttons do.
+ * ======================================================================== */
+
+.arena-hud {
+  --arena-ember: var(--brand-ember);
+  --arena-gold: var(--brand-sun-gold);
+  --arena-outline: var(--brand-outline);
+  --arena-cream: var(--brand-cream);
+  --arena-panel: var(--brand-window-dark);
+  --arena-rim: var(--brand-window-rim);
+  --arena-headline: var(--brand-font-headline);
+  --arena-body: var(--brand-font-body);
+  --arena-button: var(--brand-font-menu);
+  /* The HUD sizes its own type, so the game's cap-height adjustment (D-119) is off here. */
+  font-size-adjust: none;
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  font-family: var(--arena-body);
+  color: var(--arena-cream);
+}
+
+.arena-hud-bar {
+  position: absolute;
+  top: 0.9rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.9rem;
+  background: var(--arena-panel);
+  border: 4px solid var(--arena-outline);
+  box-shadow: inset 0 0 0 2px var(--arena-rim), 0 5px 0 var(--arena-outline);
+  border-radius: 4px;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.arena-hud-bar-spectator {
+  padding: 0.25rem 0.7rem;
+  font-size: 1.15rem;
+}
+
+.arena-hud-title {
+  font-family: var(--arena-headline);
+  font-size: 1.6rem;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: var(--arena-gold);
+}
+
+.arena-hud-bar-spectator .arena-hud-title {
+  font-size: 1.3rem;
+}
+
+.arena-hud-hp {
+  position: relative;
+  display: inline-block;
+  inline-size: 9rem;
+  block-size: 0.85rem;
+  background: var(--arena-outline);
+  border: 2px solid var(--arena-rim);
+}
+
+.arena-hud-bar-spectator .arena-hud-hp {
+  inline-size: 6rem;
+  block-size: 0.6rem;
+}
+
+.arena-hud-hp-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(var(--arena-gold), var(--arena-ember));
+  transition: width 120ms ease-out;
+}
+
+.arena-hud-hp-text,
+.arena-hud-timer {
+  /* VT323, not Jersey 15: at this size Jersey's 6, 8 and B merge (D-119). */
+  font-family: var(--arena-body);
+  font-size: 1.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.arena-hud-timer {
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--arena-rim);
+  color: var(--arena-gold);
+}
+
+.arena-hud-countdown {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--arena-headline);
+  font-size: clamp(5rem, 18vw, 9rem);
+  line-height: 0.95;
+  color: var(--arena-gold);
+  -webkit-text-stroke: 3px var(--arena-outline);
+  text-shadow: 0 0.08em 0 var(--arena-outline);
+  animation: arena-pulse 1s ease-out both;
+}
+
+.arena-hud-fight {
+  color: var(--arena-ember);
+}
+
+@keyframes arena-pulse {
+  from { transform: translate(-50%, -50%) scale(1.35); opacity: 0.2; }
+  35% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  to { transform: translate(-50%, -50%) scale(0.96); opacity: 1; }
+}
+
+.arena-hud-banner {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.7rem 1.6rem 0.8rem;
+  background: var(--arena-panel);
+  border: 6px solid var(--arena-outline);
+  box-shadow: inset 0 0 0 3px var(--arena-rim), 0 8px 0 var(--arena-outline);
+  border-radius: 4px;
+  animation: arena-banner-slide 260ms ease-out both;
+}
+
+.arena-hud-banner-title {
+  font-family: var(--arena-headline);
+  font-size: clamp(2.6rem, 8vw, 4.4rem);
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  color: var(--arena-cream);
+}
+
+.arena-hud-banner[data-tone="win"] .arena-hud-banner-title {
+  color: var(--arena-gold);
+  -webkit-text-stroke: 2px var(--arena-outline);
+  text-shadow: 0 0.07em 0 var(--arena-ember);
+}
+
+.arena-hud-banner-detail {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+@keyframes arena-banner-slide {
+  from { transform: translate(-50%, -1.5rem); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes arena-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.arena-hud-actions {
+  position: absolute;
+  right: 1rem;
+  bottom: 1.2rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+}
+
+.arena-hud-button {
+  pointer-events: auto;
+  font-family: var(--arena-button);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--arena-cream);
+  background: var(--arena-ember);
+  border: 4px solid var(--arena-outline);
+  border-radius: 3px;
+  box-shadow: 0 5px 0 var(--arena-outline);
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.arena-hud-button:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--arena-outline);
+}
+
+.arena-hud-button:focus-visible {
+  outline: 3px solid var(--arena-gold);
+  outline-offset: 3px;
+}
+
+.arena-hud-leave {
+  background: var(--arena-panel);
+  box-shadow: inset 0 0 0 2px var(--arena-rim), 0 5px 0 var(--arena-outline);
+}
+
+.arena-hud-strike {
+  min-inline-size: 7.5rem;
+  min-block-size: 7.5rem;
+  border-radius: 50%;
+  font-size: 1.15rem;
+}
+
+.arena-hud-live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Reduced motion: numbers only, no pulse; the banner fades in rather than sliding. */
+.arena-hud[data-motion="reduced"] .arena-hud-countdown {
+  animation: none;
+}
+
+.arena-hud[data-motion="reduced"] .arena-hud-banner {
+  animation: arena-fade 200ms linear both;
+}
+
+.arena-hud[data-motion="reduced"] .arena-hud-hp-fill {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-hud-countdown,
+  .arena-hud-hp-fill {
+    animation: none;
+    transition: none;
+  }
+
+  .arena-hud-banner {
+    animation: arena-fade 200ms linear both;
+  }
+}
+
+@media (max-width: 560px) {
+  .arena-hud-bar {
+    gap: 0.45rem;
+    font-size: 1.1rem;
+  }
+
+  .arena-hud-hp {
+    inline-size: 5.5rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .arena-hud-hp-fill {
+    background: CanvasText;
+  }
+}
+
+/* ===========================================================================
  * Leaderboard phase 1: the placement stand's window, in the STRKWORLD brand
  * (D-113): a dark scoreboard card with the big placement in Jersey 15, body
  * in VT323, and an ember Silkscreen button with a hard outline drop. The

@@ -16,6 +16,7 @@ import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coor
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow, type JumpShadow } from './jump-shadow.js';
+import { createSeatTracker, createSwingClock, type SeatTracker, type SwingClock } from '../arena-swing.js';
 import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
 
 /**
@@ -101,6 +102,11 @@ export interface RemoteAvatarLayer3DOptions {
   readonly reducedMotion?: () => boolean;
   /** Builds a jumping peer's contact shadow; the shared one by default. */
   readonly jumpShadows?: () => JumpShadow;
+  /**
+   * D-114: whether a World pixel point is a seat (an arena tier). A peer
+   * standing still on one for `ARENA_SEAT_IDLE_MS` sits; absent, nobody sits.
+   */
+  readonly seatAt?: (xPx: number, yPx: number) => boolean;
 }
 
 export interface RemoteAvatarLayer3D {
@@ -110,6 +116,14 @@ export interface RemoteAvatarLayer3D {
   setVisible(visible: boolean): void;
   /** Per-frame: interpolation, yaw smoothing, heights, figure animation. */
   update(deltaMs: number): void;
+  /**
+   * D-114: play one arena swing on this peer (a spectator's view of the
+   * server's swing counter). Unknown ids are ignored. Satisfies arena-fx's
+   * `RemoteSwingPort`.
+   */
+  playSwing(gameId: string): void;
+  /** D-114: the peer in the ring holds the battle stance; null for nobody. */
+  setFighter(gameId: string | null): void;
   /** Unsubscribe and retire every figure, once. Inert afterwards. */
   destroy(): void;
 }
@@ -163,6 +177,9 @@ interface RemoteAvatar {
   jumpRaise: number;
   /** Built on the first jump, then kept (hidden) until retirement. */
   jumpShadow: JumpShadow | null;
+  /** D-114: this peer's arena swing, and how long it has stood on a seat. */
+  readonly swing: SwingClock;
+  readonly seat: SeatTracker;
   /** Set once figure.update has thrown: the figure stops animating, the loop does not. */
   frozen: boolean;
   /** Set while dispose() runs and once it has returned; cleared if it throws. */
@@ -191,6 +208,7 @@ export function createRemoteAvatarLayer3D({
   carriedBlocks = createCarriedBlock,
   reducedMotion,
   jumpShadows = createJumpShadow,
+  seatAt,
 }: RemoteAvatarLayer3DOptions): RemoteAvatarLayer3D {
   const group = new Group();
   group.name = 'remote-avatars';
@@ -210,6 +228,8 @@ export function createRemoteAvatarLayer3D({
   // in it rather than wall time, so there are no timers to own or cancel, and
   // a paused engine cannot expire a hold behind the renderer's back.
   let clock = 0;
+  /** D-114: the peer in the ring, who holds the battle stance. */
+  let fighter: string | null = null;
 
   /** Detach and dispose one figure; true once nothing of it is left owned. */
   const retire = (avatar: RemoteAvatar, errors: unknown[]): boolean => {
@@ -523,8 +543,34 @@ export function createRemoteAvatarLayer3D({
     }
   }
 
+  /** This frame's motion; the shared frozen values unless the arena adds to them. */
+  const motionOf = (avatar: RemoteAvatar, dt: number, moving: boolean, jump: AvatarMotion['jump']): AvatarMotion => {
+    const attack = avatar.swing.step(dt);
+    let seated = false;
+    if (seatAt) {
+      let onSeat = false;
+      try {
+        onSeat = seatAt(avatar.x, avatar.y) === true;
+      } catch {
+        onSeat = false;
+      }
+      seated = avatar.seat.step(dt, moving || jump != null, onSeat);
+    }
+    const guard = fighter === avatar.id;
+    if (!attack && !seated && !guard) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
+    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated };
+  };
+
   return {
     group,
+    playSwing(gameId) {
+      if (destroyed) return;
+      avatars.get(gameId)?.swing.start();
+    },
+    setFighter(gameId) {
+      if (destroyed) return;
+      fighter = typeof gameId === 'string' ? gameId : null;
+    },
     setVisible(visible) {
       // A visibility callback that outlives teardown is stale, not an error.
       if (destroyed) return;
@@ -555,10 +601,7 @@ export function createRemoteAvatarLayer3D({
         if (destroyed) break;
         if (avatar.frozen) continue;
         try {
-          avatar.figure.update(
-            dt,
-            jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING,
-          );
+          avatar.figure.update(dt, motionOf(avatar, dt, moving, jump));
         } catch (error) {
           // Frozen after one report instead of rethrowing every frame: a
           // figure that always throws would otherwise report 60 times a second
@@ -607,6 +650,8 @@ function standingAvatar(
     jumpClimbed: false,
     jumpRaise: 0,
     jumpShadow: null,
+    swing: createSwingClock(),
+    seat: createSeatTracker(),
     frozen: false,
     disposed: false,
   };

@@ -139,6 +139,50 @@ export function figurePoses(): Pose[] {
   return poses;
 }
 
+/**
+ * D-114: the arena's poses: the battle stance at rest and on the move, the
+ * swing through each of its stages (standing and walking), and the seat.
+ */
+export function arenaPoses(): Pose[] {
+  const poses: Pose[] = [];
+  const GUARD: AvatarMotion = Object.freeze({ moving: false, sprinting: false, guard: true });
+  const GUARD_WALK: AvatarMotion = Object.freeze({ moving: true, sprinting: false, guard: true });
+  const settle = (figure: AvatarFigure, motion: AvatarMotion, frames = 40): void => {
+    for (let t = 0; t < frames; t += 1) figure.update(25, motion);
+  };
+  poses.push({ name: 'guard', drive: (figure) => settle(figure, GUARD) });
+  for (let i = 0; i < 4; i += 1) {
+    poses.push({
+      name: `guard walk ${i}/4`,
+      drive: (figure) => {
+        settle(figure, GUARD_WALK);
+        for (let t = 0; t < i * 4; t += 1) figure.update(1000 / 1.6 / 16, GUARD_WALK);
+      },
+    });
+  }
+  const stages: Array<readonly ['windup' | 'strike' | 'recover', number]> = [
+    ['windup', 0.5], ['windup', 1], ['strike', 0.25], ['strike', 0.5], ['strike', 0.75], ['strike', 1],
+    ['recover', 0.3], ['recover', 0.7],
+  ];
+  for (const [stage, progress] of stages) {
+    for (const walking of [false, true]) {
+      poses.push({
+        name: `swing ${stage} ${progress}${walking ? ' walking' : ''}`,
+        drive: (figure) => {
+          const base = walking ? GUARD_WALK : GUARD;
+          settle(figure, base);
+          figure.update(16, { ...base, attack: { stage, progress } });
+        },
+      });
+    }
+  }
+  poses.push({
+    name: 'seated',
+    drive: (figure) => settle(figure, Object.freeze({ moving: false, sprinting: false, seated: true })),
+  });
+  return poses;
+}
+
 function collectSolids(root: Object3D): Solid[] {
   root.updateMatrixWorld(true);
   const solids: Solid[] = [];

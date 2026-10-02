@@ -1,4 +1,5 @@
 import type { ArenaPhase, ArenaRingSnapshot, Facing, GameId } from '@strkworld/shared';
+import type { InteractionTarget } from './interaction.js';
 
 /**
  * D-114: the gladiator pit's arena, as the World sees it.
@@ -20,11 +21,21 @@ export interface ArenaChannel {
   claim(): void;
   attack(): void;
   leave(): void;
+  /**
+   * C (optional): the HUD's STRIKE button, routed through the World so it
+   * takes the same path as E and a click (client floor, local swing). The
+   * Shell calls each listener on a STRIKE press; with none, it sends the
+   * attack itself.
+   */
+  subscribeStrikes?(listener: () => void): () => void;
 }
 
 /** What world-session (A) gives the arena session (C). */
 export interface ArenaSessionHost {
-  /** Arena-local World pixels and facing of the local player. */
+  /**
+   * The local player's World pixels in the arena room, room origin included
+   * (the frame the lobby holds positions in), and facing.
+   */
   position(): { readonly x: number; readonly y: number; readonly facing: Facing };
   /** Snap the local player to a tile with the jump choreography (a cut under reduced motion). */
   leapTo(tile: { readonly x: number; readonly y: number }, facing: Facing): void;
@@ -33,7 +44,34 @@ export interface ArenaSessionHost {
   setOutfitLocked(locked: boolean): void;
   selectLook(mode: 'fighting' | 'restore'): void;
   reducedMotion(): boolean;
+  /**
+   * C (optional): true while a panel or Shell claim owns the keyboard. The
+   * session then sends nothing, whatever the caller forwards.
+   */
+  inputSuspended?(): boolean;
+  /**
+   * C (optional): the press-E system's combat yield (D-117,
+   * `interactions.suspend`). When the host supplies it, the session holds a
+   * suspension for as long as this client fights, so E goes straight to the
+   * attack; and the gate's CLAIM / IN USE prompt comes from `gateTargets`
+   * through the interaction system instead of `setPrompt`.
+   */
+  suspendInteractions?(reason: string): () => void;
+  /**
+   * C (optional): the ring gate's mesh in the arena room, handed to the
+   * gate's press-E target so the interaction cues can glow it. No floor
+   * tiles and no floating prompt are drawn for the gate.
+   */
+  gateObject?(): unknown;
 }
+
+/**
+ * C: the ring gate as a press-E station target (D-117): World pixels, room
+ * origin included. `object` is the gate's own mesh when the host supplies it
+ * (`ArenaSessionHost.gateObject`), for the interaction cues' edge glow; the
+ * field follows the interaction system's optional object ref.
+ */
+export type ArenaGateTarget = InteractionTarget & { readonly object?: unknown };
 
 export interface ArenaViewFrame {
   readonly phase: ArenaPhase;
@@ -47,11 +85,26 @@ export interface ArenaViewFrame {
 /** Implemented by C in arena-session.ts; PR 0 ships a no-op. */
 export interface ArenaSession {
   update(deltaMs: number): void;
+  /** Arena-local tile indices (the room's own grid, origin excluded). */
   isRingTileWalkable(tileX: number, tileY: number): boolean;
   /** E pressed in the arena. True if consumed. */
   onInteract(): boolean;
   /** Primary click/tap on the canvas in the arena. True if consumed. */
   onPrimary(): boolean;
+  /**
+   * C (optional), for the press-E system (D-117): the gate as a station,
+   * registered as an `InteractionSource` (`{ targets: () => session.gateTargets() }`).
+   * One target while this client stands on the gate approach and is not
+   * fighting: CLAIM while the ring is idle, IN USE (which does nothing) while
+   * it is not. None otherwise.
+   */
+  gateTargets?(): readonly ArenaGateTarget[];
+  /**
+   * C (optional), for the press-E system: E as an `InteractionAction`
+   * (`{ id: 'arena', priority: 10, run: () => session.onAttack() }`). Attacks
+   * only while this client fights; true when it took the press.
+   */
+  onAttack?(): boolean;
   frame(): ArenaViewFrame | null;
   destroy(): void;
 }

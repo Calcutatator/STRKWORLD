@@ -400,15 +400,6 @@ export function cardinalMovementInput(velocity: MovementVelocity): MovementInput
   return { left: x < 0, right: x > 0, up: false, down: false };
 }
 
-/**
- * D-114: the arena session as the press-E system (D-117) can use it: C's
- * optional `gateTargets` (the gate as a station) and `onAttack` (E in a
- * fight). Read structurally, so PR 0's stub and C's session both fit.
- */
-type ArenaSessionPressE = ArenaSession & {
-  gateTargets?(): readonly InteractionTarget[];
-  onAttack?(): boolean;
-};
 
 export function createWorldSession(options: WorldSessionOptions): WorldSession {
   return new Session(options);
@@ -1526,7 +1517,7 @@ class Session implements WorldSession {
   private createArena(): void {
     const channel = this.arenaChannel;
     if (!channel) return;
-    const session: ArenaSessionPressE = createArenaSession(channel, this.arenaHost());
+    const session: ArenaSession = createArenaSession(channel, this.arenaHost());
     this.arenaSession = session;
     // D-117: E is interact. The ring's gate is a station (C's `gateTargets`:
     // CLAIM, or IN USE), so the shared system prompts and uses it like any

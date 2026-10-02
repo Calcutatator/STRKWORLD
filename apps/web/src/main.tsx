@@ -12,6 +12,8 @@ import { lobbyEndpoint } from './presence/config.js';
 import { LobbyClient } from '@strkworld/lobby/client';
 import { createSandboxController } from './sandbox/sandbox-controller.js';
 import { createFootballController } from './football/football-controller.js';
+import { createArenaController } from './arena/arena-controller.js';
+import { createArenaAuthority } from '@strkworld/lobby/arena';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
@@ -63,12 +65,18 @@ const stopSandboxWorld = sandbox.listen(worldOut);
 // rules locally for solo play, one stable channel for the World.
 const football = createFootballController();
 const stopFootballWorld = football.listen(worldOut);
+// The gladiator pit's ring (D-114), likewise: the lobby's ring while connected,
+// the same rules locally for solo play, one stable channel for the World and
+// the arena HUD.
+const arena = createArenaController({ solo: () => createArenaAuthority() });
+const stopArenaWorld = arena.listen(worldOut);
 const createPresence = (): PresenceController => {
   const next = createPresenceController({
     endpoint: lobbyEndpoint(),
-    factory: (options) => football.adopt(sandbox.adopt(new LobbyClient(options))),
+    factory: (options) => arena.adopt(football.adopt(sandbox.adopt(new LobbyClient(options)))),
     sandbox: sandbox.channel,
     football: football.channel,
+    arena: arena.channel,
   });
   activePresence = next;
   return next;
@@ -82,6 +90,8 @@ const presenceLifecycle = {
     sandbox.destroy();
     stopFootballWorld();
     football.destroy();
+    stopArenaWorld();
+    arena.destroy();
     await activePresence?.destroy();
   },
 };
