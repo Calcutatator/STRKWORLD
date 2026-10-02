@@ -263,6 +263,14 @@ export interface FakeConfig {
     strkHeld?: bigint;
     xstrkHeld?: bigint;
   };
+  /**
+   * Leaderboard phase 1 (D-122, amended 2026-10-02): mark every prepared batch
+   * as carrying a receipt or a DeFi tick, the way the Wallet API adapter does
+   * in a probing tab with a ledger configured. Off by default, so a build
+   * without the leaderboard reads exactly as it did. It only sets the review
+   * flag; the demo composes no ledger call and writes nothing on chain.
+   */
+  placementReceipts?: boolean;
 }
 
 /**
@@ -426,8 +434,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
   private endurNow = DEMO_ENDUR_CHAIN_TIME;
   private endurDeployed = false;
   private endurCommitted = false;
+  /** D-122: whether every prepared batch claims a placement receipt. */
+  private readonly placementReceipts: boolean;
 
   constructor(config: FakeConfig = {}) {
+    this.placementReceipts = config.placementReceipts === true;
     const balances = config.balances ?? {};
     for (const token of Object.keys(balances)) {
       const descriptor = Object.getOwnPropertyDescriptor(balances, token);
@@ -875,6 +886,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       warnings: publishedWarnings,
       promptCount,
       ...(swapReview === undefined ? {} : { swapReview }),
+      ...(this.placementReceipts ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, signal: sig, acknowledgeUncheckedPrice }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
@@ -1461,6 +1473,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       totalCost: feeAtPrepare,
       warnings: Object.freeze([]),
       promptCount: 1,
+      ...(this.placementReceipts ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, onStage, onSubmitted, signal }: Parameters<PreparedVaultBatch['confirm']>[0]) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
