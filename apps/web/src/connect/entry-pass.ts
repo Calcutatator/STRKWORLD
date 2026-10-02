@@ -23,6 +23,11 @@ export interface EntryPassMemory {
   recall(): Promise<boolean>;
   /** Remember the pass for this tab. Never rejects; a lost write only means checking again. */
   remember(): Promise<void>;
+  /**
+   * D-120: forget the pass, so the next connection of this account checks
+   * again. Signing out is a logout. Never rejects.
+   */
+  forget(): Promise<void>;
 }
 
 export type Digest = (text: string) => Promise<string | null>;
@@ -73,6 +78,14 @@ export function createEntryPassMemory({
         if (stored !== null) storage.write(stored, PASSED);
       } catch {
         // Checking again next time is the whole cost.
+      }
+    },
+    async forget(): Promise<void> {
+      try {
+        const stored = await keyFor();
+        if (stored !== null) storage.remove(stored);
+      } catch {
+        // A pass that cannot be removed lives only as long as this tab.
       }
     },
   });

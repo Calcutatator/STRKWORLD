@@ -1586,6 +1586,62 @@ describe('WalletSession', () => {
     expect(request.mock.calls.map(([input]) => input.type)).toContain('wallet_supportedWalletApi');
   });
 
+  it('D-120: signs out through standard:disconnect where offered, locally where not, and connects again', async () => {
+    function standardWallet(withDisconnect: boolean) {
+      const disconnect = vi.fn(async () => undefined);
+      const request = vi.fn(async ({ type }: { type: string }) => {
+        if (type === 'wallet_requestChainId') return '0x534e5f4d41494e';
+        if (type === 'wallet_supportedWalletApi') return ['0.10.3'];
+        throw new Error(`Unexpected wallet request: ${type}`);
+      });
+      const wallet = {
+        version: '1.0.0',
+        name: 'Ready',
+        icon: 'data:image/svg+xml,ready' as const,
+        chains: ['starknet:0x534e5f4d41494e'],
+        accounts: [],
+        features: {
+          'standard:connect': {
+            version: '1.0.0',
+            connect: vi.fn(async () => ({
+              accounts: [{
+                address: '0x123',
+                publicKey: new Uint8Array(),
+                chains: ['starknet:0x534e5f4d41494e'],
+                features: [],
+              }],
+            })),
+          },
+          ...(withDisconnect ? { 'standard:disconnect': { version: '1.0.0', disconnect } } : {}),
+          'standard:events': { version: '1.0.0', on: vi.fn(() => () => undefined) },
+          'starknet:walletApi': { version: '1.0.0', walletVersion: '5.33.8', id: 'ready', request },
+        },
+      };
+      return { wallet, disconnect };
+    }
+
+    for (const withDisconnect of [true, false]) {
+      const { wallet, disconnect } = standardWallet(withDisconnect);
+      const session = createProductionWalletSession(denyAllOptions(), discoveryWith(wallet));
+      const key = session.getSnapshot().wallets[0]!.key;
+      await session.connect(key);
+      expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x123' });
+
+      await expect(session.disconnect()).resolves.toBeUndefined();
+      expect(disconnect).toHaveBeenCalledTimes(withDisconnect ? 1 : 0);
+      expect(session.getSnapshot()).toMatchObject({ phase: 'selection-required', account: null, selectedKey: null });
+      expect(session.readAccount()).toBeNull();
+      await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+
+      // The same session, the same tab: the wallet is still listed and connects again.
+      expect(session.getSnapshot().wallets.map((choice) => choice.key)).toEqual([key]);
+      await session.connect(key);
+      expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x123' });
+      await expect(session.operations.capability()).resolves.toMatchObject({ supportsStrk20: true });
+      session.destroy();
+    }
+  });
+
   it('captures an account change that arrives while the initial chain read is pending', async () => {
     let releaseChain!: (chainId: string) => void;
     let markChainRequested!: () => void;

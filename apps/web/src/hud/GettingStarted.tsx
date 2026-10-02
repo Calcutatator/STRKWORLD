@@ -8,7 +8,7 @@ import { guideRouteSteps } from './guide-route.js';
  *
  * It is a non-modal region, not a dialog: the street stays live behind it, so
  * a player can try the controls while reading them. It stays in the document
- * while closed (`hidden`) so the HUD's `?` control always has a target.
+ * while closed (`hidden`) so the wallet menu's Help item always has a target.
  *
  * The controls are the World's real bindings (`packages/world` dom-keyboard,
  * world-session and the visit controller's Escape; the camera is fixed and
