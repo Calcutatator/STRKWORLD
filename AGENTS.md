@@ -13729,3 +13729,63 @@ on 2026-10-02; both CASM files hashed with starknet.js; a mainnet
 the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
+
+### The engine's fog makes distant scenery impossible; bake your own haze
+
+`scene.fog` is linear in view depth and its range moves with the player's
+elevation: `fogRange(e) = { near: 26 + e, far: 64 + e * 1.6 }`
+(`three/world-engine.ts`). Standing on the Exchange roof (`EXCHANGE_ROOF_HEIGHT`
+is 36) that is whole by 122 units, and the camera's far plane is 240. So
+anything meant to be *seen* from a height at more than about 100 units — a far
+bank, a skyline, a mountain — is painted flat in `SKY_HORIZON` by the engine
+before it ever reaches the frame, and anything built to look right under one
+elevation's fog looks wrong under another. The south vista (D-124) therefore
+sets `material.fog = false` on every one of its materials and mixes its own
+haze into the vertex colours by distance. Two things to know if you do the
+same: the haze target must be a shade *off* `SKY_HORIZON` and must not reach 1,
+or the silhouette dissolves instead of receding; and the colours are albedo
+under a lit material, so a far surface facing away from the sun still goes
+darker than the sky — which is what a real hazy skyline does, so lean into it
+rather than fighting it.
+
+*Verified:* read of `fogRange` and the `PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240)`
+in `three/world-engine.ts`; renders of the vista at pitches from 6 to 32 degrees
+below the horizon through the offline rasteriser, with and without the fog
+opt-out, on 2026-10-02.
+
+### South of the map was never blank — it was backdrop country, and it is water now
+
+`backdrop.ts` already filled the south with fields, hedgerows, tree lines, a row
+of houses at z ≈ 50 and two hills centred at z 64 and 68, and street-builder
+laid its own meadow to `H + OUTSKIRT` (z 68). None of it had ever been in frame,
+because the camera always looks north (D-059), so it read as blank. It is not.
+Anything you put south of the district has to clear it: D-124's river stops all
+of it at `SOUTH_SHORE_Z` (58, exported from `three/south-vista.ts`), which is the
+line to respect — a hedge or a hill past it stands in the water. Note also that
+`backdropSurface()` returns null for the whole band `x ∈ [-40, 151)` south of the
+map even inshore of the shore: street-builder lays that ground itself, and the
+backdrop defers to it wherever `z >= CITY_FRONT`.
+
+*Verified:* read of `groundCode`, `hillSpots`, `houses` and `hedgerows` in
+`three/backdrop.ts` and `buildOutskirts` in `three/street-builder.ts`; renders
+over the south edge before and after the change; `south-vista.test.ts` pins both
+the shore and the band, on 2026-10-02.
+
+### The Exchange roof is part of the street scene, not a room
+
+`EXCHANGE_ROOF_LEVEL` carries a `rooftop` and `fixed-room.ts` says so in a
+comment, but it is easy to read "roof" as another `FixedRoomLevel` with its own
+scene. It is not: the presenter skips every level with a `rooftop` when it
+builds its rooms ("A roof is not here: it is the building's top in the street"),
+`street-builder.ts` draws the deck in `towerRoof` at `EXCHANGE_ROOF_HEIGHT`, and
+`showRooftop(building)` only records which roof the player is on and switches the
+camera preset — the street stays drawn. So anything that should be visible from
+the roof goes in the street scene and needs nothing else, and anything added to a
+"roof room" would never be drawn at all.
+
+*Verified:* read of `createPresenter` (`if (level.rooftop) continue`,
+`showRooftop`, `setStreetVisible`) in `three/presenter.ts` and `towerRoof` in
+`three/street-builder.ts`; `south-vista.test.ts` asserts the vista is reachable
+through `view.ground`, on 2026-10-02.
+
+---
