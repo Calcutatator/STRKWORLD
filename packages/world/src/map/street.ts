@@ -321,9 +321,9 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // Unmarked: no facade, no sign, no label (see bunker.ts).
   paintBunker(tiles);
 
-  // The gladiator pit (D-114): a sunken stone bowl on the east half of the
-  // south lawn, its arch on the north rim and a stone path from the
-  // pavement to it (see arena-pit.ts).
+  // The gladiator pit (D-114): a sunken stone bowl on the south lawn just
+  // east of the Studio's path, its arch on its west front and a short stone
+  // path branching east off the Studio's path to it (see arena-pit.ts).
   paintArenaPit(tiles);
 
   // The football pitch square where the road begins (D-078): its walkway,

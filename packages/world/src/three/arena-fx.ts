@@ -247,7 +247,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     const root = new Group();
     root.name = 'arena-fx-dummy';
     root.position.set(ground.x, 0, ground.z);
-    // Its front (+Z) to the gate, as the room's dummy; the pivot turns inside the yaw.
+    // Its front (+Z) to the camera (south), as the room's dummy; the pivot turns inside the yaw.
     root.rotation.y = ARENA_DUMMY_YAW;
     const ownPivot = new Group();
     ownPivot.name = 'arena-dummy-pivot';
@@ -435,8 +435,9 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
   };
 
   const applyPivot = (): void => {
-    // Topple falls backwards (away from the gate, south); the wobble rocks the same way.
-    pivot.rotation.x = -(Math.PI / 2) * easeOut(toppled) - wobble;
+    // The topple falls east, away from the ring's west gate where the fighter
+    // comes in, flat across the screen; the wobble rocks the same way.
+    pivot.rotation.z = -(Math.PI / 2) * easeOut(toppled) - wobble;
   };
 
   const applyBar = (): void => {
@@ -659,7 +660,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       owned?.geometry.dispose();
       for (const restore of restores) restore();
       for (const { material } of flashing) material.dispose();
-      if (adopted) (adopted as Object3D).rotation.x = 0;
+      if (adopted) (adopted as Object3D).rotation.z = 0;
       barBack.geometry.dispose();
       barBackMaterial.dispose();
       fillGeometry.dispose();

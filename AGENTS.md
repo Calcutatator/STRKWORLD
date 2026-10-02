@@ -13730,6 +13730,52 @@ the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
 
+### 2026-10-02 — With a fixed north-looking camera, which way a feature faces decides how much of it you ever see
+
+Moving the gladiator pit's entrance from the north rim to the west rim
+(D-114, second amendment) cost nothing in geometry and a lot in looks, and the
+reason is D-059: the camera always looks north. Three things fell out of it
+that are worth keeping in mind for any street or room feature.
+
+**A façade turned 90° becomes a silhouette.** The street arch was a triumphal
+façade with its sign and banners facing the road; on the west front the camera
+only ever sees its end. Drawn unchanged it reads as a blank wall slab beside
+the player. Two cheap fixes made it read again: cap the attic and cornice over
+the *gateposts only*, so the silhouette dips to the arch's ring between them,
+and wrap a banner onto the posts' end faces, because the south post's end is
+the one face of the gate on screen.
+
+**A sign belongs on whatever surface faces south, not on the thing it names.**
+Keeping `GLADIATOR PIT` on the west arch put it edge-on and high above the
+pit. Standing it on two posts on the pit's *far* (north) rim, facing south,
+reads over the bowl from the road exactly as a stadium nameplate should — and
+because it is north of everyone it never occludes a player, so it drops out of
+the arch's fader entirely.
+
+**Entering from the west puts sky where the room used to be.** The pre-mirror
+south tunnel gave the best arrival in the game: standing at the arena's south
+edge, the whole stadium spread out ahead. Arriving at the *west* edge puts the
+off-map void in the upper-left of the frame, because the camera looks north,
+not east. Pushing the spawn from 2 tiles inside the tunnel to 4 (`ARENA_SPAWN`
+(4, 16)) recovers most of it — the doorway out stays in frame behind you and
+the stadium opens to the right — but it cannot be fixed, only traded. Decide
+the axis of travel against the camera before the geometry, not after.
+
+One mechanical trap came with the same change: `classifyTile` in
+`street-builder.ts` calls a pavement run a flush `path` only when *both* ends
+of the run are `grass`. A branch that ends at the pit's threshold therefore
+re-classified itself *and the Studio path it leaves* as kerbed `sidewalk`,
+silently raising a path 40 tiles long by `PAVEMENT_HEIGHT`. `isLawnEnd` now
+counts `pitstep` as a lawn end. Any new walkable kind at the end of a path run
+needs the same treatment.
+
+*Verified:* offline renders from the game camera (`arenawest-tools/render.sh`,
+a z-buffer rasterizer matching the engine's lighting, ACES and fog) compared
+side by side with the pre-mirror `renders/arena-final-*.png`; the raised-path
+regression caught by `three/street-builder.test.ts`'s
+`streetSurfaceHeightAt(map, X + 23, 22)` assertion, which is why that test
+exists.
+
 ### 2026-10-02 — Reading a tile coordinate back out of a game screenshot
 
 An annotated screenshot of the fixed camera is enough to recover exact tile
