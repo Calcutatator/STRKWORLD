@@ -283,8 +283,8 @@ export const COPY = freezeCopy({
     /** Pragma prices one side or neither, so there is no independent figure to hold the output against. */
     priceImpactUnknown: 'Not known',
     priceImpactHigh: "Large price impact: you get noticeably less than Pragma's price for what you sell.",
-    route: 'Route',
-    routeAvnu: 'via avnu',
+    /** The review's collapsed section for everything beyond sell, buy and rate. */
+    details: 'Details',
     poolFeeToken: 'Set in STRK. Your wallet chooses which token in your pool balance pays it.',
     quoting: 'Fetching a quote…',
     quotePaused: 'Press Review swap for a quote.',

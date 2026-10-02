@@ -747,7 +747,7 @@ body {
 /* Figure tables: the review costs, the swap quote, the stake and the Bridge records. */
 :where(
   .review-costs,
-  .exchange-review dl,
+  .exchange-review-summary,
   .stake-review,
   .bridge-review,
   .bridge-plan,
@@ -764,11 +764,11 @@ body {
   background: var(--ui-surface-raised);
 }
 
-:where(.review-costs, .exchange-review dl, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dt {
+:where(.review-costs, .exchange-review-summary, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dt {
   color: var(--ui-text-dim);
 }
 
-:where(.review-costs, .exchange-review dl, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dd {
+:where(.review-costs, .exchange-review-summary, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -778,11 +778,34 @@ body {
 
 /* The agreed total reads as the answer to the table. */
 .review-costs dt:last-of-type,
-.review-costs dd:last-of-type,
-.exchange-review dl dt:last-of-type,
-.exchange-review dl dd:last-of-type {
+.review-costs dd:last-of-type {
   color: var(--ui-text);
   font-weight: 800;
+}
+
+/* The swap review's Details: everything past sell, buy and rate, closed until asked for. */
+.exchange-review-details {
+  margin: 0.9rem 0;
+  font-size: 0.95rem;
+}
+.exchange-review-details > summary {
+  width: fit-content;
+  border-radius: 6px;
+  color: var(--ui-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.exchange-review-details > summary::marker {
+  color: var(--ui-accent);
+}
+.exchange-review-details[open] > summary {
+  margin-bottom: 0.55rem;
+}
+.exchange-review-details > .ui-details {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
 }
 
 .bridge-instructions dl:empty {
@@ -3544,6 +3567,13 @@ button.shell-start {
 }
 .exchange-price-check[data-status="unchecked"] {
   font-weight: 600;
+}
+p.exchange-price-check[data-status="unchecked"] {
+  margin: 0.9rem 0;
+  padding: 0.55rem 0.8rem;
+  border-left: 3px solid var(--ui-warn);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
 }
 .exchange-acknowledge {
   display: flex;
