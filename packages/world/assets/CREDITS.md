@@ -90,3 +90,21 @@ SHA-256s, licence) remains in git history before the removal commit.
 - Ownership: Vesu's mark and wordmark belong to Vesu and are used only to
   represent Vesu's lending route at the Vault. STRKWORLD claims no rights in
   them and implies no endorsement.
+
+## Degen floor cat standee (`degen-cat/`)
+
+- What: `degen-cat/cutout.webp`, a 516x502 lossless WebP die-cut of the cat's head and
+  chest with a thin white card border, printed on the cardboard standee
+  behind the Degen floor's DEGEN SWAP counter (`src/three/degen-cat.ts`).
+- Source: the well-known "crying cat" meme photo (a white cat with teary
+  eyes in front of a laptop), 640x640 JPEG, supplied by the lead on
+  2026-10-02 and kept at `tools/degen-cat/crying-cat.jpg`. Its photographer
+  is not known to us; the image circulates widely as a meme. STRKWORLD
+  claims no rights in it.
+- Changes: cropped 1:1 and masked to a hand-traced die-cut outline (the
+  laptop, wall and blanket removed); a white border added outside the
+  silhouette. No resize, redraw, filter or colour change: every pixel inside
+  the silhouette is the photo's own, and the tool checks this.
+- Regenerate with `python3 packages/world/tools/degen-cat/make-cutout.py`
+  (Python 3 and Pillow). It also rewrites `src/three/degen-cat-outline.ts`,
+  the card's silhouette for the 3D standee.
