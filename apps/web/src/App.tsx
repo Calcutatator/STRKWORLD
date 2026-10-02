@@ -57,6 +57,7 @@ export function App({
   initialConnectState,
   degenCatalog,
   poolStats,
+  onSignOut,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
@@ -73,6 +74,12 @@ export function App({
   degenCatalog?: DegenCatalogSource;
   /** The Privacy Plaza's pool stats from the backend (D-076); the demo uses sample figures. */
   poolStats?: PoolStatsSource;
+  /**
+   * D-119: the wallet pill's "Disconnect & return to menu". The production
+   * root supplies it; the demo has no title screen to return to, so its pill
+   * offers Help alone.
+   */
+  onSignOut?: () => Promise<void>;
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
@@ -88,7 +95,7 @@ export function App({
         football={presence.football}
         vaultOpen={VAULT_DOOR_OPEN}
       />
-      <HudLayer shell={shellIn} />
+      <HudLayer shell={shellIn} onSignOut={onSignOut} />
       <VisitLayer world={worldOut} shell={shellIn} />
       <PresenceStatusLayer presence={presence} world={worldOut} />
       <SessionNoticeLayer />

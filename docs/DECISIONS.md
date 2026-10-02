@@ -6026,3 +6026,25 @@ The lead's decisions:
 - Copy edits to the register's lines or to shell copy are ordinary product changes.
 - `scripts/privacy-report.sh` now reports grades and approvals only.
 - `observable` is still the reviewer's exact record of what an observer sees. It was never player copy, and it is unchanged.
+
+---
+
+## D-119 — The street HUD is one wallet pill: no balance row, and its menu holds Help and "Disconnect & return to menu"
+
+**2026-10-02 · Accepted (the lead: the wallet-connected overlay "feels a bit useless as the expansion just says check at the bank. Probably can be removed entirely or streamlined just as a wallet connected check - which can be used to disconnect wallet and logout of the game (return to menu)") · amends D-013 (the HUD no longer shows the pool balance) · builds on D-072 and D-115 · no seam, privacy-path or lobby change**
+
+**Context.** The HUD bar showed a lamp and "Wallet connected", then "Shielded balance: Check at the Bank" with Hide/Show, then a `?` that reopened Getting started. Every `wallet_strk20Balances` read can prompt, so the HUD never read a balance itself: it only echoed the figure the Bank published after the player asked, and almost always said "Check at the Bank". D-013 had said "the HUD shows" the pool balance. There was no way to sign out short of closing the tab.
+
+**Decision.**
+- **One pill in the top-left corner** (`hud/HudLayer.tsx`): the status lamp and one word ("Connected"), in Silkscreen caps on a translucent dark-window fill with an Outline border and a small hard drop (D-113). The pending spinner rides inside it while something is in flight; the polite live region is unchanged.
+- **The balance row and its Hide/Show toggle are gone**, with `strkworld.hud.balance-hidden.v1`. The HUD model no longer listens to `hud:balance`. The Bank still publishes it on the bus, so the seam is unchanged and the World may still draw it. The balance lives in the Bank's window, read when the player asks.
+- **Pressing the pill opens a tiny menu.** It names the account shortened (`0x07ea…69731`), only inside the open menu, never on the pill, so a stream does not show it by default. Then:
+  - **Help**, which reopens Getting started. The `?` was its only way back, so it moved here.
+  - **Disconnect & return to menu**, production only. The demo has no title screen, so its menu holds Help alone. Silkscreen's `&` reads as `$`, so that one glyph is set in VT323.
+- **Keys.** Closed, the menu listens to nothing, so E, Space and movement stay the World's. Open, only Escape is taken, at the window's capture phase, so the visit layer does not also close a counter; it returns focus to the pill. A press outside closes it.
+- **Sign-out is a session disconnect, and unmounting is the teardown.** `ConnectedProductionApp.signOut` forgets this account's D-072 entry pass (`EntryPassMemory.forget()`, so the next connection checks the gate again, as a logout should) and calls `WalletSession.disconnect()`. That forgets the account and its operations synchronously, then asks the wallet's `standard:disconnect` where the wallet offers it; a wallet without it is forgotten locally only, and one that throws has still been forgotten. The snapshot leaving `connected` makes `ProductionApp` render the D-115 title screen in place of the city. Unmounting the city destroys the presence owner (which leaves the lobby), releases the World lease (the engine and its three.js resources are destroyed after the usual deferred release) and drops the capability flow and every provider. Connecting again in the same tab builds each of them fresh. Nothing reloads.
+
+**Consequences.**
+- D-013's "the HUD shows the second" no longer holds: the pool balance is shown in the Bank's window.
+- Tests: `HudLayer.test.tsx` (the pill, no balance row or `?`, the menu opening and closing, Escape and an outside press, no keys taken while closed, sign-out once and only in production, Help reachable from the menu), `hud-model.test.ts` (no balance held), `entry-pass.test.ts` (forget), `session.test.ts` (sign-out with and without `standard:disconnect`, then connecting again in the same session), `ProductionRoot.test.tsx` (disconnect, presence destroyed, title screen, pass forgotten, reconnect; a refusing wallet still returns to the title screen) and `App.after-gate.test.tsx` (the real pill and menu through the production root: lobby left, World lease released, title screen, reconnect).
+- Not verified: a real wallet's disconnect prompt, and Safari or Firefox. The renders were made in Chromium.

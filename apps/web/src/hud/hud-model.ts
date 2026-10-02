@@ -4,12 +4,14 @@ import { createStore, type ReadableStore } from '../store/store.js';
 /**
  * The HUD's view of the Shell's own presentation events.
  *
- * `hud:balance`, `hud:pending` and `wallet:status` were published for a
- * World-drawn HUD that was never built (ARCHITECTURE, "Reading a balance").
- * This is their consumer, and it is a listener and nothing else: it never
- * emits, never asks the wallet for anything and holds no money — only the
- * pre-formatted string the Bank chose to publish after the player asked for a
- * read. Balance reads stay manual because every one of them prompts the wallet.
+ * `hud:pending` and `wallet:status` were published for a World-drawn HUD that
+ * was never built (ARCHITECTURE, "Reading a balance"). This is their consumer,
+ * and it is a listener and nothing else: it never emits, never asks the wallet
+ * for anything and holds no money.
+ *
+ * D-119: the HUD no longer shows a balance. The Bank still publishes
+ * `hud:balance` on the shared bus (the seam is unchanged), but the street HUD
+ * is only the wallet pill, so this model does not listen to it.
  *
  * Payloads are owned and validated like World events
  * (`bus/world-event-payload.ts`). The bus is shared with the World, so a
@@ -19,15 +21,12 @@ import { createStore, type ReadableStore } from '../store/store.js';
 export interface HudState {
   /** Null until the first `wallet:status`. */
   readonly wallet: WalletStatus | null;
-  /** The Bank's pre-formatted display string. Null while unknown. */
-  readonly balance: string | null;
   /** Financial handoffs in flight across every mounted window. */
   readonly pending: number;
 }
 
 export type HudEvent =
   | { readonly name: 'wallet:status'; readonly payload: unknown }
-  | { readonly name: 'hud:balance'; readonly payload: unknown }
   | { readonly name: 'hud:pending'; readonly payload: unknown };
 
 export interface HudModel {
@@ -51,13 +50,9 @@ const WALLET_STATUSES: ReadonlySet<unknown> = new Set<WalletStatus>([
   'unregistered',
 ]);
 
-/** Long enough for any `formatStrk` output; a longer string is not a balance. */
-const MAX_DISPLAY_LENGTH = 96;
 const MAX_PENDING = 10_000;
-/** Control characters have no place in a one-line HUD figure. */
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
-export const EMPTY_HUD: HudState = Object.freeze({ wallet: null, balance: null, pending: 0 });
+export const EMPTY_HUD: HudState = Object.freeze({ wallet: null, pending: 0 });
 
 function ownData(value: unknown, key: string): unknown {
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return undefined;
@@ -67,18 +62,6 @@ function ownData(value: unknown, key: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-/** `undefined` means the payload is not one the HUD will render. */
-export function ownBalanceDisplay(payload: unknown): string | null | undefined {
-  const display = ownData(payload, 'display');
-  if (display === null) return null;
-  if (typeof display !== 'string') return undefined;
-  const trimmed = display.trim();
-  if (trimmed.length === 0 || trimmed.length > MAX_DISPLAY_LENGTH || CONTROL_CHARACTERS.test(trimmed)) {
-    return undefined;
-  }
-  return trimmed;
 }
 
 export function ownPendingCount(payload: unknown): number | undefined {
@@ -96,25 +79,14 @@ export function ownWalletStatus(payload: unknown): WalletStatus | undefined {
 /**
  * One event applied to the HUD. Pure; returns `state` itself when nothing
  * changes, so the store does not notify.
- *
- * A balance belongs to a connected account. Any other wallet status makes it
- * unknown, and a figure arriving while the wallet is known to be elsewhere is
- * ignored rather than shown against the wrong state.
  */
 export function applyHudEvent(state: HudState, event: HudEvent): HudState {
   switch (event.name) {
     case 'wallet:status': {
       const wallet = ownWalletStatus(event.payload);
       if (wallet === undefined) return state;
-      const balance = wallet === 'connected' ? state.balance : null;
-      if (wallet === state.wallet && balance === state.balance) return state;
-      return Object.freeze({ ...state, wallet, balance });
-    }
-    case 'hud:balance': {
-      const balance = ownBalanceDisplay(event.payload);
-      if (balance === undefined || balance === state.balance) return state;
-      if (balance !== null && state.wallet !== null && state.wallet !== 'connected') return state;
-      return Object.freeze({ ...state, balance });
+      if (wallet === state.wallet) return state;
+      return Object.freeze({ ...state, wallet });
     }
     case 'hud:pending': {
       const pending = ownPendingCount(event.payload);
@@ -138,7 +110,6 @@ export function createHudModel(initial: HudState = EMPTY_HUD): HudModel {
     listen(bus: EventBus<ShellEvents>, currentWallet?: () => WalletStatus | null): () => void {
       const stops = [
         bus.on('wallet:status', (payload) => apply({ name: 'wallet:status', payload })),
-        bus.on('hud:balance', (payload) => apply({ name: 'hud:balance', payload })),
         bus.on('hud:pending', (payload) => apply({ name: 'hud:pending', payload })),
       ];
       let status: WalletStatus | null = null;

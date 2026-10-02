@@ -3043,9 +3043,11 @@ button[data-locked="true"] {
  *    controls and the station hint use;
  *  - while a window is open it shrinks to one row inside the band the
  *    window's own top padding keeps clear (`.panel`: 4.5rem, 3.9rem short);
- *  - inside a building at tablet and phone widths it keeps only the wallet
- *    lamp, or the pending spinner while something is in flight, and on the
- *    narrowest phones it steps aside entirely.
+ *    the pill is one row already (D-119), so only its menu and the guide
+ *    wait for the window to close;
+ *  - inside a building at tablet and phone widths the pill keeps only the
+ *    wallet lamp (and the pending spinner while something is in flight), and
+ *    on the narrowest phones it steps aside entirely.
  * The live region that announces pending work is never hidden by any of this.
  * --------------------------------------------------------------------- */
 
@@ -3072,107 +3074,184 @@ button[data-locked="true"] {
   pointer-events: auto;
 }
 
-.journey-hud-bar {
+/* D-119: the wallet pill. Quiet on purpose: small Silkscreen caps on a
+ * translucent dark-window fill with an Outline border and a small hard drop,
+ * so it reads over the street without becoming a panel. */
+.journey-hud-wallet {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.85rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
   max-width: 100%;
-  padding: 0.4rem 0.45rem 0.4rem 0.8rem;
-  border: 1px solid var(--ui-line);
-  border-radius: 16px;
-  background: rgb(36 28 23 / 0.94);
-  box-shadow: var(--ui-hud-shadow);
-  animation: ui-drop-in 200ms ease-out;
 }
 
-.journey-hud-bar > p {
+.journey-hud-pill {
+  --btn-bg: rgb(38 24 16 / 0.72);
+  --btn-bg-hover: rgb(38 24 16 / 0.88);
+  --btn-text: var(--brand-cream);
+  --btn-border: var(--brand-outline);
+  --btn-border-hover: var(--brand-outline);
+  --btn-edge: var(--brand-outline);
+  --btn-inset: inset 0 0 0 1px rgb(110 62 30 / 0.55);
+  --btn-glow: 0 0 0 0 transparent;
+  --btn-drop: 0 0 0 0 transparent;
+  --btn-drop-active: 0 0 0 0 transparent;
+  --btn-depth: 2px;
+  --btn-lift: 0px;
+  --btn-press: 1px;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  min-width: 0;
-  margin: 0;
+  min-height: 1.9rem;
+  max-width: 100%;
+  padding: 0.25rem 0.75rem 0.25rem 0.6rem;
+  border-width: 2px;
+  border-radius: 999px;
+  font-family: var(--brand-font-menu);
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: ui-drop-in 200ms ease-out;
 }
 
-.journey-hud-wallet {
-  font-weight: 700;
+.journey-hud-pill > .journey-hud-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Status lamp; decorative, the label carries the meaning. */
 .journey-hud-lamp {
   flex: none;
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid var(--brand-outline);
   border-radius: 50%;
-  background: var(--ui-accent);
-  box-shadow: 0 0 0 3px rgb(242 181 74 / 0.22);
+  background: var(--brand-sun-gold);
 }
 
 .journey-hud-wallet[data-status="connected"] .journey-hud-lamp {
   background: var(--ui-success);
-  box-shadow: 0 0 0 3px rgb(143 209 138 / 0.22);
+  box-shadow: 0 0 0 2px rgb(143 209 138 / 0.22);
 }
 
 .journey-hud-wallet:is([data-status="unsupported"], [data-status="unregistered"]) .journey-hud-lamp {
   background: var(--ui-danger);
-  box-shadow: 0 0 0 3px rgb(255 122 92 / 0.22);
 }
 
 .journey-hud-wallet[data-status="disconnected"] .journey-hud-lamp {
   background: var(--ui-lock);
-  box-shadow: none;
-}
-
-.journey-hud-balance {
-  font-variant-numeric: tabular-nums;
-}
-
-.journey-hud-balance > .journey-hud-label {
-  color: var(--ui-text-dim);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.journey-hud-balance > strong {
-  font-family: var(--ui-number-font);
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.journey-hud-bar button,
-.journey-hud-nudge > button {
-  --btn-depth: 3px;
-  --btn-press: 2px;
-  padding: 0.28rem 0.7rem;
-  font-size: 0.8rem;
-}
-
-.journey-hud-bar > .journey-hud-help {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  font-size: 0.95rem;
-  font-weight: 800;
 }
 
 .journey-hud-pending {
-  padding: 0.12rem 0.6rem 0.12rem 0.45rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ui-accent) 14%, transparent);
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid rgb(255 246 230 / 0.25);
+  color: var(--brand-sun-gold);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Quiet on purpose: small, thin and slow. */
 .journey-hud-spinner {
   flex: none;
-  width: 0.8rem;
-  height: 0.8rem;
-  border: 2px solid color-mix(in srgb, var(--ui-accent) 30%, transparent);
-  border-top-color: var(--ui-accent);
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid rgb(255 193 46 / 0.3);
+  border-top-color: var(--brand-sun-gold);
   border-radius: 50%;
   animation: ui-spin 1.2s linear infinite;
+}
+
+/* The pill's menu: a small dark brand window under it. */
+.journey-hud-menu {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 13.5rem;
+  padding: 0.4rem;
+  border: 3px solid var(--brand-outline);
+  border-radius: 8px;
+  background: var(--brand-window-dark);
+  box-shadow: inset 0 0 0 2px var(--brand-window-rim), 0 3px 0 var(--brand-outline);
+  color: var(--brand-cream);
+  animation: ui-drop-in 140ms ease-out;
+}
+
+.journey-hud-menu[hidden] {
+  display: none;
+}
+
+.journey-hud-account {
+  margin: 0.15rem 0.5rem 0.3rem;
+  color: rgb(255 246 230 / 0.6);
+  font-family: var(--brand-font-body);
+  font-size: 1.05rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-hud-menu-item {
+  --btn-bg: transparent;
+  --btn-bg-hover: rgb(255 193 46 / 0.12);
+  --btn-text: var(--brand-cream);
+  --btn-border: transparent;
+  --btn-border-hover: transparent;
+  --btn-edge: transparent;
+  --btn-inset: 0 0 0 0 transparent;
+  --btn-glow: 0 0 0 0 transparent;
+  --btn-drop: 0 0 0 0 transparent;
+  --btn-drop-active: 0 0 0 0 transparent;
+  --btn-depth: 0px;
+  --btn-lift: 0px;
+  --btn-press: 0px;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border-radius: 4px;
+  font-family: var(--brand-font-menu);
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+/* Silkscreen's & reads as $; the one glyph is set in VT323. */
+.journey-hud-amp {
+  font-family: var(--brand-font-body);
+  font-size: 1.35em;
+  line-height: 0;
+}
+
+/* Menus mark the item under the pointer or focus with ▶ in Sun gold. */
+.journey-hud-menu-item::before {
+  content: "▶";
+  flex: none;
+  width: 0.7em;
+  font-size: 0.6rem;
+  visibility: hidden;
+}
+
+.journey-hud-menu-item:is(:hover, :focus-visible):not(:disabled) {
+  color: var(--brand-sun-gold);
+}
+
+.journey-hud-menu-item:is(:hover, :focus-visible):not(:disabled)::before {
+  visibility: visible;
+}
+
+.journey-hud-nudge > button {
+  --btn-depth: 3px;
+  --btn-press: 2px;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.8rem;
 }
 
 .journey-hud-nudge {
@@ -3378,25 +3457,10 @@ button[data-locked="true"] {
   max-width: min(26rem, calc(100% - 23rem));
 }
 
-/* A window is open: one row in the band above it. The toggle, the nudge (the
- * Bank window carries its own) and the guide wait for the window to close. */
-.strkworld:has(.panel) .journey-hud-bar {
-  flex-wrap: nowrap;
-}
-
-.strkworld:has(.panel) .journey-hud-bar .journey-hud-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  border: 0;
-  white-space: nowrap;
-}
-
-.strkworld:has(.panel) :is(.journey-hud-toggle, .journey-hud-help, .journey-hud-nudge, .journey-guide) {
+/* A window is open: the pill stays as it is, one row in the band above it.
+ * Its menu, the nudge (the Bank window carries its own) and the guide wait
+ * for the window to close. */
+.strkworld:has(.panel) :is(.journey-hud-menu, .journey-hud-nudge, .journey-guide) {
   display: none;
 }
 
@@ -3405,19 +3469,16 @@ button[data-locked="true"] {
     max-width: calc(100% - 2rem);
   }
 
-  .strkworld:has(.game-mode-controls) :is(.journey-hud-balance, .journey-hud-help, .journey-hud-nudge, .journey-guide) {
+  .strkworld:has(.game-mode-controls) :is(.journey-hud-nudge, .journey-guide) {
     display: none;
   }
 
-  .strkworld:has(.game-mode-controls) .journey-hud-bar {
-    flex-wrap: nowrap;
-    gap: 0.35rem;
-    padding: 0.45rem 0.55rem;
+  /* One small chip: the wallet lamp, and the pending spinner beside it. */
+  .strkworld:has(.game-mode-controls) .journey-hud-pill {
+    padding: 0.25rem 0.55rem;
   }
 
-  /* One chip: the wallet lamp, or the pending spinner in its place. */
-  .strkworld:has(.game-mode-controls) .journey-hud-bar .journey-hud-label,
-  .strkworld:has(.game-mode-controls) .journey-hud-bar:has(.journey-hud-pending) .journey-hud-wallet {
+  .strkworld:has(.game-mode-controls) .journey-hud-pill > .journey-hud-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -3428,16 +3489,11 @@ button[data-locked="true"] {
     border: 0;
     white-space: nowrap;
   }
-
-  .strkworld:has(.game-mode-controls) .journey-hud-pending {
-    padding: 0;
-    background: none;
-  }
 }
 
 /* The narrowest phones: the Game Mode controls need the whole top row. */
 @media (max-width: 22rem) {
-  .strkworld:has(.game-mode-controls) .journey-hud-bar {
+  .strkworld:has(.game-mode-controls) .journey-hud-wallet {
     display: none;
   }
 }
@@ -3455,7 +3511,8 @@ button[data-locked="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .journey-hud-bar,
+  .journey-hud-pill,
+  .journey-hud-menu,
   .journey-hud-nudge,
   .journey-guide,
   .station-hint {

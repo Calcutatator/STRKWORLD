@@ -879,28 +879,28 @@ export const COPY = freezeCopy({
     reconnect: 'Reconnect multiplayer',
   },
 
-  /** The street HUD (`hud/HudLayer.tsx`). Status words only; no privacy claim. */
+  /**
+   * The street HUD (`hud/HudLayer.tsx`): one quiet wallet pill and its menu
+   * (D-119). Status words only; no privacy claim and no balance.
+   */
   hud: {
-    label: 'Your wallet and balance',
+    label: 'Your wallet',
     wallet: {
       unknown: 'Checking wallet…',
       connecting: 'Connecting wallet…',
-      connected: 'Wallet connected',
+      connected: 'Connected',
       disconnected: 'Wallet not connected',
       unsupported: 'Wallet cannot open the pool',
       unregistered: 'Register in your wallet',
     },
-    balance: 'Shielded balance',
-    balanceUnknown: 'Check at the Bank',
-    balanceHidden: 'Hidden',
-    hide: 'Hide',
-    show: 'Show',
-    hideBalance: 'Hide balance',
-    showBalance: 'Show balance',
+    /** The pill's accessible name: what it is, then what it opens. */
+    menuLabel: 'Wallet menu',
+    help: 'Help',
+    disconnect: 'Disconnect & return to menu',
+    disconnecting: 'Disconnecting…',
     pendingOne: 'action in progress',
     pendingMany: 'actions in progress',
     pendingNone: 'No actions in progress',
-    help: 'Getting started',
   },
 
   /**

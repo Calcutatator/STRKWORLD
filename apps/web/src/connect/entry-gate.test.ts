@@ -68,6 +68,9 @@ function memory(remembered = false): EntryPassMemory & { remembered: boolean; re
     async remember() {
       owned.remembered = true;
     },
+    async forget() {
+      owned.remembered = false;
+    },
   };
   return owned;
 }
@@ -812,7 +815,7 @@ describe('the entry gate machine (D-072)', () => {
     });
 
     it('checks as usual when the memory cannot answer', async () => {
-      const broken: EntryPassMemory = { recall: async () => { throw new Error('storage gone'); }, remember: async () => undefined };
+      const broken: EntryPassMemory = { recall: async () => { throw new Error('storage gone'); }, remember: async () => undefined, forget: async () => undefined };
       open({ operations: new FakePrivacyOperations(), memory: broken });
       await flush();
       expect(state()).toEqual({ name: 'ready' });

@@ -45,13 +45,13 @@ key material, so we cannot lose it.
 React (useStrk20Balances)
   → walletV6.strk20Balances([])
   → wallet resolves from its own note discovery
-  → React state
-  → `hud:balance` on the Shell bus → the Shell's HUD overlay (apps/web/src/hud)
+  → React state → the Bank's own window
+  → `hud:balance` on the Shell bus (pre-formatted; no Shell consumer since D-119)
 ```
 
-The World never calls Starknet. The HUD is a Shell overlay that only listens
-to the pre-formatted `hud:*` and `wallet:status` events; the World receives
-them too and ignores them.
+The World never calls Starknet. The HUD is a Shell overlay, a wallet pill and
+its menu (D-119), that only listens to `hud:pending` and `wallet:status`; it
+shows no balance. The World receives every `hud:*` event too and ignores them.
 
 ### Performing a shielded action
 
@@ -409,7 +409,11 @@ connected, which keeps the World independently testable. The production root
 is different: a supported connected wallet is its entry gate, so no World or
 lobby surface exists before wallet admission (D-055). Both the production
 root and the demo composition then hold the World, the HUD and the lobby
-behind D-072's funds check, which the demo runs against its own seam.
+behind D-072's funds check, which the demo runs against its own seam. The
+wallet pill's "Disconnect & return to menu" (D-119) disconnects the session;
+the production root then renders the title screen in place of that subtree,
+and unmounting it is the teardown: the presence owner leaves the lobby, the
+World lease is released and the engine destroyed.
 
 The block sandbox (D-060) is the second retained-state side seam. The lobby
 room is the authority for anonymous block state — stacks of colour indices per
@@ -474,7 +478,7 @@ the lobby never hear of them. The World also reports when the plaza is in
 view (`plaza:nearby`); while it is, or the monument's window is open, the
 Shell reads `POST /v1/rpc/pool-stats` about once a minute (backing off to
 the minute when reads fail) and pushes the monument its figures
-pre-formatted (`plaza:stats`), as it does the HUD balance. The stats are public aggregates only, and the shell game runs
+pre-formatted (`plaza:stats`), as the Bank does `hud:balance`. The stats are public aggregates only, and the shell game runs
 entirely in the Shell, with no money, wallet, backend or lobby.
 
 ---

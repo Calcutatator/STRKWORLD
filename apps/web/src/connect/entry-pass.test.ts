@@ -49,6 +49,20 @@ describe('the entry pass (D-072)', () => {
     await expect(createEntryPassMemory({ account: '0xdef', storage })!.recall()).resolves.toBe(false);
   });
 
+  it('D-119: forgets the pass on sign-out, leaving every other account\'s', async () => {
+    const raw = memoryStorage();
+    const storage = createViewerStorage(() => raw);
+    await createEntryPassMemory({ account: '0xdef', storage })!.remember();
+    const pass = createEntryPassMemory({ account: ACCOUNT, storage })!;
+    await pass.remember();
+    await pass.forget();
+    await expect(pass.recall()).resolves.toBe(false);
+    await expect(createEntryPassMemory({ account: '0xdef', storage })!.recall()).resolves.toBe(true);
+
+    const throwing = createViewerStorage(() => { throw new Error('sessionStorage blocked'); });
+    await expect(createEntryPassMemory({ account: ACCOUNT, storage: throwing })!.forget()).resolves.toBeUndefined();
+  });
+
   it('has nothing to key without an account', () => {
     for (const account of [null, '', 'player', '0x0', '0xnot-hex']) {
       expect(createEntryPassMemory({ account })).toBeNull();
