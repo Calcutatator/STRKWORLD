@@ -8,7 +8,12 @@ import { STREET_ORIGIN_X, type BuildingId, type EventBus, type ShellEvents, type
 
 export const FIXED_ROOM_TILE_SIZE = 32;
 
-export type FixedRoomTile = 'floor' | 'wall' | 'exit' | 'station' | 'lift';
+/**
+ * A floor tile. A `fixture` is built-in furniture (a teller wall, a front
+ * desk, a booth): as solid as a wall, but inside the room, where its
+ * builder dresses it.
+ */
+export type FixedRoomTile = 'floor' | 'wall' | 'exit' | 'station' | 'lift' | 'fixture';
 
 export interface FixedRoomRect {
   readonly x: number;
@@ -55,6 +60,14 @@ export interface FixedRoomFloorDefinition {
   readonly stations: readonly FixedRoomStationDefinition[];
   /** Pads to the building's other floors. */
   readonly lifts?: readonly FixedRoomLiftDefinition[];
+  /**
+   * Built-in furniture the counters are set into: solid tiles a player
+   * cannot walk on, which the room's builder dresses (the Bank's teller
+   * wall, the Vault's front desk). A fixture never covers a station, the
+   * exit, a lift, the spawn or a lift's arrival, and every station keeps an
+   * approach tile that can be walked to from the spawn.
+   */
+  readonly fixtures?: readonly FixedRoomRect[];
 }
 
 /** A building's ground floor: the room its street door opens onto. */
@@ -95,6 +108,8 @@ export interface FixedRoomLevelMap {
   readonly exit: FixedRoomRect | null;
   readonly stations: readonly FixedRoomStationDefinition[];
   readonly lifts: readonly FixedRoomLiftDefinition[];
+  /** Built-in furniture; solid, like walls (`FixedRoomFloorDefinition.fixtures`). */
+  readonly fixtures: readonly FixedRoomRect[];
   readonly rooftop: FixedRoomRooftop | null;
 }
 
@@ -139,7 +154,9 @@ export type FixedRoomDefinitionErrorCode =
   | 'overlapping-stations'
   | 'overlapping-approaches'
   | 'invalid-lift'
-  | 'invalid-level';
+  | 'invalid-level'
+  | 'invalid-fixture'
+  | 'unreachable-station';
 
 /** Stable fail-closed error surface for authored room data. */
 export class FixedRoomDefinitionError extends Error {
@@ -273,6 +290,8 @@ function freezeFloor<T extends FixedRoomFloorDefinition>(definition: T): void {
     Object.freeze(lift);
   }
   if (definition.lifts) Object.freeze(definition.lifts);
+  for (const fixture of definition.fixtures ?? []) Object.freeze(fixture);
+  if (definition.fixtures) Object.freeze(definition.fixtures);
 }
 
 function freezeAuthoredRoom<const T extends FixedRoomDefinition>(definition: T): T {
@@ -300,13 +319,17 @@ function ownDataField(value: unknown, key: string): unknown {
 }
 
 /**
- * The Bank's teller line (D-103): four counters along the north wall, one
- * action each, west to east SHIELD, UNSHIELD, STAKE and UNSTAKE. Each keeps
- * one privacy grade (D-030): shielding and unshielding are `public-edge`,
- * staking and unstaking their own Endur routes (D-063, D-085). Two-tile
- * counters four tiles apart: their approaches tile the north band edge to
- * edge without overlapping, so every counter opens from its own three-wide
- * halo and none stands in another's path. The Shell supplies the labels.
+ * The Bank's banking hall (D-103, D-104): four counters, one action each.
+ * Each keeps one privacy grade (D-030): shielding and unshielding are
+ * `public-edge`, staking and unstaking their own Endur routes (D-063, D-085).
+ *
+ * SHIELD and UNSHIELD are teller windows set into a teller wall that runs the
+ * width of the hall along row 3, the tellers' back office behind it, and a
+ * clear bay between them where the runner from the door ends, so walking
+ * straight in opens neither. STAKE and UNSTAKE are the two windows of Endur's
+ * partner booth, built against the east wall and facing west into the hall.
+ * A bench stands along the west wall. Fixtures are solid; every window is
+ * approached from the hall only. The Shell supplies the labels.
  */
 export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bank',
@@ -315,10 +338,24 @@ export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: 9, y: 9 },
   exit: { x: 8, y: 11, width: 2, height: 1 },
   stations: [
-    { station: 'bank:shielding', label: 'SHIELD', x: 2, y: 3, width: 2, height: 1 },
-    { station: 'bank:unshielding', label: 'UNSHIELD', x: 6, y: 3, width: 2, height: 1 },
-    { station: 'bank:staking', label: 'STAKE', x: 10, y: 3, width: 2, height: 1 },
-    { station: 'bank:unstaking', label: 'UNSTAKE', x: 14, y: 3, width: 2, height: 1 },
+    { station: 'bank:shielding', label: 'SHIELD', x: 5, y: 3, width: 2, height: 1 },
+    { station: 'bank:unshielding', label: 'UNSHIELD', x: 11, y: 3, width: 2, height: 1 },
+    { station: 'bank:staking', label: 'STAKE', x: 16, y: 5, width: 1, height: 1 },
+    { station: 'bank:unstaking', label: 'UNSTAKE', x: 16, y: 8, width: 1, height: 1 },
+  ],
+  fixtures: [
+    // The tellers' back office, behind the teller wall.
+    { x: 1, y: 1, width: 16, height: 2 },
+    // The teller wall, between and either side of the two windows.
+    { x: 1, y: 3, width: 4, height: 1 },
+    { x: 7, y: 3, width: 4, height: 1 },
+    { x: 13, y: 3, width: 4, height: 1 },
+    // Endur's booth on the east wall: its ends and the pier between its windows.
+    { x: 16, y: 4, width: 1, height: 1 },
+    { x: 16, y: 6, width: 1, height: 2 },
+    { x: 16, y: 9, width: 1, height: 1 },
+    // The bench along the west wall.
+    { x: 1, y: 5, width: 1, height: 4 },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -469,10 +506,13 @@ export function canonicalFixedRoomStation(station: StationId): StationId {
 }
 
 /**
- * The Vault opens on shadow accounts, behind the Shell's switch (D-077): four
- * counters along the north wall in the envelope every room shares, west to
- * east SUPPLY, REDEEM, BORROW and REPAY (D-103), laid out as the Bank's teller
- * line. Locked, it is D-007's facade and no room is built, so it stays out of
+ * The Vault opens on shadow accounts, behind the Shell's switch (D-077): a
+ * lending lounge of four counters, west to east SUPPLY, REDEEM, BORROW and
+ * REPAY (D-103, D-104). SUPPLY and REDEEM are the two places at a long white
+ * front desk; BORROW and REPAY are loan booths set into the vault wall, either
+ * side of its round door. Desk, wall and the staff floor behind them are
+ * fixtures, so every counter is approached from the lounge only. Locked, it
+ * is D-007's facade and no room is built, so it stays out of
  * `FIXED_ROOM_DEFINITIONS`, whose rooms are always open;
  * `fixedRoomDefinitionsFor` adds it when the Shell says so.
  */
@@ -483,10 +523,20 @@ export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: 9, y: 9 },
   exit: { x: 8, y: 11, width: 2, height: 1 },
   stations: [
-    { station: 'vault:supply', label: 'SUPPLY', x: 2, y: 3, width: 2, height: 1 },
-    { station: 'vault:redeem', label: 'REDEEM', x: 6, y: 3, width: 2, height: 1 },
-    { station: 'vault:borrow', label: 'BORROW', x: 10, y: 3, width: 2, height: 1 },
-    { station: 'vault:repay', label: 'REPAY', x: 14, y: 3, width: 2, height: 1 },
+    { station: 'vault:supply', label: 'SUPPLY', x: 3, y: 3, width: 2, height: 1 },
+    { station: 'vault:redeem', label: 'REDEEM', x: 7, y: 3, width: 2, height: 1 },
+    { station: 'vault:borrow', label: 'BORROW', x: 11, y: 3, width: 2, height: 1 },
+    { station: 'vault:repay', label: 'REPAY', x: 15, y: 3, width: 2, height: 1 },
+  ],
+  fixtures: [
+    // The staff floor behind the desk and the vault wall.
+    { x: 1, y: 1, width: 16, height: 2 },
+    // The front desk's ends and middle, either side of its two places.
+    { x: 1, y: 3, width: 2, height: 1 },
+    { x: 5, y: 3, width: 2, height: 1 },
+    { x: 9, y: 3, width: 2, height: 1 },
+    // The vault door, between the two loan booths.
+    { x: 13, y: 3, width: 2, height: 1 },
   ],
 } as const satisfies FixedRoomDefinition);
 
@@ -532,6 +582,7 @@ function buildFloorMap(
   rooftop: FixedRoomRooftop | null,
 ): FixedRoomLevelMap {
   const lifts = definition.lifts ?? [];
+  const fixtures = definition.fixtures ?? [];
   const tiles: FixedRoomTile[][] = Array.from({ length: definition.height }, (_, y) =>
     Array.from({ length: definition.width }, (_, x) => {
       if (lifts.some((lift) => isInside(lift, x, y))) return 'lift';
@@ -539,6 +590,7 @@ function buildFloorMap(
         x === 0 || x === definition.width - 1 || y === 0 || y === definition.height - 1;
       if (border) return exit && isInside(exit, x, y) ? 'exit' : 'wall';
       if (definition.stations.some((station) => isInside(station, x, y))) return 'station';
+      if (fixtures.some((fixture) => isInside(fixture, x, y))) return 'fixture';
       return 'floor';
     }),
   );
@@ -555,6 +607,7 @@ function buildFloorMap(
     exit: exit ? Object.freeze({ ...exit }) : null,
     stations: Object.freeze(stations),
     lifts: Object.freeze(lifts.map((lift) => Object.freeze({ ...lift, arrival: Object.freeze({ ...lift.arrival }) }))),
+    fixtures: Object.freeze(fixtures.map((fixture) => Object.freeze({ ...fixture }))),
     rooftop: rooftop ? Object.freeze({ ...rooftop }) : null,
   });
 }
@@ -647,6 +700,8 @@ function validateFloor(definition: FixedRoomFloorDefinition, exit: FixedRoomRect
 
   const lifts = definition.lifts ?? [];
   if (!Array.isArray(lifts)) rejectDefinition('invalid-lift');
+  const fixtures = Array.isArray(definition.fixtures) ? definition.fixtures : [];
+  const onFixture = (x: number, y: number): boolean => fixtures.some((fixture) => isInside(fixture, x, y));
   const inApproach = (x: number, y: number): boolean =>
     definition.stations.some((station) => isInside(expandRect(station), x, y));
   for (const [index, lift] of lifts.entries()) {
@@ -679,6 +734,7 @@ function validateFloor(definition: FixedRoomFloorDefinition, exit: FixedRoomRect
       arrival.y < height - 1 &&
       !definition.stations.some((station) => isInside(station, arrival.x, arrival.y)) &&
       !inApproach(arrival.x, arrival.y) &&
+      !onFixture(arrival.x, arrival.y) &&
       !lifts.some((candidate) => isInside(candidate, arrival.x, arrival.y));
     if (!validArrival) rejectDefinition('invalid-lift');
   }
@@ -693,8 +749,68 @@ function validateFloor(definition: FixedRoomFloorDefinition, exit: FixedRoomRect
     spawn.y < height - 1 &&
     !definition.stations.some((station) => isInside(station, spawn.x, spawn.y)) &&
     !lifts.some((lift) => isInside(lift, spawn.x, spawn.y)) &&
+    !onFixture(spawn.x, spawn.y) &&
     !(exit !== null && isInside(exit, spawn.x, spawn.y));
   if (!validSpawn) rejectDefinition('invalid-spawn');
+
+  validateFixtures(definition, exit);
+}
+
+/**
+ * Fixtures stand strictly inside the room, off every station and pad (the
+ * spawn and arrivals are checked against them above); and with them in place every station keeps an approach
+ * tile the spawn can walk to (so does the exit's doorstep), so furniture can
+ * never wall a counter or the door off.
+ */
+function validateFixtures(definition: FixedRoomFloorDefinition, exit: FixedRoomRect | null): void {
+  const fixtures = definition.fixtures ?? [];
+  if (!Array.isArray(fixtures)) rejectDefinition('invalid-fixture');
+  const { width, height } = definition;
+  const lifts = definition.lifts ?? [];
+  for (const fixture of fixtures) {
+    if (
+      !validRect(fixture) ||
+      !rectStrictlyInside(fixture, width, height) ||
+      definition.stations.some((station) => rectanglesOverlap(fixture, station)) ||
+      lifts.some((lift) => rectanglesOverlap(fixture, lift))
+    ) {
+      rejectDefinition('invalid-fixture');
+    }
+  }
+  if (fixtures.length === 0) return;
+  const open = (x: number, y: number): boolean =>
+    x > 0 &&
+    y > 0 &&
+    x < width - 1 &&
+    y < height - 1 &&
+    !definition.stations.some((station) => isInside(station, x, y)) &&
+    !fixtures.some((fixture) => isInside(fixture, x, y));
+  const reached = new Set<number>([definition.spawn.y * width + definition.spawn.x]);
+  const queue: [number, number][] = [[definition.spawn.x, definition.spawn.y]];
+  while (queue.length > 0) {
+    const [x, y] = queue.pop()!;
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+      const key = ny * width + nx;
+      // A pad rides away, so a walk does not pass through it.
+      if (reached.has(key) || !open(nx, ny) || lifts.some((lift) => isInside(lift, nx, ny))) continue;
+      reached.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  for (const station of definition.stations) {
+    let reachable = false;
+    forEachCell(expandRect(station), (x, y) => {
+      if (reached.has(y * width + x)) reachable = true;
+    });
+    if (!reachable) rejectDefinition('unreachable-station');
+  }
+  if (exit !== null) {
+    let reachable = false;
+    forEachCell(expandRect(exit), (x, y) => {
+      if (reached.has(y * width + x)) reachable = true;
+    });
+    if (!reachable) rejectDefinition('invalid-fixture');
+  }
 }
 
 /**
@@ -753,13 +869,16 @@ export function validateFixedRoomLevels(
   if (reached.size !== floors.size) rejectDefinition('invalid-level');
 }
 
-/** Whether a floor tile can be walked on: inside the grid, not a wall or a counter. */
+/** Whether a floor tile can be walked on: inside the grid, not a wall, a counter or a fixture. */
 function walkableOn(floor: FixedRoomFloorDefinition, x: number, y: number): boolean {
   if (x <= 0 || y <= 0 || x >= floor.width - 1 || y >= floor.height - 1) {
     // The border is wall, except where a pad stands in it.
     return (floor.lifts ?? []).some((lift) => isInside(lift, x, y));
   }
-  return !floor.stations.some((station) => isInside(station, x, y));
+  return (
+    !floor.stations.some((station) => isInside(station, x, y)) &&
+    !(floor.fixtures ?? []).some((fixture) => isInside(fixture, x, y))
+  );
 }
 
 /** The straight directions a player can step onto `lift` from a free tile beside it. */
@@ -801,7 +920,7 @@ export function fixedRoomTileAt(room: FixedRoomLevelMap, x: number, y: number): 
 
 export function isFixedRoomSolidAt(room: FixedRoomLevelMap, x: number, y: number): boolean {
   const tile = fixedRoomTileAt(room, x, y);
-  return tile === null || tile === 'wall' || tile === 'station';
+  return tile === null || tile === 'wall' || tile === 'station' || tile === 'fixture';
 }
 
 export function isFixedRoomExit(room: FixedRoomLevelMap, x: number, y: number): boolean {

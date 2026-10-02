@@ -189,6 +189,26 @@ export const VESU = Object.freeze({
 });
 
 /**
+ * The Bank's banking hall (D-104): dark walnut and brass under STRK20's
+ * near-black stone, a pale marble counter top, warm lamp light. Not a brand:
+ * the hall's materials, kept dark and warm so STRK20's orange still leads.
+ */
+export const BANK_HALL = Object.freeze({
+  wood: 0x3a2317,
+  woodDark: 0x23140c,
+  woodLight: 0x5c3a25,
+  brass: 0xb38536,
+  brassDark: 0x7a5620,
+  brassLight: 0xe0bb68,
+  marble: 0xd8d2c6,
+  marbleVein: 0xa49c90,
+  /** Lamp light through amber glass. */
+  lamp: 0xffc27a,
+  /** The glass in the teller windows, a cool tint over the warm room. */
+  glass: 0xc9dde4,
+});
+
+/**
  * Vesu's mark, sampled from its logo art (vesu.xyz/img/vesu-logo-light.png
  * and -dark.png, Sept 2026): a V of two strokes, a slanted bar and a rounded
  * inverted triangle in an iridescent gradient. `light` is the version for
@@ -1252,6 +1272,16 @@ export const DEGEN_STATION_LOOKS: StationLooks = Object.freeze({
 export type StationPropStyle = RoomDecorStyle | 'endur' | 'vesu-borrow';
 
 /**
+ * How a counter is built into its room's fixtures (D-104), in place of a
+ * free-standing desk: a teller window in the Bank's teller wall, a window of
+ * Endur's booth on its east wall, a place at the Vault's front desk, or a
+ * loan booth in its vault wall. Each draws its own desk, a status light in
+ * the state's colour, and a sign in the architecture that carries the
+ * Shell's label (room-builder.ts).
+ */
+export type StationFit = 'teller' | 'endur-booth' | 'vesu-desk' | 'vesu-booth';
+
+/**
  * How one station dresses: counter, props, label and state looks. A room's
  * stations wear the room's theme unless it names one of its own, as the
  * Bank's Endur staking counter does (D-063).
@@ -1266,7 +1296,22 @@ export interface StationTheme {
   readonly looks: StationLooks;
   /** The protocol's name on the counter's status panel, beside the Shell's label. */
   readonly plate?: BrandPlate;
+  /** Built into the room's fixtures rather than standing free (D-104). */
+  readonly fit?: StationFit;
+  /** A built-in counter's sign, which carries the Shell's label in place of a floating one. */
+  readonly sign?: SignStyleOptions;
 }
+
+/** STRK20's floating label: white mono capitals on near-black (the Bank's room label). */
+export const ROOM_LABEL_STRK20: FloatingStyleOptions = Object.freeze({
+  foreground: css(STRK20.text),
+  background: cssAlpha(STRK20.surface, 0.92),
+  border: css(STRK20.hairline),
+  font: 'mono',
+  cornerRadius: 0.08,
+  tracking: 0.1,
+  uppercase: true,
+});
 
 /** The Bank's staking counter: Endur's light look, inside the STRK20 room. */
 export const ENDUR_STATION_THEME: StationTheme = Object.freeze({
@@ -1356,6 +1401,113 @@ export const VESU_BORROW_STATION_THEME: StationTheme = Object.freeze({
   props: 'vesu-borrow',
 });
 
+/**
+ * A teller window's sign (D-104): gilded capitals on a black glass panel in
+ * a brass frame, set into the teller wall's header over the window.
+ */
+export const TELLER_SIGN: SignStyleOptions = Object.freeze({
+  width: 1.7,
+  height: 0.34,
+  background: css(STRK20.black),
+  foreground: css(BANK_HALL.brassLight),
+  accent: css(BANK_HALL.brass),
+  gradient: Object.freeze([css(BANK_HALL.brassLight), css(BANK_HALL.brass)]),
+  cornerRadius: 0.05,
+  borderWidth: 0.09,
+  hairline: false,
+  titleFont: 'display',
+  titleWeight: 900,
+  titleTracking: 0.18,
+  uppercase: true,
+});
+
+/** SHIELD and UNSHIELD: teller windows in the Bank's teller wall, in STRK20's looks (D-104). */
+export const TELLER_STATION_THEME: StationTheme = Object.freeze({
+  props: 'strk20',
+  kioskBase: BANK_HALL.wood,
+  kioskTop: BANK_HALL.marble,
+  kioskTrim: BANK_HALL.brass,
+  label: ROOM_LABEL_STRK20,
+  looks: STRK20_STATION_LOOKS,
+  fit: 'teller',
+  sign: TELLER_SIGN,
+});
+
+/**
+ * A window of Endur's booth (D-104): a blade sign in Endur's green with dark
+ * text (text on its green is never white), hung from the booth so it faces
+ * the camera, as Endur's pill buttons are.
+ */
+export const ENDUR_BOOTH_SIGN: SignStyleOptions = Object.freeze({
+  width: 0.92,
+  height: 0.32,
+  background: css(ENDUR.green),
+  foreground: css(ENDUR.dark),
+  accent: css(ENDUR.greenDeep),
+  cornerRadius: 0.5,
+  borderWidth: 0.07,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleTracking: 0.04,
+  uppercase: true,
+});
+
+/**
+ * STAKE and UNSTAKE as the two windows of Endur's partner booth on the
+ * Bank's east wall (D-104): Endur's light look, its name once over the
+ * booth (room-builder.ts) rather than on each counter.
+ */
+export const ENDUR_BOOTH_STATION_THEME: StationTheme = Object.freeze({
+  props: 'endur',
+  kioskBase: ENDUR.base,
+  kioskTop: ENDUR.card,
+  kioskTrim: ENDUR.dark,
+  label: ENDUR_STATION_THEME.label,
+  looks: ENDUR_STATION_LOOKS,
+  fit: 'endur-booth',
+  sign: ENDUR_BOOTH_SIGN,
+});
+
+/**
+ * A lit header over a Vault counter (D-104): Vesu's electric blue with white
+ * capitals in the platform sans, widened like Base Neue Wide, 8 px round.
+ */
+export const VESU_HEADER_SIGN: SignStyleOptions = Object.freeze({
+  width: 1.5,
+  height: 0.32,
+  background: css(VESU.blue),
+  foreground: css(VESU.white),
+  accent: css(VESU.blueText),
+  cornerRadius: 0.2,
+  borderWidth: 0.05,
+  hairline: false,
+  titleFont: 'sans',
+  titleWeight: 700,
+  titleStretch: 1.3,
+  titleTracking: 0.06,
+  uppercase: true,
+});
+
+/** SUPPLY and REDEEM: the two places at the Vault's white front desk, a screen each (D-104). */
+export const VESU_DESK_STATION_THEME: StationTheme = Object.freeze({
+  props: 'vesu',
+  kioskBase: VESU.white,
+  kioskTop: VESU_STATION_THEME.kioskTop,
+  kioskTrim: VESU.ink,
+  label: VESU_LABEL,
+  looks: VESU_STATION_LOOKS,
+  fit: 'vesu-desk',
+  sign: VESU_HEADER_SIGN,
+});
+
+/** BORROW and REPAY: loan booths set into the Vault's vault wall, the loan card on each screen (D-104). */
+export const VESU_BOOTH_STATION_THEME: StationTheme = Object.freeze({
+  ...VESU_DESK_STATION_THEME,
+  props: 'vesu-borrow',
+  fit: 'vesu-booth',
+});
+
 /** Interior palette for one fixed room. */
 export interface RoomTheme {
   readonly decor: RoomDecorStyle;
@@ -1395,19 +1547,17 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     kioskBase: lift(STRK20.raised, 0.09),
     kioskTop: lift(STRK20.hairline, 0.15),
     exitGlow: STRK20.orange,
-    label: Object.freeze({
-      foreground: css(STRK20.text),
-      background: cssAlpha(STRK20.surface, 0.92),
-      border: css(STRK20.hairline),
-      font: 'mono',
-      cornerRadius: 0.08,
-      tracking: 0.1,
-      uppercase: true,
-    }),
+    label: ROOM_LABEL_STRK20,
     stationLooks: STRK20_STATION_LOOKS,
-    // Endur staking is its own counter in its own brand (D-063), and so is
-    // unstaking beside it (D-103).
-    stations: Object.freeze({ 'bank:staking': ENDUR_STATION_THEME, 'bank:unstaking': ENDUR_STATION_THEME }),
+    // D-104: SHIELD and UNSHIELD are teller windows in the hall's teller
+    // wall; STAKE and UNSTAKE (Endur's own counters, D-063, D-103) the two
+    // windows of Endur's booth on the east wall, in Endur's brand.
+    stations: Object.freeze({
+      'bank:shielding': TELLER_STATION_THEME,
+      'bank:unshielding': TELLER_STATION_THEME,
+      'bank:staking': ENDUR_BOOTH_STATION_THEME,
+      'bank:unstaking': ENDUR_BOOTH_STATION_THEME,
+    }),
   }),
   exchange: Object.freeze({
     decor: 'avnu',
@@ -1495,12 +1645,14 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
     exitGlow: VESU.blue,
     label: VESU_LABEL,
     stationLooks: VESU_STATION_LOOKS,
-    // D-103: lending's two counters wear the supply card, borrowing's two the loan card.
+    // D-103: lending's two counters wear the supply card, borrowing's two the
+    // loan card; D-104 builds lending's into the front desk and borrowing's
+    // into the vault wall as loan booths.
     stations: Object.freeze({
-      'vault:supply': VESU_STATION_THEME,
-      'vault:redeem': VESU_STATION_THEME,
-      'vault:borrow': VESU_BORROW_STATION_THEME,
-      'vault:repay': VESU_BORROW_STATION_THEME,
+      'vault:supply': VESU_DESK_STATION_THEME,
+      'vault:redeem': VESU_DESK_STATION_THEME,
+      'vault:borrow': VESU_BOOTH_STATION_THEME,
+      'vault:repay': VESU_BOOTH_STATION_THEME,
     }),
   }),
 });
