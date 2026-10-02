@@ -537,7 +537,8 @@ export const PLAZA_THEME = Object.freeze({
 /**
  * Leaderboard phase 1's placement stand, in the STRKWORLD brand (D-113,
  * docs/brand/README.md): a dark window board with an ember rim, the
- * wordmark's gold-to-ember title, sun-gold bulbs and a voxel trophy.
+ * wordmark's gold-to-ember title, sun-gold bulbs and a voxel trophy, on the
+ * small stone pedestal D-122 moved it to (2026-10-02).
  */
 export const PLACEMENT_THEME = Object.freeze({
   outline: 0x24120a,
@@ -547,10 +548,10 @@ export const PLACEMENT_THEME = Object.freeze({
   emberDeep: 0xb8400c,
   gold: 0xffc12e,
   bulb: 0xffd23a,
-  /** The board: the brand's dark window, scoreboard type. */
+  /** The board: the brand's dark window, scoreboard type, no wider than the pedestal's tile. */
   board: Object.freeze({
-    width: 1.72,
-    height: 0.96,
+    width: 0.94,
+    height: 0.56,
     background: '#261810',
     foreground: '#fff6e6',
     accent: '#f56a16',
