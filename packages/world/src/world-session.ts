@@ -18,6 +18,8 @@ import {
   presenceAreaOfBuilding,
 } from '@strkworld/shared';
 import {
+  AVATAR_STUDIO_RETURN_FACING,
+  avatarStudioReturnTile,
   createStreetMap,
   isAvatarStudioEntrance,
   isSolidAt,
@@ -49,7 +51,13 @@ import {
 } from './avatar-outfit.js';
 import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
-import { createDoorTrigger, DOOR_REENTRY_HOLD_MS, type DoorTrigger } from './door-trigger.js';
+import {
+  createDoorTrigger,
+  createReentryHold,
+  DOOR_REENTRY_HOLD_MS,
+  type DoorTrigger,
+  type ReentryHold,
+} from './door-trigger.js';
 import {
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
@@ -352,6 +360,9 @@ const NO_MOVEMENT: MovementInput = Object.freeze({
 
 const IDLE_MOTION: PlayerMotion = Object.freeze({ vx: 0, vy: 0, sprinting: false });
 
+/** The Studio's entrance is one zone, so the hold needs one identity (D-125). */
+const AVATAR_STUDIO_ENTRANCE_HOLD_KEY = 'avatar-studio';
+
 /** A destroyed session has no outfit to change; keep the field non-optional. */
 const NOOP_AVATAR_OUTFIT: AvatarOutfitSelection = {
   get selected() {
@@ -435,6 +446,13 @@ class Session implements WorldSession {
   private avatarOutfit: AvatarOutfitSelection = NOOP_AVATAR_OUTFIT;
   private avatarOutfitToggle?: AvatarOutfitToggleBinding;
   private avatarStudioActive = false;
+  /**
+   * D-125: the Studio's exit leaves the player on the street tile touching its
+   * hidden entrance, so that entrance takes the doors' re-entry hold
+   * (door-trigger.ts): a key held through the handoff cannot walk them
+   * straight back in, and the entrance stays shut until they step off it.
+   */
+  private readonly studioEntranceHold: ReentryHold<string> = createReentryHold();
   private movement!: StreetMovementAdapter;
   private returnTile = { x: 0, y: 0 };
   private viewOwned = false;
@@ -615,6 +633,7 @@ class Session implements WorldSession {
     }
     if (this.arenaShown) this.clearArena();
     this.doors?.advance(delta);
+    this.studioEntranceHold.advance(delta);
     const input = this.moveStreetPlayer(delta, cameraYaw);
     this.movement.streetUpdate({ x: this.position.x, y: this.position.y }, input, () => {
       if (this.cleanedUp) return;
@@ -942,6 +961,7 @@ class Session implements WorldSession {
   private createAvatarStudio(): void {
     const config = this.config;
     const streetBounds = this.streetBounds();
+    const studioReturn = avatarStudioReturnTile(this.map);
     const studioBounds: AvatarStudioBounds = {
       x: ROOM_ORIGIN.x,
       y: ROOM_ORIGIN.y,
@@ -977,7 +997,10 @@ class Session implements WorldSession {
         setCameraBounds: (bounds) => this.view.setCameraBounds(bounds),
         setPlayerPosition: (position) => this.teleport(position),
         resetDoors: () => this.doors?.reset(),
-        resumeStreet: (position, report) => this.movement.exit(position, report),
+        // D-125: the street hears the player standing outside the Studio's
+        // entrance, facing north away from it, as the view shows them.
+        resumeStreet: (position, report) =>
+          this.movement.exit(position, report, AVATAR_STUDIO_RETURN_FACING),
         destroyStudio: () => this.view.destroyStudio(),
       },
       streetBounds,
@@ -987,7 +1010,9 @@ class Session implements WorldSession {
         ROOM_ORIGIN,
         AVATAR_STUDIO_TILE_SIZE,
       ),
-      streetReturn: tileToWorld(this.map.spawn.x, this.map.spawn.y),
+      // D-125: outside the room, on the street tile touching its entrance —
+      // not the street spawn, which is rows north of it up the path.
+      streetReturn: tileToWorld(studioReturn.x, studioReturn.y),
       reportStreet: () => this.reportTile(),
     });
     this.avatarStudio = createAvatarStudioController({
@@ -1238,6 +1263,9 @@ class Session implements WorldSession {
   private exitAvatarStudioRoom(): void {
     this.avatarStudioActive = false;
     this.lastTile = { x: -1, y: -1 };
+    // Before the handoff: it ends in a street tile report from the tile next
+    // to the entrance, which the hold must already be guarding.
+    this.studioEntranceHold.start(DOOR_REENTRY_HOLD_MS);
     try {
       this.avatarStudioPresentation?.exit();
     } catch (error) {
@@ -1247,6 +1275,9 @@ class Session implements WorldSession {
       if (!this.cleanedUp) this.avatarStudioActive = true;
       throw error;
     }
+    // D-125: standing on the street outside the entrance, turned away from it,
+    // the way the arena's return faces off its arch (D-114).
+    this.view.setPlayerFacing?.(AVATAR_STUDIO_RETURN_FACING);
   }
 
   private renderAvatarStudio(): void {
@@ -1820,7 +1851,17 @@ class Session implements WorldSession {
   private reportTile(): void {
     const tile = worldToTile(this.position.x, this.position.y);
     if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
-    if (!this.avatarStudioActive && isAvatarStudioEntrance(this.map, tile.x, tile.y)) {
+    const onStudioEntrance = !this.avatarStudioActive &&
+      isAvatarStudioEntrance(this.map, tile.x, tile.y);
+    // D-125: every tile report feeds the hold, because stepping off the
+    // entrance is what releases it. Swallowed, the tile is reported as any
+    // other street tile would be: the entrance is no door, so nothing else
+    // here treats it specially.
+    const studioShut = this.studioEntranceHold.swallows(
+      onStudioEntrance ? AVATAR_STUDIO_ENTRANCE_HOLD_KEY : null,
+      this.avatarStudioActive,
+    );
+    if (onStudioEntrance && !studioShut) {
       this.avatarStudio?.enter();
       // Studio entry is an external lifecycle boundary. Commit the tile only
       // after the transition succeeds so a failed entry can retry while the

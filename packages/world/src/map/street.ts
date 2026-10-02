@@ -1,4 +1,11 @@
-import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, STREET_ORIGIN_X, type BuildingId } from '@strkworld/shared';
+import {
+  BUILDINGS,
+  SANDBOX_AREA,
+  SANDBOX_ENTRANCE,
+  STREET_ORIGIN_X,
+  type BuildingId,
+  type Facing,
+} from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
 import { ARENA_PIT_BUILDING, ARENA_PIT_DOOR, paintArenaPit } from './arena-pit.js';
 import { BUNKER_BUILDING, BUNKER_DOOR, paintBunker } from './bunker.js';
@@ -501,6 +508,21 @@ export function isAvatarStudioEntrance(
     tileY < entrance.y + entrance.height
   );
 }
+
+/**
+ * D-125: the street tile the Studio's exit puts the player on — the pavement
+ * tile touching its entrance from the north, so leaving the room leaves the
+ * player standing outside it rather than back at the spawn. It is the
+ * entrance's own column (the path is two tiles wide and the entrance spans
+ * both), one row north, so stepping south walks back in.
+ */
+export function avatarStudioReturnTile(map: DistrictMap): { x: number; y: number } {
+  const entrance = map.avatarStudioEntrance;
+  return { x: entrance.x + Math.floor(entrance.width / 2), y: entrance.y - 1 };
+}
+
+/** Facing out of the Studio's entrance: north, away from it (the arena's rule, D-114). */
+export const AVATAR_STUDIO_RETURN_FACING: Facing = 'up';
 
 /** Pixel centre of a tile. */
 export function tileToWorld(tileX: number, tileY: number): { x: number; y: number } {
