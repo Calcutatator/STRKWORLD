@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+// The wallet's action list, kept opaque here: the shell never builds protocol actions (D-018).
+type WalletAction = Readonly<Record<string, unknown>>;
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { STRK20_ACTION } from 'starknet';
 import {
   LEADERBOARD_DAPP_NAME,
   WalletApiPrivacyOperations,
@@ -104,7 +105,7 @@ function productionSession(
     readonly reads?: false;
   } = {},
 ) {
-  const invoked: STRK20_ACTION[][] = [];
+  const invoked: WalletAction[][] = [];
   const base = {
     address: PLAYER,
     async strk20Balances(tokens: readonly string[]) {
@@ -113,8 +114,8 @@ function productionSession(
     async strk20PrepareInvoke() {
       throw new Error('nothing here is relayed');
     },
-    async strk20InvokeTransaction(actions: readonly STRK20_ACTION[]) {
-      invoked.push(structuredClone(actions) as STRK20_ACTION[]);
+    async strk20InvokeTransaction(actions: readonly WalletAction[]) {
+      invoked.push(structuredClone(actions) as WalletAction[]);
       return { transaction_hash: TX };
     },
   };
