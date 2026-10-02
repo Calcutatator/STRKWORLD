@@ -87,6 +87,11 @@ async function walkTo(world: ReturnType<typeof createEventBus<WorldEvents>>, sta
   await settle();
 }
 
+/** The review's amounts, in order (D-103). */
+function reviewFigures(review: Element): (string | null)[] {
+  return [...review.querySelectorAll('.ui-amount-summary .ui-detail dd')].map((dd) => dd.textContent);
+}
+
 function button(label: string): HTMLButtonElement {
   const found = [...container!.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
   if (!found) throw new Error(`No button labelled ${label}`);
@@ -165,10 +170,16 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     // Supply 5 STRK: the button says what is missing until an amount is in (D-089).
     expect(button(COPY.kit.enterAmount).disabled).toBe(true);
     await type('5');
-    expect([...vault().querySelectorAll('.panel-compose .ui-detail')].map((row) => row.textContent)).toEqual([`${COPY.vault.form.willSupply}5 STRK`]);
+    // D-103: what you supply, what goes into Vesu, the pool fee on top, the total from the pool.
+    expect([...vault().querySelectorAll('.panel-compose .ui-detail')].map((row) => row.textContent)).toEqual([
+      `${COPY.vault.review.supply}5 STRK`,
+      `${COPY.vault.form.inVesu}5 STRK`,
+      `${COPY.bank.poolFee}${COPY.glossary.poolFee}6 STRK`,
+      `${COPY.kit.totalFromPool}11 STRK`,
+    ]);
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['5 STRK']);
+    expect(reviewFigures(review)).toEqual(['5 STRK', '5 STRK', '6 STRK', COPY.vault.review.networkByWallet, '11 STRK']);
     expect(review.textContent).toContain(COPY.vault.review.networkByWallet);
     expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
     // At the commit point the gate carries the disclosure; the header preview is withdrawn.
@@ -228,14 +239,14 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await choose(USDC);
     expect(vault().querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.feeInStrk);
     expect(vault().querySelector('.ui-amount-symbol')?.textContent).toBe('USDC');
-    // The chosen market's APY sits in the form too (D-089).
-    expect(vault().querySelector('.panel-compose .ui-detail')?.textContent).toBe(`${COPY.vault.rates.label}3.09%, Vesu's figure`);
+    // The chosen market's APY sits in the form too (D-089), after the amounts (D-103).
+    expect(vault().querySelector('.panel-compose .ui-amount-summary .ui-detail:last-child')?.textContent).toBe(`${COPY.vault.rates.label}3.09%, Vesu's figure`);
     await type('12.5');
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['12.5 USDC']);
+    // Two tokens leave the pool: the USDC supplied and the pool fee in STRK.
+    expect(reviewFigures(review)).toEqual(['12.5 USDC', '12.5 USDC', '6 STRK', COPY.vault.review.networkByWallet, '12.5 USDC + 6 STRK']);
     // The pool fee is the pool's, in STRK, and the wallet picks what pays it.
-    expect([...review.querySelectorAll('.review-costs dd')].map((dd) => dd.textContent)[0]).toBe('6 STRK');
     expect(review.querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.review.feeTokenByWallet);
     expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
@@ -354,7 +365,7 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await type('0.001');
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['0.001 strkBTC']);
+    expect(reviewFigures(review)[0]).toBe('0.001 strkBTC');
     expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: STRKBTC, amount: 100_000n }]);
@@ -388,7 +399,8 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await click(button(COPY.kit.max));
     await click(button(COPY.gameMode.reviewAction));
     const review = vault().querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['20.4 xSTRK']);
+    // A redeem's amount comes out of Vesu: only the pool fee leaves the pool.
+    expect(reviewFigures(review)).toEqual(['20.4 xSTRK', '20.4 xSTRK', '6 STRK', COPY.vault.review.networkByWallet, '6 STRK']);
     await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
     expect(operations.vaultSubmitted).toEqual([{ kind: 'redeem', token: XSTRK, amount: 20_400_000_000_000_000_000n, all: true }]);
   });
@@ -412,7 +424,11 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
 
     // More than the pool balance: the field and the button both say so.
     await type('200');
-    expect(vault().querySelector('.ui-amount-message')?.textContent).toBe(COPY.kit.exceedsBalance);
+    expect(vault().querySelector('.ui-amount-message')?.textContent).toBe(COPY.kit.exceedsWithFee);
+    // D-103: within the balance, but not with the fee on top, is too much as well.
+    await type('95');
+    expect(vault().querySelector('.ui-amount-message')?.textContent).toBe(COPY.kit.exceedsWithFee);
+    await type('200');
     expect(button('Insufficient STRK').disabled).toBe(true);
 
     // USDC pays no pool fee of its own, so Max is all of it.

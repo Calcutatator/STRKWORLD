@@ -3,6 +3,7 @@ import type { BorrowHealth, BorrowPosition } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import {
   formatRatePercent,
+  formatStrk,
   formatStrkExact,
   formatTokenAmount,
   formatTokenAmountExact,
@@ -18,7 +19,8 @@ import { ConfirmGate } from '../ConfirmGate.js';
 import { GlossaryTerm } from '../Glossary.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
-import { AmountField, BeforeAfter, DetailRows, checkAmount, primaryAction, type AmountCheck, type DetailRow, type DetailTone } from '../kit/index.js';
+import { AmountField, AmountSummary, BeforeAfter, checkAmount, primaryAction, totalAcross, type AmountCheck, type AmountSummaryProps, type DetailRow, type DetailTone } from '../kit/index.js';
+import { usePoolFee } from '../pool-fee.js';
 import { feeReserve, maxAfterReserve, maxBasis } from '../kit/amount-math.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { voyagerContractUrl } from '../vault/vault-machine.js';
@@ -115,6 +117,8 @@ export function BorrowPanel({
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
+  // D-103: the pool fee for the amounts under the form; the review shows the prepared one.
+  const poolFee = usePoolFee(operations);
   const uncertaintyState = useStore(submissionUncertainty.store);
   const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
 
@@ -174,7 +178,7 @@ export function BorrowPanel({
             ) : state.flow.name === 'submitted' ? (
               <SubmittedBlock state={state} onBack={() => panel.acknowledge()} />
             ) : gateBlocked || (state.flow.name === 'failed' && state.flow.recovery === 'close') ? null : (
-              <ComposeBlock state={state} panel={panel} />
+              <ComposeBlock state={state} panel={panel} poolFee={state.balances.status === 'loaded' && state.balances.fee ? state.balances.fee.feeAmount : poolFee} />
             )}
             {state.flow.name === 'failed' ? (
               <div className="flow-failed" role="alert">
@@ -382,7 +386,7 @@ function pairLabel(state: BorrowState, pair: BorrowPairChoice): string {
  * where the seam would refuse an amount for D-083's 1.05 floor. The seam
  * still re-reads and decides; these figures only say it early.
  */
-function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanelMachine }) {
+function ComposeBlock({ state, panel, poolFee }: { state: BorrowState; panel: BorrowPanelMachine; poolFee: bigint | null }) {
   const preparing = state.flow.name === 'preparing';
   const choices = borrowPairChoices(state);
   const pair = state.pair;
@@ -469,6 +473,7 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
             decimals={collateral.decimals}
             symbol={collateral.symbol}
             balance={preview.pool.balance}
+            {...(preview.pool.limit !== null ? { limit: preview.pool.limit, exceedsMessage: COPY.kit.exceedsWithFee } : {})}
             {...(preview.pool.max ? { max: preview.pool.max } : {})}
             hint={preview.pool.hint(state.collateralText)}
             disabled={preparing}
@@ -483,6 +488,7 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
         decimals={amountToken.decimals}
         symbol={amountToken.symbol}
         balance={preview.balance}
+        {...(preview.limit !== null ? { limit: preview.limit } : {})}
         {...(preview.balanceLabel ? { balanceLabel: preview.balanceLabel } : {})}
         {...(preview.exceeds ? { exceedsMessage: preview.exceeds } : {})}
         {...(preview.max ? { max: preview.max } : {})}
@@ -493,7 +499,7 @@ function ComposeBlock({ state, panel }: { state: BorrowState; panel: BorrowPanel
       />
       {state.mode === 'add-collateral' ? <PoolBalanceRead state={state} onRead={() => void panel.refreshBalances()} /> : null}
       {state.mode === 'borrow' && (state.loans.status === 'unrequested' || state.loans.status === 'failed') ? <p className="borrow-read-loans">{COPY.borrow.form.readLoans}</p> : null}
-      <DetailRows rows={preview.rows} label={COPY.flow.review} />
+      <AmountSummary {...composeSummary(state.mode, collateral, debt, preview, poolFee, preview.rows)} label={COPY.kit.amountsLabel} />
       <button type="submit" className="review" disabled={action.disabled}>
         {action.label}
       </button>
@@ -597,16 +603,19 @@ function healthTone(health: PreviewHealth): { tone: DetailTone; note: string | n
  */
 function poolFieldFor(state: BorrowState, collateral: BorrowTokenView): {
   balance: bigint | null;
+  /** D-103: the balance less the pool fee when the collateral is the fee token, so amount + fee fits. */
+  limit: bigint | null;
   max: (() => bigint | null) | null;
   hint: (text: string) => string | null;
 } {
   const held = poolBalanceFor(state, collateral.token);
-  if (!held) return { balance: null, max: null, hint: () => null };
+  if (!held) return { balance: null, limit: null, max: null, hint: () => null };
   const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
   const reserve = feeReserve(collateral.token, fee);
   const maximum = tidied(maxAfterReserve(maxBasis(held), reserve), collateral);
   return {
     balance: held.total,
+    limit: reserve !== null && reserve > 0n ? held.total - reserve : null,
     max: () => maximum,
     hint: (text) => maximum !== null && reserve !== null && reserve > 0n && text === formatTokenAmountExact(maximum, collateral.decimals)
       ? COPY.balance.feeReserved
@@ -632,6 +641,10 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   hint: string | 'add-collateral' | null;
   rows: DetailRow[];
   tooLow: boolean;
+  limit: bigint | null;
+  typed: bigint | null;
+  added: bigint;
+  everything: boolean;
 } {
   const mode = state.mode;
   const loan = loanFor(state, pair);
@@ -640,9 +653,10 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   const held: PreviewLoan | null = known ? { collateralAmount: loan?.collateralAmount ?? 0n, debtAmount: loan?.debtAmount ?? 0n } : null;
   const amountToken = mode === 'borrow' || mode === 'repay' ? debt : collateral;
   const pool = poolFieldFor(state, collateral);
-  const collateralCheck = mode === 'borrow' ? checkAmount(state.collateralText, { decimals: collateral.decimals, balance: pool.balance }) : { status: 'empty' as const, amount: null };
+  const collateralCheck = mode === 'borrow' ? checkAmount(state.collateralText, { decimals: collateral.decimals, balance: pool.limit ?? pool.balance }) : { status: 'empty' as const, amount: null };
   const added = collateralCheck.status === 'ok' ? collateralCheck.amount : 0n;
   let balance: bigint | null = null;
+  let limit: bigint | null = null;
   let balanceLabel: string | null = null;
   let exceeds: string | null = null;
   let max: (() => bigint | null) | null = null;
@@ -652,6 +666,7 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   if (mode === 'borrow' && !held) why = state.loans.status === 'loading' ? 'loans-loading' : 'loans-unread';
   if (mode === 'add-collateral') {
     balance = pool.balance;
+    limit = pool.limit;
     max = pool.max;
   }
   if (held && market) {
@@ -671,14 +686,21 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
     balanceLabel = COPY.borrow.form.owed;
     exceeds = COPY.borrow.form.overDebt;
     const whole = tidied(loan.debtAmount, debt);
-    max = () => whole;
+    // D-103: Max leaves the pool fee aside. When the pool balance of the debt
+    // token, less the fee if it is the fee token, cannot cover the whole debt,
+    // Max is what it can cover: a part repayment.
+    const inPool = poolBalanceFor(state, debt.token);
+    const reserve = feeReserve(debt.token, state.balances.status === 'loaded' ? state.balances.fee : null);
+    const covers = inPool ? maxAfterReserve(maxBasis(inPool), reserve) : null;
+    const repayMax = covers !== null && whole !== null && covers < whole ? tidied(covers, debt) : whole;
+    max = () => repayMax;
   }
   if (held && loan && mode === 'withdraw-collateral') {
     balance = loan.collateralAmount;
     balanceLabel = COPY.borrow.form.held;
     exceeds = COPY.borrow.form.overCollateral;
   }
-  const check = checkAmount(state.amountText, { decimals: amountToken.decimals, balance });
+  const check = checkAmount(state.amountText, { decimals: amountToken.decimals, balance: limit ?? balance });
   const typed = check.status === 'ok' ? check.amount : null;
   const everything = takesEverything(state, pair, typed);
   const rows: DetailRow[] = [];
@@ -730,7 +752,83 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
       : everything && mode === 'withdraw-collateral'
         ? COPY.borrow.form.withdrawAllLine
         : null;
-  return { check, collateralCheck, pool, balance, balanceLabel, exceeds, max, hint, rows, tooLow };
+  const exceedsAfterFee = limit !== null ? COPY.kit.exceedsWithFee : exceeds;
+  return { check, collateralCheck, pool, balance, limit, balanceLabel, exceeds: exceedsAfterFee, max, hint, rows, tooLow, typed, added, everything };
+}
+
+/**
+ * The amounts in the owner's order (D-103) for the form: what is typed (a
+ * borrow's collateral, then the loan), what comes out directly, the pool fee
+ * on top, and what leaves the pool, in each token. The loan's figures (what
+ * can be borrowed, LTV, health) follow as details.
+ */
+function composeSummary(
+  mode: BorrowMode,
+  collateral: BorrowTokenView,
+  debt: BorrowTokenView,
+  figures: { typed: bigint | null; added: bigint; everything: boolean },
+  fee: bigint | null,
+  details: readonly DetailRow[],
+): AmountSummaryProps {
+  const typed = figures.typed ?? 0n;
+  const fees = fee === null ? [] : [poolFeeRow(formatStrk(fee))];
+  const total = (amount: bigint, token: BorrowTokenView) => fee === null
+    ? null
+    : { label: COPY.kit.totalFromPool, value: borrowTotal(amount, token, fee, false) };
+  switch (mode) {
+    case 'borrow':
+      return {
+        entered: [
+          ...(figures.added > 0n ? [{ label: COPY.borrow.review.collateral, value: formatHolding(figures.added, collateral) }] : []),
+          { label: COPY.borrow.review.borrow, value: formatHolding(typed, debt) },
+        ],
+        receive: { label: COPY.kit.youReceive, value: formatHolding(typed, debt) },
+        fees,
+        total: total(figures.added, collateral),
+        details,
+      };
+    case 'add-collateral':
+      return {
+        entered: { label: COPY.borrow.review.collateral, value: formatHolding(typed, collateral) },
+        receive: { label: COPY.borrow.form.addedToLoan, value: formatHolding(typed, collateral) },
+        fees,
+        total: total(typed, collateral),
+        details,
+      };
+    case 'repay':
+      return {
+        entered: { label: figures.everything ? COPY.borrow.review.repayAll : COPY.borrow.review.repay, value: formatHolding(typed, debt) },
+        receive: { label: COPY.borrow.form.paidOff, value: formatHolding(typed, debt) },
+        fees,
+        total: total(typed, debt),
+        details,
+      };
+    case 'withdraw-collateral':
+      return {
+        entered: { label: figures.everything ? COPY.borrow.review.withdrawAll : COPY.borrow.review.withdraw, value: formatHolding(typed, collateral) },
+        receive: { label: COPY.kit.youReceive, value: formatHolding(typed, collateral) },
+        fees,
+        total: total(0n, collateral),
+        details,
+      };
+  }
+}
+
+/** The pool fee, glossed; at the review its exact figure carries the "read live" note. */
+function poolFeeRow(value: string, note?: string): DetailRow {
+  return {
+    id: 'fee',
+    label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+    value: note ? <span title={note}>{value}</span> : value,
+  };
+}
+
+/** What leaves the pool: an amount in its token plus the pool fee in STRK, one figure when both are STRK. */
+function borrowTotal(amount: bigint, token: BorrowTokenView, fee: bigint, exact: boolean): string {
+  return totalAcross([
+    { token: token.token, amount, format: (value) => (exact ? formatExact(value, token) : formatHolding(value, token)) },
+    { token: STRK_TOKEN, amount: fee, format: exact ? formatStrkExact : formatStrk },
+  ]);
 }
 
 /** A Max figure floored to a tidy precision (D-089); nothing when that leaves nothing. */
@@ -762,24 +860,52 @@ function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onCon
   if (flow.name !== 'review' && flow.name !== 'submitting') return null;
   const { summary } = flow;
   const { action, collateral, debt } = summary;
-  const rows: Array<[string, string]> = [];
   let note: string | null = null;
   let landsIn: BorrowTokenView | null = null;
+  // D-103: what is typed, what comes out, the fees on top and what leaves the pool, exactly.
+  const fees: DetailRow[] = [
+    poolFeeRow(formatStrkExact(summary.poolFee), COPY.bank.poolFeeNote),
+    { id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: COPY.borrow.review.networkByWallet },
+  ];
+  const total = (amount: bigint, token: BorrowTokenView) => ({ label: COPY.kit.totalFromPool, value: borrowTotal(amount, token, summary.poolFee, true) });
+  let amounts: AmountSummaryProps;
   switch (action.kind) {
     case 'borrow':
-      if (action.collateralAmount > 0n) rows.push([COPY.borrow.review.collateral, formatExact(action.collateralAmount, collateral)]);
-      rows.push([COPY.borrow.review.borrow, formatExact(action.borrowAmount, debt)]);
+      amounts = {
+        entered: [
+          ...(action.collateralAmount > 0n ? [{ label: COPY.borrow.review.collateral, value: formatExact(action.collateralAmount, collateral) }] : []),
+          { label: COPY.borrow.review.borrow, value: formatExact(action.borrowAmount, debt) },
+        ],
+        receive: { label: COPY.kit.youReceive, value: formatExact(action.borrowAmount, debt) },
+        fees,
+        total: total(action.collateralAmount, collateral),
+      };
       landsIn = debt;
       break;
     case 'add-collateral':
-      rows.push([COPY.borrow.review.collateral, formatExact(action.amount, collateral)]);
+      amounts = {
+        entered: { label: COPY.borrow.review.collateral, value: formatExact(action.amount, collateral) },
+        receive: { label: COPY.borrow.form.addedToLoan, value: formatExact(action.amount, collateral) },
+        fees,
+        total: total(action.amount, collateral),
+      };
       break;
     case 'repay':
-      rows.push([action.all ? COPY.borrow.review.repayAll : COPY.borrow.review.repay, formatExact(action.amount, debt)]);
+      amounts = {
+        entered: { label: action.all ? COPY.borrow.review.repayAll : COPY.borrow.review.repay, value: formatExact(action.amount, debt) },
+        receive: { label: COPY.borrow.form.paidOff, value: formatExact(action.amount, debt) },
+        fees,
+        total: total(action.amount, debt),
+      };
       if (action.all) note = COPY.borrow.review.bufferNote;
       break;
     case 'withdraw-collateral':
-      rows.push([action.all ? COPY.borrow.review.withdrawAll : COPY.borrow.review.withdraw, formatExact(action.amount, collateral)]);
+      amounts = {
+        entered: { label: action.all ? COPY.borrow.review.withdrawAll : COPY.borrow.review.withdraw, value: formatExact(action.amount, collateral) },
+        receive: { label: COPY.kit.youReceive, value: formatExact(action.amount, collateral) },
+        fees,
+        total: total(0n, collateral),
+      };
       if (action.all) note = COPY.borrow.review.withdrawAllNote;
       landsIn = collateral;
       break;
@@ -788,14 +914,7 @@ function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onCon
   return (
     <div className="panel-review borrow-review">
       <h3>{COPY.flow.review}</h3>
-      <dl className="vault-review">
-        {rows.map(([label, value]) => (
-          <div key={label} className="borrow-review-row">
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <AmountSummary {...amounts} label={COPY.flow.review} />
       {note || landsIn ? (
         <p className="vault-review-note">
           {note ? `${note} ` : ''}
@@ -804,12 +923,6 @@ function CommitBlock({ state, onConfirm, onCancel }: { state: BorrowState; onCon
       ) : null}
       <h4 className="borrow-after-title">{COPY.borrow.review.after}</h4>
       <HealthFigures health={summary.after} collateral={collateral} debt={debt} />
-      <dl className="review-costs">
-        <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-        <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-        <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
-        <dd>{COPY.borrow.review.networkByWallet}</dd>
-      </dl>
       {!sameAddress(moved.token, STRK_TOKEN) ? <p className="vault-review-note vault-fee-token">{COPY.borrow.review.feeTokenByWallet}</p> : null}
       {flow.name === 'submitting' ? (
         <p className="flow-pending" aria-live="polite" data-stage={flow.stage}>{flow.message}</p>

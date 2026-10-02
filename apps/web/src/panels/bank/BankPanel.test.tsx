@@ -355,8 +355,25 @@ describe('BankPanel rendering', () => {
     // <details>/<summary> is native keyboard- and screen-reader-reachable, not hover-only.
     expect(markup).toMatch(/<details class="glossary-term"><summary>Pool fee<\/summary>/);
     expect(markup).toContain(COPY.glossary.poolFee);
+    // D-103: a network fee is listed only where the seam states one; a
+    // wallet-submitted send's is the wallet's to price (D-082).
+    expect(markup).not.toContain('Network cost');
+  });
+
+  it('lists the network cost, glossed, among the fees when the seam states one (D-103)', async () => {
+    const seam = operations();
+    const prepare = seam.prepare.bind(seam);
+    seam.prepare = async (...args) => ({ ...(await prepare(...args)), gasEstimate: parseTokenAmount('0.25')! });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger(), allowedModes: ['transfer'], initialMode: 'transfer' });
+    await panel.open();
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.review();
+    const markup = render(panel, seam, 'menu', undefined, { mode: 'transfer' });
     expect(markup).toMatch(/<details class="glossary-term"><summary>Network cost<\/summary>/);
     expect(markup).toContain(COPY.glossary.networkCost);
+    // Entered, received, the fees on top, and a total that adds them: 1 + 6 + 0.25.
+    expect(markup).toMatch(/You send<\/dt><dd>1 STRK<\/dd>[^]*?They receive<\/dt><dd>1 STRK[^]*?Pool fee[^]*?6 STRK[^]*?Network cost[^]*?0\.25 STRK[^]*?Total from your pool<\/dt><dd>7\.25 STRK<\/dd>/);
   });
 
   it('shows uncertainty without a retry path or another financial form', async () => {
@@ -570,10 +587,9 @@ describe('BankPanel rendering', () => {
     await panel.prepare();
 
     const markup = render(panel, seam);
-    // A send is wallet-submitted (D-082): the seam states no relay estimate,
-    // and the pool fee and total survive at full precision.
-    expect(markup).toContain('6 STRK');
-    expect(markup).toContain('<dd>0 STRK</dd>');
+    // A send is wallet-submitted (D-082): the seam states no relay estimate.
+    // D-103: what is sent arrives whole, and the total is it plus the pool fee.
+    expect(markup).toMatch(/You send<\/dt><dd>1 STRK<\/dd>[^]*?They receive<\/dt><dd>1 STRK[^]*?Pool fee[^]*?6 STRK[^]*?Total from your pool<\/dt><dd>7 STRK<\/dd>/);
     expect(markup).not.toContain('0.001 STRK');
   });
 
@@ -705,9 +721,9 @@ describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094
     await panel.prepare();
     const review = render(panel, seam);
     const figures = review.slice(review.indexOf('data-review="shield"'));
-    expect(figures).toMatch(/<dt>You shield<\/dt><dd>9 STRK<\/dd>[^]*?Pool fee[^]*?<dd[^>]*>6 STRK<\/dd><dt>Total from your wallet<\/dt><dd>15 STRK<\/dd>/);
+    // D-103's order: what you enter, what reaches the pool, the fee on top, the total.
+    expect(figures).toMatch(/<dt>You shield<\/dt><dd>9 STRK<\/dd>[^]*?You receive<\/dt><dd>9 STRK<\/dd>[^]*?Pool fee[^]*?6 STRK[^]*?<dt>Total from your wallet<\/dt><dd>15 STRK<\/dd>/);
     expect(review).toContain('Depositing 15 STRK is public');
-    expect(review).toContain('<li>Shield 9 STRK</li>');
 
     await panel.confirm();
     expect(panel.store.getState().flow).toMatchObject({ name: 'submitted', shielded: true });

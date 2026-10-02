@@ -686,25 +686,14 @@ body {
   padding-block: 0.7rem;
 }
 
-.panel-hint,
-.batch-empty {
+.panel-hint {
   margin: 0.85rem 0;
   color: var(--ui-text-dim);
   font-size: 0.95rem;
 }
 
-.panel-compose > .panel-hint,
-.panel-compose > .batch-empty {
+.panel-compose > .panel-hint {
   margin: 0;
-}
-
-.station-action {
-  margin: 0;
-  padding: 0.6rem 0.8rem;
-  border: 1px dashed color-mix(in srgb, var(--ui-accent) 60%, var(--ui-line));
-  border-radius: var(--ui-radius-inner);
-  background: var(--ui-surface-raised);
-  font-weight: 600;
 }
 
 .batch-list {
@@ -734,7 +723,9 @@ body {
   font-size: 0.82rem;
 }
 
-.panel-review h3 {
+/* D-103: a counter with no Menu Mode tabs over it names its one action. */
+.panel-review h3,
+.panel-body > .counter-action {
   margin: 0 0 0.75rem;
   color: var(--ui-heading);
   font-family: var(--ui-heading-font);
@@ -2079,13 +2070,6 @@ button[data-locked="true"] {
 .panel[data-brand="endur"] .unstake-counter {
   display: grid;
   gap: 0.6rem;
-}
-
-/* D-091: Stake and Unstake, Endur's own two tabs, as a full-width segmented pair. */
-.panel[data-brand="endur"] .stake-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  width: 100%;
 }
 
 .panel[data-brand="endur"] .unstake-counter > h3,

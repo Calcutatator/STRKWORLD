@@ -3,16 +3,17 @@
 **The shell. Composes everything.**
 
 Providers, routing, layout, and the event bus. Owns the local visit controller,
-the interaction windows, and the batch accumulator that sits between Menu Mode
-and the financial seam:
+the interaction windows, and the accumulator that validates every intent's
+shape before it reaches the financial seam:
 
 - **Game Mode** — the default. A building entry starts a local visit in the
   World's instanced room; an admitted station opens one React interaction
   window and confirms one typed action at a time. The top-right controls also
   provide an explicit accessible exit from the room.
-- **Menu Mode** — the secondary path. Its top-right control opens the existing
-  full building panel, where the batch accumulator collects player intent and
-  emits one atomic `Intent[]` on confirm. This is the fee-amortising path.
+- **Menu Mode** — the secondary path. Its top-right control opens the
+  building's windows behind a row of tabs named as its counters are (D-088);
+  each tab is that counter's own window. Since D-103 neither mode queues a
+  visit: every counter confirms one action, which pays its own pool fee.
 
 The shell emits only typed intents. It never accepts a raw contract target,
 selector or protocol argument blob, and it never falls back to unshielding and
@@ -37,7 +38,7 @@ room's presence area, where only its own players see each other (D-087).
 | `src/visits/` | `VisitLayer`, the Game/Menu visit controller, and the Shell-owned opaque station registry (the Privacy Plaza's street stations included, D-076) |
 | `src/plaza/` | The Privacy Plaza's Shell half (D-076): the pool-stats client and poller, `PlazaProvider`, and the shell game's pure rules |
 | `src/store/` | A 40-line observable store, plus its `useSyncExternalStore` hook |
-| `src/accumulator/` | Menu Mode's batch accumulator |
+| `src/accumulator/` | The intent accumulator: shape validation, one intent per counter since D-103 |
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |
 | `src/panels/` | The building-window framework, privacy gate, and locked/unbuilt surfaces |
 | `src/privacy/` | The seam context, failure classification, session uncertainty, build context, and register import |
@@ -172,6 +173,17 @@ window. Closing a station or Menu Mode returns controls to the room. Leave
 building emits the active building through `world:exit-building`; the visit
 stays mounted until the World answers with the matching `building:exited`.
 Unknown or newly locked stations fail closed and return controls to the World.
+
+**D-103: one action per counter.** The Bank's room holds SHIELD
+(`bank:shielding`), UNSHIELD (`bank:unshielding`), STAKE (`bank:staking`) and
+UNSTAKE (`bank:unstaking`); the Vault's SUPPLY (`vault:supply`), REDEEM
+(`vault:redeem`), BORROW (`vault:borrow`) and REPAY (`vault:repay`). The
+registry gives each one route and one control; `panels/CounterWindow.tsx`
+draws its window for a station and for its Menu Mode tab alike. "Review this
+action" prepares straight from the form, Back returns to it, and there is no
+Remove, Clear or visit queue. `vault:lending` is an alias of `vault:supply`.
+The Bank has no private transfer; the Post Office is the one place to send.
+The history below predates D-103 where it mentions tabs or batches.
 
 The first tracer maps the opaque `bank:shielding` station to the existing Bank
 machine, limited to Shield/Unshield and one intent. D-039 adds
@@ -347,9 +359,9 @@ tick both pass it. Past that, four separate clocks decide whether a finished
 async step may write what it learned: `attempt` for a newer prepare/confirm,
 `session` for a closed panel, `balanceRead` for a newer balance read or settled
 submission, and `composition` for a Clear/Remove edit that owns the batch over
-older recipient preflight or preparation. One counter for all four would make
-an unrelated balance read or batch edit cancel a submission, which is worse
-than the stale write it prevents.
+older recipient preflight or preparation (since D-103, a form edit or Back).
+One counter for all four would make an unrelated balance read or batch edit
+cancel a submission, which is worse than the stale write it prevents.
 
 **An operation verdict supersedes an older capability probe.** Wallet errors
 118 and 162 are current account/wallet facts, so the connect machine retires

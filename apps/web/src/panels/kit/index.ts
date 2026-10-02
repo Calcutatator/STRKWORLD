@@ -38,6 +38,9 @@
  *   (custom slippage) in here, not on the panel.
  * - `DetailRows` (+ `InvertibleRate`, `BeforeAfter`): label/value rows with a
  *   tone for the figure agreed to or one to look at twice.
+ * - `AmountSummary` (+ `amountSummaryRows`, `totalAcross`): every counter's
+ *   amounts in one order (D-103): what you enter, what you receive, the fees
+ *   added on top, and the total. The typed amount is never reduced by a fee.
  * - `FlipButton`, `QuoteTimer`: the swap direction control and a quote's
  *   refresh countdown.
  * - `primaryAction`: the primary button's words and state, "Enter an amount",
@@ -52,6 +55,7 @@ export { RecipientField, type RecipientFieldProps } from './RecipientField.js';
 export { TokenSelect, tokenOptionText, type TokenOption, type TokenSelectProps } from './TokenSelect.js';
 export { SettingsPopover, type SettingsPopoverProps, type SettingsPreset } from './SettingsPopover.js';
 export { DetailRows, InvertibleRate, BeforeAfter, type DetailRow, type DetailTone } from './DetailRows.js';
+export { AmountSummary, amountSummaryRows, totalAcross, type AmountSummaryProps } from './AmountSummary.js';
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {

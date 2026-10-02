@@ -169,7 +169,16 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     await type('amount', '100');
     await click(button(COPY.gameMode.reviewAction));
     const review = counter().querySelector('.panel-review')!;
-    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['10000 STRK', '100 USDC']);
+    // D-103: the collateral and the loan typed, the USDC received, the fees on
+    // top, and what leaves the pool: the collateral plus the pool fee, both STRK.
+    expect([...review.querySelectorAll('.ui-amount-summary .ui-detail')].map((row) => [row.querySelector('dt')!.textContent, row.querySelector('dd')!.textContent])).toEqual([
+      [COPY.borrow.review.collateral, '10000 STRK'],
+      [COPY.borrow.review.borrow, '100 USDC'],
+      [COPY.kit.youReceive, '100 USDC'],
+      [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`, '6 STRK'],
+      [`${COPY.bank.networkCost}${COPY.glossary.networkCost}`, COPY.borrow.review.networkByWallet],
+      [COPY.kit.totalFromPool, '10006 STRK'],
+    ]);
     expect(review.textContent).toContain(COPY.borrow.review.after);
     // 10,000 demo STRK at $0.04 against 100 USDC at $1: LTV 25%, liquidation at $0.0147, and health
     // 2.72 less a hair, since the estimate counts a base unit more debt for Vesu's rounding.

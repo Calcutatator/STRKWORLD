@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { COPY } from '../../copy.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { PanelFrame } from '../PanelFrame.js';
+import { usePoolFee } from '../pool-fee.js';
 import { useEndurRate } from './endur-rate.js';
 import { UnstakeCounter } from './UnstakeCounter.js';
 
@@ -34,20 +35,7 @@ export function UnstakePanel({
 }) {
   const { operations } = usePrivacy();
   const rate = useEndurRate(operations, true);
-  const [poolFee, setPoolFee] = useState<bigint | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    operations.poolConfig(controller.signal).then(
-      (pool) => {
-        if (!controller.signal.aborted) setPoolFee(pool.feeAmount);
-      },
-      () => {
-        // No fee row rather than a guessed one; the review shows the exact fee.
-      },
-    );
-    return () => controller.abort();
-  }, [operations]);
+  const poolFee = usePoolFee(operations);
 
   return (
     <div className="bank-experience" data-experience={experience} data-mode="unstake">

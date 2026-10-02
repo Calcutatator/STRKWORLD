@@ -19,12 +19,11 @@ import {
   type BankState,
 } from './bank-machine.js';
 import { describeIntent, describeWarnings } from './summary-copy.js';
-import { shieldDeposits } from './shield-deposits.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
 import { GlossaryTerm } from '../Glossary.js';
-import { AmountField, DetailRows, RecipientField, checkAmount, primaryAction, type DetailRow } from '../kit/index.js';
+import { AmountField, AmountSummary, RecipientField, checkAmount, primaryAction, type AmountSummaryProps, type DetailRow } from '../kit/index.js';
 import { estimateText, rateRow, useEndurRate, xstrkForStrk, type EndurRateView } from './endur-rate.js';
 
 /** What each counter does, in the words its window names it by. */
@@ -385,7 +384,10 @@ function ComposeBlock({
   const balance = shield
     ? wallet
     : balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
-  const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : balance });
+  // D-103: a spend's pool fee comes out of the same STRK, on top of the typed
+  // amount, so the amount is checked against the balance less the fee.
+  const spendLimit = !shield && balance !== null && state.pool ? balance - state.pool.feeAmount : null;
+  const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : spendLimit ?? balance });
   const recipient = toOwnWallet ? account : state.recipientText.trim();
   const ready = COPY.gameMode.reviewAction;
   const action = needsRecipient && recipient === ''
@@ -454,7 +456,9 @@ function ComposeBlock({
         decimals={18}
         symbol="STRK"
         balance={balance}
-        {...(shield ? { limit: shieldLimit, balanceLabel: COPY.kit.walletBalance, exceedsMessage: COPY.bank.exceedsWallet } : {})}
+        {...(shield
+          ? { limit: shieldLimit, balanceLabel: COPY.kit.walletBalance, exceedsMessage: COPY.bank.exceedsWallet }
+          : spendLimit !== null ? { limit: spendLimit, exceedsMessage: COPY.kit.exceedsWithFee } : {})}
         max={max !== null || shield ? () => panel.maxSpendable() : undefined}
         balanceAction={
           <button type="button" className="ui-chip balance-refresh" aria-label={COPY.balance.refreshLabel} disabled={busy} onClick={onRefresh}>
@@ -465,7 +469,10 @@ function ComposeBlock({
         disabled={busy}
       />
 
-      <DetailRows rows={composeRows(state, check.amount, rate)} />
+      {(() => {
+        const summary = composeSummary(state, check.amount, rate);
+        return summary ? <AmountSummary {...summary} label={COPY.kit.amountsLabel} /> : null;
+      })()}
 
       <button type="submit" className="review" disabled={busy || action.disabled}>
         {action.label}
@@ -479,46 +486,61 @@ function ComposeBlock({
 }
 
 /**
- * The rows under the amount, as each category's apps show them, and no more:
- * a send, a shield and an unshield show the pool fee; a stake adds what it
- * receives and the rate it is estimated at (D-091). The fee is ambient here;
- * the exact figure being agreed to is the review's.
+ * The amounts under the field, in the owner's order (D-103): what you enter,
+ * what you get out directly, the pool fee on top, and the total. The typed
+ * amount is what moves: a shield reaches the pool whole (D-094), an unshield
+ * or a send arrives whole, a stake spends exactly it. The pool fee is ambient
+ * here; the exact figure being agreed to is the review's. A stake adds the
+ * rate its estimate uses (D-091).
  */
-function composeRows(state: BankState, amount: bigint | null, rate: EndurRateView): DetailRow[] {
-  const rows: DetailRow[] = [];
-  if (state.mode === 'shield' && state.pool) {
-    // D-094: what reaches the pool, the fee on top, and what leaves the
-    // wallet. D-103: every shield is its own action and pays its own fee.
-    const figures = shieldFigures(amount ?? 0n, state.pool.feeAmount);
-    rows.push({ id: 'shield', label: COPY.bank.youShield, value: formatStrk(figures.amount) });
-    rows.push({
-      id: 'fee',
-      label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
-      value: formatStrk(figures.fee),
-    });
-    rows.push({ id: 'total', label: COPY.bank.totalFromWallet, value: formatStrk(figures.total), tone: 'emphasis' });
-    return rows;
+function composeSummary(state: BankState, amount: bigint | null, rate: EndurRateView): AmountSummaryProps | null {
+  const typed = amount ?? 0n;
+  const fee = state.pool?.feeAmount ?? null;
+  const fees: DetailRow[] = fee === null ? [] : [poolFeeRow(formatStrk(fee))];
+  const total = fee === null ? null : { label: totalLabel(state.mode), value: formatStrk(shieldFigures(typed, fee).total) };
+  switch (state.mode) {
+    case 'shield':
+      return {
+        entered: { label: COPY.bank.youShield, value: formatStrk(typed) },
+        receive: { label: COPY.kit.youReceive, value: formatStrk(typed) },
+        fees,
+        total,
+      };
+    case 'unshield':
+    case 'transfer':
+      return {
+        entered: { label: state.mode === 'unshield' ? COPY.bank.youUnshield : COPY.bank.youSend, value: formatStrk(typed) },
+        receive: { label: state.mode === 'unshield' ? COPY.kit.youReceive : COPY.kit.theyReceive, value: formatStrk(typed) },
+        fees,
+        total,
+      };
+    case 'stake': {
+      const estimate = rate.status === 'loaded' && amount !== null
+        ? estimateText(xstrkForStrk(amount, rate.strkPerXstrk), COPY.stake.outputToken)
+        : null;
+      return {
+        entered: { label: COPY.stake.youStake, value: formatStrk(typed) },
+        receive: { label: COPY.stake.willReceive, value: estimate ?? '—' },
+        fees,
+        total,
+        details: [rateRow(rate)],
+      };
+    }
   }
-  if (state.mode === 'stake') {
-    const estimate = rate.status === 'loaded' && amount !== null
-      ? estimateText(xstrkForStrk(amount, rate.strkPerXstrk), COPY.stake.outputToken)
-      : null;
-    rows.push({
-      id: 'receive',
-      label: COPY.stake.willReceive,
-      value: estimate ?? '—',
-      tone: 'emphasis',
-    });
-    rows.push(rateRow(rate));
-  }
-  if (state.pool) {
-    rows.push({
-      id: 'fee',
-      label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
-      value: formatStrk(state.pool.feeAmount),
-    });
-  }
-  return rows;
+}
+
+/** The pool fee, the one fee every Bank-machine action pays on top (D-013). */
+function poolFeeRow(value: string, note?: string): DetailRow {
+  return {
+    id: 'fee',
+    label: <GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} />,
+    value: note ? <span title={note}>{value}</span> : value,
+  };
+}
+
+/** A shield draws on the wallet's public STRK (D-094); every other counter on the pool balance. */
+function totalLabel(mode: BankMode): string {
+  return mode === 'shield' ? COPY.kit.totalFromWallet : COPY.kit.totalFromPool;
 }
 
 /**
@@ -554,46 +576,18 @@ function CommitBlock({
   const { summary } = flow;
   const busy = flow.name === 'submitting';
   const stake = reviewedStake(summary.intents);
-  // D-094: a shield's amount reaches the pool and the fee goes on top, so
-  // its review shows what leaves the wallet in the fee token.
-  const shieldOnly = summary.intents.length > 0 && summary.intents.every((intent) => intent.kind === 'shield');
   const pool = state.token ? { feeToken: state.token, feeAmount: summary.poolFee } : undefined;
-  const shielded = shieldOnly ? summary.intents.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n) : 0n;
-  const fromWallet = shieldOnly && pool ? shieldDeposits(summary.intents, pool).reduce((sum, deposit) => sum + deposit, 0n) : 0n;
 
   return (
     <div className="panel-review">
       <h3>{COPY.flow.review}</h3>
-      {stake ? (
-        <StakeFigures intent={stake} />
-      ) : (
-        <ul className="batch-list">
-          {summary.intents.map((intent, index) => (
-            <li key={`${intent.kind}-${index}`}>{describeIntent(intent)}</li>
-          ))}
-        </ul>
-      )}
-
       {/* Exact figures: this is the number being agreed to, not an ambient one. */}
-      {shieldOnly && pool ? (
-        <dl className="review-costs" data-review="shield">
-          <dt>{COPY.bank.youShield}</dt>
-          <dd>{formatStrkExact(shielded)}</dd>
-          <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-          <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-          <dt>{COPY.bank.totalFromWallet}</dt>
-          <dd>{formatStrkExact(fromWallet)}</dd>
-        </dl>
-      ) : (
-        <dl className="review-costs">
-          <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
-          <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-          <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
-          <dd>{formatStrkExact(summary.gasEstimate)}</dd>
-          <dt>{COPY.bank.total}</dt>
-          <dd>{formatStrkExact(summary.totalCost)}</dd>
-        </dl>
-      )}
+      {summary.intents.map((intent, index) => (
+        <div key={`${intent.kind}-${index}`} data-review={intent.kind}>
+          <AmountSummary {...reviewSummary(intent, summary.poolFee, summary.gasEstimate, index === 0)} label={COPY.flow.review} />
+        </div>
+      ))}
+      {stake ? <p className="stake-review-note">{COPY.stake.amountAtExecution}</p> : null}
 
       {/* How the product works, said at the moment it matters. Not a privacy disclosure (D-064). */}
       {stake ? <p className="stake-note">{COPY.stake.unstaking}</p> : null}
@@ -629,6 +623,55 @@ function CommitBlock({
 }
 
 /**
+ * One prepared action at the commit point, in the owner's order (D-103), in
+ * exact figures. The fees are the prepared batch's (counted once, on the
+ * first action): the pool fee, and a network cost only where the seam states
+ * one (the wallet prices its own, D-082). A stake's xSTRK is named and never
+ * numbered: nothing enforces a figure for it (D-063, D-041).
+ */
+function reviewSummary(intent: Intent, poolFee: bigint, gas: bigint, carriesFees: boolean): AmountSummaryProps {
+  const fees: DetailRow[] = carriesFees ? [poolFeeRow(formatStrkExact(poolFee), COPY.bank.poolFeeNote)] : [];
+  if (carriesFees && gas > 0n) {
+    fees.push({ id: 'network', label: <GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} />, value: formatStrkExact(gas) });
+  }
+  const costs = carriesFees ? poolFee + gas : 0n;
+  switch (intent.kind) {
+    case 'shield':
+      return {
+        entered: { label: COPY.bank.youShield, value: formatStrkExact(intent.amount) },
+        receive: { label: COPY.kit.youReceive, value: formatStrkExact(intent.amount) },
+        fees,
+        total: { label: COPY.kit.totalFromWallet, value: formatStrkExact(intent.amount + costs) },
+      };
+    case 'unshield':
+    case 'transfer':
+      return {
+        entered: { label: intent.kind === 'unshield' ? COPY.bank.youUnshield : COPY.bank.youSend, value: formatStrkExact(intent.amount) },
+        receive: {
+          label: intent.kind === 'unshield' ? COPY.kit.youReceive : COPY.kit.theyReceive,
+          value: formatStrkExact(intent.amount),
+          note: shortenAddress(intent.recipient),
+        },
+        fees,
+        total: { label: COPY.kit.totalFromPool, value: formatStrkExact(intent.amount + costs) },
+      };
+    case 'stake':
+      return {
+        entered: { label: COPY.stake.youStake, value: formatStrkExact(intent.amountIn) },
+        receive: {
+          label: <GlossaryTerm term={COPY.stake.youReceive} definition={COPY.glossary.xstrk} />,
+          value: <span className="stake-token">{COPY.stake.outputToken}</span>,
+        },
+        fees,
+        total: { label: COPY.kit.totalFromPool, value: formatStrkExact(intent.amountIn + costs) },
+      };
+    case 'swap':
+      // The Bank never composes a swap; described plainly if one is ever reviewed here.
+      return { entered: { label: describeIntent(intent), value: '' }, fees, total: null };
+  }
+}
+
+/**
  * The staking counter's own header (D-063): where the STRK comes from, where
  * the xSTRK lands, and that there is no way back out in the game yet.
  *
@@ -643,28 +686,5 @@ function StakeIntro() {
       <p className="panel-intro">{COPY.stake.intro}</p>
       <p className="stake-note">{COPY.stake.unstaking}</p>
     </div>
-  );
-}
-
-/**
- * STRK in and xSTRK out, at the commit point.
- *
- * STRK in is the exact amount being signed. xSTRK out is named and never
- * numbered: `PreparedBatch` carries no stake output figure, because the
- * ERC-4626 share amount is fixed only when the deposit executes (D-063), and
- * D-041/D-042 forbid reviewing a figure nothing enforces. Showing a rate here
- * would mean inventing one — the demo fake's fixed rate included.
- */
-function StakeFigures({ intent }: { intent: Extract<Intent, { kind: 'stake' }> }) {
-  return (
-    <>
-      <dl className="stake-review">
-        <dt>{COPY.stake.youStake}</dt>
-        <dd>{formatStrkExact(intent.amountIn)}</dd>
-        <dt><GlossaryTerm term={COPY.stake.youReceive} definition={COPY.glossary.xstrk} /></dt>
-        <dd><span className="stake-token">{COPY.stake.outputToken}</span></dd>
-      </dl>
-      <p className="stake-review-note">{COPY.stake.amountAtExecution}</p>
-    </>
   );
 }
