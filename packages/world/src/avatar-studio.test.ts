@@ -670,7 +670,7 @@ describe('hidden Avatar Studio', () => {
     );
   });
 
-  it('selects a cosy figure on contact and exits upward through the top opening', () => {
+  it('highlights a cosy figure in reach, puts it on only with E, and exits upward through the top opening (D-117)', () => {
     const events: Emitted[] = [];
     const out: Pick<EventBus<WorldEvents>, 'emit'> = {
       emit: (event, payload) => events.push({ event, payload } as Emitted),
@@ -685,8 +685,22 @@ describe('hidden Avatar Studio', () => {
     expect(events[0]).toEqual({ event: 'avatar-studio:entered', payload: {} });
 
     const figure = avatarStudioFigureAt(AVATAR_STUDIO_DEFINITION, 14, 6)!;
+    // Standing beside it, or on it, only highlights it and offers the prompt.
+    controller.update({ x: figure.x - 1, y: figure.y });
+    expect(controller.state.highlightedFigure).toBe(8);
     controller.update({ x: figure.x, y: figure.y });
+    expect(controller.state.selected).toBe('avatar-1');
+    expect(events.some((event) => event.event === 'avatar:selected')).toBe(false);
+    expect(controller.interaction()).toEqual({
+      figure: 8,
+      sprite: 'avatar-8',
+      rect: { x: figure.x, y: figure.y, width: 1, height: 1 },
+    });
+    expect(controller.activate()).toBe(true);
     expect(controller.state.selected).toBe('avatar-8');
+    // Already worn: no prompt, and E changes nothing.
+    expect(controller.interaction()).toBeNull();
+    expect(controller.activate()).toBe(false);
     expect(events.at(-1)).toEqual({
       event: 'avatar:selected',
       payload: { sprite: 'avatar-8' satisfies AvatarSpriteKey },
@@ -714,13 +728,14 @@ describe('hidden Avatar Studio', () => {
 
     controller.enter();
     controller.update({ x: 14, y: 6 });
+    expect(controller.activate()).toBe(false);
 
     expect(controller.state.inRoom).toBe(false);
     expect(selection.selected).toBe('avatar-1');
     expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
   });
 
-  it('does not let a reentrant figure update apply the outer stale selection', () => {
+  it('puts on the newer figure after a reentrant update moves the highlight (D-117)', () => {
     const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
     const selection = createAvatarOutfitSelection({ out });
     let controller!: ReturnType<typeof createAvatarStudioController>;
@@ -738,9 +753,11 @@ describe('hidden Avatar Studio', () => {
 
     controller.enter();
     controller.update({ x: 2, y: 3 });
+    expect(selection.selected).toBe('avatar-1');
+    expect(controller.state.highlightedFigure).toBe(2);
+    controller.activate();
 
     expect(selection.selected).toBe('avatar-2');
-    expect(controller.state.highlightedFigure).toBe(2);
   });
 
   it('does not publish after avatar selection destroys the controller', () => {
@@ -761,6 +778,7 @@ describe('hidden Avatar Studio', () => {
     controller.enter();
     snapshots.length = 0;
     controller.update({ x: 14, y: 6 });
+    controller.activate();
 
     expect(selection.selected).toBe('avatar-8');
     expect(controller.state.inRoom).toBe(false);
@@ -878,8 +896,9 @@ describe('hidden Avatar Studio', () => {
     controller.enter();
     expect(controller.state.selected).toBe('avatar-9');
 
-    // Figure contact writes through to the shared selection.
+    // E at a figure writes through to the shared selection.
     controller.update({ x: 2, y: 3 });
+    controller.activate();
     expect(selection.selected).toBe('avatar-1');
     expect(controller.state.selected).toBe('avatar-1');
     expect(events.at(-1)).toEqual({
@@ -887,9 +906,10 @@ describe('hidden Avatar Studio', () => {
       payload: { sprite: 'avatar-1' },
     });
 
-    // Standing on the same figure again is not a change and emits nothing.
+    // E at the same figure again is not a change and emits nothing.
     const settled = events.length;
     controller.update({ x: 2, y: 3 });
+    controller.activate();
     expect(events).toHaveLength(settled);
 
     // The selection outlives the Studio: leaving, and even destroying it,
@@ -1136,6 +1156,7 @@ describe('hidden Avatar Studio', () => {
 
     controller.enter();
     controller.update({ x: 14, y: 6 });
+    controller.activate();
     controller.update({ x: 8, y: 0 });
 
     expect(lifecycle.groundVisible).toBe(true);

@@ -24,11 +24,13 @@ import {
 import { PLAZA_AREA, PLAZA_NEARBY } from './map/plaza.js';
 import { createStreetMap, doorAt, isSolidAt, type DistrictMap } from './map/street.js';
 import {
+  BUNKER_ELEVATOR_PROMPT,
   BUNKER_ELEVATOR_STATION,
   BUNKER_ROOM_DEFINITION,
   FIXED_ROOM_DEFINITIONS,
   createFixedRoom,
   createFixedRoomController,
+  fixedRoomStationPresentations,
   fixedRoomStationAtApproach,
   isFixedRoomExit,
   isFixedRoomSolidAt,
@@ -294,6 +296,51 @@ describe('the hidden room (D-107)', () => {
     expect(input).not.toContain('suspend');
     expect(controller.state.controlOwner).toBe('world');
     expect(states.at(-1)?.stations[0]?.status).toBe('locked');
+    controller.destroy();
+  });
+
+  it('prompts "E · LIFT" at the lift; E shows "Out of order" and opens nothing, and stepping away takes it down (D-117)', () => {
+    const emitted: Array<keyof WorldEvents> = [];
+    const states: FixedRoomState[] = [];
+    const input: string[] = [];
+    const controller = createFixedRoomController({
+      definition: BUNKER_ROOM_DEFINITION,
+      out: { emit: (event) => void emitted.push(event) },
+      input: { suspend: () => void input.push('suspend'), resume: () => void input.push('resume') },
+      onChange: (state) => void states.push(state),
+    });
+    controller.enter();
+    const lift = room.stations[0]!;
+    const notice = (): boolean | undefined =>
+      fixedRoomStationPresentations(room, controller.state).find((station) => station.station === BUNKER_ELEVATOR_STATION)?.notice;
+    // Walking up only highlights it and offers the prompt; the notice stays down.
+    controller.update({ x: lift.x, y: lift.y + 1 });
+    expect(controller.state.highlightedStation).toBe(BUNKER_ELEVATOR_STATION);
+    expect(controller.state.noticeStation).toBeNull();
+    expect(notice()).toBe(false);
+    expect(controller.interaction()).toEqual({
+      station: BUNKER_ELEVATOR_STATION,
+      label: BUNKER_ELEVATOR_PROMPT,
+      rect: { x: lift.x, y: lift.y, width: lift.width, height: lift.height },
+    });
+    // E brings up "Out of order" in the prompt's place, and nothing else.
+    expect(controller.activate()).toBe(true);
+    expect(controller.state.noticeStation).toBe(BUNKER_ELEVATOR_STATION);
+    expect(notice()).toBe(true);
+    expect(controller.interaction()).toBeNull();
+    expect(controller.activate()).toBe(false);
+    expect(emitted).toEqual([]);
+    expect(input).not.toContain('suspend');
+    // A step along the doors keeps it up; stepping away takes it down.
+    controller.update({ x: lift.x + 1, y: lift.y + 1 });
+    expect(notice()).toBe(true);
+    controller.update({ x: room.spawn.x, y: room.spawn.y });
+    expect(controller.state.noticeStation).toBeNull();
+    expect(notice()).toBe(false);
+    // Back at the doors: the prompt again, not the notice.
+    controller.update({ x: lift.x, y: lift.y + 1 });
+    expect(notice()).toBe(false);
+    expect(controller.interaction()?.label).toBe(BUNKER_ELEVATOR_PROMPT);
     controller.destroy();
   });
 });

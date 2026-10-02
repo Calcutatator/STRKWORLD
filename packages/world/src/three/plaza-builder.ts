@@ -234,18 +234,14 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
     card.object.userData['plaza'] = 'card';
   }
 
-  // The E prompts: one per station, shown only while the player stands at it.
-  const prompts = new Map<StationId, { label: TextLabel; baseY: number }>();
+  // D-117: the E prompt is the World's shared one (three/interaction-prompt.ts),
+  // in this plaza's style; the plaza only says how high it floats over each
+  // station: over the monument's tip, or just above the table.
+  const promptHeights = new Map<StationId, number>();
   for (const station of PLAZA_STATIONS) {
     const piece = station.station === PLAZA_MONUMENT_STATION ? monumentPiece : tablePiece;
     if (!piece) continue;
-    const { cx, cz } = centreOf(piece);
-    const baseY = station.station === PLAZA_MONUMENT_STATION ? TIP_TOP + 0.25 : floor + 1.2;
-    const label = addLabel(labels.floating(`E · ${station.label}`, PLAZA_THEME.prompt), cx, baseY, cz);
-    label.object.visible = false;
-    label.object.userData['plaza'] = 'prompt';
-    label.object.userData['station'] = station.station;
-    prompts.set(station.station, { label, baseY });
+    promptHeights.set(station.station, station.station === PLAZA_MONUMENT_STATION ? TIP_TOP + 0.25 : floor + 1.2);
   }
 
   if (monumentMesh && monumentPiece) {
@@ -258,7 +254,6 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
 
   let stats: PlazaStatsPresentation = EMPTY_PLAZA_STATS;
   let heldIndex = 0;
-  let highlighted: StationId | null = null;
   // D-098: the total has its own shaft face, so the die's held face cycles
   // the top holdings alone, in the Shell's order (one holding sits still).
   const heldFrames = (): readonly string[] => stats.topHoldings ?? [];
@@ -281,9 +276,6 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
       heldIndex += 1;
       if (heldFrames().length > 1) drawHeld();
     }
-    for (const { label, baseY } of prompts.values()) {
-      if (label.object.visible) label.object.position.y = baseY + 0.05 * Math.sin((elapsed / 1000) * 3);
-    }
   });
 
   return Object.freeze({
@@ -292,12 +284,8 @@ export function buildPlaza(map: DistrictMap, labels: LabelFactory, res: Resource
       heldIndex = 0;
       draw();
     },
-    setHighlight(station: StationId | null): void {
-      highlighted = station;
-      for (const [id, { label, baseY }] of prompts) {
-        label.object.visible = id === highlighted;
-        label.object.position.y = baseY;
-      }
+    promptHeight(station: StationId): number | null {
+      return promptHeights.get(station) ?? null;
     },
   });
 }

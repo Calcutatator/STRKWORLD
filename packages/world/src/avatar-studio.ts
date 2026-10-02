@@ -65,8 +65,45 @@ export interface AvatarStudioState {
 export interface AvatarStudioController {
   readonly state: AvatarStudioState;
   enter(): void;
+  /**
+   * The player's Studio tile changed: the exit leaves at once (a
+   * transition); a figure in reach is only highlighted (D-117).
+   */
   update(tile: { x: number; y: number }): void;
+  /** D-117: E at the highlighted figure: wear its look. Returns whether the look changed. */
+  activate(): boolean;
+  /** D-117: the figure E would put on right now, or null (none in reach, or already worn). */
+  interaction(): AvatarStudioInteraction | null;
   destroy(): void;
+}
+
+/** D-117: the figure E would put on, for the World's interaction system. */
+export interface AvatarStudioInteraction {
+  readonly figure: number;
+  readonly sprite: AvatarSpriteKey;
+  /** Its tile, in Studio tiles. */
+  readonly rect: AvatarStudioRect;
+}
+
+/** D-117: the Studio's prompt, "E · WEAR". */
+export const AVATAR_STUDIO_PROMPT = 'WEAR';
+
+/**
+ * D-117: the figure within reach of a Studio tile: the one the player
+ * stands on, else one in the ring of tiles round it (the figures stand far
+ * enough apart that rings never meet).
+ */
+export function avatarStudioFigureInReach(
+  definition: AvatarStudioDefinition,
+  x: number,
+  y: number,
+): AvatarStudioFigure | null {
+  const on = avatarStudioFigureAt(definition, x, y);
+  if (on) return on;
+  return definition.figures.find((figure) => (
+    x >= figure.x - 1 && x < figure.x + figure.width + 1 &&
+    y >= figure.y - 1 && y < figure.y + figure.height + 1
+  )) ?? null;
 }
 
 export interface AvatarStudioControllerOptions {
@@ -544,12 +581,14 @@ export function createAvatarStudioController(
     },
     update(tile): void {
       if (destroyed || !inRoom) return;
-      const ownRevision = ++updateRevision;
+      // A newer update makes an in-flight selection's snapshot stale.
+      updateRevision += 1;
       if (isAvatarStudioExit(definition, tile.x, tile.y)) {
         leave();
         return;
       }
-      const figure = avatarStudioFigureAt(definition, tile.x, tile.y);
+      // D-117: a figure in reach is highlighted; E puts it on (`activate`).
+      const figure = avatarStudioFigureInReach(definition, tile.x, tile.y);
       const nextHighlight = figure?.figure ?? null;
       if (nextHighlight !== highlightedFigure) {
         const previousHighlight = highlightedFigure;
@@ -583,16 +622,29 @@ export function createAvatarStudioController(
           throw error;
         }
       }
-      // onChange delivery is synchronous and may destroy the Studio before
-      // this update resumes. It may also synchronously run a newer update;
-      // do not let this stale frame select or publish over that newer state.
-      if (destroyed || !inRoom || updateRevision !== ownRevision) return;
-      if (figure && options.selection.select(figure.sprite)) {
-        // Selection delivery is synchronous and can destroy or leave the
-        // Studio; do not publish a snapshot for a retired lifecycle.
-        if (destroyed || !inRoom || updateRevision !== ownRevision) return;
-        publish();
-      }
+    },
+    activate(): boolean {
+      if (destroyed || !inRoom) return false;
+      const figure = definition.figures.find((candidate) => candidate.figure === highlightedFigure);
+      if (!figure) return false;
+      const ownRevision = ++updateRevision;
+      if (!options.selection.select(figure.sprite)) return false;
+      // Selection delivery is synchronous and can destroy or leave the
+      // Studio, or move the player on; do not publish a snapshot for a
+      // retired lifecycle.
+      if (destroyed || !inRoom || updateRevision !== ownRevision) return true;
+      publish();
+      return true;
+    },
+    interaction(): AvatarStudioInteraction | null {
+      if (destroyed || !inRoom) return null;
+      const figure = definition.figures.find((candidate) => candidate.figure === highlightedFigure);
+      if (!figure || figure.sprite === options.selection.selected) return null;
+      return Object.freeze({
+        figure: figure.figure,
+        sprite: figure.sprite,
+        rect: Object.freeze({ x: figure.x, y: figure.y, width: figure.width, height: figure.height }),
+      });
     },
     destroy(): void {
       if (destroying || (destroyed && !destroyPending)) return;

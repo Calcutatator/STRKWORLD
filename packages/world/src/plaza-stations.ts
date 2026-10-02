@@ -4,10 +4,11 @@ import { isPlazaNearby, plazaStationAtApproach } from './map/plaza.js';
 /**
  * The Privacy Plaza's stations on the street (D-076), renderer-free.
  *
- * Fixed rooms open a counter when the player walks up to it (D-033). The
- * plaza is outdoors on a shared street, so walking past must not open
- * anything: the player walks up, then presses E. The handoff is the fixed
- * rooms' own, with the plaza as the building: the World suspends input before
+ * The plaza is outdoors on a shared street, so walking past must not open
+ * anything: the player walks up, then presses E. D-117 made that every
+ * station's rule (the session's interaction system offers the highlighted
+ * station here and calls `activate`). The handoff is the fixed rooms' own,
+ * with the plaza as the building: the World suspends input before
  * it emits `station:activated`, the Shell claims the controls with
  * `world:control-owner` while that event is delivered, and hands them back
  * the same way when its window closes. If the Shell does not claim them, the

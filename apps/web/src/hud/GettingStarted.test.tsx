@@ -40,14 +40,21 @@ describe('Getting started card', () => {
     expect(camera).not.toContain('addEventListener');
     expect(camera).not.toMatch(/'(wheel|pointerdown|pointermove)'/);
 
-    // E belongs to the sandbox, the Privacy Plaza (D-076) and the football
-    // pitch (D-078) on the street; F follows the avatar everywhere.
+    // D-117: E is interact: one key for every station (the counters, the
+    // Privacy Plaza, the Studio's outfits), then the sandbox and the football
+    // pitch; F follows the avatar everywhere.
     const session = source('../../../../packages/world/src/world-session.ts');
-    expect(session).toContain("if (this.inputGate.suspended || this.area !== 'street') return;");
-    expect(session).toContain('this.plaza?.activate();');
+    expect(session).toContain("keyboard.on('keydown-E', onKey);");
+    expect(session).toContain('activate: () => controller.activate(),');
+    expect(session).toContain('activate: () => this.plaza?.activate(),');
+    expect(session).toContain('activate: () => studio.activate(),');
     expect(session).toContain('channel.kick();');
-    expect(COPY.guide.controls.find(({ input }) => input === 'E')?.effect).toMatch(/Privacy Plaza/);
-    expect(COPY.guide.controls.find(({ input }) => input === 'E')?.effect).toContain('E · KICK');
+    const e = COPY.guide.controls.find(({ input }) => input === 'E')?.effect;
+    expect(e).toMatch(/Privacy Plaza/);
+    expect(e).toMatch(/counter/);
+    expect(e).toMatch(/touch screen/);
+    expect(e).toContain('E · KICK');
+    expect(COPY.guide.buildings).toContain('press E');
 
     // Escape closes a counter or Menu Mode (React owns it, not the World).
     const visits = source('../visits/VisitLayer.tsx');
