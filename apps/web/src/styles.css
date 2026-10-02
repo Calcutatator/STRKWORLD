@@ -27,9 +27,17 @@
  * The Exchange's degen counter carries `data-brand="degen"` the same way: the
  * avnu window, louder, in neon pink and cyan on navy (D-067).
  *
- * This file loads no fonts. The game's theme below uses system stacks; the
- * brand's three faces (D-113) are self-hosted by brand/brand.css, and only
- * the title screen wears them so far.
+ * Type (D-119, from the brand guide in docs/brand/README.md, D-113). The
+ * game's own theme sets STRKWORLD's three pixel faces: Jersey 15 for
+ * headings, VT323 for body copy and every figure, Silkscreen for buttons, tabs
+ * and labels. This file loads no fonts itself: the faces are self-hosted by
+ * brand/brand.css (D-115), so the only font requests go to this origin. The
+ * pixel faces draw small for their size, so the game theme normalises them
+ * with `font-size-adjust` (`--ui-type-adjust`) and keeps every rem size below
+ * as it was. The title screen sizes its own type and switches the adjustment
+ * off. The partner themes keep their own faces as system stacks that load
+ * nothing; they approximate their brands' faces and never ship them, and they
+ * switch the adjustment off too.
  *
  * Disclosures, warnings and the ConfirmGate are never smaller, fainter or less
  * prominent than body copy (D-024). Every text pair here was checked against
@@ -39,16 +47,30 @@
 :root {
   color-scheme: dark;
 
-  /* Type */
-  --ui-font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Type (D-119): Jersey 15 headings, VT323 body and figures, Silkscreen
+   * buttons, tabs and labels, from the brand's tokens (brand/brand.css). Each
+   * stack ends in a plain monospace. */
+  --ui-font: var(--brand-font-body);
   --ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --ui-heading-font: var(--ui-font);
+  --ui-heading-font: var(--brand-font-headline);
+  /* Amounts stay in VT323, not `--brand-font-numeric` (Jersey 15): VT323 is
+   * monospaced, so columns align, its 1/l/I, 5/S, 8/B and 6/b are distinct
+   * and the decimal point gets a full cell. Jersey 15's 8/B, 6/8 and 1/l
+   * merge at the sizes the windows use. */
   --ui-number-font: var(--ui-font);
-  --ui-btn-font: var(--ui-font);
+  --ui-btn-font: var(--brand-font-menu);
+  --ui-label-font: var(--ui-btn-font);
+  /* The pixel faces draw small for their size. This sets each face's cap
+   * height to 0.73 of the font size: VT323 and Jersey 15 (caps 0.56) draw
+   * 1.3x, so 1rem of body copy is about 21 px, and Silkscreen (caps 0.70)
+   * 1.04x, so a 0.95rem button lands on its own 16 px grid. Cap height, not
+   * x-height: Silkscreen is all caps, and on x-height it would shrink. */
+  --ui-type-adjust: cap-height 0.73;
   --ui-heading-size: 1.4rem;
-  --ui-heading-weight: 800;
+  /* Jersey 15 and VT323 have one weight; asking for more would smear them. */
+  --ui-heading-weight: 400;
   --ui-heading-case: none;
-  --ui-heading-tracking: -0.01em;
+  --ui-heading-tracking: 0.01em;
 
   /* Surfaces */
   --ui-page: #1a1411;
@@ -94,7 +116,8 @@
   --ui-btn-size: 0.95rem;
   --ui-btn-weight: 700;
   --ui-btn-case: none;
-  --ui-btn-tracking: 0.005em;
+  /* Silkscreen caps, slightly spaced (the brand guide). */
+  --ui-btn-tracking: 0.04em;
   --ui-btn-pad: 0.55rem 1.1rem;
   --ui-btn-bg: linear-gradient(#45382d, #392d25);
   --ui-btn-bg-hover: linear-gradient(#4f4135, #42352b);
@@ -143,6 +166,7 @@ body {
   background: radial-gradient(120% 90% at 50% 30%, #30231a 0%, var(--ui-page) 62%) var(--ui-page);
   color: var(--ui-text);
   font-family: var(--ui-font);
+  font-size-adjust: var(--ui-type-adjust);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -366,6 +390,7 @@ body {
   background: var(--ui-scrim);
   color: var(--ui-text);
   font-family: var(--ui-font);
+  font-size-adjust: var(--ui-type-adjust);
   line-height: 1.45;
   animation: ui-fade-in 160ms ease-out;
 }
@@ -825,6 +850,7 @@ body {
 .bridge-status-label {
   margin-right: 0.35rem;
   color: var(--ui-text-dim);
+  font-family: var(--ui-label-font);
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -970,6 +996,7 @@ body {
   display: grid;
   gap: 0.35rem;
   color: var(--ui-text-dim);
+  font-family: var(--ui-label-font);
   font-size: 0.92rem;
   font-weight: 600;
 }
@@ -986,6 +1013,8 @@ body {
   background-color: var(--ui-surface-sunken);
   color: var(--ui-text);
   font: inherit;
+  /* A field sits inside its label, whose face is the label's (D-119). */
+  font-family: var(--ui-font);
   font-size: 1rem;
   font-weight: 500;
   transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -1264,6 +1293,10 @@ button[data-locked="true"] {
   --ui-heading-font: var(--brand-font-headline);
   --ui-number-font: var(--brand-font-numeric);
   --ui-btn-font: var(--brand-font-menu);
+  /* It sizes its own type (D-115), so the game theme's adjustment and label
+   * face (D-119) stay off here. */
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-weight: 400;
   --ui-heading-case: none;
   --ui-heading-tracking: 0.01em;
@@ -1325,6 +1358,7 @@ button[data-locked="true"] {
   color: var(--ui-text);
   font-family: var(--brand-font-body);
   font-size: var(--brand-body-size);
+  font-size-adjust: var(--ui-type-adjust);
   line-height: var(--brand-body-leading);
 }
 
@@ -1536,6 +1570,8 @@ button[data-locked="true"] {
   --ui-heading-font: "Arial Black", "Helvetica Neue", Arial, sans-serif;
   --ui-number-font: var(--ui-heading-font);
   --ui-btn-font: var(--ui-font-mono);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.55rem;
   --ui-heading-weight: 900;
   --ui-heading-case: uppercase;
@@ -1636,6 +1672,8 @@ button[data-locked="true"] {
   --ui-heading-font: var(--ui-font);
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.4rem;
   --ui-heading-weight: 600;
   --ui-heading-case: none;
@@ -1738,6 +1776,8 @@ button[data-locked="true"] {
   --ui-heading-font: var(--ui-font);
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.4rem;
   --ui-heading-weight: 800;
   --ui-heading-case: none;
@@ -2025,6 +2065,8 @@ button[data-locked="true"] {
   --ui-heading-font: var(--ui-font);
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font-mono);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.4rem;
   --ui-heading-weight: 400;
   --ui-heading-case: none;
@@ -2189,6 +2231,8 @@ button[data-locked="true"] {
   --ui-heading-font: var(--ui-font);
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.4rem;
   --ui-heading-weight: 700;
   --ui-heading-case: none;
@@ -2415,6 +2459,8 @@ button[data-locked="true"] {
   --ui-heading-font: "Base Neue", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --ui-number-font: var(--ui-font);
   --ui-btn-font: var(--ui-font);
+  --ui-label-font: var(--ui-font);
+  --ui-type-adjust: none;
   --ui-heading-size: 1.35rem;
   --ui-heading-weight: 600;
   --ui-heading-case: none;
@@ -3129,6 +3175,7 @@ button[data-locked="true"] {
 
 .journey-hud-balance > .journey-hud-label {
   color: var(--ui-text-dim);
+  font-family: var(--ui-label-font);
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -3259,6 +3306,7 @@ button[data-locked="true"] {
 .journey-guide h3 {
   margin-top: 0.35rem;
   color: var(--ui-text-dim);
+  font-family: var(--ui-label-font);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -3707,6 +3755,7 @@ button[data-locked="true"] {
   position: absolute;
   inset: auto 0 -1.35rem;
   color: var(--ui-text-dim);
+  font-family: var(--ui-label-font);
   font-size: 0.78rem;
   font-weight: 700;
 }
