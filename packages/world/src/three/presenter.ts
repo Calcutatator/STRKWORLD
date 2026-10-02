@@ -261,6 +261,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
    * adds no lift: the pose plays on, and the feet land on the block.
    */
   let jumpClimbed = false;
+  /**
+   * D-106 (amended with D-097's block-high jump): how far the ground rose
+   * under this jump when it climbed with the feet already above the block
+   * top. The arc carries on from where it had the feet, measured from the
+   * new ground, so the hang is kept and the figure lands on the block.
+   */
+  let jumpRaise = 0;
   let targetYaw = 0;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -309,6 +316,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     jumpElapsed = null;
     lift = 0;
     jumpClimbed = false;
+    jumpRaise = 0;
     jumpShadow.place(0, 0, 0, 0);
   };
 
@@ -437,6 +445,17 @@ export function createPresenter(options: PresenterOptions): Presenter {
             // Re-plan from wherever the feet are now, so they never jump.
             // D-106: a climb mid-jump hops on from the top of the arc.
             const from = jumpElapsed !== null && lift > 0 ? elevationShown + lift : elevationShown;
+            if (from >= next && next - elevationShown <= MAX_HOP_RISE) {
+              // The arc already has the feet above the block: no hop. The
+              // ground rises under the jump and the arc lands on the block.
+              jumpRaise += next - elevationShown;
+              lift = from - next;
+              elevationShown = next;
+              elevationTarget = next;
+              hop = null;
+              fallSpeed = 0;
+              return;
+            }
             hop = next - elevationShown <= MAX_HOP_RISE ? { from, to: next, elapsed: 0 } : null;
             if (!hop) elevationShown = next;
             if (hop && from !== elevationShown) {
@@ -506,6 +525,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
           jumpSquash = !reduced;
           jumpElapsed = 0;
           jumpClimbed = false;
+          jumpRaise = 0;
         },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;
@@ -562,10 +582,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
       if (jumpElapsed !== null) {
         jumpElapsed += dt;
         pose = jumpPose(jumpElapsed, jumpSquash);
-        lift = jumpClimbed ? 0 : jumpLift(jumpElapsed, jumpHeight);
+        lift = jumpClimbed ? 0 : Math.max(0, jumpLift(jumpElapsed, jumpHeight) - jumpRaise);
         if (jumpElapsed >= JUMP_TOTAL_MS) {
           jumpElapsed = null;
           jumpClimbed = false;
+          jumpRaise = 0;
           lift = 0;
         }
       }

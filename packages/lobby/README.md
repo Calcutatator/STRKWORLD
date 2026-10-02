@@ -273,9 +273,10 @@ pitch square or faster than the rules allow, a score past 5 or a phase byte
 the rules do not have is no ball at all.
 
 - **`jump()`** (D-097) sends `jump` with no payload. The room bumps the
-  sender's own `jumps` byte (it wraps at 256) at most once per 400 ms
-  (`JUMP_MIN_INTERVAL_MS`, strict), on the street or the roof only; the
-  client holds itself to 450 ms (`JUMP_CLIENT_INTERVAL_MS`) and sends
+  sender's own `jumps` byte (it wraps at 256) at most once per 800 ms
+  (`JUMP_MIN_INTERVAL_MS`, strict: the jump's whole air time, the shared
+  `JUMP_AIR_MS`), on the street or the roof only; the client holds itself
+  to 850 ms (`JUMP_CLIENT_INTERVAL_MS`) and sends
   nothing while suspended or in the Studio. The counter rides the presence
   entry, so only observers whose view already holds the jumper (same area,
   inside the interest radius) are told: 4 bytes in one patch.
@@ -360,10 +361,10 @@ nothing.
 - **Jump to climb (D-106).** On the street, a move whose body (the shared
   `PLAYER_BODY_SIZE` square, measured as the World measures it) stands
   higher than at the held position is a step up. It is accepted only if it
-  rises one block (`SANDBOX_STEP_HEIGHT`), within `CLIMB_WINDOW_MS` (650 ms)
-  of the session's last accepted `jump`, and that jump has not climbed yet;
-  the climb is spent only once the move is written, so a throttled one is
-  resent. Anything else is `refused`: the position stays, and the room sends
+  rises one block (`SANDBOX_STEP_HEIGHT`), within `CLIMB_WINDOW_MS` (950 ms:
+  the 800 ms air time plus 150 ms of latency) of the session's last accepted
+  `jump`, and that jump has not climbed yet; the climb is spent only once
+  the move is written, so a throttled one is resent. Anything else is `refused`: the position stays, and the room sends
   that client alone `resync` with the held position, at most once per
   `RESYNC_MIN_INTERVAL_MS` (250 ms). Level ground and stepping down are
   unchanged. The window is server-side only and is dropped on suspend, a

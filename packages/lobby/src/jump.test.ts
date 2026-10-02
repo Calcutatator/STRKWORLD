@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Encoder, Metadata, StateView } from '@colyseus/schema';
-import { ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID, type GameId } from '@strkworld/shared';
+import { JUMP_AIR_MS, ROOF_PRESENCE_GRID, STUDIO_PRESENCE_GRID, type GameId } from '@strkworld/shared';
 import { JUMP_CLIENT_INTERVAL_MS, JUMP_MIN_INTERVAL_MS, MAX_MESSAGES_PER_SECOND, MESSAGE } from './config';
 import { LobbyPresence } from './presence';
 import { PresenceEntry } from './state';
@@ -28,8 +28,12 @@ const jumpsOf = (registry: LobbyPresence, id: GameId) => registry.peers.get(id)?
 describe('the jump message (D-097)', () => {
   it('is one payload-free verb with a strict server floor under the client\'s', () => {
     expect(MESSAGE.jump).toBe('jump');
-    expect(JUMP_MIN_INTERVAL_MS).toBe(400);
+    // D-097, amended: the floor is the whole air time, so two accepted jumps never overlap.
+    expect(JUMP_MIN_INTERVAL_MS).toBe(JUMP_AIR_MS);
+    expect(JUMP_MIN_INTERVAL_MS).toBeGreaterThanOrEqual(750);
     expect(JUMP_CLIENT_INTERVAL_MS).toBeGreaterThan(JUMP_MIN_INTERVAL_MS);
+    // The World's own cycle (air plus its 150 ms cooldown) sits above the client floor.
+    expect(JUMP_CLIENT_INTERVAL_MS).toBeLessThanOrEqual(JUMP_AIR_MS + 150);
     // Moves (20/s), sandbox actions (5/s), kicks (3.3/s) and jumps together
     // stay under the disconnecting ceiling.
     expect(20 + 5 + 1000 / 300 + 1000 / JUMP_CLIENT_INTERVAL_MS).toBeLessThan(MAX_MESSAGES_PER_SECOND);
@@ -55,7 +59,7 @@ describe('the jump message (D-097)', () => {
     expect(jumpsOf(registry, a)).toBe(0);
   });
 
-  it('rate-limits strictly: at most one jump per 400 ms per session, each session its own', () => {
+  it('rate-limits strictly: at most one jump per air time (800 ms) per session, each session its own', () => {
     const registry = new LobbyPresence();
     const a = join(registry, 'a', { x: 100, y: 100 });
     join(registry, 'b', { x: 140, y: 100 });
