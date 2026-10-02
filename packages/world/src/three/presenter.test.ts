@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, InstancedMesh, Mesh, Vector3, type Material } from 'three';
+import { Color, Group, InstancedMesh, Mesh, SRGBColorSpace, Vector3, type Material } from 'three';
 import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
@@ -16,7 +16,7 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
-import { affordanceClock } from './affordance.js';
+import { AFFORDANCE_EMBER, affordanceClock } from './affordance.js';
 import { BoxGeometry, MeshBasicMaterial, ShaderMaterial } from 'three';
 import { createRemotePeerSource } from '../remote-peer.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
@@ -753,7 +753,23 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
       mesh,
       glow: (id: string) => levels[ids.indexOf(id) * 2 + 1],
       usable: (id: string) => levels[ids.indexOf(id) * 2],
+      /** The colour `id` shimmers in, read off the baked `aTint` attribute. */
+      tint: (id: string) => {
+        const slot = ids.indexOf(id);
+        const slots = mesh.geometry.getAttribute('aSlot');
+        const tints = mesh.geometry.getAttribute('aTint');
+        for (let i = 0; i < slots.count; i++) {
+          if (slots.getX(i) === slot) return new Color(tints.getX(i), tints.getY(i), tints.getZ(i));
+        }
+        throw new Error(`no shimmer tint for ${id}`);
+      },
     };
+  };
+  /** A tint as hue, saturation and lightness, the way the eye reads it. */
+  const readHSL = (color: Color): { h: number; s: number; l: number } => {
+    const out = { h: 0, s: 0, l: 0 };
+    color.getHSL(out, SRGBColorSpace);
+    return out;
   };
   const bank = (status: (station: string) => 'available' | 'locked' = () => 'available') => {
     const world = setup();
@@ -811,6 +827,44 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
     world.view.setInteractionPrompt(SHIELD);
     world.presenter.update(250);
     expect(room.glow('bank:shielding')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('shimmers each counter in its own colours: STRK20 warm, Endur mint, and never black', () => {
+    const world = bank();
+    const { room } = world;
+    const strk20 = readHSL(room.tint('bank:shielding'));
+    const endur = readHSL(room.tint('bank:staking'));
+    // The STRK20 counters are gold-trimmed black: a warm tint, not a grey one.
+    expect(strk20.h * 360).toBeGreaterThan(15);
+    expect(strk20.h * 360).toBeLessThan(55);
+    // Endur's counter is mint and white: a green one.
+    expect(endur.h * 360).toBeGreaterThan(120);
+    expect(endur.h * 360).toBeLessThan(200);
+    // Both lit enough to see, and the two rows do not share a colour.
+    for (const tint of [strk20, endur]) expect(tint.l).toBeGreaterThan(0.5);
+    expect(Math.abs(strk20.h - endur.h)).toBeGreaterThan(0.1);
+    // The pair on each brand's row share theirs, as they share their desk.
+    expect(room.tint('bank:unshielding').getHex()).toBe(room.tint('bank:shielding').getHex());
+    expect(room.tint('bank:unstaking').getHex()).toBe(room.tint('bank:staking').getHex());
+    // The edge glow stays brand ember, whatever the counter shimmers.
+    const uColor = (room.mesh.material as ShaderMaterial).uniforms['uColor']!.value as Color;
+    expect(uColor.getHex()).toBe(AFFORDANCE_EMBER);
+    expect(room.tint('bank:shielding').getHex()).not.toBe(AFFORDANCE_EMBER);
+    world.presenter.dispose();
+  });
+
+  it('shimmers the plaza\'s monument and its table in their own colours, not one ember', () => {
+    const world = setup();
+    const plaza = shells(world.parent, 'plaza:affordances');
+    const monument = readHSL(plaza.tint('plaza:monument'));
+    const table = readHSL(plaza.tint('plaza:shells'));
+    for (const tint of [monument, table]) {
+      // Daylit stone and wood: warm, and lifted well clear of black.
+      expect(tint.l).toBeGreaterThan(0.5);
+      expect(tint.s).toBeGreaterThan(0.1);
+    }
+    expect(plaza.tint('plaza:monument').getHex()).not.toBe(plaza.tint('plaza:shells').getHex());
     world.presenter.dispose();
   });
 

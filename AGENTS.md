@@ -13730,6 +13730,52 @@ the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
 
+### An additive brightness breathe under ~10% is invisible in this game
+
+The D-123 shimmer pulsed each usable station's surfaces between 3% and 9%
+additive ember over 2.5 s. On the Bank's near-black STRK20 counters that is
+below the eye's threshold at play distance — the lead's report was "I can't
+tell it on anything" — and the renders agree: the counters are
+indistinguishable from the locked ones. Two fixes, both needed:
+
+1. **Give the eye an edge to catch.** A band of light gliding along the thing
+   reads at a fraction of the energy a whole-surface brightening needs,
+   because motion with a boundary is what the periphery picks up. The band
+   has to be narrow: at a half-width of 0.26 of the object it reads as the
+   whole object brightening, at 0.18 it reads as a sweep.
+2. **Raise the floor.** 12-20% base plus a 45% crest is the point where the
+   dark interiors read clearly and the already-light surfaces (the Bank's
+   cream counter tops, the Vault's white desks) do not wash out. At a 55%
+   crest the Bank's wood panels lose their grain.
+
+Daylight is the hard case, not darkness: outdoors (the plaza, the arena) an
+additive cue competes with the sun, and the arena's ring gate is wood against
+sand, so a *colour-matched* tint on it is nearly the colour behind it. That
+is an inherent cost of colour-matching and is not worth fixing by shouting.
+
+*Verified:* headless-Chrome WebGL renders of the Bank, the Degen floor, the
+plaza, the Studio and the arena at several points in the cycle, against the
+same scenes with every station locked (shimmer off) and against the pre-change
+shader built from `HEAD` — `scratchpad/renders/shimmer-*.png`, 2026-10-02.
+
+### Derive a "dominant colour" from chroma, never from HSL saturation
+
+Picking each station's shimmer tint from its own paint needs a score that
+prefers what the eye notices. Weighting a colour's area by its HSL
+*saturation* picks the wrong thing every time on a voxel city: `#3b1b1b` (the
+Bank's desk, which reads black) has saturation 0.37, so the counter's dark
+bulk out-voted its own gold trim and the lifted result was a dusty rose with
+no relation to the counter. Chroma (max channel minus min, i.e.
+`2 * s * min(l, 1 - l)`) calls that same colour 0.13 and the gold 0.48, which
+is what the eye does. The shipped score is
+`area * (0.06 + chroma) * (0.15 + lightness + chroma / 2)`, with the result
+lifted to a fixed lightness so every station reads at one strength and no
+near-black station gets an invisible tint.
+
+*Verified:* dumping the per-station colour tallies while building every real
+room, the plaza, the Studio and the arena gate (a scratch vitest probe,
+2026-10-02); both scoring functions compared on the same tallies.
+
 ### The engine's fog makes distant scenery impossible; bake your own haze
 
 `scene.fog` is linear in view depth and its range moves with the player's
