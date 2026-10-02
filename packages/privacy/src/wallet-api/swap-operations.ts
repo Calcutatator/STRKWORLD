@@ -260,6 +260,11 @@ export class ShadowSwap {
   ledgerCommitment(): Promise<string> {
     return this.identity.fullCommitment();
   }
+
+  /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
+  ledgerPartial(): Promise<string> {
+    return this.identity.partial();
+  }
 }
 
 function ownConfirmOptions(options: unknown): {

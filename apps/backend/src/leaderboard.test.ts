@@ -20,6 +20,7 @@ import {
   LeaderboardStore,
   MAX_LEADERBOARD_RECEIPTS,
   leaderboardEntryKey,
+  leaderboardFeatureKey,
   receiptCommitment,
   type LeaderboardRpcPort,
 } from './leaderboard.js';
@@ -299,6 +300,10 @@ describe('behind BACKEND_LEADERBOARD_ENABLED', () => {
       .toEqual({ ledger: LEDGER, storePath: null });
     expect(parseBackendEnvironment({ ...base, BACKEND_LEADERBOARD_ENABLED: 'true', BACKEND_LEADERBOARD_LEDGER: LEDGER, BACKEND_LEADERBOARD_FILE: '/data/lb.json' }).backend.leaderboard)
       .toEqual({ ledger: LEDGER, storePath: '/data/lb.json' });
+    expect(parseBackendEnvironment({ ...base, BACKEND_LEADERBOARD_ENABLED: 'true', BACKEND_LEADERBOARD_LEDGER: LEDGER, BACKEND_LEADERBOARD_RANK_DEFI: 'true' }).backend.leaderboard)
+      .toEqual({ ledger: LEDGER, storePath: null, rankDefi: true });
+    expect(parseBackendEnvironment({ ...base, BACKEND_LEADERBOARD_ENABLED: 'true', BACKEND_LEADERBOARD_LEDGER: LEDGER, BACKEND_LEADERBOARD_RANK_DEFI: 'false' }).backend.leaderboard)
+      .toEqual({ ledger: LEDGER, storePath: null });
     expect(() => parseBackendEnvironment({ ...base, BACKEND_LEADERBOARD_ENABLED: 'true' })).toThrow('BACKEND_LEADERBOARD_LEDGER');
     expect(() => parseBackendEnvironment({ ...base, BACKEND_LEADERBOARD_ENABLED: 'true', BACKEND_LEADERBOARD_LEDGER: LEDGER, BACKEND_LEADERBOARD_FILE: 'lb.json' }))
       .toThrow('Invalid BACKEND_LEADERBOARD_FILE.');
@@ -372,5 +377,71 @@ describe('the RPC reads, pinned', () => {
     await expect(rpc.getLeaderboardCounts(LEDGER, ['0xc1', '0xc2', '0xc3'])).resolves.toEqual([3n, null, null]);
     expect(requests.map((request) => (request.params[0] as { contract_address: string; entry_point_selector: string }).contract_address)).toEqual([LEDGER, LEDGER, LEDGER]);
     expect((requests[0]!.params[0] as { entry_point_selector: string }).entry_point_selector).toBe(COUNT_OF_SELECTOR);
+  });
+});
+
+describe('ranking DeFi behind BACKEND_LEADERBOARD_RANK_DEFI (off by default)', () => {
+  const VAULT = '0x5f2e1d';
+  const SWAP = '0x5aa9';
+  const withFeatures = (partialCommitment: string, featurePartials: string[], client = 'c0'): ApiRequest => ({
+    method: 'POST', path: LB_CHECK_IN_PATH, body: { v: 1, season: 's1', partialCommitment, featurePartials }, client,
+  });
+  const ranked = (rpc: LeaderboardRpcPort, store = new LeaderboardStore(null)) =>
+    new LeaderboardService({ config: { ledger: LEDGER, storePath: null, rankDefi: true }, rpc, store, now: () => NOW });
+
+  it('off: refuses feature partials and says nothing of DeFi in the histogram', async () => {
+    const lb = service(chain({ [P]: [0] }).rpc);
+    await expect(lb.handle(withFeatures(P, [VAULT]), signal())).rejects.toMatchObject({ status: 400 });
+    expect(await lb.handle({ method: 'GET', path: LB_HISTOGRAM_PATH, body: undefined }, signal())).toEqual({ status: 200, body: { season: 's1', total: 0, buckets: [] } });
+  });
+
+  it('on: counts the feature shadows\' ticks into the ranked number, and says so in the histogram', async () => {
+    const { rpc } = chain({ [P]: [0, 1] }, { [receiptCommitment(VAULT, 0)]: 3n, [receiptCommitment(SWAP, 0)]: 0n });
+    const store = new LeaderboardStore(null);
+    const lb = ranked(rpc, store);
+    await expect(lb.handle(withFeatures(P, [VAULT, SWAP]), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+    const histogram = await lb.handle({ method: 'GET', path: LB_HISTOGRAM_PATH, body: undefined }, signal());
+    expect(histogram.body).toEqual({ season: 's1', total: 1, buckets: [{ count: 5, players: 1 }], rankDefi: true });
+    // p alone still works.
+    await expect(lb.handle(checkIn(P), signal())).resolves.toEqual({ status: 200, body: { count: '2' } });
+  });
+
+  it('credits one feature shadow to one entry per season: a second account cannot borrow its ticks', async () => {
+    const OTHER = '0xabc123';
+    const { rpc } = chain({ [P]: [0], [OTHER]: [0] }, { [receiptCommitment(VAULT, 0)]: 4n });
+    const store = new LeaderboardStore(null);
+    const lb = ranked(rpc, store);
+    await expect(lb.handle(withFeatures(P, [VAULT]), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+    await expect(lb.handle(withFeatures(OTHER, [VAULT], 'c1'), signal())).resolves.toEqual({ status: 200, body: { count: '1' } });
+    // The first entry keeps its credit on a refresh.
+    await expect(lb.handle(withFeatures(P, [VAULT], 'c2'), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+    expect(store.claimFeature('s1', leaderboardFeatureKey('s1', VAULT), leaderboardEntryKey('s1', OTHER))).toBe(false);
+  });
+
+  it('refuses a repeated partial, p among the features, or more than four', async () => {
+    const lb = ranked(chain({ [P]: [0] }).rpc);
+    for (const features of [[VAULT, VAULT], [P], ['0x1', '0x2', '0x3', '0x4', '0x5'], ['0x0']]) {
+      await expect(lb.handle(withFeatures(P, features, `x${features.length}`), signal())).rejects.toMatchObject({ status: 400 });
+    }
+  });
+
+  it('writes claims as hashes only, and reads them back', async () => {
+    const { mkdtemp: temp } = await import('node:fs/promises');
+    const dir = await temp(join(tmpdir(), 'strkworld-lb-'));
+    try {
+      const path = join(dir, 'leaderboard.json');
+      const store = new LeaderboardStore(path);
+      await ranked(chain({ [P]: [0] }, { [receiptCommitment(VAULT, 0)]: 2n }).rpc, store).handle(withFeatures(P, [VAULT]), signal());
+      await store.flushed();
+      const text = await readFile(path, 'utf8');
+      expect(JSON.parse(text).claims).toEqual({ s1: { [leaderboardFeatureKey('s1', VAULT)]: leaderboardEntryKey('s1', P) } });
+      expect(text).not.toContain(BigInt(VAULT).toString(16));
+      expect(text).not.toContain(BigInt(P).toString(16));
+      const again = new LeaderboardStore(path);
+      await again.load();
+      expect(again.claimFeature('s1', leaderboardFeatureKey('s1', VAULT), leaderboardEntryKey('s1', '0x999'))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

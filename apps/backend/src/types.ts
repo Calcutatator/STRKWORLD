@@ -62,6 +62,8 @@ export interface BackendConfig {
     readonly ledger: string;
     /** `BACKEND_LEADERBOARD_FILE`: a JSON file on a volume, or null for memory only. */
     readonly storePath: string | null;
+    /** `BACKEND_LEADERBOARD_RANK_DEFI`: also rank DeFi ticks, from the feature partials (D-122). Off unless true. */
+    readonly rankDefi?: boolean;
   };
 }
 

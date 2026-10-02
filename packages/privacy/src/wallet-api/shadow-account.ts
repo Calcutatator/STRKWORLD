@@ -133,6 +133,15 @@ export class ShadowAccountResolver {
     return shadowCommitment(partial, this.nonce);
   }
 
+  /**
+   * The partial commitment itself, for the placement check only when the
+   * tally ranks DeFi (`rankDefi`): it proves this account owns the feature
+   * shadow, which its public commitment alone would not. Cached like the rest.
+   */
+  partial(): Promise<string> {
+    return this.partialCommitment(undefined);
+  }
+
   private partialCommitment(onStage: VaultStageCallback | undefined): Promise<string> {
     if (this.commitment) return this.commitment;
     const request = (async () => {

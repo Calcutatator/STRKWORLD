@@ -55,7 +55,8 @@ export function placementView(check: PlacementCheck, previous: PlacementRecord |
     season: check.season,
     count,
     ranked: check.ranked,
-    defiOnly: check.defi,
+    // Ranked DeFi (the tally's opt-in) leaves nothing counted on the device alone.
+    defiOnly: check.rankDefi ? 0 : check.defi,
     placement: check.placement,
     ranking: check.histogram !== null,
     progress: placementProgress(previous, { placement: check.placement, count, season: check.season }),

@@ -93,8 +93,14 @@ export interface LeaderboardReadClient {
    * anonymous entry. The backend recounts the receipts on-chain, keeps only
    * a hash of `p` and the count, and answers the count it verified.
    */
-  leaderboardCheckIn(season: string, partialCommitment: string, signal?: AbortSignal): Promise<{ readonly count: bigint }>;
-  /** The season's anonymous histogram: counts only. */
+  leaderboardCheckIn(
+    season: string,
+    partialCommitment: string,
+    signal?: AbortSignal,
+    /** Only when the tally ranks DeFi (`rankDefi`): the four feature partials, proof of owning those shadows. */
+    featurePartials?: readonly string[],
+  ): Promise<{ readonly count: bigint }>;
+  /** The season's anonymous histogram: counts only, and whether DeFi is ranked (`rankDefi`). */
   leaderboardHistogram(signal?: AbortSignal): Promise<unknown>;
 }
 

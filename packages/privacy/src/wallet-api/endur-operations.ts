@@ -190,6 +190,11 @@ export class EndurUnstake {
     return this.identity.fullCommitment();
   }
 
+  /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
+  ledgerPartial(): Promise<string> {
+    return this.identity.partial();
+  }
+
   /** The one public read, validated and classified by the chain's clock. */
   private async read(
     identity: ShadowIdentity,

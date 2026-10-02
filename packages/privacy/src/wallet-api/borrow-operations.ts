@@ -236,6 +236,11 @@ export class ShadowBorrow {
     return this.identity.fullCommitment();
   }
 
+  /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
+  ledgerPartial(): Promise<string> {
+    return this.identity.partial();
+  }
+
   /**
    * One public read of the pool, and the admitted tokens' and pairs' rows
    * out of it, each exactly once. A failed row for anything admitted fails

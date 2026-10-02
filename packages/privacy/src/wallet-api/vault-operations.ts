@@ -336,6 +336,11 @@ export class ShadowVault {
     return this.identity.fullCommitment();
   }
 
+  /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
+  ledgerPartial(): Promise<string> {
+    return this.identity.partial();
+  }
+
   /**
    * The pinned markets the policy admits, in its order (D-079). The route
    * must be on and its list non-empty, and every token on it must have a

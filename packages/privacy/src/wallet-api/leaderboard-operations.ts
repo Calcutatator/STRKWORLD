@@ -14,7 +14,8 @@ import {
 import { PrivacyError, type Address } from '../types.js';
 import { shadowAccountAddress } from '../vault.js';
 import { mapShadowWalletError } from './errors.js';
-import { hasCommitmentMethod, isFelt, sameAddress, throwIfAborted } from './shadow-account.js';
+import { createReceiptNonceStore, receiptNonceKey, type ReceiptNonceStore } from './receipt-nonce-store.js';
+import { hasCommitmentMethod, isFelt, ownData, sameAddress, throwIfAborted } from './shadow-account.js';
 import type { LeaderboardReadClient, LeaderboardShadowRow, WalletStrk20Account } from './types.js';
 
 /**
@@ -35,9 +36,11 @@ import type { LeaderboardReadClient, LeaderboardShadowRow, WalletStrk20Account }
  * Nothing here branches on wallet identity.
  */
 
-/** A counter whose shadow account can tick the ledger: its own full commitment. */
+/** A counter whose shadow account can tick the ledger: its own full commitment, and its partial. */
 export interface LedgerTickSource {
   commitment(): Promise<string>;
+  /** Sent to the tally only when it ranks DeFi (`rankDefi`), as proof this account owns the shadow. */
+  partial?(): Promise<string>;
 }
 
 export interface LeaderboardReceiptsOptions {
@@ -48,6 +51,8 @@ export interface LeaderboardReceiptsOptions {
   readonly supported: (signal?: AbortSignal) => Promise<boolean>;
   /** The DeFi counters' shadow accounts (Vault, Borrow, Endur unstaking, Swap), whose ticks add to the count. */
   readonly features: readonly LedgerTickSource[];
+  /** Where this device remembers the next receipt nonce; guarded `localStorage` by default. */
+  readonly nonces?: ReceiptNonceStore;
 }
 
 /** A receipt ready to join a transaction, and the nonce it uses. */
@@ -76,6 +81,11 @@ export interface PlacementCheck {
   readonly ranked: number;
   /** Where `ranked` sits in the histogram, computed here on the device; null with nothing to rank or no histogram. */
   readonly placement: Placement | null;
+  /**
+   * Whether the tally ranks DeFi ticks too (`BACKEND_LEADERBOARD_RANK_DEFI`).
+   * Only then were the feature partials sent, and `verified` includes them.
+   */
+  readonly rankDefi: boolean;
 }
 
 const COUNT_CHUNK = LEADERBOARD_SHADOW_PAGE;
@@ -96,8 +106,10 @@ export class LeaderboardReceipts {
    * a discarded batch never leaves a gap.
    */
   private floor = 0n;
+  private readonly nonces: ReceiptNonceStore;
 
   constructor(options: LeaderboardReceiptsOptions) {
+    this.nonces = options.nonces ?? createReceiptNonceStore();
     this.wallet = options.wallet;
     this.reads = options.reads;
     this.ledger = options.ledger;
@@ -116,7 +128,12 @@ export class LeaderboardReceipts {
       throwIfAborted(signal);
       const partial = await this.partialCommitment();
       throwIfAborted(signal);
-      const { next } = await this.scan(partial, signal);
+      // The device's own record first: then `p` goes nowhere for a normal
+      // send. Only with no record does the backend's scan find the nonce.
+      const key = receiptNonceKey(LEADERBOARD_SEASON, partial);
+      this.nonceKey = key;
+      const known = this.nonces.read(key);
+      const next = known ?? (await this.scan(partial, signal)).next;
       const nonce = next > this.floor ? next : this.floor;
       if (nonce >= BigInt(MAX_LEADERBOARD_RECEIPTS)) return null;
       return Object.freeze({
@@ -131,7 +148,11 @@ export class LeaderboardReceipts {
   /** A transaction carrying the receipt at `nonce` was submitted. */
   committed(nonce: bigint): void {
     if (nonce + 1n > this.floor) this.floor = nonce + 1n;
+    if (this.nonceKey) this.nonces.write(this.nonceKey, this.floor);
   }
+
+  /** The device record's key for this connection's account, once `p` is known. */
+  private nonceKey: string | null = null;
 
   /**
    * "Check your placement privately": count this player's receipts on-chain,
@@ -154,8 +175,15 @@ export class LeaderboardReceipts {
     const partial = await this.partialCommitment();
     throwIfAborted(signal);
 
-    const { deployed } = await this.scan(partial, signal);
+    const { deployed, next } = await this.scan(partial, signal);
     const receipts = await this.countOf(deployed.map((nonce) => shadowCommitment(partial, nonce)), signal);
+    // The check already scanned: bring the device's nonce record up to the
+    // chain (receipts sent from another device), never down.
+    const key = receiptNonceKey(LEADERBOARD_SEASON, partial);
+    this.nonceKey = key;
+    const known = this.nonces.read(key);
+    const best = [next, this.floor, known ?? 0n].reduce((a, b) => (b > a ? b : a));
+    if (known === null || best > known) this.nonces.write(key, best);
 
     // The DeFi counters' ticks: best effort, a refused or failed one adds nothing.
     const featureCommitments: string[] = [];
@@ -173,9 +201,29 @@ export class LeaderboardReceipts {
       throwIfAborted(signal);
     }
 
+    // Does the tally rank DeFi? Only then are the feature partials sent: they
+    // let it verify the DeFi ticks, and they let it tie this season pseudonym
+    // to the persistent feature shadows (D-122's trade-off). Off by default.
+    let rankDefi = false;
+    try {
+      rankDefi = ownData(await reads.leaderboardHistogram(signal), 'rankDefi') === true;
+    } catch {
+      throwIfAborted(signal);
+    }
+    const featurePartials: string[] = [];
+    if (rankDefi) {
+      for (const feature of this.features) {
+        try {
+          if (feature.partial) featurePartials.push(await feature.partial());
+        } catch {
+          throwIfAborted(signal);
+        }
+      }
+    }
+
     let verified: number | null = null;
     try {
-      const answer = await reads.leaderboardCheckIn(LEADERBOARD_SEASON, partial, signal);
+      const answer = await reads.leaderboardCheckIn(LEADERBOARD_SEASON, partial, signal, rankDefi ? featurePartials : undefined);
       verified = smallCount(answer.count);
     } catch {
       throwIfAborted(signal);
@@ -190,9 +238,9 @@ export class LeaderboardReceipts {
     // The placement, worked out here on the player's device. When the tally
     // stored this player (a verified count above zero) they are already in
     // the histogram; otherwise they count as one more player.
-    const ranked = verified ?? receipts;
+    const ranked = verified ?? (rankDefi ? receipts + defi : receipts);
     const placement = histogram ? placementFrom(histogram, ranked, verified !== null && verified > 0) : null;
-    return Object.freeze({ season: LEADERBOARD_SEASON, receipts, defi, verified, histogram, ranked, placement });
+    return Object.freeze({ season: LEADERBOARD_SEASON, receipts, defi, verified, histogram, ranked, placement, rankDefi });
   }
 
   /**

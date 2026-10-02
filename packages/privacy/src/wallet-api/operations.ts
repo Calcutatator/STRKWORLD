@@ -40,6 +40,7 @@ import { EndurUnstake } from './endur-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import { withReceipt } from '../leaderboard.js';
 import { LeaderboardReceipts, type PlacementCheck, type PreparedReceipt } from './leaderboard-operations.js';
+import type { ReceiptNonceStore } from './receipt-nonce-store.js';
 import type {
   BorrowReadClient,
   EndurReadClient,
@@ -106,6 +107,8 @@ export interface WalletApiPrivacyOperationsOptions {
    * added) and a placement check fails closed.
    */
   leaderboard?: LeaderboardReadClient;
+  /** Where the device remembers the next receipt nonce; guarded `localStorage` by default. A test passes its own. */
+  receiptNonces?: ReceiptNonceStore;
   /** How the Vault waits between receipt reads; a test passes its own. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The Vault's receipt-read schedule, in ms (`VAULT_RECEIPT_WAITS_MS` by default). */
@@ -195,9 +198,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         wallet: this.wallet,
         ...(options.leaderboard ? { reads: options.leaderboard } : {}),
         ledger,
+        ...(options.receiptNonces ? { nonces: options.receiptNonces } : {}),
         supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
         features: [this.vault, this.borrow, this.endur, this.swap].map((feature) => ({
           commitment: () => feature.ledgerCommitment(),
+          partial: () => feature.ledgerPartial(),
         })),
       });
       this.leaderboard = receipts;

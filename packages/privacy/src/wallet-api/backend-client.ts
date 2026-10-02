@@ -545,14 +545,28 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
    * nothing else (no address, no signature). The backend recounts on-chain,
    * keeps a hash and the count, and answers the count.
    */
-  async leaderboardCheckIn(season: string, partialCommitment: string, signal?: AbortSignal): Promise<{ readonly count: bigint }> {
+  async leaderboardCheckIn(
+    season: string,
+    partialCommitment: string,
+    signal?: AbortSignal,
+    featurePartials?: readonly string[],
+  ): Promise<{ readonly count: bigint }> {
     if (
       typeof season !== 'string' || !/^[a-z0-9]{1,8}$/.test(season)
       || typeof partialCommitment !== 'string' || !isNonzeroFelt(partialCommitment)
+      || (featurePartials !== undefined && (
+        !Array.isArray(featurePartials) || featurePartials.length > 4
+        || !featurePartials.every((partial) => typeof partial === 'string' && isNonzeroFelt(partial))
+      ))
     ) {
       throw new PrivacyError('unknown', 'The placement check-in request is invalid.');
     }
-    const raw = await this.post('/v1/leaderboard/check-in', { v: 1, season, partialCommitment }, signal);
+    const raw = await this.post('/v1/leaderboard/check-in', {
+      v: 1,
+      season,
+      partialCommitment,
+      ...(featurePartials !== undefined ? { featurePartials: [...featurePartials] } : {}),
+    }, signal);
     throwIfAborted(signal);
     const value = asRecord(raw);
     if (Reflect.ownKeys(value).length !== 1) {

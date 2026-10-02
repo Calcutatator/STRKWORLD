@@ -60,6 +60,16 @@ export interface LeaderboardConfig {
   readonly ledger: string;
   /** A JSON file on a persistent volume, or null to keep the tally in memory only. */
   readonly storePath: string | null;
+  /**
+   * `BACKEND_LEADERBOARD_RANK_DEFI`, off by default: a check-in may also carry
+   * the player's four feature partials, so the DeFi ticks on those shadows
+   * count toward the ranked number. The trade-off (D-122): while handling it,
+   * this service can tie the season pseudonym to the persistent Vault, Borrow,
+   * unstaking and swap shadows. Each feature partial is credited to one entry
+   * per season (first claim wins), so two accounts cannot share one shadow's
+   * ticks.
+   */
+  readonly rankDefi?: boolean;
 }
 
 /** One nonce of the anonymizer's `get_shadow_accounts` view. */
@@ -90,6 +100,8 @@ export interface LeaderboardHistogramBody {
  */
 export class LeaderboardStore {
   private readonly seasons = new Map<string, Map<string, { count: number; day: number }>>();
+  /** Rank-DeFi only: per season, a feature key (a hash of a feature partial) to the entry that claimed it. */
+  private readonly claims = new Map<string, Map<string, string>>();
   private writing: Promise<void> = Promise.resolve();
   private dirty = false;
 
@@ -107,7 +119,8 @@ export class LeaderboardStore {
     }
     const parsed = parseStoreFile(text);
     if (!parsed) throw new Error('The leaderboard store is malformed.');
-    for (const [season, entries] of parsed) this.seasons.set(season, entries);
+    for (const [season, entries] of parsed.seasons) this.seasons.set(season, entries);
+    for (const [season, claims] of parsed.claims) this.claims.set(season, claims);
   }
 
   upsert(season: string, key: string, count: number, now: number): void {
@@ -121,6 +134,25 @@ export class LeaderboardStore {
     }
     entries.set(key, { count, day: Math.floor(now / DAY_MS) * DAY_MS });
     this.schedule();
+  }
+
+  /**
+   * Credit a feature shadow to an entry for the season: true when it is
+   * free (and is now this entry's) or already this entry's; false when
+   * another entry claimed it first.
+   */
+  claimFeature(season: string, featureKey: string, entryKey: string): boolean {
+    let claims = this.claims.get(season);
+    if (!claims) {
+      claims = new Map();
+      this.claims.set(season, claims);
+    }
+    const holder = claims.get(featureKey);
+    if (holder !== undefined) return holder === entryKey;
+    if (claims.size >= MAX_LEADERBOARD_ENTRIES * 4) return false;
+    claims.set(featureKey, entryKey);
+    this.schedule();
+    return true;
   }
 
   histogram(season: string): LeaderboardHistogramBody {
@@ -162,7 +194,8 @@ export class LeaderboardStore {
 
   private async write(): Promise<void> {
     const path = this.path!;
-    const body = JSON.stringify({ v: 1, seasons: this.snapshot() });
+    const claims = Object.fromEntries([...this.claims].map(([season, map]) => [season, Object.fromEntries(map)]));
+    const body = JSON.stringify({ v: 1, seasons: this.snapshot(), ...(this.claims.size > 0 ? { claims } : {}) });
     await mkdir(dirname(path), { recursive: true });
     const temporary = `${path}.tmp`;
     await writeFile(temporary, body, { mode: 0o600 });
@@ -226,7 +259,10 @@ export class LeaderboardService {
     if (!await this.ready) throw new ApiFailure(503, 'The leaderboard is unavailable.');
     switch (request.path) {
       case LB_HISTOGRAM_PATH:
-        return { status: 200, body: this.store.histogram(LEADERBOARD_SEASON) };
+        return {
+          status: 200,
+          body: { ...this.store.histogram(LEADERBOARD_SEASON), ...(this.config.rankDefi === true ? { rankDefi: true } : {}) },
+        };
       case LB_SHADOWS_PATH:
         return this.shadows(request.body, signal);
       case LB_COUNTS_PATH:
@@ -271,13 +307,36 @@ export class LeaderboardService {
    * out of scope with the call. Nothing about it is logged or returned.
    */
   private async checkIn(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
-    const value = requireRecord(body, ['v', 'season', 'partialCommitment']);
+    const withFeatures = !!body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'featurePartials');
+    const value = requireRecord(body, withFeatures
+      ? ['v', 'season', 'partialCommitment', 'featurePartials']
+      : ['v', 'season', 'partialCommitment']);
     requireVersion(value);
     if (value.season !== LEADERBOARD_SEASON) throw new ApiFailure(400, 'Unknown season.');
     const partial = requireNonzeroFelt(value.partialCommitment, 'partial commitment');
-    const count = await this.countReceipts(partial, signal);
+    // The feature partials are taken only while this service ranks DeFi.
+    let features: string[] = [];
+    if (withFeatures) {
+      if (this.config.rankDefi !== true) throw new ApiFailure(400, 'DeFi actions are not ranked.');
+      const raw = value.featurePartials;
+      if (!Array.isArray(raw) || raw.length > 4) throw new ApiFailure(400, 'Invalid feature partials.');
+      features = raw.map((item) => requireNonzeroFelt(item, 'feature partial'));
+      const distinct = new Set([partial, ...features].map((felt) => BigInt(felt)));
+      if (distinct.size !== features.length + 1) throw new ApiFailure(400, 'Invalid feature partials.');
+    }
+    const entry = leaderboardEntryKey(LEADERBOARD_SEASON, partial);
+    let count = await this.countReceipts(partial, signal);
+    if (features.length > 0) {
+      const ticks = await this.readCounts(features.map((feature) => receiptCommitment(feature, 0)), signal);
+      features.forEach((feature, index) => {
+        const tick = ticks[index]!;
+        if (tick > 0 && this.store.claimFeature(LEADERBOARD_SEASON, leaderboardFeatureKey(LEADERBOARD_SEASON, feature), entry)) {
+          count += tick;
+        }
+      });
+    }
     // Zero receipts store nothing: a random felt cannot pad the ranking.
-    if (count > 0) this.store.upsert(LEADERBOARD_SEASON, leaderboardEntryKey(LEADERBOARD_SEASON, partial), count, this.now());
+    if (count > 0) this.store.upsert(LEADERBOARD_SEASON, entry, count, this.now());
     return { status: 200, body: { count: String(count) } };
   }
 
@@ -334,6 +393,11 @@ export function leaderboardEntryKey(season: string, partialCommitment: string): 
   return `0x${poseidonHashMany([shortString('strkworld-lb-id'), shortString(season), BigInt(partialCommitment)]).toString(16)}`;
 }
 
+/** Rank-DeFi only: the key a feature partial is claimed under. Domain-separated; it reveals neither the partial nor the shadow. */
+export function leaderboardFeatureKey(season: string, featurePartial: string): string {
+  return `0x${poseidonHashMany([shortString('strkworld-lb-feat'), shortString(season), BigInt(featurePartial)]).toString(16)}`;
+}
+
 function shortString(text: string): bigint {
   let value = 0n;
   for (const char of text) value = (value << 8n) | BigInt(char.charCodeAt(0));
@@ -345,7 +409,10 @@ function rateLimited(): ApiResponse {
   return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
 }
 
-function parseStoreFile(text: string): Map<string, Map<string, { count: number; day: number }>> | null {
+function parseStoreFile(text: string): {
+  seasons: Map<string, Map<string, { count: number; day: number }>>;
+  claims: Map<string, Map<string, string>>;
+} | null {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -353,6 +420,8 @@ function parseStoreFile(text: string): Map<string, Map<string, { count: number; 
     return null;
   }
   if (!raw || typeof raw !== 'object' || (raw as { v?: unknown }).v !== 1) return null;
+  const keys = Object.keys(raw as object);
+  if (keys.some((key) => !['v', 'seasons', 'claims'].includes(key))) return null;
   const seasons = (raw as { seasons?: unknown }).seasons;
   if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) return null;
   const out = new Map<string, Map<string, { count: number; day: number }>>();
@@ -373,5 +442,19 @@ function parseStoreFile(text: string): Map<string, Map<string, { count: number; 
     }
     out.set(season, map);
   }
-  return out;
+  const claims = new Map<string, Map<string, string>>();
+  const rawClaims = (raw as { claims?: unknown }).claims;
+  if (rawClaims !== undefined) {
+    if (!rawClaims || typeof rawClaims !== 'object' || Array.isArray(rawClaims)) return null;
+    for (const [season, entries] of Object.entries(rawClaims as Record<string, unknown>)) {
+      if (!/^[a-z0-9]{1,8}$/.test(season) || !entries || typeof entries !== 'object' || Array.isArray(entries)) return null;
+      const map = new Map<string, string>();
+      for (const [feature, entry] of Object.entries(entries as Record<string, unknown>)) {
+        if (!isFelt(feature) || typeof entry !== 'string' || !isFelt(entry)) return null;
+        map.set(feature, entry);
+      }
+      claims.set(season, map);
+    }
+  }
+  return { seasons: out, claims };
 }

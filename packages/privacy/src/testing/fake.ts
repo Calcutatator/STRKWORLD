@@ -1244,6 +1244,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       histogram: DEMO_PLACEMENT_HISTOGRAM,
       ranked: 15,
       placement: placementFrom(DEMO_PLACEMENT_HISTOGRAM, 15, true),
+      rankDefi: false,
     });
   }
 

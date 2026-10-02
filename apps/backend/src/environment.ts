@@ -250,9 +250,10 @@ function parseDegenCatalog(environment: Environment): DegenConfig | undefined {
  * Leaderboard phase 1: off unless `BACKEND_LEADERBOARD_ENABLED=true`, and
  * then the ledger is required. `BACKEND_LEADERBOARD_FILE` is an optional
  * absolute path for the tally's JSON file; unset, the tally lives in memory
- * and is lost on restart.
+ * and is lost on restart. `BACKEND_LEADERBOARD_RANK_DEFI=true` (off by
+ * default) also ranks DeFi ticks, taking the feature partials (D-122).
  */
-function parseLeaderboard(environment: Environment): { leaderboard?: { ledger: string; storePath: string | null } } {
+function parseLeaderboard(environment: Environment): { leaderboard?: { ledger: string; storePath: string | null; rankDefi?: true } } {
   if (isUnset(environment.BACKEND_LEADERBOARD_ENABLED)) return {};
   if (!parseBoolean(environment, 'BACKEND_LEADERBOARD_ENABLED')) return {};
   const ledger = parseFelt(environment, 'BACKEND_LEADERBOARD_LEDGER');
@@ -261,7 +262,10 @@ function parseLeaderboard(environment: Environment): { leaderboard?: { ledger: s
   if (file !== undefined && file !== '' && (!file.startsWith('/') || file !== file.trim() || file.includes('\0') || PLACEHOLDER.test(file))) {
     throw new Error('Invalid BACKEND_LEADERBOARD_FILE.');
   }
-  return { leaderboard: { ledger, storePath: file ? file : null } };
+  const rankDefi = isUnset(environment.BACKEND_LEADERBOARD_RANK_DEFI)
+    ? false
+    : parseBoolean(environment, 'BACKEND_LEADERBOARD_RANK_DEFI');
+  return { leaderboard: { ledger, storePath: file ? file : null, ...(rankDefi ? { rankDefi: true } : {}) } };
 }
 
 function parseDebugLogsEnabled(environment: Environment): boolean {

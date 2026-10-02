@@ -17,6 +17,7 @@ import {
 } from '../index.js';
 import { LEADERBOARD_SHADOW_PAGE, receiptInvokeAction, shadowCommitment } from '../leaderboard.js';
 import { shadowAccountAddress, vaultSupplyActions } from '../vault.js';
+import { createReceiptNonceStore, receiptNonceKey } from './receipt-nonce-store.js';
 
 /**
  * Leaderboard phase 1 on the Wallet API: receipts on shield, unshield and
@@ -64,7 +65,14 @@ function fixture(options: {
   /** Dapp names whose commitment the wallet refuses. */
   refuse?: readonly string[];
   withLeaderboardReads?: boolean;
+  /** The device's storage behind the nonce record; a fresh one per fixture by default. */
+  storage?: Map<string, string>;
 } = {}) {
+  const storage = options.storage ?? new Map<string, string>();
+  const nonces = createReceiptNonceStore(() => ({
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+  }));
   const invoked: STRK20_ACTION[][] = [];
   const commitments: string[] = [];
   const lbCalls: Array<{ method: string; args: unknown[] }> = [];
@@ -72,6 +80,7 @@ function fixture(options: {
     deployed: new Set<number>(),
     counts: new Map<bigint, bigint>(),
     verified: 0n as bigint | Error,
+    rankDefi: false,
     histogram: { season: 's1', total: 3, buckets: [{ count: 1, players: 1 }, { count: 3, players: 1 }, { count: 9, players: 1 }] } as unknown,
     shadowsFail: false,
     /** Addresses the shadow read answers wrong, by nonce. */
@@ -127,14 +136,16 @@ function fixture(options: {
       lbCalls.push({ method: 'counts', args: [[...commitments]] });
       return commitments.map((commitment) => state.counts.get(BigInt(commitment)) ?? 0n);
     },
-    async leaderboardCheckIn(season, partial) {
-      lbCalls.push({ method: 'check-in', args: [season, partial] });
+    async leaderboardCheckIn(season, partial, _signal, featurePartials) {
+      lbCalls.push({ method: 'check-in', args: featurePartials === undefined ? [season, partial] : [season, partial, [...featurePartials]] });
       if (state.verified instanceof Error) throw state.verified;
       return { count: state.verified };
     },
     async leaderboardHistogram() {
       lbCalls.push({ method: 'histogram', args: [] });
-      return state.histogram;
+      return state.rankDefi && state.histogram && typeof state.histogram === 'object'
+        ? { ...(state.histogram as object), rankDefi: true }
+        : state.histogram;
     },
   };
   const operations = new WalletApiPrivacyOperations({
@@ -145,9 +156,10 @@ function fixture(options: {
     vault,
     endur,
     ...(options.withLeaderboardReads === false ? {} : { leaderboard }),
+    receiptNonces: nonces,
     sleep: async () => undefined,
   });
-  return { operations, invoked, commitments, lbCalls, state };
+  return { operations, invoked, commitments, lbCalls, state, storage };
 }
 
 const SHIELD: Intent = { kind: 'shield', token: STRK, amount: 20n * ONE };
@@ -343,6 +355,7 @@ describe('the placement check', () => {
       // Ranked on the verified count, on the device: one player has more.
       ranked: 3,
       placement: { rank: 2, total: 3, topPercent: 67 },
+      rankDefi: false,
     });
     // The tally gets the season and p: no address, no signature, nothing else.
     expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual(['s1', LB_PARTIAL]);
@@ -354,7 +367,7 @@ describe('the placement check', () => {
     f.state.verified = new Error('tally down');
     f.state.histogram = { season: 's1', total: 9, buckets: [] };
     await expect(f.operations.checkPlacement()).resolves.toEqual({
-      season: 's1', receipts: 0, defi: 0, verified: null, histogram: null, ranked: 0, placement: null,
+      season: 's1', receipts: 0, defi: 0, verified: null, histogram: null, ranked: 0, placement: null, rankDefi: false,
     });
   });
 
@@ -401,5 +414,73 @@ describe('the placement check', () => {
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(logged.filter((args) => text(args).includes(needle))).toEqual([]);
     expect(text(shown)).not.toContain(needle);
+  });
+});
+
+describe('the device remembers the next receipt nonce, so a normal send sends p nowhere', () => {
+  it('a send with a device record makes no backend call at all, and uses the recorded nonce', async () => {
+    const storage = new Map<string, string>([[receiptNonceKey('s1', LB_PARTIAL), '5']]);
+    const f = fixture({ storage });
+    await run(f.operations, SEND);
+    expect(f.invoked[0]!.at(-1)).toEqual(receipt(5n));
+    // Not one leaderboard read: p went to no backend.
+    expect(f.lbCalls).toEqual([]);
+    expect(storage.get(receiptNonceKey('s1', LB_PARTIAL))).toBe('6');
+  });
+
+  it('falls back to the backend scan only with no record, then records the next nonce under a hashed key', async () => {
+    const f = fixture();
+    f.state.deployed = new Set([0, 1]);
+    await run(f.operations, SEND);
+    // Page 0 held receipts, so page 1 was read too.
+    expect(f.lbCalls.map((call) => call.method)).toEqual(['shadows', 'shadows']);
+    expect(f.invoked[0]!.at(-1)).toEqual(receipt(2n));
+    expect([...f.storage.entries()]).toEqual([[receiptNonceKey('s1', LB_PARTIAL), '3']]);
+    // The key is per season and account, and never carries p.
+    expect([...f.storage.keys()].join()).not.toContain(BigInt(LB_PARTIAL).toString(16));
+    f.lbCalls.length = 0;
+    await run(f.operations, SHIELD);
+    expect(f.lbCalls).toEqual([]);
+    expect(f.invoked[1]!.at(-1)).toEqual(receipt(3n));
+  });
+
+  it('a placement check brings a stale record up to the chain, never down', async () => {
+    const storage = new Map<string, string>([[receiptNonceKey('s1', LB_PARTIAL), '1']]);
+    const f = fixture({ storage });
+    f.state.deployed = new Set([0, 1, 2, 3]);
+    await f.operations.checkPlacement();
+    expect(storage.get(receiptNonceKey('s1', LB_PARTIAL))).toBe('4');
+    storage.set(receiptNonceKey('s1', LB_PARTIAL), '9');
+    await f.operations.checkPlacement();
+    expect(storage.get(receiptNonceKey('s1', LB_PARTIAL))).toBe('9');
+  });
+
+  it('reads storage that throws or holds junk as no record, and never throws', () => {
+    const throwing = createReceiptNonceStore(() => { throw new Error('blocked'); });
+    expect(throwing.read('k')).toBeNull();
+    expect(() => throwing.write('k', 3n)).not.toThrow();
+    const junk = createReceiptNonceStore(() => ({ getItem: () => '1e9', setItem: () => {} }));
+    expect(junk.read('k')).toBeNull();
+  });
+});
+
+describe('ranking DeFi, only when the tally opts in (BACKEND_LEADERBOARD_RANK_DEFI)', () => {
+  it('off by default: the check-in carries p alone, and DeFi is not ranked', async () => {
+    const f = fixture();
+    const check = await f.operations.checkPlacement();
+    expect(check.rankDefi).toBe(false);
+    expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual(['s1', LB_PARTIAL]);
+  });
+
+  it('on: the check-in adds the four feature partials, and the verified count (with DeFi) is ranked', async () => {
+    const f = fixture();
+    f.state.rankDefi = true;
+    f.state.verified = 9n;
+    const check = await f.operations.checkPlacement();
+    expect(check.rankDefi).toBe(true);
+    expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual([
+      's1', LB_PARTIAL, [PARTIALS['strkworld-vault'], PARTIALS['strkworld-borrow'], PARTIALS['strkworld-endur'], PARTIALS['strkworld-swap']],
+    ]);
+    expect(check.ranked).toBe(9);
   });
 });

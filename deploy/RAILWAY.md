@@ -328,7 +328,7 @@ the swap probe above has passed, with every swap variable from it still set.
 To close it again, unset the five variables and redeploy; the counter then
 says its list is unavailable while the ground floor keeps swapping.
 
-## The private leaderboard probe (leaderboard phase 1, D-120)
+## The private leaderboard probe (leaderboard phase 1, D-122)
 
 Off by default, in three pieces that switch on together: the browser's
 receipts and ticks, the placement stand by the plaza, and the backend's blind
@@ -352,11 +352,13 @@ live check.
    | `BACKEND_LEADERBOARD_ENABLED` | `true` |
    | `BACKEND_LEADERBOARD_LEDGER` | the same address |
    | `BACKEND_LEADERBOARD_FILE` | `/data/leaderboard.json` |
+   | `BACKEND_LEADERBOARD_RANK_DEFI` | leave unset unless the lead accepts the trade-off in D-122: `true` ranks DeFi ticks too, and the browser then sends its four feature partials with a check-in |
 
-   The browser pair alone adds receipts and the stand, but the stand's check
-   and every receipt's nonce read go through the backend, so a missing
-   backend half means receipts fail open (actions go out without one) and a
-   check shows "can't be checked right now". Both halves follow
+   The browser pair alone adds receipts and the stand. The device remembers
+   the next receipt nonce, so a normal send asks the backend nothing; only a
+   device with no record scans through it, and a missing backend half then
+   means that send goes out without a receipt (fail open). A check shows
+   "can't be checked right now" without the backend. Both halves follow
    `BACKEND_GLOBAL_ENABLED`.
 3. With a funded account on a wallet that runs shadow accounts (Wallet API
    0.10.4), do one small private send. Its review should say "Counts toward

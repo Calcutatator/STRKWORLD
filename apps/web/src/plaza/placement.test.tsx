@@ -53,6 +53,7 @@ function check(overrides: Partial<PlacementCheck> = {}): PlacementCheck {
     histogram: { season: 's1', total: 310, buckets: [{ count: 1, players: 273 }, { count: 15, players: 1 }, { count: 19, players: 36 }] },
     ranked: 15,
     placement: { rank: 37, total: 310, topPercent: 12 },
+    rankDefi: false,
     ...overrides,
   };
 }
