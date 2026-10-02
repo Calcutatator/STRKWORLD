@@ -25,6 +25,7 @@ import {
   SHIMMER_PERIOD_MS,
   SHIMMER_SLOT_PHASE,
   SHIMMER_STATIC,
+  SHIMMER_STATION_SCALES,
   SHIMMER_SWEEP_AXIS,
   SHIMMER_SWEEP_PEAK,
   SHIMMER_SWEEP_PERIOD_MS,
@@ -36,11 +37,13 @@ import {
   affordanceClock,
   createAffordanceShells,
   shimmerBase,
+  shimmerScaleFor,
   shimmerSlotPhase,
   shimmerStrength,
   shimmerSweep,
 } from './affordance.js';
 import { GeometryBin } from './palette.js';
+import { PLAZA_MONUMENT_STATION } from '../map/plaza.js';
 
 /**
  * D-123 (amended 2026-10-02): the affordance shells: one mesh per area, a slot
@@ -93,7 +96,7 @@ describe('affordance shells (D-123)', () => {
     // along the sweep (plus its slot's phase) and its own shimmer tint.
     const slot = set.mesh.geometry.getAttribute('aSlot');
     const band = set.mesh.geometry.getAttribute('aBand');
-    expect(set.mesh.geometry.getAttribute('aSweep').itemSize).toBe(2);
+    expect(set.mesh.geometry.getAttribute('aSweep').itemSize).toBe(3);
     expect(set.mesh.geometry.getAttribute('aTint').itemSize).toBe(3);
     expect(slot.count).toBe(36 * 3 * 2);
     const tally = (s: number, b: number) => Array.from({ length: slot.count }, (_, i) => i).filter((i) => slot.getX(i) === s && band.getX(i) === b).length;
@@ -231,12 +234,13 @@ describe('affordance shells (D-123)', () => {
     // The wrap is whole breaths and whole glides, so neither jumps at it.
     expect(AFFORDANCE_CLOCK_WRAP_MS % SHIMMER_PERIOD_MS).toBe(0);
     expect(AFFORDANCE_CLOCK_WRAP_MS % SHIMMER_SWEEP_PERIOD_MS).toBe(0);
-    // About 2.5 s a breath, lifting the surface 12% to 20%.
+    // About 2.5 s a breath, lifting the surface 8.4% to 14%: 70% of the levels
+    // D-123 first shipped, turned down on 2026-10-02 at calc's request.
     expect(SHIMMER_PERIOD_MS).toBe(2500);
     expect(shimmerBase(0, false)).toBeCloseTo(SHIMMER_FLOOR);
     expect(shimmerBase(SHIMMER_PERIOD_MS / 2, false)).toBeCloseTo(SHIMMER_PEAK);
-    expect(SHIMMER_FLOOR).toBeGreaterThanOrEqual(0.12);
-    expect(SHIMMER_PEAK).toBeLessThanOrEqual(0.2);
+    expect(SHIMMER_FLOOR).toBeCloseTo(0.7 * 0.12, 6);
+    expect(SHIMMER_PEAK).toBeCloseTo(0.7 * 0.2, 6);
     advanceAffordanceClock(0, false);
     a.dispose();
     b.dispose();
@@ -257,6 +261,8 @@ describe('affordance shells (D-123)', () => {
     };
     for (const along of [0, 0.25, 0.5, 0.75, 1]) expect(travel(along)).toBeCloseTo(SHIMMER_SWEEP_PEAK, 2);
     expect(SHIMMER_SWEEP_PEAK).toBeGreaterThan(SHIMMER_PEAK);
+    // Turned down with the rest on 2026-10-02: 70% of the crest D-123 shipped.
+    expect(SHIMMER_SWEEP_PEAK).toBeCloseTo(0.7 * 0.45, 6);
     // It is a band, not a flash: at any moment only part of the thing is in it.
     const lit = [0, 0.2, 0.4, 0.6, 0.8, 1].filter((along) => shimmerSweep(900, along, false) > 0);
     expect(lit.length).toBeGreaterThan(0);
@@ -292,6 +298,10 @@ describe('affordance shells (D-123)', () => {
     }
     // Still discoverable: stronger than the moving cue's quietest moment.
     expect(SHIMMER_STATIC).toBeGreaterThan(SHIMMER_FLOOR);
+    // And turned down by the same 30% as the moving cue (2026-10-02).
+    expect(SHIMMER_STATIC).toBeCloseTo(0.7 * 0.24, 6);
+    // A quieted station's still tint is quieted too, not just its movement.
+    expect(shimmerStrength(0, 0.5, true, 0, shimmerScaleFor(PLAZA_MONUMENT_STATION))).toBeCloseTo(SHIMMER_STATIC * 0.2, 6);
     advanceAffordanceClock(0, false);
     set.dispose();
   });
@@ -493,6 +503,54 @@ describe('affordance shells (D-123)', () => {
     expect(set.shimmerLevel('locked')).toBe(0);
     expect(set.glowLevel('locked')).toBe(0);
     expect(set.mesh.visible).toBe(false);
+    set.dispose();
+  });
+
+  it('quiets the plaza\'s obelisk to a fifth, and nothing else', () => {
+    // One station in the whole world shimmers below the global level, and the
+    // multiplier is relative to it, so turning the global level down again
+    // takes the obelisk with it.
+    expect([...SHIMMER_STATION_SCALES]).toEqual([[PLAZA_MONUMENT_STATION, 0.2]]);
+    expect(shimmerScaleFor(PLAZA_MONUMENT_STATION)).toBe(0.2);
+    for (const id of ['plaza:shells', 'bank:counter-0', 'studio:figure-3', 'anything']) {
+      expect(shimmerScaleFor(id)).toBe(1);
+    }
+    // A fifth of the cue at every moment of the cycle, breathe and sweep alike.
+    for (const time of [0, 400, 900, 1250, 2100, 2600]) {
+      for (const along of [0, 0.3, 0.6, 1]) {
+        const full = shimmerStrength(time, along, false);
+        expect(shimmerStrength(time, along, false, 0, 0.2)).toBeCloseTo(full * 0.2, 6);
+      }
+    }
+  });
+
+  it('bakes each thing\'s multiplier per vertex, so a quieted station costs no extra draw call', () => {
+    const shells = createAffordanceShells();
+    shells.add(PLAZA_MONUMENT_STATION, new BoxGeometry(1, 6, 1).translate(0, 3, 0));
+    shells.add('plaza:shells', box(6));
+    const set = shells.build('plaza:affordances')!;
+    expect(set.shimmerScale(PLAZA_MONUMENT_STATION)).toBe(0.2);
+    expect(set.shimmerScale('plaza:shells')).toBe(1);
+    expect(set.shimmerScale('absent')).toBe(0);
+    // It rides in the sweep attribute both copies already carry: one mesh, one
+    // material, one uniform array, as before.
+    const slot = set.mesh.geometry.getAttribute('aSlot');
+    const sweep = set.mesh.geometry.getAttribute('aSweep');
+    const expected = set.ids.map((id) => set.shimmerScale(id));
+    for (let i = 0; i < slot.count; i++) expect(sweep.getZ(i)).toBeCloseTo(expected[slot.getX(i)]!, 6);
+    expect(set.mesh.geometry.groups.length).toBe(0);
+    expect(set.mesh.material).toBeInstanceOf(ShaderMaterial);
+    // The shader reads it on the shimmer only; the ember band is untouched by it.
+    const vertex = (set.mesh.material as ShaderMaterial).vertexShader;
+    expect(vertex).toContain('vShimmer = slot.x * (1.0 - glow) * level * aSweep.z;');
+    expect((set.mesh.material as ShaderMaterial).fragmentShader).not.toContain('aSweep');
+    // And the levels a quieted station reports are the shared ones: the cue it
+    // can show, not how loud it shows it.
+    set.setUsable(PLAZA_MONUMENT_STATION, true);
+    set.focus(PLAZA_MONUMENT_STATION);
+    set.update(AFFORDANCE_FADE_MS);
+    expect(set.glowLevel(PLAZA_MONUMENT_STATION)).toBe(1);
+    expect(set.shimmerLevel(PLAZA_MONUMENT_STATION)).toBe(0);
     set.dispose();
   });
 
