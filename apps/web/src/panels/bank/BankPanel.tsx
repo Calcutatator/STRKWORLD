@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import type { Intent } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../../copy.js';
@@ -9,12 +9,10 @@ import { ConfirmGate } from '../ConfirmGate.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
-import { routeDoor } from '../routes.js';
 import {
   createBankPanel,
   modeNeedsRecipient,
   reviewedStake,
-  ROUTE_BY_MODE,
   shieldFigures,
   type BankMode,
   type BankPanel as BankPanelMachine,
@@ -26,12 +24,16 @@ import { WalletAttentionCue, walletOperationAttention } from '../../wallet/Walle
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
 import { GlossaryTerm } from '../Glossary.js';
-import { UnstakeCounter } from './UnstakeCounter.js';
 import { AmountField, DetailRows, RecipientField, checkAmount, primaryAction, type DetailRow } from '../kit/index.js';
 import { estimateText, rateRow, useEndurRate, xstrkForStrk, type EndurRateView } from './endur-rate.js';
 
-const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer', 'stake'];
-const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
+/** What each counter does, in the words its window names it by. */
+const ACTION_LABELS: Readonly<Record<BankMode, string>> = Object.freeze({
+  shield: COPY.bank.shield,
+  unshield: COPY.bank.unshield,
+  transfer: COPY.bank.transfer,
+  stake: COPY.bank.stake,
+});
 
 /**
  * Whether the window wears Endur's look (D-063). Presentation only.
@@ -50,49 +52,52 @@ function wearsEndur(state: BankState): boolean {
 }
 
 /**
- * The Bank.
+ * One Bank-machine counter (D-099): SHIELD, UNSHIELD or STAKE in the Bank,
+ * or the Post Office's TRANSFER (D-040).
  *
  * A thin view over `bank-machine.ts`. Every rule that matters — no polled
  * balance, no invented maximum, no prompt counting, no mixing a shield with a
  * spend, no second confirm — lives in the machine, where it is tested without a
- * renderer. This file decides what the room looks like, and enforces two things
- * that are purely about rendering: a locked route shows a locked door rather
- * than a form nobody can submit, and the confirm button only exists inside
- * `ConfirmGate`, which cannot render without the batch's approved disclosures.
+ * renderer. This file decides what the counter looks like, and enforces two
+ * things that are purely about rendering: a locked route shows a locked door
+ * rather than a form nobody can submit, and the confirm button only exists
+ * inside `ConfirmGate`, which cannot render without the prepared action's
+ * approved disclosures. Each counter does one action and confirms it; the
+ * Game Mode counter and Menu Mode's tab render the same window.
  */
 export function BankPanel({
   onClose,
   panel: injected,
   experience = 'menu',
-  allowedModes,
-  initialMode,
+  mode = 'shield',
   title = COPY.bank.title,
   building = 'bank',
   preConfirmGuard,
   register = PRIVACY_REGISTER,
   intro,
+  counters = null,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BankPanelMachine;
-  /** Menu Mode batches a visit; the first Game Mode station admits one action. */
+  /** Presentation only: the counter and Menu Mode render the same window (D-099). */
   experience?: 'menu' | 'station';
-  /** Fixed stations can expose a strict subset of the Bank controls. */
-  allowedModes?: readonly BankMode[];
-  /** Fixed stations can open on their one meaningful control. */
-  initialMode?: BankMode;
+  /** The counter's one control (D-099). */
+  mode?: BankMode;
   /** The existing machine can render a different building title. */
   title?: string;
   /** Receipt ownership; also picks the window's theme (presentation only). */
   building?: BuildingId;
   preConfirmGuard?: () => Promise<boolean>;
-  /** Route authority used for every mode tab and the owned machine. */
+  /** Route authority used for the counter's control and the owned machine. */
   register?: readonly RouteGrade[];
   /** One short line explaining what this window does — the Post Office's own identity narrowed onto this machine. */
   intro?: string;
+  /** Menu Mode's counter tabs (D-088, D-099); presentation only. */
+  counters?: ReactNode;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
-  const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
+  const modes = useMemo(() => [mode] as const, [mode]);
 
   const owned = useMemo(
     () =>
@@ -102,10 +107,9 @@ export function BankPanel({
             operations,
             receipts,
             allowedModes: modes,
-            initialMode,
+            initialMode: mode,
             building,
             register,
-            maxIntents: experience === 'station' ? 1 : undefined,
             onError: noteOperationError,
             preConfirmGuard,
             canStartFinancialAction: () => {
@@ -113,15 +117,12 @@ export function BankPanel({
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, preConfirmGuard, register, submissionUncertainty],
+    [injected, operations, receipts, noteOperationError, modes, mode, building, preConfirmGuard, register, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertaintyState = useStore(submissionUncertainty.store);
-  // D-091: the staking counter's Stake and Unstake tabs. Only the chosen
-  // one's form is mounted, so only one confirm is ever on screen (D-088).
-  const [stakeTab, setStakeTab] = useState<'stake' | 'unstake'>('stake');
-  // D-091: xSTRK's live rate, one public read while the staking view is open.
+  // D-091: xSTRK's live rate, one public read while the staking counter is open.
   const rate = useEndurRate(operations, state.mode === 'stake');
   const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
 
@@ -157,21 +158,15 @@ export function BankPanel({
     state.flow.name === 'failed' &&
     state.flow.recovery === 'close' &&
     (state.flow.kind !== 'submission-uncertain' || !uncertaintyState.acknowledged);
-  // The tabs step aside while a stake is at its commit point, which always
-  // shows the stake (the look and the disclosures follow the batch).
-  const stakeTabs = state.mode === 'stake' && !committing;
-  const unstakeView = stakeTabs && stakeTab === 'unstake';
   const walletAttention = walletOperationAttention(
     state.balance.status === 'loading',
     state.flow.name === 'submitting' ? state.flow.stage : null,
   );
 
-  // The header disclosure previews the mode being composed. At the commit
-  // point it is withdrawn, so ConfirmGate's batch-derived set is the only
-  // disclosure on screen — otherwise a shield tab with a transfer queued
-  // shows public-deposit copy over a private transfer.
+  // The header disclosure previews the counter's route. At the commit point it
+  // is withdrawn, so ConfirmGate's prepared set is the only disclosure on screen.
   return (
-    <div className="bank-experience" data-experience={experience}>
+    <div className="bank-experience" data-experience={experience} data-mode={state.mode}>
       <WalletAttentionCue
         active={walletAttention !== null}
         kind={walletAttention ?? 'confirm'}
@@ -183,6 +178,7 @@ export function BankPanel({
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
+        counters={counters}
       >
         {intro ? <p className="panel-intro">{intro}</p> : null}
         <BankJourneyNotice
@@ -190,40 +186,19 @@ export function BankPanel({
           flow={state.flow}
           register={register}
           // The Bridge nudge says "shield it here", so only a window that can shield carries it.
-          bridgeNudge={modes.includes('shield')}
+          bridgeNudge={state.mode === 'shield'}
         />
-        {/* A stake-only station's one tab would sit over its own Stake and
-            Unstake tabs; the counter's pair is its navigation (D-091). */}
-        {modes.length === 1 && modes[0] === 'stake' ? null : <ModeTabs
-          mode={state.mode}
-          activeDoor={state.door}
-          modes={modes}
-          register={register}
-          onSelect={(mode) => panel.setMode(mode)}
-        />}
+        {/* D-099: a counter with no Menu Mode tabs above it names its one action. */}
+        {counters ? null : <h3 className="counter-action">{ACTION_LABELS[state.mode]}</h3>}
 
-        {stakeTabs ? (
-          <nav className="panel-modes stake-tabs" role="tablist" aria-label={COPY.stake.tabsLabel}>
-            {(['stake', 'unstake'] as const).map((tab) => (
-              <button key={tab} type="button" role="tab" aria-selected={stakeTab === tab} onClick={() => setStakeTab(tab)}>
-                {tab === 'stake' ? COPY.stake.tabStake : COPY.stake.tabUnstake}
-              </button>
-            ))}
-          </nav>
-        ) : null}
-
-        {unstakeView ? (
-          // D-085: the unstaking counter has its own route and door, so it shows
-          // whether or not staking is switched on.
-          <UnstakeCounter register={register} rate={rate} poolFee={state.pool?.feeAmount ?? null} />
-        ) : !state.door.open ? (
+        {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
         ) : (
           <>
             {state.mode === 'stake' && !committing && state.flow.name !== 'submitted' ? <StakeIntro /> : null}
             {/* Once read, a spending mode's balance and its Refresh sit on the amount field. */}
             {/* While the session gate holds (D-035) the card is the private balance
-                check it asks for, on every tab, Shield included. */}
+                check it asks for, on every counter, Shield included. */}
             {balanceOnField(state) && !(blocked || gateBlocked) ? null : (
               <BalanceBlock
                 state={state}
@@ -251,7 +226,7 @@ export function BankPanel({
                 </button>
               </div>
             ) : blocked || gateBlocked ? null : (
-              <ComposeBlock state={state} panel={panel} experience={experience} rate={rate} onRefresh={() => void refreshFor(state, panel)} />
+              <ComposeBlock state={state} panel={panel} rate={rate} onRefresh={() => void refreshFor(state, panel)} />
             )}
 
             {state.flow.name === 'failed' ? (
@@ -274,48 +249,6 @@ export function BankPanel({
         ) : null}
       </PanelFrame>
     </div>
-  );
-}
-
-function ModeTabs({
-  mode,
-  activeDoor,
-  modes,
-  register,
-  onSelect,
-}: {
-  mode: BankMode;
-  activeDoor: BankState['door'];
-  modes: readonly BankMode[];
-  register: readonly RouteGrade[];
-  onSelect: (mode: BankMode) => void;
-}) {
-  const labels: Record<BankMode, string> = {
-    shield: COPY.bank.shield,
-    unshield: COPY.bank.unshield,
-    transfer: COPY.bank.transfer,
-    stake: COPY.bank.stake,
-  };
-  return (
-    <nav className="panel-modes" role="tablist">
-      {modes.map((value) => {
-        // Each tab reports its own door, so a route that loses its approval is
-        // visibly shut rather than looking available until it is clicked.
-        const door = value === mode ? activeDoor : routeDoor(ROUTE_BY_MODE[value], register);
-        return (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={mode === value}
-            data-locked={door.open ? undefined : 'true'}
-            onClick={() => onSelect(value)}
-          >
-            {labels[value]}
-          </button>
-        );
-      })}
-    </nav>
   );
 }
 
@@ -402,48 +335,42 @@ function BalanceBlock({ state, privateCheck = false, onRefresh }: { state: BankS
 function ComposeBlock({
   state,
   panel,
-  experience,
   rate,
   onRefresh,
 }: {
   state: BankState;
   panel: BankPanelMachine;
-  experience: 'menu' | 'station';
   rate: EndurRateView;
   onRefresh: () => void;
 }) {
-  const busy = state.flow.name === 'preparing' || state.adding;
+  const preparing = state.flow.name === 'preparing';
+  const busy = preparing || state.adding;
   const needsRecipient = modeNeedsRecipient(state.mode);
   // D-022: a Max only where the spendable figure is known and costed. The
   // shipped wallet reports one total per token, so in production there is
   // none, and the button is not drawn rather than drawn dead.
   const max = panel.maxSpendable();
-  // A stake settles on its own (D-063), and a transfer pays one recipient per
-  // send (D-065), so even Menu Mode composes either as one action: batch
-  // vocabulary would promise a shared fee that cannot happen.
   const stake = state.mode === 'stake';
   const transfer = state.mode === 'transfer';
   const shield = state.mode === 'shield';
-  const singleAction = experience === 'station' || stake || transfer;
   // The balance the field checks against and shows: the private STRK total,
   // once read, in a mode that spends it. It is a total (D-022), so "more than
   // your pool balance" is certain; less is still the wallet's to accept.
   // D-094: on Shield it is the wallet's public balance, and the amount must
-  // leave room for the pool fee on top and for any shield already queued.
+  // leave room for the pool fee on top.
   const wallet = shield && state.publicBalance.status === 'loaded' ? state.publicBalance.amount : null;
-  const queuedShields = state.batch.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n);
-  const shieldLimit = wallet !== null && state.pool ? wallet - state.pool.feeAmount - queuedShields : null;
+  const shieldLimit = wallet !== null && state.pool ? wallet - state.pool.feeAmount : null;
   const balance = shield
     ? wallet
     : balanceOnField(state) && state.balance.status === 'loaded' ? state.balance.total : null;
   const check = checkAmount(state.amountText, { decimals: 18, balance: shield ? shieldLimit : balance });
   const recipient = state.recipientText.trim();
-  const ready = singleAction ? COPY.gameMode.reviewAction : COPY.batch.add;
+  const ready = COPY.gameMode.reviewAction;
   const action = needsRecipient && recipient === ''
     ? { label: COPY.bank.enterRecipient, disabled: true }
     : needsRecipient && !looksLikeAddress(recipient)
       ? { label: COPY.bank.checkRecipient, disabled: true }
-      : primaryAction({ check, symbol: 'STRK', ready });
+      : primaryAction({ check, symbol: 'STRK', ready, busy: busy ? COPY.flow.preparing : null });
   const atMax = max !== null && state.amountText === formatTokenAmountExact(max);
   // The balance card's notes, when its figure is on the field instead. The
   // settling note is about the private balance, so Shield never shows it.
@@ -458,7 +385,8 @@ function ComposeBlock({
       className="panel-compose"
       onSubmit={(event) => {
         event.preventDefault();
-        void panel.addToBatch();
+        // D-099: one action per counter, reviewed straight from the form.
+        void panel.review();
       }}
     >
       {needsRecipient ? (
@@ -491,43 +419,13 @@ function ComposeBlock({
 
       <DetailRows rows={composeRows(state, check.amount, rate)} />
 
-      <button
-        type="submit"
-        disabled={busy || action.disabled || (experience === 'station' && state.batch.length > 0)}
-      >
+      <button type="submit" className="review" disabled={busy || action.disabled}>
         {action.label}
       </button>
 
-      {experience === 'station' ? (
-        state.batch.length > 0 ? <StationAction state={state} /> : null
-      ) : singleAction ? (
-        // Menu Mode keeps Remove and Clear for whatever is queued, but the
-        // stake and transfer tabs never invite the player to fill a visit.
-        state.batch.length > 0 ? <BatchList state={state} panel={panel} /> : null
-      ) : (
-        <BatchList state={state} panel={panel} />
-      )}
-
       <p className="panel-hint">
-        {stake
-          ? COPY.stake.oneAtATime
-          : experience === 'station'
-            ? COPY.gameMode.singleAction
-            : transfer
-              ? COPY.postOffice.oneAtATime
-              : COPY.batch.why}
+        {stake ? COPY.stake.oneAtATime : transfer ? COPY.postOffice.oneAtATime : COPY.gameMode.singleAction}
       </p>
-      {/* One primary at a time: the review appears once something is queued. */}
-      {state.batch.length > 0 ? (
-        <button
-          type="button"
-          className="review"
-          disabled={busy}
-          onClick={() => void panel.prepare()}
-        >
-          {state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}
-        </button>
-      ) : null}
     </form>
   );
 }
@@ -542,9 +440,8 @@ function composeRows(state: BankState, amount: bigint | null, rate: EndurRateVie
   const rows: DetailRow[] = [];
   if (state.mode === 'shield' && state.pool) {
     // D-094: what reaches the pool, the fee on top, and what leaves the
-    // wallet, for the whole visit: the fee is paid once per transaction.
-    const queued = state.batch.reduce((sum, intent) => sum + (intent.kind === 'shield' ? intent.amount : 0n), 0n);
-    const figures = shieldFigures(queued + (amount ?? 0n), state.pool.feeAmount);
+    // wallet. D-099: every shield is its own action and pays its own fee.
+    const figures = shieldFigures(amount ?? 0n, state.pool.feeAmount);
     rows.push({ id: 'shield', label: COPY.bank.youShield, value: formatStrk(figures.amount) });
     rows.push({
       id: 'fee',
@@ -586,44 +483,6 @@ function shieldHint(state: BankState, amount: bigint | null, atMax: boolean): st
   const fee = state.pool?.feeAmount ?? null;
   if (fee !== null && amount !== null && amount > 0n && amount <= 2n * fee) return COPY.bank.shieldFeeNudge;
   return COPY.bank.shieldFeeOnTop;
-}
-
-/**
- * Game Mode has one action per station window. It still uses the same typed
- * batch machine so the route, disclosure and receipt invariants stay shared,
- * but it must not present Menu Mode's multi-action visit vocabulary.
- */
-function StationAction({ state }: { state: BankState }) {
-  const intent = state.batch[0];
-  if (!intent) return null;
-  return (
-    <p className="station-action" role="status">
-      {describeIntent(intent)}
-    </p>
-  );
-}
-
-function BatchList({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
-  if (state.batch.length === 0) {
-    return <p className="batch-empty">{COPY.batch.empty}</p>;
-  }
-  return (
-    <>
-      <ul className="batch-list" aria-label={COPY.batch.title}>
-        {state.batch.map((intent, index) => (
-          <li key={`${intent.kind}-${index}`}>
-            {describeIntent(intent)}
-            <button type="button" onClick={() => panel.removeFromBatch(index)}>
-              {COPY.batch.remove}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <button type="button" onClick={() => panel.clearBatch()}>
-        {COPY.batch.clear}
-      </button>
-    </>
-  );
 }
 
 /**

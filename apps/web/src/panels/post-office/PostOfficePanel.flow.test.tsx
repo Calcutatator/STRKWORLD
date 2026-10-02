@@ -108,8 +108,8 @@ async function type(name: 'amount' | 'recipient', value: string): Promise<void> 
 async function composeSend(recipient: Address): Promise<void> {
   await type('amount', '1');
   await type('recipient', recipient);
+  // D-099: one click from the form to the review.
   await click(button(COPY.gameMode.reviewAction));
-  await click(button(COPY.flow.review));
 }
 
 function postOffice(): Element | null {
@@ -183,7 +183,7 @@ describe('a Post Office send to an unregistered recipient (D-074)', () => {
     expect(gateway.submit).not.toHaveBeenCalled();
     expectRecipientFailureInPlace();
 
-    // Back returns to the counter with the send still queued, not to a card.
+    // Back returns to the counter with the send still typed, not to a card.
     await click(button(COPY.flow.back));
     expect(postOffice()).not.toBeNull();
     expect(container!.querySelector('input[name="recipient"]')).not.toBeNull();

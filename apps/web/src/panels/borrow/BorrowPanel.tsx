@@ -76,12 +76,18 @@ export function BorrowPanel({
   panel: injected,
   register = PRIVACY_REGISTER,
   experience = 'station',
+  modes = BORROW_MODES,
   counters = null,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BorrowPanelMachine;
   register?: readonly RouteGrade[];
+  /**
+   * The counter's actions (D-099): BORROW's borrow and add collateral, or
+   * REPAY's repay and withdraw collateral. Its tabs name only these.
+   */
+  modes?: readonly BorrowMode[];
   /** Presentation only: the counter and Menu Mode (D-088) render the same window. */
   experience?: 'menu' | 'station';
   /** Menu Mode's counter tabs (D-088); presentation only. */
@@ -96,13 +102,14 @@ export function BorrowPanel({
             operations,
             receipts,
             register,
+            modes,
             onError: noteOperationError,
             canStartFinancialAction: () => {
               const current = submissionUncertainty.store.getState();
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, register, noteOperationError, submissionUncertainty],
+    [injected, operations, receipts, register, modes, noteOperationError, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -130,7 +137,7 @@ export function BorrowPanel({
       : null;
 
   return (
-    <div className="vault-experience borrow-experience" data-experience={experience}>
+    <div className="vault-experience borrow-experience" data-experience={experience} data-mode={state.mode}>
       <WalletAttentionCue active={attention !== null} kind={attention ?? 'confirm'} />
       <PanelFrame
         title={COPY.buildings.vault}
@@ -141,7 +148,7 @@ export function BorrowPanel({
         counters={counters}
       >
         <BorrowIntro state={state} />
-        <ModeTabs state={state} onSelect={(mode) => panel.setMode(mode)} />
+        <ModeTabs state={state} modes={modes} onSelect={(mode) => panel.setMode(mode)} />
 
         {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
@@ -201,10 +208,10 @@ function BorrowIntro({ state }: { state: BorrowState }) {
   );
 }
 
-function ModeTabs({ state, onSelect }: { state: BorrowState; onSelect: (mode: BorrowMode) => void }) {
+function ModeTabs({ state, modes, onSelect }: { state: BorrowState; modes: readonly BorrowMode[]; onSelect: (mode: BorrowMode) => void }) {
   return (
     <nav className="panel-modes borrow-modes" role="tablist">
-      {BORROW_MODES.map((mode) => (
+      {modes.map((mode) => (
         <button
           key={mode}
           type="button"

@@ -56,7 +56,7 @@ function render(
   seam: FakePrivacyOperations,
   experience: 'menu' | 'station' = 'menu',
   submissionUncertainty = createSubmissionUncertainty(),
-  options: { allowedModes?: readonly BankMode[]; initialMode?: BankMode; title?: string; register?: readonly RouteGrade[] } = {},
+  options: { mode?: BankMode; title?: string; register?: readonly RouteGrade[] } = {},
 ): string {
   return renderToStaticMarkup(
     <PrivacyProvider operations={seam} submissionUncertainty={submissionUncertainty}>
@@ -132,7 +132,6 @@ describe('BankPanel rendering', () => {
     const panel = createAllowedBankPanel({
       operations: seam,
       receipts: createReceiptLedger(),
-      maxIntents: 1,
     });
     await panel.open();
     panel.setAmount('1');
@@ -210,7 +209,6 @@ describe('BankPanel rendering', () => {
       receipts: createReceiptLedger(),
       allowedModes: ['transfer'],
       initialMode: 'transfer',
-      maxIntents: 1,
     });
     await panel.open();
     panel.setRecipient(BOB);
@@ -219,8 +217,7 @@ describe('BankPanel rendering', () => {
     await panel.prepare();
 
     const markup = render(panel, seam, 'station', undefined, {
-      allowedModes: ['transfer'],
-      initialMode: 'transfer',
+      mode: 'transfer',
       title: 'The Post Office',
     });
     const gate = commitGate(markup);
@@ -234,80 +231,40 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain('Add to this visit');
   });
 
-  it('keeps a queued Post Office action reviewable without Menu Mode batch controls', async () => {
+  it('shows each counter one action and no visit queue, in Game Mode and Menu Mode alike (D-099)', async () => {
     const seam = operations();
-    const panel = createAllowedBankPanel({
-      operations: seam,
-      receipts: createReceiptLedger(),
-      allowedModes: ['transfer'],
-      initialMode: 'transfer',
-      maxIntents: 1,
-    });
-    await panel.open();
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-
-    const markup = render(panel, seam, 'station', undefined, {
-      allowedModes: ['transfer'],
-      initialMode: 'transfer',
-      title: 'The Post Office',
-    });
-    expect(markup).toContain('Private transfer 1 STRK');
-    expect(markup).toMatch(/<button[^>]*class="review"[^>]*>Check this before you confirm<\/button>/);
-    expect(markup).not.toContain(COPY.batch.title);
-    expect(markup).not.toContain(COPY.batch.add);
-    expect(markup).not.toContain(COPY.batch.empty);
-    expect(markup).not.toContain(COPY.batch.clear);
-    expect(markup).not.toContain(COPY.batch.why);
+    for (const experience of ['station', 'menu'] as const) {
+      for (const mode of ['shield', 'unshield', 'stake', 'transfer'] as const) {
+        const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger(), allowedModes: [mode], initialMode: mode });
+        await panel.open();
+        const markup = render(panel, seam, experience, undefined, { mode });
+        // One primary: the counter's own review, straight from the form.
+        expect(markup, `${experience} ${mode}`).toMatch(/<button type="submit" class="review" disabled="">/);
+        expect(markup, `${experience} ${mode}`).not.toContain('role="tablist"');
+        for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action', 'This visit', '>Clear<', '>Remove<']) {
+          expect(markup, `${experience} ${mode}: ${gone}`).not.toContain(gone);
+        }
+        const hint = mode === 'stake' ? COPY.stake.oneAtATime : mode === 'transfer' ? COPY.postOffice.oneAtATime : COPY.gameMode.singleAction;
+        expect(markup, `${experience} ${mode}`).toContain(hint);
+        panel.close();
+      }
+    }
   });
 
-  it('keeps the clear-batch control in Bank Menu Mode', async () => {
+  it('keeps the typed action in the form while it prepares, and offers no second action beside it', async () => {
     const seam = operations();
-    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger(), allowedModes: ['transfer'], initialMode: 'transfer' });
     await panel.open();
-    panel.setAmount('1');
-    await panel.addToBatch();
-
-    const markup = render(panel, seam, 'menu');
-    expect(markup).toContain(COPY.batch.title);
-    expect(markup).toContain(COPY.batch.clear);
-    expect(markup).toContain(COPY.batch.why);
-  });
-
-  it('composes a transfer as one send in Bank Menu Mode, and says why a second is refused (D-065)', async () => {
-    const seam = operations();
-    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
-    await panel.open();
-    panel.setMode('transfer');
-
-    const empty = render(panel, seam, 'menu');
-    expect(empty).toContain(COPY.postOffice.oneAtATime);
-    expect(empty).toContain(COPY.bank.enterRecipient);
     panel.setRecipient(BOB);
     panel.setAmount('1');
-    // Filled in, the button reviews one send, never "add to this visit".
-    expect(render(panel, seam, 'menu')).toContain(COPY.gameMode.reviewAction);
-    panel.setRecipient('');
-    panel.setAmount('');
-    expect(empty).not.toContain(COPY.batch.add);
-    expect(empty).not.toContain(COPY.batch.empty);
-    expect(empty).not.toContain(COPY.batch.why);
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    await panel.addToBatch();
-
-    const refused = render(panel, seam, 'menu');
-    expect(refused).toContain(COPY.notices.oneRecipientPerSend);
-    expect(refused).toContain('Private transfer 1 STRK');
-    expect(refused).not.toContain('Private transfer 2 STRK');
-    // What is queued keeps its Remove and Clear controls.
-    expect(refused).toContain(COPY.batch.remove);
-    expect(refused).toContain(COPY.batch.clear);
+    const filled = render(panel, seam, 'menu', undefined, { mode: 'transfer' });
+    expect(filled).toMatch(new RegExp(`<button type="submit" class="review">${COPY.gameMode.reviewAction}</button>`));
+    const reviewing = panel.review();
+    const preparing = render(panel, seam, 'menu', undefined, { mode: 'transfer' });
+    expect(preparing).toMatch(new RegExp(`<button type="submit" class="review" disabled="">${COPY.flow.preparing}</button>`));
+    expect(preparing).toContain('value="1"');
+    await reviewing;
+    expect(confirmButton(render(panel, seam, 'menu', undefined, { mode: 'transfer' }))).not.toBeNull();
   });
 
   it('disables confirm while the wallet works, and keeps the disclosure on screen', async () => {
@@ -353,39 +310,8 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain('name="amount"');
     expect(markup).not.toContain(COPY.balance.refresh);
     expect(confirmButton(markup)).toBeNull();
-    // The tab itself is marked, so the door is visibly shut before it is tried.
-    expect(markup).toMatch(/<button[^>]*data-locked="true"/);
-  });
-
-  it('marks non-active mode tabs from the machine route register', async () => {
-    const unapproved: RouteGrade = {
-      building: 'bank',
-      route: 'bank.unshield',
-      grade: 'public-edge',
-      observable: 'test fixture',
-      disclosure: null,
-      approvedBy: null,
-      approvedOn: null,
-      rationale: null,
-      returnToPool: false,
-    };
-    const shieldRoute = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!;
-    const seam = operations();
-    const panel = createAllowedBankPanel({
-      operations: seam,
-      receipts: createReceiptLedger(),
-      allowedModes: ['shield', 'unshield'],
-      initialMode: 'shield',
-      register: [shieldRoute, unapproved],
-    });
-    await panel.open();
-
-    const markup = render(panel, seam, 'menu', undefined, {
-      allowedModes: ['shield', 'unshield'],
-      initialMode: 'shield',
-      register: [shieldRoute, unapproved],
-    });
-    expect(markup).toMatch(/<button[^>]*data-locked="true"[^>]*>Unshield<\/button>/);
+    // One counter, one control: no tabs to mark (D-099).
+    expect(markup).not.toContain('role="tablist"');
   });
 
   it('tells the player a restored receipt settled while the room was shut, not that it was just sent', async () => {
@@ -500,7 +426,7 @@ describe('BankPanel rendering', () => {
     expect(seam.submitted).toHaveLength(0);
     expect(markup).toContain(COPY.balance.refresh);
     expect(markup).not.toContain('name="amount"');
-    expect(markup).not.toContain(COPY.batch.add);
+    expect(markup).not.toContain(COPY.gameMode.reviewAction);
     expect(confirmButton(markup)).toBeNull();
   });
 
@@ -552,7 +478,7 @@ describe('BankPanel rendering', () => {
       seam.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
       await panel.prepare();
 
-      const markup = render(panel, seam, 'menu', createSubmissionUncertainty(), options);
+      const markup = render(panel, seam, 'menu', createSubmissionUncertainty(), { mode, ...('title' in options ? { title: options.title } : {}) });
       expect(markup, mode).toContain(`<div class="flow-failed" role="alert"><p>${message}</p><button type="button">${COPY.flow.back}</button>`);
       expect(markup, mode).not.toContain(COPY.errors.unreachable);
     }
@@ -610,8 +536,8 @@ describe('BankPanel rendering', () => {
       // Its Refresh sits beside the balance line, and no empty card is left above.
       expect(markup, mode).toContain(`aria-label="${COPY.balance.refreshLabel}">${COPY.balance.refreshShort}</button>`);
       expect(markup, mode).not.toContain('class="panel-balance"');
-      // One primary at a time: nothing is queued, so there is no review button.
-      expect(markup, mode).not.toContain('class="review"');
+      // One primary: the counter's own review button, waiting for an amount.
+      expect(markup, mode).toMatch(/<button type="submit" class="review" disabled="">/);
       expect(markup, mode).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
       // Swap conventions stay at the Exchange.
       expect(markup, mode).not.toContain(COPY.kit.half);
@@ -630,7 +556,7 @@ describe('BankPanel rendering', () => {
 
     const markup = render(panel, seam);
     expect(markup).toContain(COPY.kit.exceedsBalance);
-    expect(markup).toMatch(new RegExp(`<button type="submit" disabled="">${COPY.kit.insufficient.replace('{symbol}', 'STRK')}</button>`));
+    expect(markup).toMatch(new RegExp(`<button type="submit" class="review" disabled="">${COPY.kit.insufficient.replace('{symbol}', 'STRK')}</button>`));
   });
 
   it('states review figures exactly', async () => {
@@ -737,7 +663,7 @@ describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094
     panel.setAmount('24');
     const markup = render(panel, seam);
     expect(markup).toContain(COPY.bank.exceedsWallet);
-    expect(markup).toContain('<button type="submit" disabled="">Insufficient STRK</button>');
+    expect(markup).toContain('<button type="submit" class="review" disabled="">Insufficient STRK</button>');
     panel.setAmount('23');
     expect(render(panel, seam)).not.toContain('Insufficient STRK');
   });

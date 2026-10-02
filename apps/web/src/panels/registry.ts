@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../copy.js';
-import { BankPanel } from './bank/BankPanel.js';
+import { BankMenuPanel } from './bank/BankMenuPanel.js';
 import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import { ExchangeMenuPanel } from './exchange/ExchangeMenuPanel.js';
 import { BridgePanel } from './bridge/BridgePanel.js';
@@ -30,7 +30,8 @@ export interface BuildingPanelDescriptor {
 }
 
 export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.freeze({
-  bank: Object.freeze({ building: 'bank', title: COPY.buildings.bank, Component: BankPanel }),
+  // D-099: the Bank's four counters as Menu Mode tabs.
+  bank: Object.freeze({ building: 'bank', title: COPY.buildings.bank, Component: BankMenuPanel }),
   // D-088: the ground floor's swap, and the degen floor's whenever its
   // counter would open.
   exchange: Object.freeze({ building: 'exchange', title: COPY.buildings.exchange, Component: ExchangeMenuPanel }),
@@ -40,8 +41,8 @@ export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.fr
     Component: PostOfficePanel,
   }),
   bridge: Object.freeze({ building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel }),
-  // D-077: Menu Mode's Vault, the same window as its counter. Its routes'
-  // doors still gate every control inside it. D-088: and the BORROW window
-  // beside it whenever that counter would open.
+  // D-077: Menu Mode's Vault, the same windows as its counters. Their routes'
+  // doors still gate every control inside them. D-088, D-099: SUPPLY, REDEEM,
+  // BORROW and REPAY as tabs, each while its counter would open.
   vault: Object.freeze({ building: 'vault', title: COPY.buildings.vault, Component: VaultMenuPanel }),
 });

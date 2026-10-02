@@ -6,7 +6,7 @@ import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET, FakePrivacyOperations } from '@strkworl
 import { COPY } from '../../copy.js';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
-import { BankPanel } from './BankPanel.js';
+import { VisitLayerView } from '../../visits/VisitLayer.js';
 
 /**
  * The unstaking counter (D-085) as a player drives it, under the stake form
@@ -64,14 +64,24 @@ async function render(operations: FakePrivacyOperations): Promise<HTMLElement> {
   await act(async () => {
     root!.render(
       <PrivacyProvider operations={operations}>
-        <BankPanel experience="station" allowedModes={['stake']} initialMode="stake" onClose={() => {}} />
+        <VisitLayerView
+          state={{ name: 'visiting', building: 'bank', surface: { name: 'station', station: 'bank:unstaking' } }}
+          connected
+          onOpenMenu={() => {}}
+          onRequestExit={() => {}}
+          onCloseSurface={() => {}}
+          onDismissLocked={() => {}}
+        />
       </PrivacyProvider>,
     );
   });
   await settle();
-  // D-091: the unstaking counter is the staking counter's Unstake tab.
-  expect(container.querySelector('section.unstake-counter')).toBeNull();
-  await click(button(COPY.stake.tabUnstake));
+  // D-099: unstaking is the UNSTAKE counter's own window, in Endur's look,
+  // with no stake form and no tabs beside it.
+  const panel = container.querySelector<HTMLElement>('section.panel')!;
+  expect(panel.getAttribute('data-brand')).toBe('endur');
+  expect(container.querySelector('[role="tablist"]')).toBeNull();
+  expect(container.textContent).not.toContain(COPY.stake.intro);
   return container.querySelector<HTMLElement>('section.unstake-counter')!;
 }
 

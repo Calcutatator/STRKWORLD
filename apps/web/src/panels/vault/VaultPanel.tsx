@@ -20,9 +20,7 @@ import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
 import { AmountField, DetailRows, checkAmount, feeReserve, maxAfterReserve, primaryAction, type DetailRow } from '../kit/index.js';
 import { createPendingHudOwner } from '../pending-hud.js';
-import { routeDoor } from '../routes.js';
 import {
-  ROUTE_BY_VAULT_MODE,
   createVaultPanel,
   noneInPoolLine,
   poolBalanceOf,
@@ -37,8 +35,6 @@ import {
   type VaultState,
   type VaultTokenView,
 } from './vault-machine.js';
-
-const VAULT_MODES: readonly VaultMode[] = ['supply', 'redeem'];
 
 /** A position figure: up to eight decimal places, truncated, with the token's symbol (D-079). */
 function formatHolding(amount: bigint, token: VaultTokenView): string {
@@ -75,14 +71,16 @@ function poolLabel(token: VaultTokenView): string {
  * switched on shows a locked door rather than a form nobody can submit; a
  * wallet that cannot run a shadow account is told so instead of being shown a
  * form; and the only confirm button is inside `ConfirmGate`, which cannot
- * render without the prepared route's approved disclosure. The Game Mode
- * counter and Menu Mode render the same window: the Vault confirms one action
- * at a time either way.
+ * render without the prepared route's approved disclosure. D-099: SUPPLY and
+ * REDEEM are counters of their own, so a window shows one of them; the Game
+ * Mode counter and Menu Mode's tab render the same window, and the Vault
+ * confirms one action at a time either way.
  */
 export function VaultPanel({
   onClose,
   panel: injected,
   experience = 'menu',
+  mode = 'supply',
   register = PRIVACY_REGISTER,
   counters = null,
 }: {
@@ -90,6 +88,8 @@ export function VaultPanel({
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: VaultPanelMachine;
   experience?: 'menu' | 'station';
+  /** The counter: SUPPLY or REDEEM (D-099). */
+  mode?: VaultMode;
   register?: readonly RouteGrade[];
   /** Menu Mode's counter tabs (D-088); presentation only. */
   counters?: ReactNode;
@@ -103,13 +103,14 @@ export function VaultPanel({
             operations,
             receipts,
             register,
+            initialMode: mode,
             onError: noteOperationError,
             canStartFinancialAction: () => {
               const current = submissionUncertainty.store.getState();
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, register, noteOperationError, submissionUncertainty],
+    [injected, operations, receipts, register, mode, noteOperationError, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -141,7 +142,7 @@ export function VaultPanel({
   const token = state.token === null ? undefined : vaultChoices(state, state.mode).find((entry) => sameAddress(entry.token, state.token!));
 
   return (
-    <div className="vault-experience" data-experience={experience}>
+    <div className="vault-experience" data-experience={experience} data-mode={state.mode}>
       <WalletAttentionCue active={attention !== null} kind={attention ?? 'confirm'} />
       <PanelFrame
         title={COPY.buildings.vault}
@@ -153,7 +154,6 @@ export function VaultPanel({
         counters={counters}
       >
         <VaultIntro token={token} />
-        <ModeTabs state={state} register={register} onSelect={(mode) => panel.setMode(mode)} />
 
         {!state.door.open ? (
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
@@ -217,37 +217,6 @@ function VaultIntro({ token }: { token: VaultTokenView | undefined }) {
       <p className="vault-note">{COPY.vault.feeNote}</p>
       {otherToken ? <p className="vault-note vault-fee-token">{COPY.vault.feeInStrk}</p> : null}
     </div>
-  );
-}
-
-function ModeTabs({
-  state,
-  register,
-  onSelect,
-}: {
-  state: VaultState;
-  register: readonly RouteGrade[];
-  onSelect: (mode: VaultMode) => void;
-}) {
-  const labels: Record<VaultMode, string> = { supply: COPY.vault.supply, redeem: COPY.vault.redeem };
-  return (
-    <nav className="panel-modes" role="tablist">
-      {VAULT_MODES.map((mode) => {
-        const door = mode === state.mode ? state.door : routeDoor(ROUTE_BY_VAULT_MODE[mode], register);
-        return (
-          <button
-            key={mode}
-            type="button"
-            role="tab"
-            aria-selected={state.mode === mode}
-            data-locked={door.open ? undefined : 'true'}
-            onClick={() => onSelect(mode)}
-          >
-            {labels[mode]}
-          </button>
-        );
-      })}
-    </nav>
   );
 }
 

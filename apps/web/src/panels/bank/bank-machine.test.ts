@@ -236,7 +236,6 @@ describe('bank panel — entering the room', () => {
     const panel = await openPanel(fake(), {
       allowedModes: ['transfer'],
       initialMode: 'transfer',
-      maxIntents: 1,
     });
 
     expect(panel.store.getState()).toMatchObject({
@@ -321,6 +320,90 @@ describe('bank panel — entering the room', () => {
   });
 });
 
+describe('bank panel — one action per counter (D-099)', () => {
+  it('reviews straight from the form: one call checks, queues and prepares the one intent', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations, { allowedModes: ['unshield'], initialMode: 'unshield' });
+    panel.setRecipient(ALICE);
+    panel.setAmount('2');
+    await panel.review();
+
+    const flow = panel.store.getState().flow;
+    expect(flow.name).toBe('review');
+    expect(flow.name === 'review' && flow.summary.intents).toEqual([
+      { kind: 'unshield', token: STRK, amount: strk('2'), recipient: ALICE },
+    ]);
+    // The form still holds the action while it is reviewed.
+    expect(panel.store.getState()).toMatchObject({ amountText: '2', recipientText: ALICE });
+    await panel.confirm();
+    expect(operations.submitted).toEqual([[{ kind: 'unshield', token: STRK, amount: strk('2'), recipient: ALICE }]]);
+    // Settled: the form is empty for the next action, which pays its own fee.
+    expect(panel.store.getState()).toMatchObject({ flow: { name: 'submitted' }, batch: [], amountText: '', recipientText: '' });
+  });
+
+  it('refuses a bad form without queuing anything or asking the wallet', async () => {
+    const operations = fake();
+    const prepare = vi.spyOn(operations, 'prepare');
+    const panel = await openPanel(operations, { allowedModes: ['unshield'], initialMode: 'unshield' });
+    panel.setRecipient('not an address');
+    panel.setAmount('1');
+    await panel.review();
+    expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' }, notice: { text: COPY.notices.badRecipient } });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('prepares what the form says now, never an intent an earlier failed attempt left queued', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations, { allowedModes: ['shield'], initialMode: 'shield' });
+    await settle();
+    operations.injectFault({ kind: 'unreachable', on: 'prepare' });
+    panel.setAmount('1');
+    await panel.review();
+    expect(panel.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
+    // The player edits the amount and reviews again without pressing Back first.
+    panel.setAmount('3');
+    await panel.review();
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.intents).toEqual([{ kind: 'shield', token: STRK, amount: strk('3') }]);
+  });
+
+  it('ignores a second review while one is preparing or under review', async () => {
+    const operations = fake();
+    const prepare = vi.spyOn(operations, 'prepare');
+    const panel = await openPanel(operations, { allowedModes: ['shield'], initialMode: 'shield' });
+    await settle();
+    panel.setAmount('1');
+    const first = panel.review();
+    await panel.review();
+    await first;
+    await panel.review();
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(panel.store.getState().batch).toHaveLength(1);
+  });
+
+  it('has no visit queue to edit: no Remove or Clear on the machine', async () => {
+    const panel = await openPanel(fake());
+    expect('removeFromBatch' in panel).toBe(false);
+    expect('clearBatch' in panel).toBe(false);
+  });
+
+  it('empties the form with the queue when a submission is uncertain, so acknowledging cannot replay it blind', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations, { allowedModes: ['unshield'], initialMode: 'unshield' });
+    operations.injectFault({ kind: 'submission-uncertain', on: 'confirm' });
+    panel.setRecipient(ALICE);
+    panel.setAmount('2');
+    await panel.review();
+    await panel.confirm();
+    expect(panel.store.getState()).toMatchObject({
+      flow: { name: 'failed', kind: 'submission-uncertain', recovery: 'close' },
+      batch: [],
+      amountText: '',
+      recipientText: '',
+    });
+  });
+});
+
 describe('bank panel — optional Bridge commit guard', () => {
   it('rejects a changed handoff plan before the wallet confirm and asks to prepare again', async () => {
     const guard = vi.fn(async () => false);
@@ -383,24 +466,22 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
   });
 
-  it('offers no maximum for a visit shape it has never seen costed', async () => {
-    // The relay fee is charged per action, so a figure measured on a one-intent
-    // batch is not the cost of a two-intent batch. Reusing it is what made MAX
-    // a button that always failed. Unshields still batch; a transfer never
-    // shares a batch since D-065, so it cannot show this.
+  it('leaves nothing queued after Back, so the costed one-action shape gives the maximum (D-099)', async () => {
+    // One action per counter: backing out of a review drops the queued
+    // intent, keeps the form, and the next action is the same one-intent
+    // shape the review just costed.
     const panel = await openPanel(fake());
     panel.setMode('unshield');
     panel.setRecipient(ALICE);
     panel.setAmount('1');
-    await panel.addToBatch();
-    await panel.prepare();
+    await panel.review();
+    const gas = quotedCost(panel);
     panel.cancelPrepared();
     await panel.refreshBalance();
 
-    // One unshield has been costed; a batch of two has not, and that is the
-    // shape another Add would create.
-    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
-    expect(panel.maxSpendable()).toBeNull();
+    expect(panel.store.getState()).toMatchObject({ batch: [], amountText: '1', recipientText: ALICE, flow: { name: 'composing' } });
+    expect(panel.store.getState().quotedGasForNextIntent).toBe(gas);
+    expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE - gas);
   });
 
   it('reserves both fees for the empty visit, and that maximum survives review', async () => {
@@ -413,7 +494,6 @@ describe('bank panel — maturity-aware balance', () => {
     await panel.prepare();
     const gasForOne = quotedCost(panel);
     panel.cancelPrepared();
-    panel.clearBatch();
     await panel.refreshBalance();
 
     panel.applyMax();
@@ -428,7 +508,7 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.store.getState().flow.name).toBe('review');
   });
 
-  it('refuses a second unshield in one visit, because the relay admits one withdrawal', async () => {
+  it('queues one action per counter: a second Add is refused (D-099)', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('unshield');
@@ -438,26 +518,24 @@ describe('bank panel — maturity-aware balance', () => {
       await panel.addToBatch();
     }
     expect(panel.store.getState().batch).toHaveLength(1);
-    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.oneUnshieldPerSend });
+    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.batchFull });
     // The one that was queued still reviews.
     await panel.prepare();
     expect(panel.store.getState().flow.name).toBe('review');
   });
 
-  it('offers no maximum once the visit already spends everything', async () => {
-    const operations = fake({ balances: { [STRK]: strk('10') } });
+  it('offers no maximum once the fees alone spend everything', async () => {
+    const operations = fake({ balances: { [STRK]: strk('6') } });
     const panel = await openPanel(operations);
     panel.setMode('unshield');
     panel.setRecipient(ALICE);
     panel.setAmount('4');
-    await panel.addToBatch();
-    expect(panel.store.getState().batch).toHaveLength(1);
-    await panel.prepare();
+    await panel.review();
     panel.cancelPrepared();
     await panel.refreshBalance();
 
-    // 10 held, 4 queued, 6 pool fee and the relay estimate on top: the visit
-    // already spends more than there is, so there is no maximum to offer.
+    // 6 held, the 6 pool fee and the network estimate on top: nothing is
+    // left to spend, so there is no maximum to offer.
     expect(panel.maxSpendable()).toBeNull();
   });
 
@@ -481,7 +559,6 @@ describe('bank panel — maturity-aware balance', () => {
     await panel.prepare();
     const gas = quotedCost(panel);
     panel.cancelPrepared();
-    panel.clearBatch();
     await panel.refreshBalance();
     expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE - gas);
   });
@@ -741,7 +818,6 @@ describe('bank panel — composing a visit', () => {
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
-    panel.clearBatch();
     await panel.refreshBalance();
 
     const max = panel.maxSpendable();
@@ -828,132 +904,7 @@ describe('bank panel — composing a visit', () => {
     });
   });
 
-  it('keeps Clear authoritative when a transfer preflight finishes late', async () => {
-    const operations = fake();
-    const preflight = deferred<'registered'>();
-    vi.spyOn(operations, 'recipientStatus')
-      .mockResolvedValueOnce('registered')
-      .mockReturnValueOnce(preflight.promise);
-    const panel = await openPanel(operations);
-    panel.setMode('transfer');
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    expect(panel.store.getState().batch).toHaveLength(1);
-
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    const adding = panel.addToBatch();
-    expect(panel.store.getState().adding).toBe(true);
-
-    panel.clearBatch();
-    expect(panel.store.getState().batch).toEqual([]);
-    preflight.resolve('registered');
-    await adding;
-
-    expect(panel.store.getState()).toMatchObject({
-      adding: false,
-      batch: [],
-      flow: { name: 'composing' },
-    });
-  });
-
-  it('suppresses a rejected transfer preflight after Clear owns the batch', async () => {
-    const operations = fake();
-    const preflight = deferred<'registered'>();
-    vi.spyOn(operations, 'recipientStatus')
-      .mockResolvedValueOnce('registered')
-      .mockReturnValueOnce(preflight.promise);
-    const onError = vi.fn();
-    const panel = await openPanel(operations, { onError });
-    panel.setMode('transfer');
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    const adding = panel.addToBatch();
-
-    panel.clearBatch();
-    preflight.reject(new PrivacyError('unreachable', 'stale preflight failure'));
-    await adding;
-
-    expect(onError).not.toHaveBeenCalled();
-    expect(panel.store.getState()).toMatchObject({
-      adding: false,
-      amountText: '2',
-      recipientText: BOB,
-      batch: [],
-      notice: null,
-      flow: { name: 'composing' },
-    });
-  });
-
-  it('keeps Remove authoritative when a transfer preflight succeeds late', async () => {
-    const operations = fake();
-    const preflight = deferred<'registered'>();
-    vi.spyOn(operations, 'recipientStatus')
-      .mockResolvedValueOnce('registered')
-      .mockReturnValueOnce(preflight.promise);
-    const panel = await openPanel(operations);
-    panel.setMode('transfer');
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    const adding = panel.addToBatch();
-
-    panel.removeFromBatch(0);
-    preflight.resolve('registered');
-    await adding;
-
-    expect(panel.store.getState()).toMatchObject({
-      adding: false,
-      amountText: '2',
-      recipientText: BOB,
-      batch: [],
-      notice: null,
-      flow: { name: 'composing' },
-    });
-  });
-
-  it('suppresses a rejected transfer preflight after Remove owns the batch', async () => {
-    const operations = fake();
-    const preflight = deferred<'registered'>();
-    vi.spyOn(operations, 'recipientStatus')
-      .mockResolvedValueOnce('registered')
-      .mockReturnValueOnce(preflight.promise);
-    const onError = vi.fn();
-    const panel = await openPanel(operations, { onError });
-    panel.setMode('transfer');
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    const adding = panel.addToBatch();
-
-    panel.removeFromBatch(0);
-    preflight.reject(new PrivacyError('unreachable', 'stale preflight failure'));
-    await adding;
-
-    expect(onError).not.toHaveBeenCalled();
-    expect(panel.store.getState()).toMatchObject({
-      adding: false,
-      amountText: '2',
-      recipientText: BOB,
-      batch: [],
-      notice: null,
-      flow: { name: 'composing' },
-    });
-  });
-
-  it('refuses a second transfer with the one-recipient notice, then sends the next after confirm (D-065)', async () => {
+  it('refuses a second transfer while one is queued, then sends the next after confirm (D-065, D-099)', async () => {
     const operations = fake({ registered: [BOB, ALICE] });
     const panel = await openPanel(operations);
     panel.setMode('transfer');
@@ -970,7 +921,7 @@ describe('bank panel — composing a visit', () => {
       // The refused entry stays in the form, so the player can send it next.
       amountText: '2',
       recipientText: ALICE,
-      notice: { tone: 'error', text: COPY.notices.oneRecipientPerSend },
+      notice: { tone: 'error', text: COPY.notices.batchFull },
     });
     await panel.prepare();
     await panel.confirm();
@@ -1004,12 +955,12 @@ describe('bank panel — composing a visit', () => {
       await panel.addToBatch();
     }
 
-    // Even to the same recipient: a batch holds at most one transfer.
+    // Even to the same recipient: a counter holds one action at a time.
     expect(panel.store.getState()).toMatchObject({
       mode: 'transfer',
       routeId: 'post-office.transfer',
       batch: [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
-      notice: { tone: 'error', text: COPY.notices.oneRecipientPerSend },
+      notice: { tone: 'error', text: COPY.notices.batchFull },
     });
 
     await panel.prepare();
@@ -1055,7 +1006,6 @@ describe('bank panel — composing a visit', () => {
     const panel = await openPanel(operations, {
       allowedModes: ['transfer'],
       initialMode: 'transfer',
-      maxIntents: 1,
     });
 
     panel.setRecipient(BOB);
@@ -1072,7 +1022,7 @@ describe('bank panel — composing a visit', () => {
     expect(panel.store.getState().flow.name).toBe('submitted');
   });
 
-  it('rejects a shield queued alongside a spend, with the reason (D-022)', async () => {
+  it('never queues a spend beside a shield: one action at a time (D-022, D-099)', async () => {
     const panel = await openPanel(fake());
     panel.setAmount('1');
     await panel.addToBatch();
@@ -1082,8 +1032,8 @@ describe('bank panel — composing a visit', () => {
     panel.setAmount('1');
     await panel.addToBatch();
 
-    expect(panel.store.getState().batch).toHaveLength(1);
-    expect(panel.store.getState().notice?.text).toBe(COPY.notices.mixedShieldAndSpend);
+    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['shield']);
+    expect(panel.store.getState().notice?.text).toBe(COPY.notices.batchFull);
   });
 
   it('preflights a transfer recipient and blocks an unregistered one', async () => {
@@ -1123,7 +1073,7 @@ describe('bank panel — composing a visit', () => {
 });
 
 describe('bank panel — prepare and confirm', () => {
-  it('keeps Clear authoritative when preparation finishes late', async () => {
+  it('keeps Back authoritative when preparation finishes late', async () => {
     const operations = fake();
     const preparation = deferred<void>();
     const prepare = operations.prepare.bind(operations);
@@ -1139,46 +1089,12 @@ describe('bank panel — prepare and confirm', () => {
 
     const preparing = panel.prepare();
     expect(panel.store.getState().flow.name).toBe('preparing');
-    panel.clearBatch();
-    expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' } });
+    panel.cancelPrepared();
+    expect(panel.store.getState()).toMatchObject({ batch: [], amountText: '1', flow: { name: 'composing' } });
 
     preparation.resolve(undefined);
     await preparing;
     expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' } });
-    await expect(staleBatch.confirm({ feeCeiling: staleBatch.totalCost })).rejects.toThrow(/discarded/);
-  });
-
-  it('keeps Remove authoritative when preparation finishes late', async () => {
-    const operations = fake();
-    const preparation = deferred<void>();
-    const prepare = operations.prepare.bind(operations);
-    let staleBatch!: Awaited<ReturnType<PrivacyOperations['prepare']>>;
-    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
-      await preparation.promise;
-      staleBatch = await prepare(intents, signal);
-      return staleBatch;
-    });
-    const panel = await openPanel(operations);
-    panel.setMode('transfer');
-    for (const amount of ['1', '2']) {
-      panel.setRecipient(BOB);
-      panel.setAmount(amount);
-      await panel.addToBatch();
-    }
-
-    const preparing = panel.prepare();
-    panel.removeFromBatch(1);
-    expect(panel.store.getState()).toMatchObject({
-      batch: [{ amount: strk('1') }],
-      flow: { name: 'composing' },
-    });
-
-    preparation.resolve(undefined);
-    await preparing;
-    expect(panel.store.getState()).toMatchObject({
-      batch: [{ amount: strk('1') }],
-      flow: { name: 'composing' },
-    });
     await expect(staleBatch.confirm({ feeCeiling: staleBatch.totalCost })).rejects.toThrow(/discarded/);
   });
 
@@ -1335,9 +1251,9 @@ describe('bank panel — fault injection', () => {
       expect(panel.store.getState().flow).toEqual(recipientFailure);
       expect(connect.store.getState().name).toBe('connected');
       expect(failures.map((failure) => failure.kind)).toEqual(['recipient-not-registered']);
-      // Back keeps the send queued, as any failed prepare does.
+      // Back returns to the form with the send still typed (D-099), as any failed prepare does.
       panel.cancelPrepared();
-      expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['transfer']);
+      expect(panel.store.getState()).toMatchObject({ batch: [], recipientText: STRANGER, amountText: '1' });
       expect(operations.submitted).toHaveLength(0);
     });
 
@@ -1752,7 +1668,7 @@ describe('bank panel — confirmation ownership', () => {
     const first = panel.confirm();
     await gates.first.entered.promise;
     panel.cancelPrepared();
-    await panel.prepare();
+    await panel.review();
     const second = panel.confirm();
     await gates.second.entered.promise;
     return { first, second, gates, operations, panel, receipts };
@@ -1796,7 +1712,7 @@ describe('bank panel — confirmation ownership', () => {
     await gates.first.entered.promise;
 
     panel.cancelPrepared();
-    await panel.prepare();
+    await panel.review();
     panel.close();
     gates.first.settled.resolve(undefined);
     await first;
@@ -1996,7 +1912,7 @@ describe('bank panel — a receipt outlives the room', () => {
     expect(accumulator.intents[0]).toMatchObject({ kind: 'shield', amount: strk('2') });
 
     panel.cancelPrepared();
-    await panel.prepare();
+    await panel.review();
     const flow = panel.store.getState().flow;
     expect(flow.name).toBe('review');
     expect(flow.name === 'review' && flow.summary.intents[0]).toMatchObject({
@@ -2220,8 +2136,8 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
    * The relay fee is charged per action, so the cost of a batch depends on its
    * shape. A quote is therefore evidence about the shape it was taken on and
    * nothing else — there is no interpolation between two observations here,
-   * because a fitted curve is still a guess about somebody's money. Unshields
-   * show it: they still batch, where a transfer never shares a batch (D-065).
+   * because a fitted curve is still a guess about somebody's money. Since
+   * D-099 every counter prepares one action, so the shape is the mode's.
    */
 
   it('offers a maximum only once the one-spend shape has actually been costed', async () => {
@@ -2238,10 +2154,9 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
-    panel.removeFromBatch(0);
     await panel.refreshBalance();
 
-    // That shape has now been costed, and the visit is empty again.
+    // That shape has now been costed, and nothing is queued.
     expect(panel.maxSpendable()).not.toBeNull();
   });
 
@@ -2254,7 +2169,6 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
-    panel.clearBatch();
     await panel.refreshBalance();
     expect(panel.maxSpendable()).not.toBeNull();
 
@@ -2292,7 +2206,7 @@ describe('bank panel — a relay with no avnu key (D-070)', () => {
     expect(operations.submitted).toHaveLength(0);
   });
 
-  it('tells a player adding a shield behind the failed spend to remove it first', async () => {
+  it('leaves nothing behind a failed spend once the player goes Back, so a shield is its own action (D-099)', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('unshield');
@@ -2303,14 +2217,10 @@ describe('bank panel — a relay with no avnu key (D-070)', () => {
     await panel.prepare();
     panel.cancelPrepared();
 
+    expect(panel.store.getState().batch).toEqual([]);
+
     panel.setMode('shield');
     panel.setAmount('1');
-    await panel.addToBatch();
-    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.shieldAfterSpend });
-    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['unshield']);
-
-    // Doing what it says works: the shield queues once the spend is gone.
-    panel.removeFromBatch(0);
     await panel.addToBatch();
     expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['shield']);
     expect(panel.store.getState().notice).toBeNull();
@@ -2360,7 +2270,7 @@ describe('bank panel — debug steps (D-070)', () => {
       { step: 'mode', mode: 'unshield', from: 'shield' },
       { step: 'add-refused', reason: 'bad-amount' },
       { step: 'mode', mode: 'shield', from: 'unshield' },
-      { step: 'add-refused', reason: 'mixed-shield-and-spend' },
+      { step: 'add-refused', reason: 'batch-full' },
       { step: 'mode', mode: 'unshield', from: 'shield' },
       { step: 'prepare', kinds: ['unshield'] },
       { step: 'confirm', stage: 'composing' },

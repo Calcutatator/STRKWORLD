@@ -58,7 +58,7 @@ function ConnectStateProbe() {
   return <output data-testid="connect-state">{usePrivacy().connectState.name}</output>;
 }
 
-async function openCounter(operations: PrivacyOperations) {
+async function openCounter(operations: PrivacyOperations, station: 'vault:supply' | 'vault:redeem' = 'vault:supply') {
   const world = createEventBus<WorldEvents>();
   const shell = createEventBus<ShellEvents>();
   const stations: Array<ShellEvents['world:stations']> = [];
@@ -75,9 +75,16 @@ async function openCounter(operations: PrivacyOperations) {
     );
   });
   await act(async () => world.emit('building:entered', { building: 'vault' }));
-  await act(async () => world.emit('station:activated', { building: 'vault', station: 'vault:lending' }));
+  await act(async () => world.emit('station:activated', { building: 'vault', station }));
   await settle();
-  return { stations };
+  return { stations, world };
+}
+
+/** Close this counter's window and walk up to another, as a player does (D-099). */
+async function walkTo(world: ReturnType<typeof createEventBus<WorldEvents>>, station: 'vault:supply' | 'vault:redeem'): Promise<void> {
+  await click(button(COPY.flow.close));
+  await act(async () => world.emit('station:activated', { building: 'vault', station }));
+  await settle();
 }
 
 function button(label: string): HTMLButtonElement {
@@ -120,17 +127,20 @@ function vault(): Element {
 describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-081)', () => {
   it('supplies STRK and redeems it all, with the approved disclosure at every commit point', async () => {
     const operations = createDemoOperations({ funded: true });
-    const { stations } = await openCounter(operations);
+    const { stations, world } = await openCounter(operations);
 
-    // The World was told the counter is open: presentation only.
-    // D-083: the Borrow counter stands beside it.
+    // The World was told the counters are open: presentation only (D-083, D-099).
     expect(stations.at(-1)).toEqual({
       building: 'vault',
       stations: [
-        { station: 'vault:lending', label: 'SUPPLY / REDEEM', status: 'available' },
+        { station: 'vault:supply', label: 'SUPPLY', status: 'available' },
+        { station: 'vault:redeem', label: 'REDEEM', status: 'available' },
         { station: 'vault:borrow', label: 'BORROW', status: 'available' },
+        { station: 'vault:repay', label: 'REPAY', status: 'available' },
       ],
     });
+    // SUPPLY does one thing: no Supply / Redeem tabs.
+    expect(vault().querySelector('.panel-body .panel-modes')).toBeNull();
     expect(vault().querySelector('.vault-stand-in')).toBeNull();
 
     // Vesu's window, what it does, and how fees work; the disclosure previewed.
@@ -175,9 +185,10 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.worth);
 
-    // Redeem everything: the field shows what is supplied, and Max fills the
-    // whole position, which redeems every share (D-089).
-    await click(button(COPY.vault.redeem));
+    // Redeem everything at REDEEM: the field shows what is supplied, and Max
+    // fills the whole position, which redeems every share (D-089, D-099).
+    await walkTo(world, 'vault:redeem');
+    await click(button(COPY.vault.position.show));
     expect(vault().querySelector('.ui-amount-balance')?.textContent).toMatch(new RegExp(`^${COPY.vault.form.supplied}: [0-9.]+ STRK$`));
     await click(button(COPY.kit.max));
     expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).not.toBe('');
@@ -355,7 +366,7 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
       poolConfig: { noteMaturityBlocks: 0 },
       vault: { markets: { [XSTRK]: { shares: 20n * 10n ** 18n } } },
     });
-    await openCounter(operations);
+    const { world } = await openCounter(operations);
     const options = () => [...vault().querySelectorAll<HTMLOptionElement>('select[name="token"] option')].map((option) => option.value);
     expect(vault().querySelector('.vault-market[data-token="xSTRK"]')).toBeNull();
     expect(options()).not.toContain(XSTRK);
@@ -368,8 +379,9 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     // Still never offered for supply.
     expect(options()).not.toContain(XSTRK);
 
-    // Redeem offers it, with the same note, and redeems it all.
-    await click(button(COPY.vault.redeem));
+    // REDEEM offers it, with the same note, and redeems it all.
+    await walkTo(world, 'vault:redeem');
+    await click(button(COPY.vault.position.show));
     expect(options()).toContain(XSTRK);
     await choose(XSTRK);
     expect(vault().querySelector('.panel-compose .vault-market-note')?.textContent).toBe(COPY.vault.collateralOnly);

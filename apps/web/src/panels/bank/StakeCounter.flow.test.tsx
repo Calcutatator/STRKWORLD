@@ -64,7 +64,7 @@ describe('the staking station, driven through the screen in demo', () => {
     await act(async () => {
       root!.render(
         <PrivacyProvider operations={operations}>
-          <BankPanel experience="station" allowedModes={['stake']} initialMode="stake" onClose={() => {}} />
+          <BankPanel experience="station" mode="stake" onClose={() => {}} />
         </PrivacyProvider>,
       );
     });
@@ -96,11 +96,11 @@ describe('the staking station, driven through the screen in demo', () => {
       [`${COPY.bank.poolFee}${COPY.glossary.poolFee}`]: '6 STRK',
     });
     expect(container.querySelector('.panel-compose')?.textContent).toContain(COPY.stake.demoRate);
+    // D-099: one click from the form to the review; nothing is queued in between.
     await click(button(COPY.gameMode.reviewAction));
-    expect(container.querySelector('.station-action')?.textContent).toBe('Stake 5 STRK → xSTRK');
+    expect(container.querySelector('.station-action')).toBeNull();
 
     // Review: STRK in, exact; xSTRK out, named only.
-    await click(button(COPY.flow.review));
     const review = container.querySelector('.panel-review')!;
     const figures = [...review.querySelectorAll('.stake-review dd')].map((dd) => dd.textContent);
     expect(figures).toEqual(['5 STRK', 'xSTRK']);

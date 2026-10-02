@@ -2,11 +2,9 @@ import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { ConnectRoom } from '../connect/ConnectRoom.js';
-import { BankPanel } from '../panels/bank/BankPanel.js';
+import { CounterWindow } from '../panels/CounterWindow.js';
 import { ExchangePanel } from '../panels/exchange/ExchangePanel.js';
 import { BridgePanel } from '../panels/bridge/BridgePanel.js';
-import { VaultPanel } from '../panels/vault/VaultPanel.js';
-import { BorrowPanel } from '../panels/borrow/BorrowPanel.js';
 import { LockedRoom, UnbuiltRoom } from '../panels/LockedRoom.js';
 import { PanelFrame } from '../panels/PanelFrame.js';
 import { MonumentPanel } from '../panels/plaza/MonumentPanel.js';
@@ -226,17 +224,12 @@ export function VisitLayerView({
       );
     }
 
-    if (station.definition.view === 'bank') {
+    // D-099: the Bank's, the Vault's and the Post Office's counters, one
+    // action each, in the same windows Menu Mode's tabs show.
+    const view = station.definition.view;
+    if (view === 'bank' || view === 'unstake' || view === 'vault' || view === 'borrow') {
       return withControls(
-        <BankPanel
-          experience="station"
-          building={station.definition.building}
-          allowedModes={station.definition.modes}
-          initialMode={station.definition.initialMode}
-          register={register}
-          title={COPY.buildings[station.definition.building]}
-          onClose={onCloseSurface}
-        />,
+        <CounterWindow definition={station.definition} experience="station" register={register} onClose={onCloseSurface} />,
       );
     }
     if (station.definition.view === 'exchange') {
@@ -251,12 +244,6 @@ export function VisitLayerView({
     }
     if (station.definition.view === 'bridge') {
       return withControls(<BridgePanel experience="station" register={register} onClose={onCloseSurface} />);
-    }
-    if (station.definition.view === 'vault') {
-      return withControls(<VaultPanel experience="station" register={register} onClose={onCloseSurface} />);
-    }
-    if (station.definition.view === 'borrow') {
-      return withControls(<BorrowPanel register={register} onClose={onCloseSurface} />);
     }
   }
 

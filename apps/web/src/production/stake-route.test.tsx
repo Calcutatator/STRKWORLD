@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ENDUR_XSTRK, FakePrivacyOperations, type Address, type WalletRoutePolicy } from '@strkworld/privacy';
 import { COPY } from '../copy.js';
 import { parseTokenAmount } from '../format.js';
+import { BankMenuPanel } from '../panels/bank/BankMenuPanel.js';
 import { BankPanel } from '../panels/bank/BankPanel.js';
 import { createBankPanel } from '../panels/bank/bank-machine.js';
 import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
@@ -12,9 +13,9 @@ import { detectRoutePolicy, routePolicyFrom } from './config.js';
 
 /**
  * D-063's "built switched off", as a player would meet it: under the
- * production default the staking station and the Bank's Stake tab are locked
- * with their own not-enabled line, and only the build's stake switch opens
- * them. Availability comes from the existing machinery alone — the register
+ * production default the STAKE counter is locked with its own not-enabled
+ * line and Menu Mode hides its tab (D-088, D-099), and only the build's stake
+ * switch opens them. Availability comes from the existing machinery alone — the register
  * plus `routeDoor`'s live policy — with nothing stake-specific deciding it.
  *
  * As in `unshield-route.test.tsx`, Vite inlines `import.meta.env`, so the live
@@ -53,17 +54,27 @@ function stakingStation(): string {
   );
 }
 
-async function menuOnStakeTab(): Promise<{ markup: string; open: boolean }> {
+/** The STAKE counter's own window (D-099), over its own machine. */
+async function stakeWindow(): Promise<{ markup: string; open: boolean }> {
   const operations = new FakePrivacyOperations({ balances: { [STRK]: parseTokenAmount('100')! } });
-  const panel = createBankPanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+  const panel = createBankPanel({ operations, receipts: createReceiptLedger(), allowedModes: ['stake'], initialMode: 'stake', canStartFinancialAction: () => true });
   await panel.open();
-  panel.setMode('stake');
   const markup = renderToStaticMarkup(
     <PrivacyProvider operations={operations}>
-      <BankPanel panel={panel} onClose={() => {}} />
+      <BankPanel panel={panel} mode="stake" onClose={() => {}} />
     </PrivacyProvider>,
   );
   return { markup, open: panel.store.getState().door.open };
+}
+
+/** The Bank's Menu Mode tabs under the live policy. */
+function menuTabs(): string[] {
+  const markup = renderToStaticMarkup(
+    <PrivacyProvider operations={new FakePrivacyOperations()}>
+      <BankMenuPanel onClose={() => {}} />
+    </PrivacyProvider>,
+  );
+  return [...markup.matchAll(/role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]!);
 }
 
 describe("Endur staking follows this build's production policy", () => {
@@ -81,9 +92,10 @@ describe("Endur staking follows this build's production policy", () => {
     expect(station).not.toContain('name="amount"');
     expect(station).not.toContain(COPY.balance.refresh);
 
-    const { markup, open } = await menuOnStakeTab();
+    // Menu Mode hides a counter its build leaves off: here every counter but SHIELD.
+    expect(menuTabs()).toEqual([]);
+    const { markup, open } = await stakeWindow();
     expect(open).toBe(false);
-    expect(markup).toMatch(/<button[^>]*data-locked="true"[^>]*>Stake<\/button>/);
     expect(markup).toContain(escaped(COPY.locked.notEnabled.stake));
     expect(markup).not.toContain('name="amount"');
     // A locked counter offers nothing to compose, not even the intro to it.
@@ -99,11 +111,11 @@ describe("Endur staking follows this build's production policy", () => {
     expect(station).toContain('data-brand="endur"');
     expect(station).toContain('name="amount"');
 
-    const { markup, open } = await menuOnStakeTab();
+    const { markup, open } = await stakeWindow();
     expect(open).toBe(true);
-    expect(markup).not.toMatch(/<button[^>]*data-locked="true"[^>]*>Stake<\/button>/);
-    // Enabling staking enables nothing else.
-    expect(markup).toMatch(/<button[^>]*data-locked="true"[^>]*>Shield<\/button>/);
+    expect(markup).toContain('name="amount"');
+    // Enabling staking enables nothing else: Menu Mode offers SHIELD, always, and STAKE.
+    expect(menuTabs()).toEqual(['SHIELD', 'STAKE']);
   });
 
   it('opens freely in demo, where there is no production policy', () => {

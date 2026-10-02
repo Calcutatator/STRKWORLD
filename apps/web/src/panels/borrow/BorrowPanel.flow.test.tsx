@@ -52,7 +52,7 @@ async function settle(): Promise<void> {
   }
 }
 
-async function openCounter(operations: PrivacyOperations) {
+async function openCounter(operations: PrivacyOperations, station: 'vault:borrow' | 'vault:repay' = 'vault:borrow') {
   const world = createEventBus<WorldEvents>();
   const shell = createEventBus<ShellEvents>();
   const stations: Array<ShellEvents['world:stations']> = [];
@@ -68,9 +68,16 @@ async function openCounter(operations: PrivacyOperations) {
     );
   });
   await act(async () => world.emit('building:entered', { building: 'vault' }));
-  await act(async () => world.emit('station:activated', { building: 'vault', station: 'vault:borrow' }));
+  await act(async () => world.emit('station:activated', { building: 'vault', station }));
   await settle();
-  return { stations };
+  return { stations, world };
+}
+
+/** Close this counter's window and walk up to another, as a player does (D-099). */
+async function walkTo(world: ReturnType<typeof createEventBus<WorldEvents>>, station: 'vault:borrow' | 'vault:repay'): Promise<void> {
+  await click(button(COPY.flow.close));
+  await act(async () => world.emit('station:activated', { building: 'vault', station }));
+  await settle();
 }
 
 function button(label: string): HTMLButtonElement {
@@ -118,20 +125,23 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     });
     const { stations } = await openCounter(operations);
 
-    // The World is told both counters are open: presentation only.
+    // The World is told all four counters are open: presentation only (D-099).
     expect(stations.at(-1)).toEqual({
       building: 'vault',
       stations: [
-        { station: 'vault:lending', label: 'SUPPLY / REDEEM', status: 'available' },
+        { station: 'vault:supply', label: 'SUPPLY', status: 'available' },
+        { station: 'vault:redeem', label: 'REDEEM', status: 'available' },
         { station: 'vault:borrow', label: 'BORROW', status: 'available' },
+        { station: 'vault:repay', label: 'REPAY', status: 'available' },
       ],
     });
     const panel = counter();
     expect(panel.querySelector('.vault-eyebrow')?.textContent).toBe(COPY.borrow.eyebrow);
     expect(panel.querySelector('[data-testid="disclosure"]')?.textContent).toBe(DISCLOSURE);
     expect(panel.querySelector('.borrow-risk')?.textContent).toContain(COPY.borrow.risk.lines[1]);
+    // D-099: BORROW borrows and adds collateral; repaying is the REPAY counter's.
     expect([...panel.querySelectorAll('.borrow-modes button')].map((node) => node.textContent)).toEqual([
-      'Borrow', 'Add collateral', 'Repay', 'Withdraw collateral',
+      'Borrow', 'Add collateral',
     ]);
     // Nothing read that could prompt.
     expect(panel.textContent).toContain(COPY.borrow.loans.unrequested);
@@ -213,7 +223,11 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
       poolConfig: { noteMaturityBlocks: 0 },
       borrow: { positions: [{ collateral: STRK, debt: USDC, collateralAmount: 1_000n * E18, debtAmount: 25n * USDC_ONE }] },
     });
-    await openCounter(operations);
+    // D-099: withdrawing collateral is at the REPAY counter.
+    await openCounter(operations, 'vault:repay');
+    expect([...counter().querySelectorAll('.borrow-modes button')].map((node) => node.textContent)).toEqual([
+      'Repay', 'Withdraw collateral',
+    ]);
     await click(button(COPY.borrow.loans.show));
     const loan = counter().querySelector('.borrow-loan')!;
     expect(loan.getAttribute('data-band')).toBe('warning');
@@ -242,16 +256,18 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
       balances: { [STRK]: 250n * E18, [USDC]: USDC_ONE },
       poolConfig: { noteMaturityBlocks: 0 },
     });
-    await openCounter(operations);
-    // Open a small loan first, from the 250 practice STRK.
+    const { world } = await openCounter(operations);
+    // Open a small loan first at BORROW, from the 250 practice STRK.
     await choose('debt', USDC);
     await type('collateral-amount', '200');
     await type('amount', '3');
     await click(button(COPY.gameMode.reviewAction));
     await click(counter().querySelector<HTMLButtonElement>('.panel-review button.confirm')!);
     await click(button(COPY.flow.back));
+    // Then walk to REPAY, which opens on its repay form (D-099).
+    await walkTo(world, 'vault:repay');
     await click(button(COPY.borrow.loans.show));
-    await click(button(COPY.borrow.modes.repay));
+    expect(counter().closest('.borrow-experience')?.getAttribute('data-mode')).toBe('repay');
     // D-089: Max is the debt as read, and repays everything.
     expect(counter().querySelector('.ui-amount-balance')?.textContent).toBe(`${COPY.borrow.form.owed}: 3 USDC`);
     await click(button(COPY.kit.max));

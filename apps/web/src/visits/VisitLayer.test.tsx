@@ -247,7 +247,7 @@ describe('VisitLayerView', () => {
     expect(markup).not.toContain('name="amount"');
   });
 
-  it('renders the existing full Bank panel in Menu Mode', () => {
+  it('renders the Bank\'s four counters as Menu Mode tabs, SHIELD first, with no transfer (D-099)', () => {
     const markup = render(
       <VisitLayerView
         state={{ name: 'visiting', building: 'bank', surface: { name: 'menu' } }}
@@ -260,14 +260,23 @@ describe('VisitLayerView', () => {
     );
 
     expect(markup).toContain('data-experience="menu"');
-    expect(markup).toContain('Private transfer');
-    // An empty form's button asks for an amount (the kit's primaryAction); the
-    // visit vocabulary is still the batch's.
+    const tabs = [...markup.matchAll(/<button[^>]*role="tab"[^>]*aria-selected="(true|false)"[^>]*data-station="([^"]+)"[^>]*>([^<]+)<\/button>/g)]
+      .map(([, selected, station, label]) => ({ selected, station, label }));
+    expect(tabs).toEqual([
+      { selected: 'true', station: 'bank:shielding', label: 'SHIELD' },
+      { selected: 'false', station: 'bank:unshielding', label: 'UNSHIELD' },
+      { selected: 'false', station: 'bank:staking', label: 'STAKE' },
+      { selected: 'false', station: 'bank:unstaking', label: 'UNSTAKE' },
+    ]);
+    // The chosen counter's own form, one action, and no private transfer: the
+    // Post Office is the one place to send privately.
+    expect(markup).toContain('data-mode="shield"');
     expect(markup).toContain(COPY.kit.enterAmount);
-    expect(markup).toContain(COPY.batch.empty);
+    expect(markup).not.toContain(COPY.bank.transfer);
+    for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action']) expect(markup).not.toContain(gone);
   });
 
-  it('renders the shielding station as the same Bank flow limited to one action', () => {
+  it('renders the SHIELD counter as one action, with no tabs (D-099)', () => {
     const markup = render(
       <VisitLayerView
         state={{
@@ -284,10 +293,12 @@ describe('VisitLayerView', () => {
     );
 
     expect(markup).toContain('data-experience="station"');
-    expect(markup).toContain('Shield');
-    expect(markup).toContain('Unshield');
+    // D-099: SHIELD alone; unshielding is the counter beside it.
+    expect(markup).toContain(`<h3 class="counter-action">${COPY.bank.shield}</h3>`);
+    expect(markup).not.toContain('Unshield');
+    expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain('Private transfer');
-    expect(markup).toContain('This station confirms one action at a time.');
+    expect(markup).toContain(COPY.gameMode.singleAction);
     expect(markup).toContain(COPY.kit.enterAmount);
     expect(markup).not.toContain('Add to this visit');
     expect(markup).not.toContain('Nothing queued yet');
@@ -316,7 +327,7 @@ describe('VisitLayerView', () => {
     expect(markup).not.toContain('Unshield');
     expect(markup).not.toContain('Add to this visit');
     expect(markup).not.toContain('Nothing queued yet');
-    expect(markup).toContain('This station confirms one action at a time.');
+    expect(markup).toContain(COPY.postOffice.oneAtATime);
   });
 
   it('renders Post Office Menu Mode as a transfer-only surface, one recipient per send (D-065)', () => {
@@ -337,9 +348,7 @@ describe('VisitLayerView', () => {
     // A send's button asks for its recipient first, as a wallet's does.
     expect(markup).toContain(COPY.bank.enterRecipient);
     // No visit vocabulary that would promise several sends for one fee.
-    expect(markup).not.toContain(COPY.batch.add);
-    expect(markup).not.toContain(COPY.batch.empty);
-    expect(markup).not.toContain(COPY.batch.why);
+    for (const gone of ['Add to this visit', 'Nothing queued yet', 'settles as one action']) expect(markup).not.toContain(gone);
     expect(markup).not.toContain('Shield');
     expect(markup).not.toContain('Unshield');
   });

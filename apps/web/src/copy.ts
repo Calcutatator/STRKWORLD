@@ -204,15 +204,6 @@ export const COPY = freezeCopy({
     receiptWaiting: 'This settled while the room was shut.',
   },
 
-  batch: {
-    title: 'This visit',
-    empty: 'Nothing queued yet. Add what you want to do, then confirm once.',
-    add: 'Add to this visit',
-    clear: 'Clear',
-    remove: 'Remove',
-    why: 'Everything queued here settles as one action, so you pay the pool fee once and your wallet asks you once.',
-  },
-
   bank: {
     title: 'The Bank',
     shield: 'Shield',
@@ -332,13 +323,9 @@ export const COPY = freezeCopy({
   stake: {
     eyebrow: 'Liquid staking with Endur',
     intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
-    /** D-085: unstaking is a counter of its own; D-091 puts it behind the Unstake tab. */
+    /** D-085: unstaking is a counter of its own (D-099: UNSTAKE, beside STAKE). */
     unstaking:
-      "To unstake, use the Unstake tab. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
-    /** D-091: the counter's two tabs, as Endur's own app names them. */
-    tabStake: 'Stake',
-    tabUnstake: 'Unstake',
-    tabsLabel: 'Stake or unstake',
+      "To unstake, use the Unstake counter. Endur's withdrawal queue holds the STRK for about seven days, sometimes longer, before it can come back to your pool balance.",
     /** D-091: the preview rows. Estimates at xSTRK's live rate, never shown at review. */
     willReceive: 'You will receive',
     exchangeRate: 'Exchange rate',
@@ -835,7 +822,8 @@ export const COPY = freezeCopy({
   gameMode: {
     menu: 'Menu Mode',
     exit: 'Leave building',
-    singleAction: 'This station confirms one action at a time.',
+    /** D-099: every counter does one action and confirms it, and each pays its own pool fee. */
+    singleAction: 'This counter confirms one action at a time, and each action pays its own pool fee.',
     reviewAction: 'Review this action',
     /** D-088: names Menu Mode's row of counter tabs for assistive tech. */
     counters: 'Counters',

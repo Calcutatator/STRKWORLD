@@ -11,6 +11,7 @@ import {
 } from '@strkworld/privacy';
 import { COPY } from '../copy.js';
 import { parseTokenAmount } from '../format.js';
+import { BankMenuPanel } from '../panels/bank/BankMenuPanel.js';
 import { BankPanel } from '../panels/bank/BankPanel.js';
 import { createBankPanel } from '../panels/bank/bank-machine.js';
 import { routeDoor } from '../panels/routes.js';
@@ -76,23 +77,27 @@ describe('the Shell opens unshield exactly when the production policy enables it
     }
   });
 
-  it('opens the shared Bank station for unshield alone and keeps every other station shut', () => {
-    expect(resolveStation('bank', 'bank:shielding', PRIVACY_REGISTER, {}, unshieldOnly).status).toBe('available');
+  it('opens the UNSHIELD counter alone and keeps every other station shut (D-099)', () => {
+    expect(resolveStation('bank', 'bank:unshielding', PRIVACY_REGISTER, {}, unshieldOnly).status).toBe('available');
     expect(stationSnapshot('bank', PRIVACY_REGISTER, {}, unshieldOnly)).toEqual([
-      { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'available' },
-      // Enabling unshield enables nothing else (D-062), staking included.
+      // Enabling unshield enables nothing else (D-062), shielding and staking included.
+      { station: 'bank:shielding', label: 'SHIELD', status: 'locked' },
+      { station: 'bank:unshielding', label: 'UNSHIELD', status: 'available' },
       { station: 'bank:staking', label: 'STAKE', status: 'locked' },
+      { station: 'bank:unstaking', label: 'UNSTAKE', status: 'locked' },
     ]);
     expect(resolveStation('post-office', 'post-office:transfer', PRIVACY_REGISTER, {}, unshieldOnly))
       .toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
     expect(resolveStation('exchange', 'exchange:swap', PRIVACY_REGISTER, {}, unshieldOnly))
       .toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
-    expect(resolveStation('bank', 'bank:shielding', PRIVACY_REGISTER, {}, denyAll))
-      .toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
+    for (const station of ['bank:shielding', 'bank:unshielding'] as const) {
+      expect(resolveStation('bank', station, PRIVACY_REGISTER, {}, denyAll), station)
+        .toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
+    }
   });
 });
 
-describe("the Bank's Unshield tab follows this build's environment", () => {
+describe("the Bank's UNSHIELD counter follows this build's environment (D-099)", () => {
   afterEach(() => {
     livePolicy.current = null;
   });
@@ -109,49 +114,58 @@ describe("the Bank's Unshield tab follows this build's environment", () => {
     expect(routePolicyFrom(undefined)).toBeNull();
   });
 
-  async function renderTabs(): Promise<{ markup: string; unshieldOpen: boolean }> {
+  async function renderCounter(): Promise<{ markup: string; unshieldOpen: boolean }> {
     const operations = new FakePrivacyOperations({ balances: { [STRK]: parseTokenAmount('100')! } });
     const panel = createBankPanel({
       operations,
       receipts: createReceiptLedger(),
-      allowedModes: ['shield', 'unshield'],
+      allowedModes: ['unshield'],
       initialMode: 'unshield',
       canStartFinancialAction: () => true,
     });
     await panel.open();
     const markup = renderToStaticMarkup(
       <PrivacyProvider operations={operations}>
-        <BankPanel panel={panel} onClose={() => {}} allowedModes={['shield', 'unshield']} initialMode="unshield" />
+        <BankPanel panel={panel} onClose={() => {}} mode="unshield" />
       </PrivacyProvider>,
     );
     return { markup, unshieldOpen: panel.store.getState().door.open };
   }
 
-  const lockedTab = (label: string) => new RegExp(`<button[^>]*data-locked="true"[^>]*>${label}</button>`);
-  const tab = (label: string) => new RegExp(`<button[^>]*>${label}</button>`);
+  /** The Bank's Menu Mode tabs under the live policy (D-088 hides a counter its build leaves off). */
+  function menuTabs(): string[] {
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BankMenuPanel onClose={() => {}} />
+      </PrivacyProvider>,
+    );
+    return [...markup.matchAll(/role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]!);
+  }
 
-  it('opens the tab when the environment enables unshield, and leaves shield shut', async () => {
+  it('opens the counter when the environment enables unshield, and offers its tab beside SHIELD', async () => {
     stubProduction(UNSHIELD_ENV);
     expect(detectRoutePolicy()?.enabledRoutes).toEqual(['unshield']);
 
-    const { markup, unshieldOpen } = await renderTabs();
+    const { markup, unshieldOpen } = await renderCounter();
 
     expect(unshieldOpen).toBe(true);
-    expect(markup).toMatch(tab(COPY.bank.unshield));
-    expect(markup).not.toMatch(lockedTab(COPY.bank.unshield));
-    expect(markup).toMatch(lockedTab(COPY.bank.shield));
+    expect(markup).toContain('name="recipient"');
+    expect(markup).not.toContain('data-lock-reason');
+    expect(menuTabs()).toEqual(['SHIELD', 'UNSHIELD']);
   });
 
-  it('locks the tab when the environment leaves unshield off', async () => {
+  it('locks the counter, and hides its tab, when the environment leaves unshield off', async () => {
     stubProduction({ ...SHIELD_ENV, ...UNSHIELD_ENV, VITE_STRK20_UNSHIELD_ENABLED: 'false' });
     expect(detectRoutePolicy()?.enabledRoutes).toEqual(['shield']);
 
-    const { markup, unshieldOpen } = await renderTabs();
+    const { markup, unshieldOpen } = await renderCounter();
 
     expect(unshieldOpen).toBe(false);
-    expect(markup).toMatch(lockedTab(COPY.bank.unshield));
     expect(markup).toContain('data-lock-reason="not-enabled"');
     expect(markup).toContain(COPY.locked.notEnabled.unshield.replaceAll("'", '&#x27;'));
+    expect(markup).not.toContain('name="recipient"');
+    // SHIELD alone is left, so Menu Mode draws no tab row.
+    expect(menuTabs()).toEqual([]);
   });
 });
 
