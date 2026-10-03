@@ -28,12 +28,14 @@ import {
   type ArenaAttackOutcome,
   type ArenaAuthority,
   type ArenaAuthorityOptions,
+  type ArenaBlockOutcome,
   type ArenaClaimOutcome,
   type ArenaClaimant,
   type ArenaEvent,
   type ArenaGoneReason,
   type ArenaLeaveOutcome,
   type ArenaLocate,
+  type ArenaSeatOutcome,
 } from './arena-rules.js';
 import type { ArenaRingEntry, ArenaSlotEntry } from './state.js';
 
@@ -46,6 +48,8 @@ export interface ArenaRingWire {
   readonly secondsLeft: number;
   readonly reason: number;
   readonly winner: number;
+  readonly champion: string;
+  readonly seated: number;
 }
 
 export interface ArenaSlotWire {
@@ -54,6 +58,8 @@ export interface ArenaSlotWire {
   readonly hp: number;
   readonly swings: number;
   readonly hits: number;
+  readonly guarding: number;
+  readonly blocks: number;
 }
 
 function slotToWire(slot: ArenaSlot): ArenaSlotWire {
@@ -63,6 +69,8 @@ function slotToWire(slot: ArenaSlot): ArenaSlotWire {
     hp: slot.hp,
     swings: slot.swings,
     hits: slot.hits,
+    guarding: slot.guarding ? 1 : 0,
+    blocks: slot.blocks,
   };
 }
 
@@ -76,6 +84,8 @@ export function arenaRingToWire(ring: ArenaRingSnapshot): ArenaRingWire {
     secondsLeft: ring.secondsLeft,
     reason: ring.outcome === null ? 0 : ARENA_END_REASONS.indexOf(ring.outcome.reason) + 1,
     winner: ring.outcome === null || ring.outcome.winner === null ? 0 : ARENA_SIDES.indexOf(ring.outcome.winner) + 1,
+    champion: ring.champion ?? '',
+    seated: ring.seated ? 1 : 0,
   };
 }
 
@@ -85,6 +95,8 @@ function writeSlot(entry: ArenaSlotEntry, next: ArenaSlotWire, last: ArenaSlotWi
   if (last === null || last.hp !== next.hp) entry.hp = next.hp;
   if (last === null || last.swings !== next.swings) entry.swings = next.swings;
   if (last === null || last.hits !== next.hits) entry.hits = next.hits;
+  if (last === null || last.guarding !== next.guarding) entry.guarding = next.guarding;
+  if (last === null || last.blocks !== next.blocks) entry.blocks = next.blocks;
 }
 
 export class LobbyArena {
@@ -119,10 +131,36 @@ export class LobbyArena {
     return outcome;
   }
 
+  /** D-128: whether `key`'s session is on the throne, and so walks the box's tile. */
+  holdsSeat(key: string): boolean {
+    return this.#authority.holdsSeat(key);
+  }
+
   attack(key: string, now: number, locate: ArenaLocate): ArenaAttackOutcome {
     const outcome = this.#authority.attack(key, now, locate);
     this.#copy(now);
     return outcome;
+  }
+
+  /** D-128: raise or lower a session's guard. */
+  block(key: string, down: boolean, now: number): ArenaBlockOutcome {
+    const outcome = this.#authority.block(key, down, now);
+    this.#copy(now);
+    return outcome;
+  }
+
+  /** D-128: the champion presses E at the emperor's box. */
+  seat(claimant: ArenaClaimant, now: number): ArenaSeatOutcome {
+    const outcome = this.#authority.seat(claimant, now);
+    this.#copy(now);
+    return outcome;
+  }
+
+  /** D-128: the session walked off the throne's tile. */
+  unseat(key: string, now: number): boolean {
+    const changed = this.#authority.unseat(key);
+    if (changed) this.#copy(now);
+    return changed;
   }
 
   leave(key: string, now: number): ArenaLeaveOutcome {
@@ -158,6 +196,8 @@ export class LobbyArena {
     if (last === null || last.secondsLeft !== next.secondsLeft) entry.secondsLeft = next.secondsLeft;
     if (last === null || last.reason !== next.reason) entry.reason = next.reason;
     if (last === null || last.winner !== next.winner) entry.winner = next.winner;
+    if (last === null || last.champion !== next.champion) entry.champion = next.champion;
+    if (last === null || last.seated !== next.seated) entry.seated = next.seated;
     writeSlot(entry.challenger as ArenaSlotEntry, next.challenger, last?.challenger ?? null);
     writeSlot(entry.opponent as ArenaSlotEntry, next.opponent, last?.opponent ?? null);
     this.#written = next;

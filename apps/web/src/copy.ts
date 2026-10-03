@@ -957,6 +957,8 @@ export const COPY = freezeCopy({
     timeLeft: 'Time left',
     fight: 'FIGHT!',
     strike: 'STRIKE',
+    /** D-128: the block, held on Q or on the touch button beside STRIKE. */
+    block: 'BLOCK',
     leave: 'LEAVE RING',
     victory: 'VICTORY',
     /** Followed by the client-timed seconds, e.g. "Dummy down in 12.4 s". */

@@ -14208,6 +14208,43 @@ was used; the live ledger's `leaf_count()` has not been re-read.
 
 ---
 
+## The arena's block and the emperor's box (D-128)
+
+Two traps cost time here, both about the gap between a test's shortcut and
+what a player can actually do.
+
+**A test may not teleport across a room.** `client-arena.test.ts` moved a new
+champion from the ring's return tile to the emperor's box with one
+`updatePosition`. The room refused every one of them and the test timed out on
+a position that never changed. `isAreaStepAllowed` (D-087) samples the
+straight line between two points and rejects the move if any sample is not
+walkable — and the line from the gate to the box runs clean through the ring's
+fence. The fix is a `walk` helper that steps round the fence tile by tile,
+waiting for the room to hold each step, which is also what a player does.
+Anything that asserts on a position in a shared room has to walk there.
+
+**A held key needs a release the gates cannot swallow.** Q is the World's only
+held action key, so `dom-keyboard.ts` gained `keyup-Q`. The press is gated like
+E; the release is gated by nothing except having seen that key go down, and is
+also delivered from blur, a hidden tab and `resetKeys`. Every one of those is a
+case where the real keyup lands somewhere else — over a panel, on another
+window — and a release that the gates ate would leave the fighter guarding on
+the server for ever. The same rule runs through the session (`setBlock(false)`
+is never gated on the ring, and `destroy` sends it) and the HUD's touch button
+(`pointerup`, `pointercancel`, `pointerleave` and a lost capture all lower it).
+
+*Verified:* the rules tests drive a simulated attacker — `ArenaAuthorityOptions.opponent`, a
+test-only seam putting a second player in the opponent slot — into a guarding
+fighter and assert 0 damage with the target's `blocks` counter up; the
+champion path runs against a real server in `client-arena.test.ts`, including
+the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
+`npm run typecheck` pass. One pre-existing flake was seen once and did not
+reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
+and then asserts `carrying` is null — unrelated to this work. Renders are from
+the offline rasteriser, not a GPU.
+
+---
+
 ### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
 
 Every `ShadowAccountResolver` cached its own partial commitment "once per

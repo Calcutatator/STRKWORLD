@@ -59,6 +59,7 @@ import {
   type ReentryHold,
 } from './door-trigger.js';
 import {
+  ARENA_BOX_STATION,
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
@@ -249,8 +250,17 @@ export interface WorldSessionView {
   arenaGateObject?(): unknown;
 }
 
-/** The World's one-shot action keys. */
-export type WorldActionKey = 'keydown-F' | 'keydown-E' | 'keydown-Space' | 'pointerdown-primary';
+/**
+ * The World's one-shot action keys, plus D-128's one hold: `keydown-Q` and
+ * `keyup-Q` are the arena's block, so the only action key with a release.
+ */
+export type WorldActionKey =
+  | 'keydown-F'
+  | 'keydown-E'
+  | 'keydown-Space'
+  | 'keydown-Q'
+  | 'keyup-Q'
+  | 'pointerdown-primary';
 
 interface OutfitKeyEvent {
   readonly repeat: boolean;
@@ -271,7 +281,9 @@ export interface WorldKeyboard extends KeyboardLike {
    * Studio figure, the bunker's lift), or else picks or places a block
    * (D-060), kicks the ball (D-078) or acts in the arena's ring (D-114);
    * `keydown-Space` jumps (D-097); `pointerdown-primary`, a primary click or
-   * tap on the World's canvas, strikes in the arena (D-114).
+   * tap on the World's canvas, strikes in the arena (D-114); and
+   * `keydown-Q`/`keyup-Q` hold and lower the arena's block (D-128), the one
+   * action key with a release.
    */
   on(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
@@ -523,7 +535,15 @@ class Session implements WorldSession {
   private stopArenaAction?: () => void;
   /** D-114: removes the ring gate's station (C's `gateTargets`) from the interaction system. */
   private stopArenaSource?: () => void;
+  /**
+   * D-128: the arena session lists stations, so it owns the emperor's box and
+   * the room's own reserved notice for it stands aside.
+   */
+  private arenaOwnsBox = false;
   private arenaPrimary?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-128: the block's two keyboard handlers (Q down and up). */
+  private arenaBlockDown?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  private arenaBlockUp?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   /** Whether the view was last given a ring frame, so leaving clears it once. */
   private arenaShown = false;
   /** D-114: F is locked while the player fights. */
@@ -780,12 +800,23 @@ class Session implements WorldSession {
     if (stopArenaAction) attempt(stopArenaAction);
     const stopArenaSource = this.stopArenaSource;
     this.stopArenaSource = undefined;
+    this.arenaOwnsBox = false;
     if (stopArenaSource) attempt(stopArenaSource);
     const arenaPrimary = this.arenaPrimary;
     this.arenaPrimary = undefined;
     if (arenaPrimary && this.keyboard) {
       const keyboard = this.keyboard;
       attempt(() => keyboard.off('pointerdown-primary', arenaPrimary));
+    }
+    // D-128: the block's hold, both halves.
+    const arenaBlockDown = this.arenaBlockDown;
+    const arenaBlockUp = this.arenaBlockUp;
+    this.arenaBlockDown = undefined;
+    this.arenaBlockUp = undefined;
+    if (this.keyboard) {
+      const keyboard = this.keyboard;
+      if (arenaBlockDown) attempt(() => keyboard.off('keydown-Q', arenaBlockDown));
+      if (arenaBlockUp) attempt(() => keyboard.off('keyup-Q', arenaBlockUp));
     }
     const arenaSession = this.arenaSession;
     this.arenaSession = undefined;
@@ -896,6 +927,13 @@ class Session implements WorldSession {
         if (!controller?.state.inRoom || !map) return [];
         const usable = controller.interaction();
         if (!usable) return [];
+        // D-128: the emperor's box is a reserved station whose notice would
+        // only say it is closed. With a ring session that lists stations, the
+        // arena offers it instead (`gateTargets`), because only the server
+        // knows whether this client is the champion. It keeps the same target
+        // id, so the box keeps its own affordance shell either way. Without
+        // one the room's notice stands, so the box is never silent.
+        if (usable.station === ARENA_BOX_STATION && this.arenaOwnsBox) return [];
         const origin = floorOrigin(map);
         return [{
           id: usable.station,
@@ -1857,6 +1895,7 @@ class Session implements WorldSession {
     // makes win outright by suspending the stations while it fights. A
     // session without them (PR 0's stub) gets the press as a plain action.
     if (typeof session.gateTargets === 'function') {
+      this.arenaOwnsBox = true;
       this.stopArenaSource = this.interactionSystem.register({
         targets: () => {
           if (this.cleanedUp || !this.arenaInputLive()) return [];
@@ -1884,6 +1923,27 @@ class Session implements WorldSession {
     };
     keyboard.on('pointerdown-primary', onPrimary);
     this.arenaPrimary = onPrimary;
+    /*
+     * D-128: Q is the block, and the only key the World holds rather than
+     * taps. The press runs the same gates as E (in the arena, the World
+     * owning the keyboard, the room's controls, no text field — the keyboard
+     * never delivers a keystroke aimed at an editable element) and the
+     * session refuses it outside a fight or in a countdown. The release runs
+     * no gate at all: whatever happened in between, a raised guard must come
+     * down, so it goes straight to the session.
+     */
+    const onBlockDown = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
+      this.arenaSession?.onBlock?.(true);
+    };
+    const onBlockUp = (): void => {
+      if (this.cleanedUp) return;
+      this.arenaSession?.onBlock?.(false);
+    };
+    keyboard.on('keydown-Q', onBlockDown);
+    keyboard.on('keyup-Q', onBlockUp);
+    this.arenaBlockDown = onBlockDown;
+    this.arenaBlockUp = onBlockUp;
   }
 
   /** Whether arena input may act: in the arena, the World owning the keyboard and the room's controls. */

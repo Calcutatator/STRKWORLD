@@ -281,6 +281,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
         return false;
       }
     },
+    /*
+     * D-128: where the blocked spark goes. Only the fighter's own client
+     * knows where it stands in the room's frame; a spectator's fx falls back
+     * to the ring spawn.
+     */
+    fighterAt: () =>
+      !streetVisible && visibleRoom === 'arena' && arenaFrame?.selfIsChallenger === true
+        ? { x: ground.x, z: ground.z }
+        : null,
   });
   disposers.push(() => {
     arenaFx.group.removeFromParent();
@@ -516,7 +525,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
    */
   const remoteSwings = (): RemoteSwingPort | null => {
     const layer = remote as
-      | (RemoteAvatarLayer3D & { playSwing?: (gameId: GameId) => void; setFighter?: (gameId: GameId | null) => void })
+      | (RemoteAvatarLayer3D & {
+          playSwing?: (gameId: GameId) => void;
+          setFighter?: (gameId: GameId | null) => void;
+          setBlocker?: (gameId: GameId | null) => void;
+          setThroned?: (gameId: GameId | null) => void;
+        })
       | null;
     if (!layer) return null;
     const port = {
@@ -525,6 +539,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
       },
       setFighter(gameId: GameId | null) {
         layer.setFighter?.(gameId);
+      },
+      // D-128: a peer's block stance and the champion's throne.
+      setBlocker(gameId: GameId | null) {
+        layer.setBlocker?.(gameId);
+      },
+      setThroned(gameId: GameId | null) {
+        layer.setThroned?.(gameId);
       },
     };
     return port;
@@ -895,13 +916,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
       idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
       const guard = inArena && arenaFrame?.selfIsChallenger === true &&
         (arenaFrame.phase === 'countdown' || arenaFrame.phase === 'fighting');
+      // D-128: the block stance is the server's own `guarding`, never a
+      // local prediction; and the champion sits the moment the server seats
+      // them, without the tiers' idle wait.
+      const blocking = guard && arenaFrame?.challengerGuarding === true;
+      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       avatar.update(dt, {
         moving,
         sprinting: moving && motion.sprinting,
         jump: pose,
         attack,
         guard,
-        seated: benchSeated || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        blocking,
+        seated: benchSeated || onThrone || idleOnTier >= ARENA_SEAT_IDLE_MS,
       });
       if (streetVisible) {
         street.update(dt);

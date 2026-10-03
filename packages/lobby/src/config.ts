@@ -299,6 +299,24 @@ export const MESSAGE = Object.freeze({
   arenaAttack: 'arena:attack',
   /** No payload — D-114: forfeit the sender's fight (it ends as `left`). Never read. */
   arenaLeave: 'arena:leave',
+  /**
+   * No payload — D-128: the sender raised their guard (Q down). Only while
+   * they are a fighting slot, and held to `ARENA_BLOCK_MIN_INTERVAL_MS`.
+   * Whatever a client sends with it is never read.
+   */
+  arenaBlock: 'arena:block',
+  /**
+   * No payload — D-128: the sender's guard came down (Q up). Never
+   * throttled: it only ever lowers a guard, and a dropped one would leave a
+   * fighter blocking for ever. Never read.
+   */
+  arenaUnblock: 'arena:unblock',
+  /**
+   * No payload — D-128: the champion pressed E at the emperor's box. The
+   * room judges it from where it holds them and whether they are the
+   * champion, and moves them onto (or off) the throne itself. Never read.
+   */
+  arenaSit: 'arena:sit',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
