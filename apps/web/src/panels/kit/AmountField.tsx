@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { COPY } from '../../copy.js';
-import { formatTokenAmountExact } from '../../format.js';
-import { balanceText, checkAmount, fractionOf, type AmountCheck } from './amount-math.js';
+import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
+import { balanceText, checkAmount, fillFromBalance, fractionOf, type AmountCheck } from './amount-math.js';
 
 /**
  * One amount input: label, the token beside the number, an optional balance
@@ -30,6 +30,15 @@ export interface AmountFieldProps {
   readonly limit?: bigint | null;
   /** The balance line's words; the pool balance by default. */
   readonly balanceLabel?: string;
+  /**
+   * D-131: a fee charged in **this same asset** on top of the amount, which a
+   * press on the balance line keeps aside, as a Max does. Pass the figure the
+   * panel already uses for its own `limit` and review — `feeReserve(token,
+   * pool)`. Omit or `0n` when this action charges none in this asset, and the
+   * press fills the balance exactly. `null` is "not known yet", and the line
+   * cannot be pressed until it is.
+   */
+  readonly balanceFee?: bigint | null;
   /** A small control beside the balance line, such as re-reading it. */
   readonly balanceAction?: ReactNode;
   /** The message for an amount above `balance`; "More than your pool balance" by default. */
@@ -61,7 +70,7 @@ export interface AmountFieldProps {
 }
 
 export function AmountField({
-  label, value, onChange, decimals, symbol, token, balance = null, limit, balanceLabel = COPY.kit.poolBalance, balanceAction,
+  label, value, onChange, decimals, symbol, token, balance = null, limit, balanceLabel = COPY.kit.poolBalance, balanceFee, balanceAction,
   exceedsMessage = COPY.kit.exceedsBalance, max, half = false, minimum = null, usd = null, hint, name = 'amount', disabled = false,
   readOnly = false, busy = false, stale = false,
 }: AmountFieldProps) {
@@ -76,7 +85,12 @@ export function AmountField({
   const fill = (amount: bigint | null) => {
     if (amount !== null && amount > 0n) onChange(formatTokenAmountExact(amount, decimals));
   };
-  const describedBy = [message ? messageId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
+  // D-131: what the balance line fills in, and the line explaining what it
+  // kept aside, which supersedes the panel's own line while it applies.
+  const fillable = readOnly ? null : fillFromBalance(balance, { fee: balanceFee, limit });
+  const aside = keptAside(value, fillable, balanceFee, decimals);
+  const note = aside === null ? hint : COPY.kit.feeKeptAside.replace('{amount}', balanceText(aside, decimals, symbol));
+  const describedBy = [message ? messageId : null, note ? hintId : null].filter(Boolean).join(' ') || undefined;
   return (
     <div
       className="ui-amount"
@@ -89,7 +103,16 @@ export function AmountField({
         <label htmlFor={id}>{label}</label>
         {balance !== null ? (
           <span className="ui-amount-balance">
-            {balanceLabel}: <span className="ui-figure">{balanceText(balance, decimals, symbol)}</span>
+            {balanceLabel}:{' '}
+            <BalanceFigure
+              balance={balance}
+              fill={fillable}
+              fee={balanceFee}
+              decimals={decimals}
+              symbol={symbol}
+              disabled={disabled}
+              onFill={() => fill(fillable)}
+            />
           </span>
         ) : null}
         {balance !== null && balanceAction ? balanceAction : null}
@@ -125,10 +148,59 @@ export function AmountField({
         <span className="ui-amount-token">{token ?? <span className="ui-amount-symbol">{symbol}</span>}</span>
       </div>
       {usd ? <p className="ui-amount-usd">{usd}</p> : null}
-      {hint ? <p className="ui-amount-hint" id={hintId}>{hint}</p> : null}
+      {note ? <p className="ui-amount-hint" id={hintId}>{note}</p> : null}
       <p className="ui-amount-message" id={messageId} aria-live="polite">{message}</p>
     </div>
   );
+}
+
+/**
+ * The balance line's figure (D-131): a button that fills the amount with it,
+ * or, where there is nothing honest to fill, the plain figure with a short
+ * reason. The figure reads the same either way, in the numeric face every
+ * amount uses (D-121).
+ */
+function BalanceFigure({
+  balance, fill, fee, decimals, symbol, disabled, onFill,
+}: {
+  balance: bigint;
+  /** What a press fills in; `null` leaves the figure unpressable. */
+  fill: bigint | null;
+  fee: bigint | null | undefined;
+  decimals: number;
+  symbol: string;
+  disabled: boolean;
+  onFill: () => void;
+}) {
+  const shown = balanceText(balance, decimals, symbol);
+  if (fill === null) {
+    // Not pressable: either the fee is unknown, or it is the whole of this
+    // balance. Nothing read yet shows no line at all, so it never lands here.
+    const why = fee === null
+      ? COPY.kit.balanceFeeUnknown
+      : fee !== undefined && fee > 0n ? COPY.kit.balanceUnderFee.replace('{fee}', balanceText(fee, decimals, symbol)) : null;
+    return <span className="ui-figure ui-balance-fill-off" {...(why ? { title: why } : {})}>{shown}</span>;
+  }
+  const label = fill === balance
+    ? COPY.kit.useBalance.replace('{amount}', shown)
+    : COPY.kit.useBalanceLessFee
+      .replace('{amount}', balanceText(fill, decimals, symbol))
+      .replace('{fee}', balanceText(balance - fill, decimals, symbol));
+  return (
+    <button type="button" className="ui-figure ui-balance-fill" aria-label={label} disabled={disabled} onClick={onFill}>
+      {shown}
+    </button>
+  );
+}
+
+/**
+ * The same-asset fee the amount on the field is keeping aside, if any: the
+ * field holds the most the balance leaves after it. `null` whenever no fee in
+ * this asset applies, or the amount is some other figure.
+ */
+function keptAside(value: string, fill: bigint | null, fee: bigint | null | undefined, decimals: number): bigint | null {
+  if (fill === null || fee === undefined || fee === null || fee <= 0n) return null;
+  return parseTokenAmount(value.trim(), decimals) === fill ? fee : null;
 }
 
 function amountMessage(check: AmountCheck, minimum: bigint | null, decimals: number, symbol: string, exceeds: string): string | null {

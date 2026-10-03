@@ -23,7 +23,7 @@ import { WalletAttentionCue, walletOperationAttention } from '../../wallet/Walle
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
 import { GlossaryTerm } from '../Glossary.js';
-import { AmountField, AmountSummary, RecipientField, checkAmount, primaryAction, type AmountSummaryProps, type DetailRow } from '../kit/index.js';
+import { AmountField, AmountSummary, RecipientField, checkAmount, feeReserve, primaryAction, type AmountSummaryProps, type DetailRow } from '../kit/index.js';
 import { estimateText, rateRow, useEndurRate, xstrkForStrk, type EndurRateView } from './endur-rate.js';
 
 /** What each counter does, in the words its window names it by. */
@@ -380,6 +380,9 @@ function ComposeBlock({
   // D-094: on Shield it is the wallet's public balance, and the amount must
   // leave room for the pool fee on top.
   const wallet = shield && state.publicBalance.status === 'loaded' ? state.publicBalance.amount : null;
+  // D-131: the pool fee comes out of the same STRK the balance line shows, so
+  // a press on that figure keeps it aside. `null` until the pool is read.
+  const balanceFee = state.token === null ? null : feeReserve(state.token, state.pool);
   const shieldLimit = wallet !== null && state.pool ? wallet - state.pool.feeAmount : null;
   const balance = shield
     ? wallet
@@ -456,6 +459,7 @@ function ComposeBlock({
         decimals={18}
         symbol="STRK"
         balance={balance}
+        balanceFee={balanceFee}
         {...(shield
           ? { limit: shieldLimit, balanceLabel: COPY.kit.walletBalance, exceedsMessage: COPY.bank.exceedsWallet }
           : spendLimit !== null ? { limit: spendLimit, exceedsMessage: COPY.kit.exceedsWithFee } : {})}

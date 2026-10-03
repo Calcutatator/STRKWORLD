@@ -354,9 +354,12 @@ function ComposeBlock({ state, token, panel, poolFee }: { state: VaultState; tok
   const choices = vaultChoices(state, state.mode);
   const field = amountFieldFor(state, token);
   // D-103: a supply of the fee token leaves the pool fee on top of the amount,
-  // so the amount is checked against the pool balance less the fee.
+  // so the amount is checked against the pool balance less the fee. D-131: a
+  // press on the balance line keeps that same figure aside. A redeem's figure
+  // is what is supplied, which the fee never comes out of.
   const fee = state.balances.status === 'loaded' && state.balances.fee ? state.balances.fee.feeAmount : poolFee;
-  const limit = supply && field.balance !== null && fee !== null && sameAddress(token.token, STRK_TOKEN) ? field.balance - fee : undefined;
+  const balanceFee = supply ? (sameAddress(token.token, STRK_TOKEN) ? fee : 0n) : 0n;
+  const limit = supply && field.balance !== null && balanceFee !== null && balanceFee > 0n ? field.balance - balanceFee : undefined;
   const check = checkAmount(state.amountText, { decimals: token.decimals, balance: limit ?? field.balance });
   const everything = !supply && (state.redeemAll || (check.status === 'ok' && redeemsWholePosition(state, token, check.amount)));
   const action = everything && check.status === 'empty'
@@ -428,6 +431,7 @@ function ComposeBlock({ state, token, panel, poolFee }: { state: VaultState; tok
         decimals={token.decimals}
         symbol={token.symbol}
         balance={field.balance}
+        balanceFee={balanceFee}
         balanceLabel={supply ? COPY.kit.poolBalance : COPY.vault.form.supplied}
         exceedsMessage={supply ? (limit !== undefined ? COPY.kit.exceedsWithFee : COPY.kit.exceedsBalance) : COPY.vault.form.overSupplied}
         {...(limit !== undefined ? { limit } : {})}

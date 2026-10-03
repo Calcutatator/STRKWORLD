@@ -126,9 +126,10 @@ function Compose({ state, panel }: { state: ExchangeState; panel: ExchangeMachin
   const { sell, buy } = state;
   const preparing = state.flow.name === 'preparing';
   const holding = sell ? holdingOf(state, sell.token) : null;
-  // Max leaves the pool fee behind only when the sell asset is the fee's own
-  // token (a swap's whole cost is the pool fee, D-084); the wallet may pay the
-  // fee from another token, so a typed amount above it is still allowed.
+  // Max, and a press on the balance line (D-131), leave the pool fee behind
+  // only when the sell asset is the fee's own token (a swap's whole cost is
+  // the pool fee, D-084); the wallet may pay the fee from another token, so a
+  // typed amount above it is still allowed.
   const reserve = sell ? feeReserve(sell.token, state.pool) : null;
   const max = () => maxAfterReserve(maxBasis(holding), reserve);
   const maximum = max();
@@ -151,7 +152,7 @@ function Compose({ state, panel }: { state: ExchangeState; panel: ExchangeMachin
       symbol={sell?.symbol ?? ''}
       token={<TokenSelect label={COPY.exchange.sellToken} labelHidden value={sell?.token ?? ''} placeholder={COPY.exchange.chooseAsset} options={state.sellChoices.map(tokenOption)} onChange={(token) => panel.setSell(token)} />}
       balance={holding?.total ?? null}
-      {...(sell ? { max, half: true } : {})}
+      {...(sell ? { max, half: true, balanceFee: reserve } : {})}
       usd={quote?.summary.sellUsd ?? null}
       hint={reserved ? COPY.balance.feeReserved : null}
     />
