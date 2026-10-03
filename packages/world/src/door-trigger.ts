@@ -57,6 +57,62 @@ export interface DoorTrigger {
 /** How long after a room exit no door fires (session time, ms). */
 export const DOOR_REENTRY_HOLD_MS = 250;
 
+/**
+ * The re-entry hold on its own, so a trigger that is not a door zone can take
+ * the same rule. The Avatar Studio's hidden entrance is the other one (D-125):
+ * its exit now returns the player to the street tile touching it, so a held
+ * key would otherwise walk them straight back in.
+ */
+export interface ReentryHold<T> {
+  /** Start the hold: for `holdMs` of advanced time, no trigger fires. */
+  start(holdMs: number): void;
+  /** Forget the swallowed trigger and the time left. */
+  clear(): void;
+  /** Advance the hold by a frame's time, ms. */
+  advance(deltaMs: number): void;
+  /**
+   * Should the trigger at the player's new tile be swallowed? `next` is the
+   * trigger there, or null for none; `inside` says the player is already
+   * within one, in which case nothing is held (they are leaving, not entering).
+   * Call this on every tile change: it is what releases a held trigger once
+   * the player steps off it.
+   */
+  swallows(next: T | null, inside: boolean): boolean;
+}
+
+export function createReentryHold<T>(
+  same: (a: T, b: T) => boolean = Object.is,
+): ReentryHold<T> {
+  let msLeft = 0;
+  let held: T | null = null;
+  return {
+    start(holdMs) {
+      held = null;
+      if (Number.isFinite(holdMs) && holdMs > 0) msLeft = holdMs;
+    },
+    clear() {
+      held = null;
+    },
+    advance(deltaMs) {
+      if (msLeft <= 0 || !Number.isFinite(deltaMs) || deltaMs <= 0) return;
+      msLeft = Math.max(0, msLeft - deltaMs);
+    },
+    swallows(next, inside) {
+      if (held !== null) {
+        // Still on the trigger the hold swallowed: it stays shut until
+        // stepped off, even once the time has run out.
+        if (next !== null && same(held, next)) return true;
+        held = null;
+      }
+      if (next !== null && !inside && msLeft > 0) {
+        held = next;
+        return true;
+      }
+      return false;
+    },
+  };
+}
+
 /** The minimal emit surface this needs — the world's outbound bus. */
 type WorldEmit = Pick<EventBus<WorldEvents>, 'emit'>;
 
@@ -65,9 +121,7 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
   // building id: this map has exactly one door per building and no overlaps.
   let active: DoorZone | null = null;
   let transition = 0;
-  // The re-entry hold: time left, and the door swallowed while it ran.
-  let holdMs = 0;
-  let held: DoorZone | null = null;
+  const hold = createReentryHold<DoorZone>((a, b) => a.building === b.building);
 
   function sameZone(a: DoorZone | null, b: DoorZone | null): boolean {
     if (a === null || b === null) return a === b;
@@ -77,15 +131,7 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
   return {
     update(tile) {
       const next = doorAt(map, tile.x, tile.y);
-      if (held !== null) {
-        // Still on the door the hold swallowed: it stays shut until stepped off.
-        if (sameZone(held, next)) return;
-        held = null;
-      }
-      if (next !== null && active === null && holdMs > 0) {
-        held = next;
-        return;
-      }
+      if (hold.swallows(next, active !== null)) return;
       if (sameZone(active, next)) return;
 
       const ownTransition = ++transition;
@@ -129,14 +175,13 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
     reset(options) {
       transition += 1;
       active = null;
-      held = null;
-      const hold = options?.holdMs;
-      if (typeof hold === 'number' && Number.isFinite(hold) && hold > 0) holdMs = hold;
+      hold.clear();
+      const holdMs = options?.holdMs;
+      if (typeof holdMs === 'number') hold.start(holdMs);
     },
 
     advance(deltaMs) {
-      if (holdMs <= 0 || !Number.isFinite(deltaMs) || deltaMs <= 0) return;
-      holdMs = Math.max(0, holdMs - deltaMs);
+      hold.advance(deltaMs);
     },
 
     get inside() {

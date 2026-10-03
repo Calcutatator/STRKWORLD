@@ -13986,6 +13986,44 @@ used.
 
 ## 6. Findings log
 
+### A hidden entrance is not a door, so none of the doors' machinery applies to it
+
+The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
+tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
+handles it before `DoorTrigger.update` is ever reached. So the Studio got none
+of what the doors get for free, and the gap had gone unnoticed in two places at
+once. It had no return tile — `createAvatarStudio` passed `map.spawn` as its
+`streetReturn`, so leaving the changing room teleported the player eleven rows
+up the path instead of outside the room (the lead's bug, D-125) — and it had no
+re-entry hold, which only looked harmless because the wrong return tile was too
+far away for a held key to carry anyone back in. Fixing the first on its own
+would have introduced the bounce PR #205 had already fixed for the doors.
+
+The lesson generalises past this entrance: when a feature is built *beside* a
+shared mechanism rather than *through* it, every invariant the mechanism
+carries has to be re-checked by hand, and a later amendment to the mechanism
+(the hold) will not reach it. Grepping for the trigger (`isAvatarStudioEntrance`,
+one call site) found the whole gap in one pass; grepping for the *concept*
+(`reset`, `returnTile`) did not, because the Studio names neither. The hold is
+now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
+trigger and the Studio's entrance as its two users, so the next amendment to it
+lands on both.
+
+*Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
+real keys end to end (walk in from the street entrance, walk out of the Studio
+exit, land on the tile outside the entrance facing away, with the street
+placement carrying it), the entrance held against a key still down after the
+exit and opening again once stepped off and back on, and an audit of every
+other room's exit (Bank, Vault, Exchange, Post Office, Bridge, bunker, arena:
+each lands on a walkable street tile off its own door and touching it, none of
+which needed changing). Each new assertion was also run against the unfixed
+code and seen to fail. Full suite (296 files, 6260 tests) and
+`npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
+
+---
+
+## 6. Findings log
+
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
 
 The private leaderboard's first mainnet probe had every variable set, the
