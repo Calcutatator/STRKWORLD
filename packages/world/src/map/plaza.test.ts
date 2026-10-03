@@ -55,7 +55,11 @@ function approachOf(rect: PlazaRect): [number, number][] {
 describe('the Privacy Plaza is placed on the street (D-076)', () => {
   it('paves the street\'s x 0-10, y 19-27: the empty grass below the south pavement at its west end', () => {
     expect(PLAZA_AREA).toEqual({ x: X, y: 19, width: 11, height: 9 });
-    expect(PLAZA_AREA.y + PLAZA_AREA.height).toBe(map.height);
+    // D-134 pushed the map's south edge five rows further out for the
+    // Garden's gate; the plaza keeps its own nine rows and the south lawn
+    // now runs on below it.
+    expect(PLAZA_AREA.y + PLAZA_AREA.height).toBe(map.height - 5);
+    expect(map.tiles[PLAZA_AREA.y + PLAZA_AREA.height]![PLAZA_AREA.x]).toBe('grass');
     for (const [x, y] of tilesOf(PLAZA_AREA)) {
       expect(['plaza', 'plinth'], `${x},${y}`).toContain(map.tiles[y]![x]);
     }

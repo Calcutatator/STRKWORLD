@@ -20,6 +20,7 @@ import {
 import {
   AVATAR_STUDIO_RETURN_FACING,
   avatarStudioReturnTile,
+  entersAvatarStudio,
   createStreetMap,
   isAvatarStudioEntrance,
   isSolidAt,
@@ -2366,8 +2367,12 @@ class Session implements WorldSession {
   private reportTile(): void {
     const tile = worldToTile(this.position.x, this.position.y);
     if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+    // D-134: the arch is a doorway. Being on its opening tiles only arms the
+    // hold; it takes a step south through the opening to go in.
     const onStudioEntrance = !this.avatarStudioActive &&
       isAvatarStudioEntrance(this.map, tile.x, tile.y);
+    const throughStudioArch = !this.avatarStudioActive &&
+      entersAvatarStudio(this.map, this.lastTile, tile);
     // D-125: every tile report feeds the hold, because stepping off the
     // entrance is what releases it. Swallowed, the tile is reported as any
     // other street tile would be: the entrance is no door, so nothing else
@@ -2376,7 +2381,7 @@ class Session implements WorldSession {
       onStudioEntrance ? AVATAR_STUDIO_ENTRANCE_HOLD_KEY : null,
       this.avatarStudioActive,
     );
-    if (onStudioEntrance && !studioShut) {
+    if (throughStudioArch && !studioShut) {
       this.avatarStudio?.enter();
       // Studio entry is an external lifecycle boundary. Commit the tile only
       // after the transition succeeds so a failed entry can retry while the

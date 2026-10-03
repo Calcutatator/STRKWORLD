@@ -64,13 +64,40 @@ describe('isAreaWalkable (D-087)', () => {
     expect(isAreaWalkable('roof', left + 5 * 32, top)).toBe(false);
   });
 
-  it('holds the Studio to its floor and the return portal in its top wall', () => {
-    for (let y = 0; y < 12; y += 1) {
-      for (let x = 0; x < 18; x += 1) {
-        const floor = x >= 1 && x <= 16 && y >= 1 && y <= 10;
-        const portal = y === 0 && (x === 8 || x === 9);
+  it('holds the Garden to its lanes, lawns and gate (D-134)', () => {
+    // The Garden's plan, '.' walkable: the lane grid, the sixteen nooks'
+    // lawn between their planted beds, and the gate in the north hedge. The
+    // World test pins it to AVATAR_STUDIO_DEFINITION, tile for tile.
+    const plan = [
+      '##############..##############',
+      '#............................#',
+      '#............................#',
+      '#..#####.#####..#####.#####..#',
+      '#..#...#.#...#..#...#.#...#..#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '#..#####.#####..#####.#####..#',
+      '#..#...#.#...#..#...#.#...#..#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '#..#####.#####..#####.#####..#',
+      '#..#...#.#...#..#...#.#...#..#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '#..#####.#####..#####.#####..#',
+      '#..#...#.#...#..#...#.#...#..#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '##############################',
+    ];
+    for (let y = 0; y < 24; y += 1) {
+      for (let x = 0; x < 30; x += 1) {
         const { x: px, y: py } = studio(x, y);
-        expect(isAreaWalkable('studio', px, py), `studio tile ${x},${y}`).toBe(floor || portal);
+        expect(isAreaWalkable('studio', px, py), `garden tile ${x},${y}`).toBe(plan[y]![x] === '.');
       }
     }
   });
@@ -126,15 +153,18 @@ describe('isAreaStepAllowed (D-087)', () => {
   it('allows a walk across the room and refuses a step off its tiles', () => {
     expect(isAreaStepAllowed('roof', roof(1, 1), roof(5, 4))).toBe(true);
     expect(isAreaStepAllowed('roof', roof(5, 4), roof(6, 4))).toBe(false);
-    expect(isAreaStepAllowed('studio', studio(1, 1), studio(16, 10))).toBe(true);
-    expect(isAreaStepAllowed('studio', studio(9, 1), studio(9, 0))).toBe(true);
-    expect(isAreaStepAllowed('studio', studio(9, 1), studio(9, -1))).toBe(false);
+    // Straight down the Garden's central lane, gate to south walk.
+    expect(isAreaStepAllowed('studio', studio(15, 1), studio(15, 22))).toBe(true);
+    expect(isAreaStepAllowed('studio', studio(15, 1), studio(15, 0))).toBe(true);
+    expect(isAreaStepAllowed('studio', studio(15, 1), studio(15, -1))).toBe(false);
+    // And across a nook's planted bed, which is not a way through.
+    expect(isAreaStepAllowed('studio', studio(5, 2), studio(5, 5))).toBe(false);
   });
 
   it('refuses a long step whose straight line crosses a wall', () => {
     // From the portal in the top wall to the floor's far west: the line runs
     // through the wall west of the portal.
-    const from = studio(8, 0);
+    const from = studio(14, 0);
     const to = { x: studio(1, 1).x, y: studio(1, 1).y - 15 };
     expect(isAreaWalkable('studio', to.x, to.y)).toBe(true);
     expect(Math.hypot(to.x - from.x, to.y - from.y)).toBeGreaterThan(AREA_STEP_SLACK_PX);
@@ -142,11 +172,11 @@ describe('isAreaStepAllowed (D-087)', () => {
   });
 
   it('lets a step within one tile clip a corner, as two samples a patch apart can', () => {
-    // Around the portal's west jamb: both ends walkable, the line clips the
-    // wall tile at (7, 0) for a few pixels.
+    // Around the gate's west jamb: both ends walkable, the line clips the
+    // hedge tile at (13, 0) for a few pixels.
     const grid = STUDIO_PRESENCE_GRID;
-    const from = { x: grid.originX + 7.6 * 32, y: grid.originY + 1.05 * 32 };
-    const to = { x: grid.originX + 8.2 * 32, y: grid.originY + 0.7 * 32 };
+    const from = { x: grid.originX + 13.6 * 32, y: grid.originY + 1.05 * 32 };
+    const to = { x: grid.originX + 14.2 * 32, y: grid.originY + 0.7 * 32 };
     expect(isAreaWalkable('studio', from.x, from.y)).toBe(true);
     expect(isAreaWalkable('studio', to.x, to.y)).toBe(true);
     expect(isAreaWalkable('studio', (from.x + to.x) / 2, (from.y + to.y) / 2)).toBe(false);

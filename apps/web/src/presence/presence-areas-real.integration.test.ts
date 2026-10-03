@@ -70,19 +70,20 @@ describe('real shell presence across shared areas (D-087)', () => {
     await count(a, 2, 'everyone on the street');
 
     // B walks into the Studio: gone from the street, live in the Studio.
-    b.world.emit('area:moved', { position: studio(9, 1), facing: 'down' });
+    b.world.emit('area:moved', { position: studio(15, 1), facing: 'down' });
     b.world.emit('avatar-studio:entered', {});
     expect(b.presence.getState().status).toBe('connected');
     await count(a, 1, 'B to leave the street');
     await count(b, 0, 'B alone in the Studio');
 
     // C follows: B and C see each other there, A sees neither.
-    c.world.emit('area:moved', { position: studio(9, 1), facing: 'down' });
+    c.world.emit('area:moved', { position: studio(15, 1), facing: 'down' });
     c.world.emit('avatar-studio:entered', {});
     await count(b, 1, 'C to join B in the Studio');
     await count(a, 0, 'the street to empty');
-    c.world.emit('area:moved', { position: studio(9, 4), facing: 'down' });
-    await waitFor(() => b.peers()[0]?.y, (y) => y === studio(9, 4).y, 'C to walk in the Studio');
+    // Straight down the Garden's central lane (D-134).
+    c.world.emit('area:moved', { position: studio(15, 8), facing: 'down' });
+    await waitFor(() => b.peers()[0]?.y, (y) => y === studio(15, 8).y, 'C to walk in the Studio');
     // C tries a look on: B sees it at once.
     c.world.emit('avatar:selected', { sprite: 'avatar-6' });
     await waitFor(() => b.peers()[0]?.sprite, (sprite) => sprite === 'avatar-6', 'C’s new look');
