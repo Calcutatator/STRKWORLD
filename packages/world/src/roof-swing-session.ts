@@ -24,7 +24,7 @@ import type {
 import { swingAngleAt, swingCameraShot } from './roof-swing.js';
 
 /**
- * D-131: the lookout swing's client session.
+ * D-132: the lookout swing's client session.
  *
  * The World's side of the swing. It reads the swing only from the channel
  * the Shell supplies, and only ever sends the two intents: claim and leave.

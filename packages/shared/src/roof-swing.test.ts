@@ -1,5 +1,5 @@
 /**
- * D-131: the lookout swing's shared seam — the roof-local geometry both sides
+ * D-132: the lookout swing's shared seam — the roof-local geometry both sides
  * measure from, and the normalizer every snapshot passes before anyone draws
  * it. The same discipline as `normalizeArenaRing`: own data fields only, and
  * null for anything that does not hold together.
@@ -38,7 +38,7 @@ function cooldown(): Record<string, unknown> {
   return { phase: 'cooldown', round: 4, riderId: null, secondsLeft: 0, reason: 'timeout' };
 }
 
-describe('the swing sits on the roof grid, south of the deck (D-131)', () => {
+describe('the swing sits on the roof grid, south of the deck (D-132)', () => {
   it('stands on the ledge row south of the walkable deck, behind the north-facing camera (D-059)', () => {
     // The deck's walkable tiles are x 1..5, y 1..4; the ring is everything else.
     expect(SWING_FRAME_TILES.y).toBe(5);

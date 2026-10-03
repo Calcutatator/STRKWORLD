@@ -12,7 +12,7 @@ import {
 import type { RoofSwingChannel } from '@strkworld/world';
 
 /**
- * The Shell side of the Exchange roof's lookout swing (D-131).
+ * The Shell side of the Exchange roof's lookout swing (D-132).
  *
  * The same shape as the arena's controller, and for the same reason: the
  * World receives one stable `RoofSwingChannel`, and behind it the lobby is

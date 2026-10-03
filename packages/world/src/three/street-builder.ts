@@ -210,7 +210,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
   const occluders: StreetOccluder[] = [];
   let plaza: PlazaView | null = null;
   let pitch: PitchView | null = null;
-  /** D-131: the Exchange roof's lookout swing, from whichever building has one. */
+  /** D-132: the Exchange roof's lookout swing, from whichever building has one. */
   let swing: RoofSwingView | null = null;
 
   try {
@@ -1189,7 +1189,7 @@ interface BuiltBuilding {
   /** Where the theme's brand plate goes, when the style makes room for one. */
   readonly brand?: SignPlacement;
   readonly lifts?: readonly RoofLift[];
-  /** D-131: the lookout swing's swinging seat, when this building has one. */
+  /** D-132: the lookout swing's swinging seat, when this building has one. */
   readonly swing?: RoofSwingView | null;
   readonly animate: Animator;
 }
@@ -1218,7 +1218,7 @@ interface StyleResult {
   readonly sign: SignPlacement;
   readonly brand?: SignPlacement;
   readonly lifts?: readonly RoofLift[];
-  /** D-131: the lookout swing's swinging seat, for the view to drive. */
+  /** D-132: the lookout swing's swinging seat, for the view to drive. */
   readonly swing?: RoofSwingView | null;
   /**
    * Top of the occluder box, when it is not the building's highest point: a
@@ -1860,7 +1860,7 @@ function blockRoof(ctx: BuildingCtx, H: number, front: number, tickers: Mesh[]):
   tickers.push(tickerFace(ctx, boardB - boardA - 0.16, 0.54, (boardA + boardB) / 2, H + 0.75, boardFront + 0.005, 0, 'ticker'));
 }
 
-/** D-131: how far the lookout's top deck cantilevers past the tower, all round. */
+/** D-132: how far the lookout's top deck cantilevers past the tower, all round. */
 export const ROOF_OVERHANG = 1;
 /** The cantilever's pale fascia, its brighter lip and its soffit. */
 const ROOF_FASCIA = 0xdfe3ea;
@@ -1879,7 +1879,7 @@ const ROOF_GLAZING_BOTTOM = ROOF_GLAZING_TOP + 1.5;
 
 /**
  * The Exchange tower's roof, a floor of the building (fixed-room.ts), and the
- * lookout it became in D-131.
+ * lookout it became in D-132.
  *
  * The top is a wide flat deck cantilevered a whole unit past the tower on
  * every side, with a pale fascia round its rim and a pale soffit under the
@@ -1928,7 +1928,7 @@ function towerRoof(
       dz1 = Math.max(dz1, origin.y + y + 1);
     }
   }
-  // D-131, the lookout's cantilever. A wide pale cap whose top is exactly the
+  // D-132, the lookout's cantilever. A wide pale cap whose top is exactly the
   // roof's height, overhanging the tower on every side, with a soffit set
   // back under it so the overhang reads as a slab with a shadow line, and a
   // proud fascia round its rim.
@@ -1981,7 +1981,7 @@ function towerRoof(
       if (!walkable(x, y)) continue;
       const wx = origin.x + x;
       const wz = origin.y + y;
-      // D-131: a pale terrace, as the lookout's is, with avnu's blue left for
+      // D-132: a pale terrace, as the lookout's is, with avnu's blue left for
       // the inlaid ring and the lift pad.
       ctx.bins.add(BODY, flatQuad(wx + 0.02, wz + 0.02, wx + 0.98, wz + 0.98, H + 0.004), (x + y) % 2 === 0 ? ROOF_DECK_PALE : ROOF_DECK_PALE_ALT);
     }
@@ -1996,7 +1996,7 @@ function towerRoof(
   // The ledge ring: planted, knee high, over every solid tile of the grid and
   // on out across the cantilever to its rim.
   const ledgeTop = H + 0.45;
-  // D-131: the parapet is the cantilever's own pale stone, not the tower's navy.
+  // D-132: the parapet is the cantilever's own pale stone, not the tower's navy.
   const ledge = ROOF_FASCIA;
   const ledges: ReadonlyArray<readonly [number, number, number, number]> = [
     [rx0, rz0, dx0, rz1],
@@ -2025,7 +2025,7 @@ function towerRoof(
     ctx.bins.add(GLASS, boxGeometry(x0, ledgeTop, z0, x1, railTop, z1), glass);
     ctx.bins.add(BODY, boxGeometry(x0 - 0.02, railTop, z0 - 0.02, x1 + 0.02, railTop + 0.06, z1 + 0.02), AVNU.slate);
   }
-  // D-131: the lookout swing's A-frame on the south ledge, its seat hanging
+  // D-132: the lookout swing's A-frame on the south ledge, its seat hanging
   // out past the balustrade. The frame merges into the building's own bins;
   // the seat is its own group, which swings.
   swings.push(buildRoofSwing(ctx.bins, ctx.res, {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D-131: the lookout swing's one HUD hint. The World draws the ride; the
+ * D-132: the lookout swing's one HUD hint. The World draws the ride; the
  * Shell adds only the way out. So what is pinned here is who sees the hint
  * (the rider, and nobody else) and that Esc and the button take the same
  * path — plus that the hint is game copy, with no money or name in it.
@@ -78,7 +78,7 @@ function press(key: string, target?: EventTarget): void {
   });
 }
 
-describe('the lookout swing\'s HUD hint (D-131)', () => {
+describe('the lookout swing\'s HUD hint (D-132)', () => {
   it('shows "Esc to get off" to the rider', () => {
     const fake = fakeChannel(riding(SELF));
     render(<SwingHud swing={fake.channel} />);

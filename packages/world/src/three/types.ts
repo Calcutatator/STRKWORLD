@@ -150,7 +150,7 @@ export interface StreetView {
   readonly plaza?: PlazaView | null;
   /** The football pitch's live parts (D-078), or null on a map without it. */
   readonly pitch?: PitchView | null;
-  /** The Exchange roof's lookout swing (D-131), or null on a map without it. */
+  /** The Exchange roof's lookout swing (D-132), or null on a map without it. */
   readonly swing?: RoofSwingView | null;
   update(deltaMs: number): void;
   dispose(): void;

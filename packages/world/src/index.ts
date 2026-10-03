@@ -238,7 +238,7 @@ export type { FootballChannel, FootballFrame, FootballMoment } from './football-
 // the football, and the World never imports the lobby.
 export type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 
-// The Exchange roof's lookout swing (D-131), under the same rule: the Shell
+// The Exchange roof's lookout swing (D-132), under the same rule: the Shell
 // supplies the channel, and the World only ever sends its two intents.
 export type {
   RoofSwingChannel,

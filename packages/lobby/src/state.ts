@@ -170,7 +170,7 @@ export type ArenaRingEntry = SchemaType<typeof ArenaRingEntry>;
 export const ARENA_RING_KEY = 'ring';
 
 /**
- * The Exchange roof's lookout swing (D-131): the phase (`SWING_PHASES`'s
+ * The Exchange roof's lookout swing (D-132): the phase (`SWING_PHASES`'s
  * index), the round (mod 65536, +1 per accepted claim), the rider's
  * ephemeral presence id while someone is on it (empty otherwise), the whole
  * seconds left in a ride, and how the last ride ended while it cools down
@@ -222,7 +222,7 @@ export const SWING_KEY = 'swing';
  * sent who is fighting. That keeps D-087's rule that no field says which area
  * anyone is in.
  *
- * `swing` (D-131) holds one entry, key `'swing'`, under the same rule for the
+ * `swing` (D-132) holds one entry, key `'swing'`, under the same rule for the
  * Exchange roof: it reaches a client only while that client is live on the
  * roof, so nobody elsewhere learns who is riding, or that anyone is up there.
  */

@@ -101,7 +101,7 @@ const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
   phase: true,
 };
 
-/** D-131's roof swing, likewise: the frozen snapshot, field for field. */
+/** D-132's roof swing, likewise: the frozen snapshot, field for field. */
 const FROZEN_SWING_FIELDS: Record<keyof RoofSwingSnapshot, true> = {
   phase: true,
   round: true,
@@ -190,11 +190,11 @@ describe('the schema is the enforcement point', () => {
     expect(fields['football']).toBe(FootballEntry);
     // D-114: the ring is a view, like peers: only arena members are sent it.
     expect(fields['arena']).toEqual({ map: ArenaRingEntry, view: true });
-    // D-131: so is the roof's swing — only roof members are sent it.
+    // D-132: so is the roof's swing — only roof members are sent it.
     expect(fields['swing']).toEqual({ map: SwingEntry, view: true });
   });
 
-  it('carries exactly the frozen RoofSwingSnapshot shape, in bytes, one 16-bit round and the rider\'s presence id (D-131)', () => {
+  it('carries exactly the frozen RoofSwingSnapshot shape, in bytes, one 16-bit round and the rider\'s presence id (D-132)', () => {
     const swing = Metadata.getFields(SwingEntry) as Record<string, unknown>;
     expect(Object.keys(swing).sort()).toEqual(Object.keys(FROZEN_SWING_FIELDS).sort());
     expect(swing).toEqual({

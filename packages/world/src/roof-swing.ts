@@ -1,5 +1,5 @@
 /**
- * The lookout swing's ride, as a timeline (D-131). Pure: no three.js, no DOM,
+ * The lookout swing's ride, as a timeline (D-132). Pure: no three.js, no DOM,
  * no clock. The session steps it, the view draws it and the camera follows
  * it, and all three read the same numbers.
  *

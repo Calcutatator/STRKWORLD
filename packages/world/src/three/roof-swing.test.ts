@@ -1,5 +1,5 @@
 /**
- * D-131: the A-frame and its seat, as geometry. The steel merges into the
+ * D-132: the A-frame and its seat, as geometry. The steel merges into the
  * building's own bins (so it costs no draw call of its own); only the seat
  * is a separate object, because it has to move. What is pinned here is that
  * it hangs south of the deck out over the edge, that it swings like a
@@ -42,7 +42,7 @@ function meshes(object: Object3D): Mesh[] {
 const distance = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-describe('the lookout swing\'s A-frame (D-131)', () => {
+describe('the lookout swing\'s A-frame (D-132)', () => {
   it('hangs its pivot south of the deck\'s south edge, out over the void', () => {
     const { swing } = build();
     const southEdge = ORIGIN.originZ + SWING_SEAT_TILE.y;
@@ -74,7 +74,7 @@ describe('the lookout swing\'s A-frame (D-131)', () => {
   });
 });
 
-describe('the pendulum, as geometry (D-131)', () => {
+describe('the pendulum, as geometry (D-132)', () => {
   it('hangs the rider straight below the pivot at rest', () => {
     const { swing } = build();
     const rest = swing.riderAt(0);

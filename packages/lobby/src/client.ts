@@ -93,7 +93,7 @@
  * waiting on the move floor go first, so the room judges it from where the
  * player stands and faces now. Swings, hits and results arrive only as state.
  *
- * ## The roof's lookout swing (D-131)
+ * ## The roof's lookout swing (D-132)
  *
  * `swing()` is a frozen snapshot of the Exchange roof's swing — phase,
  * round, the rider's presence id, seconds left and how the last ride ended —
@@ -423,7 +423,7 @@ export class LobbyClient {
   #arenaClaimHandle: ReturnType<typeof setTimeout> | null = null;
   #arenaAttackHandle: ReturnType<typeof setTimeout> | null = null;
 
-  /** D-131: the last value `swing()` returned, reused while nothing changes. */
+  /** D-132: the last value `swing()` returned, reused while nothing changes. */
   #swingView: RoofSwingSnapshot | null = null;
   /** The last value delivered to swing listeners, for change detection. */
   #swingPublished: RoofSwingSnapshot | null = null;
@@ -682,7 +682,7 @@ export class LobbyClient {
     }
     // D-114: a held claim or swing was meant for the arena.
     if (area !== 'arena') this.#cancelArena();
-    // D-131: a held swing claim was meant for the roof.
+    // D-132: a held swing claim was meant for the roof.
     if (area !== 'roof') this.#cancelSwing();
     const room = this.#room;
     room.send(MESSAGE.area, {
@@ -1078,7 +1078,7 @@ export class LobbyClient {
   }
 
   /**
-   * D-131: the Exchange roof's lookout swing, or null unless live on the roof
+   * D-132: the Exchange roof's lookout swing, or null unless live on the roof
    * and a valid snapshot has arrived. Frozen, and the same object for as long
    * as nothing in it changes. Validated through `normalizeRoofSwing`, so it
    * fails closed.
@@ -1110,7 +1110,7 @@ export class LobbyClient {
   }
 
   /**
-   * D-131: claim the roof swing. No payload: the room judges the claim from
+   * D-132: claim the roof swing. No payload: the room judges the claim from
    * where it holds this player (the deck in front of the swing, while it is
    * idle) and sits them on the seat itself. Returns whether a claim was sent
    * or is about to be; false unless live on the roof, or inside the intent
@@ -1137,7 +1137,7 @@ export class LobbyClient {
   }
 
   /**
-   * D-131: get off the swing. No payload. Returns whether it was sent; false
+   * D-132: get off the swing. No payload. Returns whether it was sent; false
    * unless live on the roof, or inside the intent floor it shares with
    * `swingClaim`.
    */
@@ -1728,7 +1728,7 @@ export class LobbyClient {
     return this.#status === 'connected' && this.#area === 'arena';
   }
 
-  /** Deliver the current swing if it differs from the last one delivered (D-131). */
+  /** Deliver the current swing if it differs from the last one delivered (D-132). */
   #emitSwing(): void {
     const swing = this.swing();
     if (sameSwing(swing, this.#swingPublished)) return;
@@ -1774,7 +1774,7 @@ export class LobbyClient {
     return readSwingEntry(entry);
   }
 
-  /** Live on the roof (D-131): the only place the swing is sent, and its intents mean anything. */
+  /** Live on the roof (D-132): the only place the swing is sent, and its intents mean anything. */
   #onRoof(): boolean {
     return this.#status === 'connected' && this.#area === 'roof';
   }
@@ -2472,7 +2472,7 @@ function sameArena(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): bo
 }
 
 /**
- * The roof swing entry as `RoofSwingSnapshot`, validated (D-131): wire codes
+ * The roof swing entry as `RoofSwingSnapshot`, validated (D-132): wire codes
  * to names, an empty presence id to null, a zero reason to none, then
  * `normalizeRoofSwing`. Null for anything malformed.
  */

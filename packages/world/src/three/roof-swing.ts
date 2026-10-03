@@ -11,7 +11,7 @@ import {
 } from './palette.js';
 
 /**
- * The lookout swing on the Exchange tower's roof deck (D-131).
+ * The lookout swing on the Exchange tower's roof deck (D-132).
  *
  * A black steel A-frame standing on the deck's south ledge, its beam
  * cantilevered out past the balustrade, with a red two-seat swing hanging

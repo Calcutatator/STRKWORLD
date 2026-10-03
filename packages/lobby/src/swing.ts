@@ -1,5 +1,5 @@
 /**
- * The room's roof swing (D-131): one rules authority and its mirror in the
+ * The room's roof swing (D-132): one rules authority and its mirror in the
  * room schema. No transport.
  *
  * The authority in `swing-rules.ts` is the truth; the `SwingEntry` handed to

@@ -49,7 +49,7 @@ export interface PresenceController {
   readonly football?: FootballChannel;
   /** The gladiator pit's ring (D-114), when the composition provides one. */
   readonly arena?: ArenaShellChannel;
-  /** The Exchange roof's lookout swing (D-131), when the composition provides one. */
+  /** The Exchange roof's lookout swing (D-132), when the composition provides one. */
   readonly roofSwing?: SwingShellChannel;
   reconnect(): void;
   destroy(): Promise<void>;

@@ -1,5 +1,5 @@
 /**
- * D-131: the ride's timeline and the rider's camera. Pure numbers, so this
+ * D-132: the ride's timeline and the rider's camera. Pure numbers, so this
  * pins the shape of the pendulum rather than any drawing of it: it starts and
  * ends at rest whatever frame it is cut off at, it swings out over the south
  * edge, and reduced motion takes the arcs out without taking the ride out.
@@ -31,7 +31,7 @@ function samples(reduced = false): number[] {
   return out;
 }
 
-describe('the pendulum (D-131)', () => {
+describe('the pendulum (D-132)', () => {
   it('hangs still at both ends, so the seat is at rest before and after the ride', () => {
     expect(swingAngleAt(0)).toBe(0);
     expect(swingEnvelopeAt(0)).toBe(0);
@@ -88,7 +88,7 @@ describe('the pendulum (D-131)', () => {
   });
 });
 
-describe('reduced motion keeps the ride but takes the arcs out (D-131)', () => {
+describe('reduced motion keeps the ride but takes the arcs out (D-132)', () => {
   it('sways gently instead of arcing: an order of magnitude shallower', () => {
     const gentle = samples(true);
     const full = samples();
@@ -104,7 +104,7 @@ describe('reduced motion keeps the ride but takes the arcs out (D-131)', () => {
   });
 });
 
-describe('the rider\'s camera (D-131)', () => {
+describe('the rider\'s camera (D-132)', () => {
   it('turns south over the edge, the opposite of the world\'s fixed north-up yaw (D-059)', () => {
     expect(swingCameraShot(0).yaw).toBe(SWING_CAMERA_YAW);
     expect(SWING_CAMERA_YAW).toBeCloseTo(Math.PI, 9);

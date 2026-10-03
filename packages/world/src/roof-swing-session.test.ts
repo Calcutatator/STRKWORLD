@@ -1,5 +1,5 @@
 /**
- * D-131: the World's side of the lookout swing. It never decides who rides —
+ * D-132: the World's side of the lookout swing. It never decides who rides —
  * the lobby does — so what is pinned here is that it obeys the snapshot it is
  * given: the press-E target it offers, mounting and dismounting on the
  * server's rounds, holding movement and E for the ride and handing both back
@@ -104,7 +104,7 @@ function harness(options: { reducedMotion?: boolean; selfId?: GameId | null } = 
   };
 }
 
-describe('the swing\'s press-E target (D-131)', () => {
+describe('the swing\'s press-E target (D-132)', () => {
   it('offers SWING on the approach while the swing is free', () => {
     const h = harness();
     h.push(idle());
@@ -170,7 +170,7 @@ describe('the swing\'s press-E target (D-131)', () => {
   });
 });
 
-describe('the ride, on the server\'s rounds (D-131)', () => {
+describe('the ride, on the server\'s rounds (D-132)', () => {
   it('sits the player on the seat when a round names them the rider', () => {
     const h = harness();
     h.push(riding(SELF));
@@ -266,7 +266,7 @@ describe('the ride, on the server\'s rounds (D-131)', () => {
   });
 });
 
-describe('getting off (D-131)', () => {
+describe('getting off (D-132)', () => {
   it('sends the leave on Esc, and never ends its own ride', () => {
     const h = harness();
     h.push(riding(SELF));
@@ -292,7 +292,7 @@ describe('getting off (D-131)', () => {
   });
 });
 
-describe('reduced motion, and shutting down (D-131)', () => {
+describe('reduced motion, and shutting down (D-132)', () => {
   it('sways gently and cuts to a still south-facing shot', () => {
     const h = harness({ reducedMotion: true });
     h.push(riding(SELF));

@@ -120,7 +120,7 @@ describe('shell boundaries', () => {
     ['sandbox', 'sandbox-rules.ts', 'D-060'],
     ['football', 'football-rules.ts', 'D-078'],
     ['arena', 'arena-rules.ts', 'D-114'],
-    ['swing', 'swing-rules.ts', 'D-131'],
+    ['swing', 'swing-rules.ts', 'D-132'],
   ])('keeps the browser-side %s rules free of server code', (_name, file) => {
     const rules = readFileSync(
       fileURLToPath(new URL(`../../../packages/lobby/src/${file}`, import.meta.url)),

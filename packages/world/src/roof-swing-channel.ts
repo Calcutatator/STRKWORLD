@@ -3,7 +3,7 @@ import type { InteractionTarget } from './interaction.js';
 import type { SwingCameraShot } from './roof-swing.js';
 
 /**
- * D-131: the Exchange roof's lookout swing, as the World sees it.
+ * D-132: the Exchange roof's lookout swing, as the World sees it.
  *
  * The same shape as the arena's channel: the Shell supplies it, so the World
  * never imports the lobby. The channel carries two intents out and validated
