@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   FOOTBALL_TICK_MS,
   PITCH_FIELD,
+  PITCH_GATES,
   PITCH_GOAL,
   STREET_ORIGIN_X,
+  isInsidePitchPen,
+  pitchTileCentre,
   type FootballSnapshot,
 } from '@strkworld/shared';
 import {
@@ -33,13 +36,33 @@ const X1 = (PITCH_FIELD.x + PITCH_FIELD.width) * T;
 const MID = (PITCH_FIELD.y + PITCH_FIELD.height / 2) * T;
 const FLOOR = FOOTBALL_MIN_KICK_INTERVAL_MS;
 
-/** A registry, a session beside the centre spot, and a clock to step it with. */
+/**
+ * A registry, a session beside the centre spot, and a clock to step it with.
+ *
+ * D-135: the pitch is fenced, so a session that is to stand inside it arrives
+ * the way a player does — admitted on the north gate's approach, in by a press
+ * of E, then walked to where the test wants it. `pitchDummyFill` is off so no
+ * dummies drop in and the match stays open, which is the free play these tests
+ * are about; a session outside the fence is admitted where it stands, as
+ * before.
+ */
 function pitchWith(ball?: BallState) {
-  const registry = new LobbyPresence(ball ? { footballBall: ball } : {});
+  const registry = new LobbyPresence({ pitchDummyFill: false, ...(ball ? { footballBall: ball } : {}) });
   let now = 10_000;
+  const APPROACH = pitchTileCentre({ x: PITCH_GATES[0]!.approach.x, y: PITCH_GATES[0]!.approach.y });
   const join = (key: string, x: number, y: number): void => {
-    const outcome = registry.admit(key, { x, y, facing: 'right' });
+    const inside = isInsidePitchPen(x, y);
+    const at = inside ? APPROACH : { x, y };
+    const outcome = registry.admit(key, { x: at.x, y: at.y, facing: 'right' });
     if (!outcome.ok) throw new Error(outcome.reason);
+    if (!inside) return;
+    now += 100;
+    const gate = registry.pitchGate(key, now);
+    if (gate !== 'entered') throw new Error(`gate ${gate}`);
+    now += 100;
+    const moved = registry.move(key, { x, y, facing: 'right' }, now);
+    if (moved !== 'applied') throw new Error(`move ${moved}`);
+    now += 100;
   };
   const step = (ms: number) => {
     const events = [];
@@ -143,10 +166,10 @@ describe('the mirror in room state (D-078)', () => {
   it('holds the ball, the score, the phase byte and the tick, and nothing else', () => {
     const { registry } = pitchWith();
     const mirror = mirrorOf(registry);
-    expect(Object.keys(mirror).sort()).toEqual(['east', 'phase', 'tick', 'vx', 'vy', 'west', 'x', 'y']);
+    expect(Object.keys(mirror).sort()).toEqual(['phase', 'snarks', 'starks', 'tick', 'vx', 'vy', 'x', 'y']);
     // In whole 64ths of a pixel, so the state holds whole numbers only.
     expect(FOOTBALL_WIRE_SCALE).toBe(64);
-    expect(mirror).toMatchObject({ x: FOOTBALL_CENTRE.x * 64, y: FOOTBALL_CENTRE.y * 64, vx: 0, vy: 0, west: 0, east: 0, phase: 0 });
+    expect(mirror).toMatchObject({ x: FOOTBALL_CENTRE.x * 64, y: FOOTBALL_CENTRE.y * 64, vx: 0, vy: 0, starks: 0, snarks: 0, phase: 0 });
     expect(Object.values(mirror).every(Number.isInteger)).toBe(true);
     expect(FOOTBALL_PHASE_CODES).toEqual({ live: 0, goal: 1, 'full-time': 2 });
     expect(toWire(1.2345)).toBe(79);
@@ -190,13 +213,13 @@ describe('the mirror in room state (D-078)', () => {
         expect(Number.isInteger(wire[key])).toBe(true);
         expect(Math.abs(wire[key]! / FOOTBALL_WIRE_SCALE - truth[key])).toBeLessThanOrEqual(0.5 / FOOTBALL_WIRE_SCALE);
       }
-      expect([wire.west, wire.east, wire.phase]).toEqual([truth.west, truth.east, FOOTBALL_PHASE_CODES[truth.phase]]);
+      expect([wire.starks, wire.snarks, wire.phase]).toEqual([truth.starks, truth.snarks, FOOTBALL_PHASE_CODES[truth.phase]]);
     };
     same(read(), registry.footballSnapshot());
     const events = step(400);
-    expect(events).toEqual([{ kind: 'goal', side: 'west' }]);
+    expect(events).toEqual([{ kind: 'goal', side: 'starks' }]);
     same(read(), registry.footballSnapshot());
-    expect(read()).toMatchObject({ west: 1, east: 0, phase: 1 });
+    expect(read()).toMatchObject({ starks: 1, snarks: 0, phase: 1 });
     step(3000);
     same(read(), registry.footballSnapshot());
     expect(read()).toMatchObject({ x: FOOTBALL_CENTRE.x * FOOTBALL_WIRE_SCALE, phase: 0 });

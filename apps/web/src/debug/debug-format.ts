@@ -523,12 +523,12 @@ const WALLET_API_VERSION = /^v?\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.-]{1,32})
 
 type DebugEntry = { level: DebugLevel; event: string; detail: string };
 
-/** The two sides at the football pitch (D-078), the only words a football line may add. */
-const FOOTBALL_SIDES = setOf({ west: true, east: true });
+/** The two teams at the football pitch (D-135), the only words a football line may add. */
+const FOOTBALL_SIDES = setOf({ starks: true, snarks: true });
 
 /**
  * A football moment as one entry, or null for anything unexpected:
- * `football.kick`, `football.goal side=west`, `football.full-time winner=east`.
+ * `football.kick`, `football.goal side=starks`, `football.full-time winner=snarks`.
  * A side from a fixed list and nothing else: no identifier, no position.
  */
 export function describeFootball(step: unknown): DebugEntry | null {

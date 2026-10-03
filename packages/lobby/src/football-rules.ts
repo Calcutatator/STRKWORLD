@@ -55,6 +55,8 @@ import {
   FOOTBALL_BALL_RADIUS,
   FOOTBALL_KICK_RANGE,
   FOOTBALL_POST_RADIUS,
+  FOOTBALL_SIDES,
+  FOOTBALL_SIDE_GOAL,
   FOOTBALL_TICK_MS,
   FOOTBALL_WIN_SCORE,
   PITCH_AREA,
@@ -235,14 +237,22 @@ export function isNearPitch(x: number, y: number): boolean {
 
 /**
  * The side a ball has just scored for, or null: a ball wholly over the west
- * goal line between the posts is East's, over the east one West's.
+ * goal line between the posts is the Snarks' (the Starks defend it), over the
+ * east one the Starks'. Both read off `FOOTBALL_SIDE_GOAL`, so nothing here
+ * assumes which end a team keeps (D-135).
  */
 export function goalScoredBy(ball: BallState): FootballSide | null {
   if (!(Math.abs(ball.y - MID) < HALF_MOUTH)) return null;
-  if (ball.x < X0 - BALL_R) return 'east';
-  if (ball.x > X1 + BALL_R) return 'west';
+  if (ball.x < X0 - BALL_R) return SCORER_AT.west;
+  if (ball.x > X1 + BALL_R) return SCORER_AT.east;
   return null;
 }
+
+/** Who scores when the ball goes in at each end: the side that does *not* defend it. */
+const SCORER_AT: Readonly<Record<'west' | 'east', FootballSide>> = Object.freeze({
+  west: FOOTBALL_SIDES.find((side) => FOOTBALL_SIDE_GOAL[side] !== 'west') as FootballSide,
+  east: FOOTBALL_SIDES.find((side) => FOOTBALL_SIDE_GOAL[side] !== 'east') as FootballSide,
+});
 
 /** A ball at rest on the centre spot. */
 export function kickOffBall(): BallState {
@@ -461,6 +471,13 @@ export interface FootballAuthority {
   kick(player: { readonly x: number; readonly y: number }, facing?: Facing): boolean;
   /** Forget a player's movement: they left. */
   forget(key: string): void;
+  /**
+   * D-135: back to a kick-off, 0–0, live. The pitch's match authority calls it
+   * when a match starts and when one ends, so a match never inherits a score
+   * or a moment from the free play before it. The clock is left as it is: a
+   * running ball keeps running, from the centre spot.
+   */
+  reset(): void;
 }
 
 export interface FootballAuthorityOptions {
@@ -485,8 +502,8 @@ interface Track {
 
 class Authority implements FootballAuthority {
   #ball: BallState;
-  #west = 0;
-  #east = 0;
+  #starks = 0;
+  #snarks = 0;
   #phase: FootballPhase = 'live';
   /** The step on which the current goal or full-time moment ends. */
   #phaseEnds = 0;
@@ -512,8 +529,8 @@ class Authority implements FootballAuthority {
         y: this.#ball.y,
         vx: this.#ball.vx,
         vy: this.#ball.vy,
-        west: this.#west,
-        east: this.#east,
+        starks: this.#starks,
+        snarks: this.#snarks,
         phase: this.#phase,
       });
     }
@@ -574,21 +591,30 @@ class Authority implements FootballAuthority {
     if (typeof key === 'string') this.#tracks.delete(key);
   }
 
+  reset(): void {
+    this.#ball = kickOffBall();
+    this.#starks = 0;
+    this.#snarks = 0;
+    this.#phase = 'live';
+    this.#phaseEnds = 0;
+    this.#view = null;
+  }
+
   #step(players: readonly FootballPlayer[], events: FootballEvent[]): void {
     const now = this.#clock ?? 0;
     const pushers = this.#pushers(players, now);
     const { ball, scored } = stepBall(this.#ball, FOOTBALL_TICK_MS, pushers);
     this.#ball = ball;
     if (this.#phase === 'live' && scored !== null) {
-      if (scored === 'west') this.#west += 1;
-      else this.#east += 1;
+      if (scored === 'starks') this.#starks += 1;
+      else this.#snarks += 1;
       events.push(Object.freeze({ kind: 'goal', side: scored }));
       this.#phase = 'goal';
       this.#phaseEnds = this.#tick + PHASE_STEPS.goal;
       return;
     }
     if (this.#phase !== 'live' && this.#tick >= this.#phaseEnds) {
-      const winner = this.#west >= FOOTBALL_WIN_SCORE ? 'west' : this.#east >= FOOTBALL_WIN_SCORE ? 'east' : null;
+      const winner = this.#starks >= FOOTBALL_WIN_SCORE ? 'starks' : this.#snarks >= FOOTBALL_WIN_SCORE ? 'snarks' : null;
       if (this.#phase === 'goal' && winner !== null) {
         this.#phase = 'full-time';
         this.#phaseEnds = this.#tick + PHASE_STEPS['full-time'];
@@ -596,8 +622,8 @@ class Authority implements FootballAuthority {
         return;
       }
       if (this.#phase === 'full-time') {
-        this.#west = 0;
-        this.#east = 0;
+        this.#starks = 0;
+        this.#snarks = 0;
       }
       this.#phase = 'live';
       this.#ball = kickOffBall();

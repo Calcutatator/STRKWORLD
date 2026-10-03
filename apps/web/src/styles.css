@@ -4763,6 +4763,222 @@ button.ui-balance-fill:focus-visible {
 }
 
 /* ===========================================================================
+   The gated pitch's HUD — D-135
+
+   The ring's HUD shape and the same brand tokens (D-119/D-121): a scoreboard
+   bar at the top, the 3–2–1 over the middle, and the winner's banner. The two
+   teams get the pitch's own colours, the Starks' blue and the Snarks' red, so
+   the bar reads at a glance which way the score is going.
+   =========================================================================== */
+
+.pitch-hud {
+  --pitch-gold: var(--brand-sun-gold);
+  --pitch-outline: var(--brand-outline);
+  --pitch-cream: var(--brand-cream);
+  --pitch-panel: var(--brand-window-dark);
+  --pitch-rim: var(--brand-window-rim);
+  --pitch-headline: var(--brand-font-headline);
+  --pitch-body: var(--brand-font-body);
+  --pitch-starks: #5B8DD9;
+  --pitch-snarks: #D9534F;
+  /* The HUD sizes its own type, so the game's cap-height adjustment (D-119) is off here. */
+  font-size-adjust: none;
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  font-family: var(--pitch-body);
+  color: var(--pitch-cream);
+}
+
+.pitch-hud-bar {
+  position: absolute;
+  top: 0.9rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  justify-items: center;
+  column-gap: 0.8rem;
+  padding: 0.4rem 1rem 0.5rem;
+  background: var(--pitch-panel);
+  border: 4px solid var(--pitch-outline);
+  box-shadow: inset 0 0 0 2px var(--pitch-rim), 0 5px 0 var(--pitch-outline);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.pitch-hud-team {
+  font-family: var(--pitch-headline);
+  font-size: 1.5rem;
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+}
+
+.pitch-hud-team[data-side="starks"] {
+  color: var(--pitch-starks);
+}
+
+.pitch-hud-team[data-side="snarks"] {
+  color: var(--pitch-snarks);
+}
+
+.pitch-hud-score {
+  /* VT323, not Jersey 15: at this size Jersey's digits merge (D-119). */
+  font-family: var(--pitch-body);
+  font-size: 1.9rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--pitch-gold);
+}
+
+.pitch-hud-target {
+  grid-column: 1 / -1;
+  font-size: 1.05rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--pitch-cream);
+  opacity: 0.8;
+}
+
+.pitch-hud-waiting {
+  grid-template-columns: auto auto;
+  padding: 0.25rem 0.8rem;
+}
+
+.pitch-hud-title {
+  font-family: var(--pitch-headline);
+  font-size: 1.3rem;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: var(--pitch-gold);
+}
+
+.pitch-hud-filled {
+  font-size: 1.2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pitch-hud-countdown {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--pitch-headline);
+  font-size: clamp(5rem, 18vw, 9rem);
+  line-height: 0.95;
+  color: var(--pitch-gold);
+  -webkit-text-stroke: 3px var(--pitch-outline);
+  text-shadow: 0 0.08em 0 var(--pitch-outline);
+  animation: pitch-pulse 1s ease-out both;
+}
+
+.pitch-hud-kickoff {
+  font-size: clamp(2.8rem, 11vw, 5.5rem);
+  color: var(--pitch-cream);
+}
+
+@keyframes pitch-pulse {
+  from { transform: translate(-50%, -50%) scale(1.35); opacity: 0.2; }
+  35% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  to { transform: translate(-50%, -50%) scale(0.96); opacity: 1; }
+}
+
+.pitch-hud-banner {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.7rem 1.6rem 0.8rem;
+  background: var(--pitch-panel);
+  border: 6px solid var(--pitch-outline);
+  box-shadow: inset 0 0 0 3px var(--pitch-rim), 0 8px 0 var(--pitch-outline);
+  border-radius: 4px;
+  animation: pitch-banner-slide 260ms ease-out both;
+}
+
+.pitch-hud-banner-title {
+  font-family: var(--pitch-headline);
+  font-size: clamp(2.6rem, 8vw, 4.4rem);
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  color: var(--pitch-gold);
+  -webkit-text-stroke: 2px var(--pitch-outline);
+}
+
+.pitch-hud-banner[data-side="starks"] .pitch-hud-banner-title {
+  text-shadow: 0 0.07em 0 var(--pitch-starks);
+}
+
+.pitch-hud-banner[data-side="snarks"] .pitch-hud-banner-title {
+  text-shadow: 0 0.07em 0 var(--pitch-snarks);
+}
+
+.pitch-hud-banner-detail {
+  font-size: 1.45rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes pitch-banner-slide {
+  from { transform: translate(-50%, -1.5rem); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes pitch-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pitch-hud-live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Reduced motion: numbers only, no pulse; the banner fades rather than slides. */
+.pitch-hud[data-motion="reduced"] .pitch-hud-countdown {
+  animation: none;
+}
+
+.pitch-hud[data-motion="reduced"] .pitch-hud-banner {
+  animation: pitch-fade 200ms linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pitch-hud-countdown {
+    animation: none;
+  }
+
+  .pitch-hud-banner {
+    animation: pitch-fade 200ms linear both;
+  }
+}
+
+@media (max-width: 560px) {
+  .pitch-hud-bar {
+    column-gap: 0.5rem;
+    padding: 0.3rem 0.7rem 0.4rem;
+  }
+
+  .pitch-hud-team {
+    font-size: 1.15rem;
+  }
+
+  .pitch-hud-score {
+    font-size: 1.5rem;
+  }
+}
+
+/* ===========================================================================
  * Leaderboard phase 1: the placement stand's window, in the STRKWORLD brand
  * (D-113): a dark scoreboard card with the big placement in Jersey 15, body
  * in VT323, and an ember Silkscreen button with a hard outline drop. The

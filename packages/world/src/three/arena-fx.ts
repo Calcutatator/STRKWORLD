@@ -18,6 +18,12 @@ import { ARENA_DUMMY_TILE, ARENA_DUMMY_YAW, ARENA_ORIGIN_PX, ARENA_RING_SPAWN, t
 import type { ArenaViewFrame } from '../arena-channel.js';
 import { CAMERA_PITCH } from './camera-rig.js';
 import { tileCenterToGround } from './coords.js';
+import {
+  TRAINING_DUMMY_BOXES,
+  TRAINING_DUMMY_COLOURS,
+  mergeTrainingDummyBoxes,
+  type TrainingDummyBox,
+} from './training-dummy.js';
 
 /**
  * D-114: the arena's combat feedback (stream C): the training dummy itself,
@@ -122,14 +128,9 @@ const NUMBER_X = 0.55;
 const VOXEL = 0.075;
 
 const COLOURS = Object.freeze({
-  post: 0x7a5232,
-  postDark: 0x5c3c22,
-  sack: 0xc9a46a,
-  sackDark: 0xa8834e,
-  straw: 0xf0cf6a,
-  target: 0xc8321e,
-  targetLight: 0xf6ecd9,
-  rope: 0x8a6a40,
+  // The figure's own palette lives with the figure (`training-dummy.ts`), which
+  // D-135's pitch dummies build from too.
+  ...TRAINING_DUMMY_COLOURS,
   barBack: 0x24120a,
   barFill: 0xf56a16,
   barFillLow: 0xffc12e,
@@ -140,28 +141,10 @@ const COLOURS = Object.freeze({
   spark: 0xe8f0ff,
 });
 
-type Box = readonly [size: readonly [number, number, number], at: readonly [number, number, number], colour: number];
+type Box = TrainingDummyBox;
 
-/** The straw training dummy: a post on a cross foot, a sack body with a painted target, a crossbar for arms. */
-const DUMMY_BOXES: readonly Box[] = Object.freeze([
-  [[0.7, 0.08, 0.12], [0, 0.04, 0], COLOURS.postDark],
-  [[0.12, 0.08, 0.7], [0, 0.04, 0], COLOURS.postDark],
-  [[0.12, 1.3, 0.12], [0, 0.65, 0], COLOURS.post],
-  [[0.52, 0.62, 0.36], [0, 0.98, 0], COLOURS.sack],
-  [[0.54, 0.06, 0.38], [0, 0.72, 0], COLOURS.rope],
-  [[0.54, 0.06, 0.38], [0, 1.24, 0], COLOURS.rope],
-  [[1.0, 0.09, 0.09], [0, 1.17, 0], COLOURS.post],
-  [[0.12, 0.14, 0.14], [0.53, 1.17, 0], COLOURS.straw],
-  [[0.12, 0.14, 0.14], [-0.53, 1.17, 0], COLOURS.straw],
-  [[0.34, 0.32, 0.32], [0, 1.46, 0], COLOURS.sackDark],
-  [[0.36, 0.06, 0.34], [0, 1.6, 0], COLOURS.straw],
-  // The target, painted on the front (+Z, towards the gate).
-  [[0.36, 0.36, 0.012], [0, 0.98, 0.186], COLOURS.target],
-  [[0.24, 0.24, 0.012], [0, 0.98, 0.194], COLOURS.targetLight],
-  [[0.12, 0.12, 0.012], [0, 0.98, 0.202], COLOURS.target],
-  // Straw poking out under the sack.
-  [[0.4, 0.08, 0.26], [0, 0.64, 0], COLOURS.straw],
-]);
+/** The straw training dummy, shared with D-135's pitch dummies (`training-dummy.ts`). */
+const DUMMY_BOXES: readonly Box[] = TRAINING_DUMMY_BOXES;
 
 /** A 3 x 5 pixel font for the damage numbers, top row first. */
 const GLYPHS: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -187,25 +170,8 @@ const GLYPHS: Readonly<Record<string, readonly string[]>> = Object.freeze({
 /** D-128: what a blocked hit says, over the fighter who blocked it. */
 export const ARENA_FX_BLOCK_WORD = 'BLOCK';
 
-function colouredBox(size: readonly [number, number, number], at: readonly [number, number, number], colour: number): BufferGeometry {
-  const box = new BoxGeometry(size[0], size[1], size[2]).toNonIndexed();
-  box.translate(at[0], at[1], at[2]);
-  const c = new Color(colour);
-  const count = box.getAttribute('position').count;
-  const colours = new Float32Array(count * 3);
-  for (let i = 0; i < count; i += 1) colours.set([c.r, c.g, c.b], i * 3);
-  box.setAttribute('color', new Float32BufferAttribute(colours, 3));
-  box.deleteAttribute('uv');
-  return box;
-}
-
-function mergeBoxes(boxes: readonly Box[]): BufferGeometry {
-  const parts = boxes.map(([size, at, colour]) => colouredBox(size, at, colour));
-  const merged = mergeGeometries(parts, false);
-  for (const part of parts) part.dispose();
-  if (!merged) throw new Error('arena-fx: could not merge geometry');
-  return merged;
-}
+/** The figure's own merge, shared with the pitch's dummies (`training-dummy.ts`). */
+const mergeBoxes = mergeTrainingDummyBoxes;
 
 /** The voxel text for a damage number, centred on its origin: gold faces over a dark drop. */
 export function damageNumberGeometry(text: string): BufferGeometry {

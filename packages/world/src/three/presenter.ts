@@ -241,7 +241,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     return streetSurfaceHeightAt(streetMap, x, z);
   };
   disposers.push(() => street.dispose());
-  root.add(street.ground, street.doors, street.labels);
+  root.add(street.ground, street.doors, street.labels, street.figures);
   /*
    * D-133: the roof's swing looks south over D-124's river, station and
    * skyline. There is no mount here: `street-builder.ts` already puts the
@@ -519,6 +519,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     street.ground.visible = true;
     street.doors.visible = true;
     street.labels.visible = true;
+    street.figures.visible = true;
     streetVisible = true;
     remoteVisible = true;
     visibleRoom = null;
@@ -719,6 +720,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
           street.ground.visible = visible;
           sandbox.group.visible = visible;
           football.group.visible = visible;
+          // D-135: the pitch's dummies hide with the street, as the ball does.
+          street.figures.visible = visible;
         },
         setDoorsVisible(visible) {
           if (!live()) return;
@@ -839,7 +842,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
         setFootball(frame) {
           if (!live()) return;
           football.setBall(frame);
-          if (frame) street.pitch?.setScore(frame.west, frame.east);
+          if (frame) street.pitch?.setScore(frame.starks, frame.snarks);
+        },
+        // D-135: the gated match's dummies stand where the server says; a null
+        // match (away from the pitch, or offline) hides every one of them.
+        setPitchMatch(match) {
+          if (!live()) return;
+          street.pitch?.setDummies(match?.slots ?? []);
         },
         setKickPrompt(visible) {
           if (!live()) return;

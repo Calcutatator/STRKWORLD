@@ -414,7 +414,7 @@ describe('presenter', () => {
 });
 
 describe('the football in the presenter (D-078)', () => {
-  const ballFrame = { x: 14 * 32, y: 15 * 32, vx: 0, vy: 0, west: 2, east: 1, phase: 'live' } as const;
+  const ballFrame = { x: 14 * 32, y: 15 * 32, vx: 0, vy: 0, starks: 2, snarks: 1, phase: 'live' } as const;
   const find = (root: Group, name: string) => {
     let found: import('three').Object3D | undefined;
     root.traverse((object) => {
@@ -431,14 +431,14 @@ describe('the football in the presenter (D-078)', () => {
     const ball = find(world.parent, 'football:ball');
     expect(ball.visible).toBe(true);
     expect(ball.position.x).toBeCloseTo(14);
-    expect(find(world.parent, 'scoreboard').userData['text']).toBe('WEST 2 – 1 EAST');
+    expect(find(world.parent, 'scoreboard').userData['text']).toBe('STARKS 2 – 1 SNARKS');
     world.view.setStreetVisible(false);
     expect(find(world.parent, 'football').visible).toBe(false);
     world.view.setStreetVisible(true);
     expect(find(world.parent, 'football').visible).toBe(true);
     world.view.setKickPrompt(true);
     expect(find(world.parent, 'prompt').visible).toBe(true);
-    world.view.footballMoment({ kind: 'goal', side: 'west' });
+    world.view.footballMoment({ kind: 'goal', side: 'starks' });
     expect(find(world.parent, 'cheer').visible).toBe(true);
   });
 
@@ -446,12 +446,12 @@ describe('the football in the presenter (D-078)', () => {
     const world = setup();
     world.view.setFootball(ballFrame);
     world.view.setKickPrompt(true);
-    world.view.footballMoment({ kind: 'full-time', winner: 'west', west: 5, east: 1 });
+    world.view.footballMoment({ kind: 'full-time', winner: 'starks', starks: 5, snarks: 1 });
     world.presenter.bindSession();
     expect(find(world.parent, 'football:ball').visible).toBe(false);
     expect(find(world.parent, 'prompt').visible).toBe(false);
     expect(find(world.parent, 'cheer').visible).toBe(false);
-    expect(find(world.parent, 'scoreboard').userData['text']).toBe('WEST 0 – 0 EAST');
+    expect(find(world.parent, 'scoreboard').userData['text']).toBe('STARKS 0 – 0 SNARKS');
     // The retired session's view steers nothing.
     world.view.setFootball(ballFrame);
     expect(find(world.parent, 'football:ball').visible).toBe(false);
@@ -459,7 +459,7 @@ describe('the football in the presenter (D-078)', () => {
 
   it('passes the reduced-motion preference to the football, so a goal throws no confetti', () => {
     const world = setup(() => true);
-    world.view.footballMoment({ kind: 'goal', side: 'east' });
+    world.view.footballMoment({ kind: 'goal', side: 'snarks' });
     expect((find(world.parent, 'football:confetti') as InstancedMesh).count).toBe(0);
   });
 });

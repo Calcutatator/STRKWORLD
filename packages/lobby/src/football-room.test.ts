@@ -12,7 +12,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
-import { PITCH_FIELD, type FootballGoal, type FootballSnapshot } from '@strkworld/shared';
+import {
+  PITCH_FIELD,
+  PITCH_GATES,
+  pitchTileCentre,
+  type FootballGoal,
+  type FootballSnapshot,
+} from '@strkworld/shared';
 import { DEFAULT_ROOM_NAME, MESSAGE, SERVER_MESSAGE, resolveRoomConfig, type PresenceRoomConfig } from './config';
 import { LobbyClient } from './client';
 import { FOOTBALL_TILE_SIZE, type BallState } from './football-rules';
@@ -28,13 +34,20 @@ const X1 = (PITCH_FIELD.x + PITCH_FIELD.width) * T;
 const BALL: BallState = Object.freeze({ x: X1 - 2 * T, y: MID, vx: 0, vy: 0 });
 /** Where the kicker stands: just west of the ball, so a kick sends it east, into the goal. */
 const KICKER = { x: BALL.x - 24, y: BALL.y };
-/** Well clear of the ball, on the pitch, so the ball runs while they watch. */
-const WATCHER = { x: 8 * T + 16, y: 24 * T + 16 };
+/**
+ * D-135: the pitch is fenced, so the kicker joins on the north gate's
+ * approach, presses E to take a slot, and is then walked to `KICKER`.
+ */
+const GATE_APPROACH = pitchTileCentre({ x: PITCH_GATES[0]!.approach.x, y: PITCH_GATES[0]!.approach.y });
+/** Well clear of the ball, outside the fence in sight of it, so the ball runs while they watch. */
+const WATCHER = { x: 8 * T + 16, y: 5 * T + 16 };
 
 /** The production room, with a trusted config whose ball starts in front of the east goal. */
 class ShootingRoom extends PresenceRoom {
   protected override roomConfig: PresenceRoomConfig & Pick<LobbyPresenceOptions, 'footballBall'> = {
-    ...resolveRoomConfig({ minUpdateIntervalMs: 10 }),
+    // D-135: the dummies are off, so the match stays open and one client can
+    // walk in and kick freely, which is what this end-to-end test is about.
+    ...resolveRoomConfig({ minUpdateIntervalMs: 10, pitchDummyFill: false }),
     footballBall: BALL,
   };
 }
@@ -84,13 +97,13 @@ describe('the ball in a real room (D-078)', () => {
       sprite: 'avatar-1',
     });
     raw.reconnection.enabled = false;
-    const westScore = (): number => (raw.state as unknown as { football?: { west?: number } }).football?.west ?? -1;
+    const starksScore = (): number => (raw.state as unknown as { football?: { starks?: number } }).football?.starks ?? -1;
     const heard: Array<{ payload: unknown; scoreThen: number }> = [];
     raw.onMessage(SERVER_MESSAGE.goal, (payload: unknown) => {
-      heard.push({ payload, scoreThen: westScore() });
+      heard.push({ payload, scoreThen: starksScore() });
     });
     // The kicker uses the client wrapper the Shell uses.
-    const kicker = new LobbyClient({ endpoint, start: { ...KICKER, facing: 'right' } });
+    const kicker = new LobbyClient({ endpoint, start: { ...GATE_APPROACH, facing: 'down' } });
     const goals: FootballGoal[] = [];
     const balls: Array<FootballSnapshot | null> = [];
     kicker.onGoal((goal) => goals.push(goal));
@@ -98,27 +111,39 @@ describe('the ball in a real room (D-078)', () => {
 
     try {
       await kicker.connect();
+      // D-135: in by the north gate, then across to the ball.
+      expect(kicker.pitchGate()).toBe(true);
+      await waitFor(
+        () => kicker.pitchMatch(),
+        (match) => (match?.slots.filter((slot) => slot.kind === 'player').length ?? 0) === 1,
+        'the slot taken',
+      );
+      kicker.updatePosition(KICKER.x, KICKER.y, 'right');
+      const standsAt = (): { x?: number; y?: number } | undefined =>
+        (raw.state as unknown as { peers: { get(key: string): { position?: { x: number; y: number } } | undefined } })
+          .peers.get(kicker.gameId as string)?.position;
+      await waitFor(standsAt, (at) => at?.x === KICKER.x && at?.y === KICKER.y, 'the walk to the ball');
       // Everyone gets the ball at rest where the room put it.
       const still = await waitFor(() => kicker.football(), (ball) => ball !== null, 'the ball');
-      expect(still).toMatchObject({ x: BALL.x, y: BALL.y, vx: 0, vy: 0, west: 0, east: 0, phase: 'live' });
+      expect(still).toMatchObject({ x: BALL.x, y: BALL.y, vx: 0, vy: 0, starks: 0, snarks: 0, phase: 'live' });
       expect(Object.isFrozen(still)).toBe(true);
 
       // The kick carries nothing; a hostile payload on the same verb is never read.
-      raw.send(MESSAGE.kick, { x: 0, y: 0, vx: 99999, side: 'east', gameId: '0123456789abcdef' });
+      raw.send(MESSAGE.kick, { x: 0, y: 0, vx: 99999, side: 'snarks', gameId: '0123456789abcdef' });
       expect(kicker.kick()).toBe(true);
       const moving = await waitFor(() => kicker.football(), (ball) => (ball?.vx ?? 0) > 0, 'the kicked ball');
       expect(moving!.vy).toBeCloseTo(0, 3);
       expect(moving!.tick).toBeGreaterThan(still!.tick);
 
-      // Into the goal: West's, told at once, before the patch that raises the score.
+      // Into the goal: the Starks', told at once, before the patch that raises the score.
       await waitFor(() => heard.length, (count) => count >= 1, 'the goal');
-      expect(heard[0]).toEqual({ payload: { side: 'west' }, scoreThen: 0 });
+      expect(heard[0]).toEqual({ payload: { side: 'starks' }, scoreThen: 0 });
       await waitFor(() => goals.length, (count) => count >= 1, 'the wrapped goal');
-      expect(goals).toEqual([{ side: 'west' }]);
+      expect(goals).toEqual([{ side: 'starks' }]);
       expect(Object.isFrozen(goals[0])).toBe(true);
-      const scored = await waitFor(() => kicker.football(), (ball) => ball?.west === 1, 'the score');
-      expect(scored).toMatchObject({ west: 1, east: 0, phase: 'goal' });
-      expect(westScore()).toBe(1);
+      const scored = await waitFor(() => kicker.football(), (ball) => ball?.starks === 1, 'the score');
+      expect(scored).toMatchObject({ starks: 1, snarks: 0, phase: 'goal' });
+      expect(starksScore()).toBe(1);
 
       // A kick during the celebration is refused: the ball stays dead in the net.
       const dead = kicker.football()!;
@@ -141,7 +166,7 @@ describe('the ball in a real room (D-078)', () => {
   }, 20_000);
 
   it('drops a kick inside the client\'s own floor, and sends nothing while not connected', async () => {
-    const idle = new LobbyClient({ endpoint, start: { ...KICKER, facing: 'right' } });
+    const idle = new LobbyClient({ endpoint, start: { ...GATE_APPROACH, facing: 'down' } });
     expect(idle.kick()).toBe(false);
     expect(idle.football()).toBeNull();
     const client = new LobbyClient({ endpoint, start: { ...WATCHER, facing: 'right' } });

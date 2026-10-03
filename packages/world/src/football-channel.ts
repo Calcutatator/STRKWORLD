@@ -22,8 +22,8 @@ export interface FootballFrame {
   readonly y: number;
   readonly vx: number;
   readonly vy: number;
-  readonly west: number;
-  readonly east: number;
+  readonly starks: number;
+  readonly snarks: number;
   readonly phase: FootballPhase;
 }
 
@@ -33,7 +33,7 @@ export interface FootballFrame {
  */
 export type FootballMoment =
   | { readonly kind: 'goal'; readonly side: FootballSide }
-  | { readonly kind: 'full-time'; readonly winner: FootballSide; readonly west: number; readonly east: number };
+  | { readonly kind: 'full-time'; readonly winner: FootballSide; readonly starks: number; readonly snarks: number };
 
 export interface FootballChannel {
   /**
@@ -65,7 +65,7 @@ function isScore(value: unknown): value is number {
 }
 
 function isSide(value: unknown): value is FootballSide {
-  return value === 'west' || value === 'east';
+  return value === 'starks' || value === 'snarks';
 }
 
 /**
@@ -77,19 +77,19 @@ export function normalizeFootballFrame(value: unknown): FootballFrame | null {
   if (value === null || typeof value !== 'object') return null;
   let record: Partial<Record<keyof FootballFrame, unknown>>;
   try {
-    const { x, y, vx, vy, west, east, phase } = value as Partial<Record<keyof FootballFrame, unknown>>;
-    record = { x, y, vx, vy, west, east, phase };
+    const { x, y, vx, vy, starks, snarks, phase } = value as Partial<Record<keyof FootballFrame, unknown>>;
+    record = { x, y, vx, vy, starks, snarks, phase };
   } catch {
     return null;
   }
-  const { x, y, vx, vy, west, east, phase } = record;
+  const { x, y, vx, vy, starks, snarks, phase } = record;
   if (typeof x !== 'number' || typeof y !== 'number' || typeof vx !== 'number' || typeof vy !== 'number') return null;
   if (![x, y, vx, vy].every(Number.isFinite)) return null;
   if (x < BOUNDS.minX || x > BOUNDS.maxX || y < BOUNDS.minY || y > BOUNDS.maxY) return null;
   if (Math.hypot(vx, vy) > MAX_DRAWN_SPEED) return null;
-  if (!isScore(west) || !isScore(east)) return null;
+  if (!isScore(starks) || !isScore(snarks)) return null;
   if (typeof phase !== 'string' || !PHASES.includes(phase as FootballPhase)) return null;
-  return Object.freeze({ x, y, vx, vy, west, east, phase: phase as FootballPhase });
+  return Object.freeze({ x, y, vx, vy, starks, snarks, phase: phase as FootballPhase });
 }
 
 /** Validate an untrusted moment; anything else is not celebrated. Frozen. */
@@ -98,18 +98,18 @@ export function normalizeFootballMoment(value: unknown): FootballMoment | null {
   let kind: unknown;
   let side: unknown;
   let winner: unknown;
-  let west: unknown;
-  let east: unknown;
+  let starks: unknown;
+  let snarks: unknown;
   try {
-    ({ kind, side, winner, west, east } = value as { kind?: unknown; side?: unknown; winner?: unknown; west?: unknown; east?: unknown });
+    ({ kind, side, winner, starks, snarks } = value as { kind?: unknown; side?: unknown; winner?: unknown; starks?: unknown; snarks?: unknown });
   } catch {
     return null;
   }
   if (kind === 'goal' && isSide(side)) return Object.freeze({ kind, side });
-  if (kind === 'full-time' && isSide(winner) && isScore(west) && isScore(east)) {
+  if (kind === 'full-time' && isSide(winner) && isScore(starks) && isScore(snarks)) {
     // The winner is the side ahead: a moment that says otherwise is not believed.
-    if ((winner === 'west') !== west > east || west === east) return null;
-    return Object.freeze({ kind, winner, west, east });
+    if ((winner === 'starks') !== starks > snarks || starks === snarks) return null;
+    return Object.freeze({ kind, winner, starks, snarks });
   }
   return null;
 }

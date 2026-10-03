@@ -404,17 +404,39 @@ export const FOOTBALL_POST_RADIUS = 0.1;
 /** The furthest a player's centre may be from the ball's centre and kick it, in tiles. */
 export const FOOTBALL_KICK_RANGE = 1.3;
 
-/** The first side to this many goals wins, and the score starts again from 0–0. */
-export const FOOTBALL_WIN_SCORE = 5;
+/**
+ * The first side to this many goals wins, and the score starts again from
+ * 0–0. D-135: three, so a match is best of five — the lead's "first team to 3
+ * goals win". Free play on an open pitch uses the same figure, so the pitch
+ * only ever has one winning score.
+ */
+export const FOOTBALL_WIN_SCORE = 3;
 
 /** One step of the ball's simulation, in ms: 25 steps a second. */
 export const FOOTBALL_TICK_MS = 40;
 
 /**
- * A team, named for the goal it defends: West defends the west goal, so a
- * ball into the east goal is West's.
+ * A team (D-135, renaming D-078's `west`/`east`). The Starks defend the west
+ * goal and the Snarks the east one, so a ball into the east goal is the
+ * Starks'. The name is the team's; which goal it defends is this comment and
+ * `FOOTBALL_SIDE_GOAL` below, and nothing else in the codebase guesses it.
  */
-export type FootballSide = 'west' | 'east';
+export type FootballSide = 'starks' | 'snarks';
+
+/** Both teams, the Starks (west) first. Wire code = index. */
+export const FOOTBALL_SIDES: readonly FootballSide[] = Object.freeze(['starks', 'snarks'] as const);
+
+/** The end of the field a team defends: the Starks the west, the Snarks the east. */
+export const FOOTBALL_SIDE_GOAL: Readonly<Record<FootballSide, 'west' | 'east'>> = Object.freeze({
+  starks: 'west',
+  snarks: 'east',
+});
+
+/** Each team's name as every scoreboard, banner and chip writes it (D-135). */
+export const FOOTBALL_TEAM_NAMES: Readonly<Record<FootballSide, string>> = Object.freeze({
+  starks: 'STARKS',
+  snarks: 'SNARKS',
+});
 
 /**
  * `live`: in play. `goal`: a goal was just scored, the ball is dead and the
@@ -433,8 +455,9 @@ export interface FootballSnapshot {
   /** The ball's velocity, in World pixels per second. */
   readonly vx: number;
   readonly vy: number;
-  readonly west: number;
-  readonly east: number;
+  /** The Starks' goals, and the Snarks'. */
+  readonly starks: number;
+  readonly snarks: number;
   readonly phase: FootballPhase;
 }
 
@@ -779,6 +802,8 @@ export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
 export * from './arena.js';
 // D-127: the overworld's sittable benches, and the seat table the wire indexes into.
 export * from './seats.js';
+// D-135: the gated pitch: its fence and gates, the four places, and the match as the wire carries it.
+export * from './pitch.js';
 // D-133: the Exchange roof's lookout swing: its tiles, the swing as the wire
 // carries it, and the ride's timings. Last, because it reads
 // `ROOF_PRESENCE_GRID` above (inside its functions only).

@@ -59,6 +59,15 @@ import { FOOTBALL_TICK_MS, type FootballSide, type GameId, type SandboxTile } fr
 export const ARENA_TICK_MS = 100;
 
 /**
+ * How often the room runs the pitch match's clock while it has a deadline, in
+ * ms (D-135): the countdown's seconds land within this, and so does the
+ * winner's banner. The dummies and the ball step on the football tick, so
+ * this clock only exists for the two timed phases; an open match costs
+ * nothing.
+ */
+export const PITCH_TICK_MS = 100;
+
+/**
  * How often the room runs the roof swing's clock while a ride is on, in ms
  * (D-133): the ride's end and the cooldown's close land within this, and
  * `secondsLeft` is refreshed. Only while the swing has a deadline; an idle
@@ -144,6 +153,8 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /** The arena ring's clock, while it has a deadline. D-114. */
   #arenaTimer: Delayed | undefined;
 
+  /** The pitch match's clock, while it has a deadline. D-135. */
+  #pitchTimer: Delayed | undefined;
   /** The roof swing's clock, while it has a deadline. D-133. */
   #swingTimer: Delayed | undefined;
 
@@ -243,6 +254,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
         this.#scheduleFootball();
         this.#scheduleArena();
+        this.#schedulePitch();
         this.#scheduleSwing();
       }
     });
@@ -277,6 +289,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
         this.#scheduleFootball();
         this.#scheduleArena();
+        this.#schedulePitch();
         this.#scheduleSwing();
       });
     });
@@ -367,6 +380,22 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     /*
+     * D-135. One press of E at a pitch gate. No payload is read: the press is
+     * judged from where the registry holds the sender. Colyseus hands this
+     * room one message at a time, so of two presses for the last free slot the
+     * first takes it and the second finds the gate locked. Every refusal is
+     * silent; the match entry is the only answer. An accepted press moves
+     * someone through the fence, so views are stale; the clock runs while the
+     * match has a deadline.
+     */
+    this.onMessage(MESSAGE.pitchGate, (client: Client) => {
+      const outcome = this.#registry.pitchGate(client.sessionId, performance.now());
+      if (outcome === 'entered' || outcome === 'left') this.#viewsStale = true;
+      this.#schedulePitch();
+      this.#scheduleFootball();
+    });
+
+    /*
      * D-133. The roof swing's two intents. No payload is read: the claim is
      * judged from where the registry holds the sender, on the deck in front
      * of the swing. Colyseus hands this room one message at a time, so of
@@ -424,6 +453,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#scheduleSpawn();
     this.#scheduleFootball();
     this.#scheduleArena();
+    this.#schedulePitch();
     this.#scheduleSwing();
   }
 
@@ -523,8 +553,37 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#footballTimer = undefined;
     this.#arenaTimer?.clear();
     this.#arenaTimer = undefined;
+    this.#pitchTimer?.clear();
+    this.#pitchTimer = undefined;
     this.#swingTimer?.clear();
     this.#swingTimer = undefined;
+  }
+
+  /**
+   * Keep the pitch match's clock running while the match has a deadline, and
+   * stopped otherwise (D-135). Called after every gate press and every change
+   * to who is in the room; idempotent.
+   */
+  #schedulePitch(): void {
+    const active = this.#registry.pitchActive;
+    if (active && this.#pitchTimer === undefined) {
+      this.#pitchTimer = this.clock.setInterval(() => this.#pitchTick(), PITCH_TICK_MS);
+    } else if (!active && this.#pitchTimer !== undefined) {
+      this.#pitchTimer.clear();
+      this.#pitchTimer = undefined;
+    }
+  }
+
+  #pitchTick(): void {
+    try {
+      // A kick-off, a restart or the close moves people: views are stale.
+      if (this.#registry.pitchTick(performance.now())) this.#viewsStale = true;
+    } catch {
+      // The room clock runs this outside any handler; an escape would take
+      // the process down with every room in it. A fixed, content-free line.
+      console.error('lobby: pitch step failed');
+    }
+    this.#schedulePitch();
   }
 
   /**
@@ -607,6 +666,10 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       for (const event of this.#registry.footballTick(performance.now())) {
         if (event.kind === 'goal') this.#broadcastGoal(event.side);
       }
+      // D-135: a goal starts the match's restart countdown, so its own clock
+      // must be running to place everyone back in their quarters and to count
+      // the seconds down. Idempotent, and nothing while the match is open.
+      this.#schedulePitch();
     } catch {
       // The room clock runs this outside any handler; an escape would take
       // the process down with every room in it. A fixed, content-free line.
@@ -744,6 +807,14 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     if (member && !holds) view.add(ring);
     else if (!member && holds) view.remove(ring);
 
+    // D-135: the match entry is in a view exactly while its client is live on
+    // the street and near the pitch. Nobody further down the road is sent who
+    // is playing.
+    const match = this.#registry.pitchMatchEntry;
+    const viewer = this.#registry.isPitchViewer(client.sessionId);
+    const hasMatch = view.has(match);
+    if (viewer && !hasMatch) view.add(match);
+    else if (!viewer && hasMatch) view.remove(match);
     // D-133: the same rule for the roof's swing entry — in a view exactly
     // while its client is live on the roof.
     const swing = this.#registry.swingEntry;

@@ -14492,6 +14492,7 @@ floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
 island's cameras); the sand look is reproducible by putting the cloud bin back
 on the lit material. Not verified on a real GPU — the rasteriser models the
 engine's hemisphere, sun, ACES and sRGB but not its exact shader.
+
 ---
 ### 2026-10-03 — The server placed the champion on the throne; the client never did
 The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
@@ -14547,3 +14548,83 @@ Renders are from the offline rasteriser, not a GPU:
 `arena-throne-merged.png` (game camera, close-up and the chair in
 three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
 browser, and whether the sit-down wants a transition animation.
+
+---
+
+### 2026-10-03 — A D-number taken from `origin/main` can be taken again while you work
+
+D-135's entry was written as D-129, renumbered to D-134 when a fetch showed
+D-129 had become the Colosseum, and renumbered again to D-135 when the fetch
+immediately before committing showed D-134 had become the Garden. With a dozen
+branches open, the number you reserved at the start of a long change is not
+yours at the end of it.
+
+*How to avoid it:* take the number from a fetch **immediately before you
+commit**, not when you start, and keep the whole change greppable for it so the
+renumber is one `grep -rl | xargs perl -pi -e` (here it was 84 references across
+29 files, then 140 across 35). Re-fetch and re-check even if you already
+renumbered once.
+
+*Verified:* `git show origin/main:docs/DECISIONS.md | grep -o "^## D-[0-9]*"`
+before each renumber; D-129 is the Colosseum and D-134 the Garden on
+`origin/main` today, and neither existed in this branch's base.
+
+---
+
+### 2026-10-03 — The static-scene rule treats a moving figure as a walkable-tile intrusion
+
+`street-builder.test.ts` asserts no volume in `street:ground` stands on a
+walkable tile between knee and head height. D-135's pitch dummies are figures
+that walk the field, so parenting them to `ground` failed that test — and
+correctly so: the rule is about authored scene geometry, which is why avatars
+have never been in that group either. Hiding them (`visible = false`) does not
+help; the test traverses geometry, not visibility.
+
+*How to avoid it:* anything that moves over walkable ground belongs outside
+`street:ground`. D-135 added `street:figures` for exactly this, hidden and shown
+with the street like the ball.
+
+*Verified:* reproduced red — with the dummies in `ground` the test reports four
+intrusions at the world origin; moving them to `street:figures` turns it green,
+and `pitch-builder.test.ts` pins that they are not in `ground`.
+
+---
+
+### 2026-10-03 — Two features that each claim "the budget is still the whole of it" both say 37.7, and the merge has to add them
+
+D-133's swing and D-135's pitch branched from the same base and each added its
+own client floor to `client-arena.test.ts`'s pinned sum, each asserting
+`toBeCloseTo(37.7, 1)`. Both were right in isolation — the base through D-128
+is 36.7 — and both are wrong together. A conflict resolution that keeps "both
+sides" of the sum but keeps either side's *number* leaves a test that passes by
+luck or fails for the wrong reason. The real figure is 38.7 a second against
+`MAX_MESSAGES_PER_SECOND` of 40, and nothing had to be paced down to fit.
+
+*How to avoid it:* when two branches each append a term to a pinned total,
+recompute the total from the constants rather than taking either side's
+assertion, and fix every prose copy of it — `config.ts` carried the 37.7 twice,
+in `JUMP_CLIENT_INTERVAL_MS`'s comment and in `PITCH_CLIENT_GATE_INTERVAL_MS`'s.
+
+*Verified:* `perSecond()` over the eight constants gives 38.709; the merged
+`client-arena.test.ts` pins 38.7 and `expect(budget).toBeLessThan(40)` passes.
+
+---
+
+### 2026-10-03 — "Both sides" is wrong wherever the two sides share a `/**`
+
+Six of the twenty-two conflicts in the football/main merge opened on a doc
+comment the two sides had in common, so the marker fell *inside* it: ours began
+`* One slot of the pitch match…` and theirs `* The Exchange roof's swing…`.
+Concatenating them yields one comment whose body is two comments, and the next
+declaration is swallowed. In `config.ts` this produced a file tsc reported at
+thirty-odd syntax errors starting with `TS1002: Unterminated string literal` —
+twenty lines below the real damage.
+
+*How to avoid it:* before concatenating a conflict, check whether the common
+context immediately above it is an unterminated `/**`. If it is, the second
+side needs its own `/**` opener. The tell in tsc's output is a cluster of
+TS1005/TS1002 in a file whose conflict you thought was a one-line addition.
+
+*Verified:* `npm run typecheck` red on `config.ts(341)` with the shared opener,
+green with `/**` restored before the swing's block; the same shape was fixed by
+hand in `state.ts`, `room.ts`, `copy.ts`, `world-session.ts` and `AGENTS.md`.

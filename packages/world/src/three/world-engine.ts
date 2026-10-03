@@ -219,6 +219,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         ...(config.remotePeers ? { peers: config.remotePeers } : {}),
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
+        ...(config.pitch ? { pitch: config.pitch } : {}),
         // The Exchange roof's lookout swing (D-133).
         ...(config.roofSwing ? { roofSwing: config.roofSwing } : {}),
         reducedMotion: () => prefersReducedMotion(win),

@@ -213,6 +213,11 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
   doors.name = 'street:doors';
   const signs = new Group();
   signs.name = 'street:labels';
+  // D-135: moving bodies the street owns — the pitch's dummies. Their own
+  // group, because `ground` is the static scene and must stand clear of every
+  // walkable tile, while these walk the field as a player does.
+  const figures = new Group();
+  figures.name = 'street:figures';
   const textLabels: TextLabel[] = [];
   const animators: Animator[] = [];
   const occluders: StreetOccluder[] = [];
@@ -349,6 +354,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     const pitchOccluders: PitchOccluder[] = [];
     pitch = buildPitch(map, labels, res, {
       ground,
+      figures,
       labels: signs,
       textLabels,
       animators,
@@ -399,6 +405,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     ground,
     doors,
     labels: signs,
+    figures,
     occluders,
     plaza,
     pitch,

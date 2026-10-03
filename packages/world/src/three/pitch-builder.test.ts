@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Material, Mesh, Object3D, PerspectiveCamera, Vector3 } from 'three';
-import { FOOTBALL_POST_RADIUS, PITCH_AREA, PITCH_FIELD, PITCH_GOAL } from '@strkworld/shared';
+import { Box3, Color, Material, Mesh, Object3D, PerspectiveCamera, Vector3 } from 'three';
+import {
+  FOOTBALL_POST_RADIUS,
+  PITCH_AREA,
+  PITCH_FIELD,
+  PITCH_GATES,
+  PITCH_GOAL,
+  PITCH_PEN,
+  PITCH_SLOTS,
+  pitchSlotSide,
+} from '@strkworld/shared';
 import { PITCH_CENTRE_SPOT, PITCH_FIXTURES, PITCH_GATE, PITCH_GATE_TEXT, PITCH_HALFWAY_X, PITCH_MIDDLE_Z } from '../map/pitch.js';
 import { createStreetMap, isSolidAt } from '../map/street.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
@@ -88,7 +97,7 @@ describe('the pitch in 3D (D-078)', () => {
     const { view } = build();
     const decor = vertices(meshNamed(view.ground, 'pitch:decor'));
     for (const piece of PITCH_FIXTURES.filter((fixture) => fixture.kind === 'goal')) {
-      const east = piece.side === 'east';
+      const east = piece.side === 'snarks';
       const line = east ? PITCH_FIELD.x + PITCH_FIELD.width : PITCH_FIELD.x;
       const postX = line + (east ? 1 : -1) * FOOTBALL_POST_RADIUS;
       for (const z of [PITCH_MIDDLE_Z - PITCH_GOAL.width / 2, PITCH_MIDDLE_Z + PITCH_GOAL.width / 2]) {
@@ -122,11 +131,11 @@ describe('the pitch in 3D (D-078)', () => {
     view.dispose();
   });
 
-  it('names the score on a brand plate over the stand, "WEST 0 – 0 EAST", whole in the camera from the far walkway', () => {
+  it('names the score on a brand plate over the stand, "STARKS 0 – 0 SNARKS", whole in the camera from the far walkway', () => {
     const { view, pitchLabels } = build();
     const board = pitchLabels.find((label) => label.userData['pitch'] === 'scoreboard')!;
     expect(board.userData['kind']).toBe('sign');
-    expect(board.userData['text']).toBe('WEST 0 – 0 EAST');
+    expect(board.userData['text']).toBe('STARKS 0 – 0 SNARKS');
     expect(board.userData['options']).toMatchObject({ titleFont: 'display', background: PITCH_THEME.scoreboard.background });
     expect(board.rotation.y).toBe(0);
     expect(board.position.x).toBe(PITCH_HALFWAY_X);
@@ -147,9 +156,9 @@ describe('the pitch in 3D (D-078)', () => {
     }
     // The score follows the ball's: the pitch view redraws it.
     view.pitch!.setScore(3, 5);
-    expect(board.userData['text']).toBe('WEST 3 – 5 EAST');
+    expect(board.userData['text']).toBe('STARKS 3 – 5 SNARKS');
     view.pitch!.setScore(Number.NaN, 1);
-    expect(board.userData['text']).toBe('WEST 0 – 1 EAST');
+    expect(board.userData['text']).toBe('STARKS 0 – 1 SNARKS');
     view.dispose();
   });
 
@@ -176,6 +185,135 @@ describe('the pitch in 3D (D-078)', () => {
     for (const material of others) expect(material.opacity).toBe(1);
     gate[0]!.setOpacity(1);
     for (const material of own) expect(material.opacity).toBe(1);
+    view.dispose();
+  });
+});
+
+describe('the pitch\'s own fence and its two gates (D-135)', () => {
+  /** Whether any decor vertex stands over tile (x, z) between the kerb and the rail top. */
+  function fenced(decor: Mesh, x: number, z: number): boolean {
+    return vertices(decor).some(
+      (v) => v.y > 0.2 && v.y < 1.3 && v.x > x - 1e-6 && v.x < x + 1 + 1e-6 && v.z > z - 1e-6 && v.z < z + 1 + 1e-6,
+    );
+  }
+
+  it('closes a ring of railing round the pen, leaving the stands outside it', () => {
+    const { view } = build();
+    const decor = meshNamed(view.ground, 'pitch:decor');
+    const x1 = PITCH_PEN.x + PITCH_PEN.width;
+    const z1 = PITCH_PEN.y + PITCH_PEN.height;
+    // Every tile of the border carries fence, the gates' tiles included.
+    for (let x = PITCH_PEN.x; x < x1; x++) {
+      for (const z of [PITCH_PEN.y, z1 - 1]) expect(fenced(decor, x, z), `${x},${z}`).toBe(true);
+    }
+    for (let z = PITCH_PEN.y; z < z1; z++) {
+      for (const x of [PITCH_PEN.x, x1 - 1]) expect(fenced(decor, x, z), `${x},${z}`).toBe(true);
+    }
+    // And the field itself carries none of it.
+    expect(fenced(decor, PITCH_FIELD.x + 4, PITCH_FIELD.y + 4)).toBe(false);
+    view.dispose();
+  });
+
+  it('stands the gates\' posts above the railing, one gate north and one south', () => {
+    const { view } = build();
+    const decor = meshNamed(view.ground, 'pitch:decor');
+    const points = vertices(decor);
+    expect(PITCH_GATES.map((gate) => gate.side)).toEqual(['north', 'south']);
+    for (const gate of PITCH_GATES) {
+      const line = gate.tiles.y + 0.5;
+      // A post taller than the railing at each end of the leaf.
+      for (const x of [gate.tiles.x, gate.tiles.x + gate.tiles.width]) {
+        const tall = points.some(
+          (v) => Math.abs(v.x - x) < 0.2 && Math.abs(v.z - line) < 0.2 && v.y > 1.3 && v.y <= 2.4,
+        );
+        expect(tall, `${gate.side} post at ${x}`).toBe(true);
+      }
+      // The gate is closed: bars stand over its own tiles, so it is no gap.
+      for (let x = gate.tiles.x; x < gate.tiles.x + gate.tiles.width; x++) {
+        expect(fenced(decor, x, gate.tiles.y), `${gate.side} leaf ${x}`).toBe(true);
+      }
+    }
+    view.dispose();
+  });
+});
+
+describe('the match\'s dummies (D-135)', () => {
+  /** The four dummy figures, in slot order. */
+  function dummies(view: StreetView): Mesh[] {
+    const found: Mesh[] = [];
+    view.figures.traverse((object) => {
+      if (object instanceof Mesh && object.name.startsWith('pitch:dummy-')) found.push(object);
+    });
+    return found.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  it('builds one figure per place, hidden until a match puts a dummy there', () => {
+    const { view } = build();
+    const figures = dummies(view);
+    expect(figures).toHaveLength(PITCH_SLOTS);
+    expect(figures.every((mesh) => !mesh.visible)).toBe(true);
+    // They live outside the static scene, which must stay clear of walkable tiles.
+    expect(dummies({ ...view, figures: view.ground } as StreetView)).toHaveLength(0);
+    view.dispose();
+  });
+
+  it('stands each dummy where the server says, and hides a place that holds a player or nobody', () => {
+    const { view } = build();
+    const place = (kind: 'empty' | 'player' | 'dummy', x = 0, y = 0) => ({ kind, x, y });
+    view.pitch!.setDummies([
+      place('dummy', 10 * 32, 11 * 32),
+      place('player'),
+      place('empty'),
+      place('dummy', 20 * 32, 19 * 32),
+    ]);
+    const figures = dummies(view);
+    expect(figures.map((mesh) => mesh.visible)).toEqual([true, false, false, true]);
+    // World pixels become world units, one per street tile.
+    expect(figures[0]!.position.x).toBeCloseTo(10);
+    expect(figures[0]!.position.z).toBeCloseTo(11);
+    expect(figures[3]!.position.x).toBeCloseTo(20);
+    expect(figures[3]!.position.z).toBeCloseTo(19);
+    // An empty list — which is what a null match sends — hides them all.
+    view.pitch!.setDummies([]);
+    expect(dummies(view).some((mesh) => mesh.visible)).toBe(false);
+    view.dispose();
+  });
+
+  it('faces each dummy at the goal its team attacks, and wears its team\'s colour', () => {
+    const { view } = build();
+    const figures = dummies(view);
+    figures.forEach((mesh, index) => {
+      const side = pitchSlotSide(index);
+      // The Starks attack east (+X), the Snarks west.
+      expect(mesh.rotation.y, `slot ${index}`).toBeCloseTo(side === 'starks' ? Math.PI / 2 : -Math.PI / 2);
+    });
+    // Each team's sack colour appears in its own figures and not the other's.
+    const colours = (mesh: Mesh): Set<string> => {
+      const attribute = mesh.geometry.getAttribute('color');
+      const set = new Set<string>();
+      for (let i = 0; i < attribute.count; i++) {
+        set.add(new Color(attribute.getX(i), attribute.getY(i), attribute.getZ(i)).getHexString());
+      }
+      return set;
+    };
+    const starks = new Color(PITCH_THEME.starks).getHexString();
+    const snarks = new Color(PITCH_THEME.snarks).getHexString();
+    expect(colours(figures[0]!).has(starks)).toBe(true);
+    expect(colours(figures[0]!).has(snarks)).toBe(false);
+    expect(colours(figures[1]!).has(snarks)).toBe(true);
+    expect(colours(figures[1]!).has(starks)).toBe(false);
+    view.dispose();
+  });
+
+  it('ignores a place whose coordinates are not numbers', () => {
+    const { view } = build();
+    view.pitch!.setDummies([
+      { kind: 'dummy', x: Number.NaN, y: 0 },
+      { kind: 'dummy', x: 0, y: Number.POSITIVE_INFINITY },
+      { kind: 'empty', x: 0, y: 0 },
+      { kind: 'empty', x: 0, y: 0 },
+    ]);
+    expect(dummies(view).some((mesh) => mesh.visible)).toBe(false);
     view.dispose();
   });
 });
