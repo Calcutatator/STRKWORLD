@@ -10,7 +10,7 @@ import {
 import { LobbyPresence } from './presence';
 
 /**
- * D-128: jumping over the football, as the room judges it.
+ * D-130: jumping over the football, as the room judges it.
  *
  * The room is the authority on who is in the air: it times the jumps it
  * accepted, and a client has no field to claim an airborne pass in. So the
@@ -61,7 +61,7 @@ function runThroughTheBall(options: { readonly jump: boolean; readonly ticks?: n
   return { ball: registry.footballSnapshot(), playerX: x };
 }
 
-describe('jumping over the football (D-128)', () => {
+describe('jumping over the football (D-130)', () => {
   it('carries the player over the ball and leaves it exactly where it was', () => {
     const run = runThroughTheBall({ jump: true });
     // Past it, and far enough that the body covered the ball on the way.
@@ -165,7 +165,7 @@ describe('jumping over the football (D-128)', () => {
   });
 });
 
-describe('the rules an airborne player is handed to (D-128)', () => {
+describe('the rules an airborne player is handed to (D-130)', () => {
   const still = { x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 };
 
   /** The ball after someone sits on its centre for a step, as `player` describes them. */

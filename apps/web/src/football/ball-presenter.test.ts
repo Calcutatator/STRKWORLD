@@ -233,7 +233,7 @@ describe('the ball the Shell draws (D-078)', () => {
     expect(pushed).toBe(true);
   });
 
-  it('leaves the drawn ball where it is while the player passes over it in the air (D-128)', () => {
+  it('leaves the drawn ball where it is while the player passes over it in the air (D-130)', () => {
     const presenter = createBallPresenter();
     presenter.push(snapshot(100, { ...FOOTBALL_CENTRE, vx: 0, vy: 0 }), 4000);
     let x = FOOTBALL_CENTRE.x - 40;

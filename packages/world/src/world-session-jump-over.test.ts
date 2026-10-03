@@ -12,11 +12,11 @@ import type { MovementInput } from './street-movement.js';
 import { createWorldSession, type WorldKeyboard, type WorldSessionView } from './world-session.js';
 
 /**
- * D-128: a jump that carries you over things, in the session.
+ * D-130: a jump that carries you over things, in the session.
  *
  * The jump has never changed the avatar's speed or direction (D-097), so a
  * running jump already covers the same ground as the run — four tiles walking
- * over the 800 ms of air, six sprinting. What D-128 adds is the one thing the
+ * over the 800 ms of air, six sprinting. What D-130 adds is the one thing the
  * ground-level world reads off it: while the feet are clear, every street
  * placement says `airborne`, and the Shell's ball leaves the jumper alone.
  *
@@ -120,7 +120,7 @@ function setup(options: { readonly reducedMotion?: boolean; readonly peerAt?: { 
   };
 }
 
-describe('the jump carries the player over the ball and over a peer (D-128)', () => {
+describe('the jump carries the player over the ball and over a peer (D-130)', () => {
   it('runs clean over the ball\'s tile and out the other side, at running speed', () => {
     const world = setup();
     // Three tiles west of the centre spot, running east through it.
@@ -197,7 +197,7 @@ describe('the jump carries the player over the ball and over a peer (D-128)', ()
   });
 });
 
-describe('walls, fixtures and blocks are unchanged by the jump (D-128)', () => {
+describe('walls, fixtures and blocks are unchanged by the jump (D-130)', () => {
   it('stops a running jump at a wall exactly where a walk stops', () => {
     // The pitch's west goal line has the boards and the stand behind it; walk
     // west off the field until the authored collision stops the body.

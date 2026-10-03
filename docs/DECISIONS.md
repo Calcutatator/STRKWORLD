@@ -6296,7 +6296,7 @@ Two separate faults. First, D-084's 3% oracle bound is the right number for the 
 
 ---
 
-## D-128 — The jump carries you over the football: airborne above knee height, the ball is not a body you meet, and the room times the window
+## D-130 — The jump carries you over the football: airborne above knee height, the ball is not a body you meet, and the room times the window
 
 **2026-10-03 · Accepted under the lead's brief ("can we make jumping actually move the character model with the jump — the character should be able to jump over the football or characters etc...") · amends D-097 (the jump stays cosmetic for the ground position but now gates one more thing) and D-078 (an airborne player is not one of the ball's pushers) · extends D-011's shared seam with `JUMP_PASS_FROM_PHASE`, `JUMP_PASS_UNTIL_PHASE` and `JUMP_PASS_WINDOW_MS` (constants only) and `WorldEvents['player:moved']` with an optional `airborne` · adds no lobby message, no schema field and no wire field · no D-024 disclosure change: nothing financial is added**
 

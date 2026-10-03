@@ -315,7 +315,7 @@ describe('solo play is the lobby\'s play (D-078)', () => {
   });
 });
 
-describe('jumping over the ball (D-128)', () => {
+describe('jumping over the ball (D-130)', () => {
   it('runs the solo ball exactly as the room does: over it in the air, dribbled on the ground', () => {
     /** One run due east through the centre spot, in the room and in solo play at once. */
     const over = (jump: boolean) => {

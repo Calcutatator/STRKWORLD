@@ -39,7 +39,7 @@
  * the player's body as off a moving wall, with a little bounce, so a player
  * walking into a still ball sends it on ahead of them.
  *
- * D-128: a player whose caller marks them `airborne` is not a body the ball
+ * D-130: a player whose caller marks them `airborne` is not a body the ball
  * meets, so a running jump carries them over it and leaves it where it was.
  * Their movement is still followed, so they land pushing it as usual.
  *
@@ -169,7 +169,7 @@ export interface FootballPlayer {
   readonly y: number;
   readonly at: number;
   /**
-   * D-128: their feet are off the ground — mid-jump, above knee height — so
+   * D-130: their feet are off the ground — mid-jump, above knee height — so
    * the ball passes under them: they are not a body it meets this step. They
    * are still followed, so the speed they land with pushes it as always. The
    * caller decides it: the room from the jump it timed, the Shell from its own
@@ -607,7 +607,7 @@ class Authority implements FootballAuthority {
 
   /**
    * Every locatable player as a body, moving at the speed read from their
-   * recent positions. D-128: an airborne player is followed like any other —
+   * recent positions. D-130: an airborne player is followed like any other —
    * so they land moving at the speed they were — but is not handed to the
    * physics, and the ball rolls on under them.
    */

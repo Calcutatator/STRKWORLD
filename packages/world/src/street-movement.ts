@@ -185,7 +185,7 @@ export function createStreetMovementReporter(
   };
 
   /**
-   * D-128: whether the feet are clear of the ground right now. Read and put on
+   * D-130: whether the feet are clear of the ground right now. Read and put on
    * the payload exactly like `seat`: present only while it is true, so a
    * walking player's `player:moved` is what it always was. The Shell reads it
    * for the ball it draws; the lobby is never sent it (the room times the

@@ -238,7 +238,7 @@ export class LobbyPresence {
   /**
    * D-106: each session's jump window — when its last accepted jump arrived,
    * and whether that jump has already stepped up. The same record times
-   * D-128's airborne pass (`#airborne`), which does not spend `used`: a jump
+   * D-130's airborne pass (`#airborne`), which does not spend `used`: a jump
    * that has climbed still passes over the ball. Server-side only; gone on
    * suspend, area change and leave.
    */
@@ -784,7 +784,7 @@ export class LobbyPresence {
    * so only peers in the same presence area, inside the interest radius. Live
    * in any shared area, the Studio (D-111) and the bunker (D-112) included; a suspended session has
    * no entry. Throttled strictly; every refusal is silent. An accepted jump
-   * opens the session's climb window (D-106) and its airborne window (D-128,
+   * opens the session's climb window (D-106) and its airborne window (D-130,
    * over the ball); a throttled one opens neither.
    */
   jump(sessionKey: string, now: number): JumpOutcome {
@@ -836,7 +836,7 @@ export class LobbyPresence {
 
   /**
    * Every street entry as someone the ball meets, with when they last moved
-   * and (D-128) whether the room has them in the air at `now`.
+   * and (D-130) whether the room has them in the air at `now`.
    */
   #footballPlayers(now: number): FootballPlayer[] {
     const players: FootballPlayer[] = [];
@@ -856,7 +856,7 @@ export class LobbyPresence {
   }
 
   /**
-   * D-128: whether the room has a session in the air at `now`: it sent a jump
+   * D-130: whether the room has a session in the air at `now`: it sent a jump
    * the room accepted no more than `JUMP_PASS_WINDOW_MS` ago. Timed from the
    * room's own clock on its own record, so a client cannot claim to be
    * airborne — the only way over the ball is to actually jump, and the jump

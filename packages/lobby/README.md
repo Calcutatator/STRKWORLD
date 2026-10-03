@@ -282,7 +282,7 @@ the rules do not have is no ball at all.
   inside the interest radius) are told: 4 bytes in one patch.
   `PeerSnapshot.jumps` is that byte, or 0; a peer plays a jump when it
   changes, never on first sight. An accepted jump also opens the session's
-  climb window (D-106, below) and its airborne window (D-128): for
+  climb window (D-106, below) and its airborne window (D-130): for
   `JUMP_PASS_WINDOW_MS` (870 ms) the room leaves that session out of the
   bodies the ball comes off, so a running jump carries them over the football
   without dribbling it. Nothing on the wire says "airborne" — the room times

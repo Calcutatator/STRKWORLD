@@ -305,7 +305,7 @@ export const CLIMB_FROM_PHASE = 0.35;
 export const CLIMB_WINDOW_MS = JUMP_AIR_MS + CLIMB_LATENCY_MS;
 
 // ---------------------------------------------------------------------------
-// Jump over — D-128
+// Jump over — D-130
 // ---------------------------------------------------------------------------
 //
 // The same shape of rule for the things that stand on the ground rather than
@@ -315,17 +315,17 @@ export const CLIMB_WINDOW_MS = JUMP_AIR_MS + CLIMB_LATENCY_MS;
 // ball: the rule never reads the jump's height.
 
 /**
- * D-128: from this fraction of a jump's air time, the feet are clear of
+ * D-130: from this fraction of a jump's air time, the feet are clear of
  * anything standing on the ground. On the full arc 10% of the air is 0.47
  * units up — past the knee, well short of the waist.
  */
 export const JUMP_PASS_FROM_PHASE = 0.1;
 
-/** D-128: and until this fraction, the mirror of `JUMP_PASS_FROM_PHASE` on the fall. */
+/** D-130: and until this fraction, the mirror of `JUMP_PASS_FROM_PHASE` on the fall. */
 export const JUMP_PASS_UNTIL_PHASE = 0.9;
 
 /**
- * D-128: the lobby treats a session as airborne for this long after it
+ * D-130: the lobby treats a session as airborne for this long after it
  * receives the jump: to the end of the pass window (`JUMP_PASS_UNTIL_PHASE`
  * of `JUMP_AIR_MS`, 720 ms) plus `CLIMB_LATENCY_MS` for the move floor and
  * jitter, 870 ms. It opens as the jump arrives rather than at
@@ -601,7 +601,7 @@ export type WorldEvents = {
    * passes it straight to the lobby with the position; the room decides
    * whether the claim stands.
    *
-   * D-128: `airborne` is present, and true, only while the jumper's feet are
+   * D-130: `airborne` is present, and true, only while the jumper's feet are
    * clear of the ground, so a walking player's payload is unchanged too. It is
    * for the ball the Shell draws, and is never sent to the lobby: the room
    * times its own jumps (`JUMP_PASS_WINDOW_MS`) rather than believe a client

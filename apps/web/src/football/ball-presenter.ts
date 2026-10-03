@@ -39,7 +39,7 @@ export interface LocalPlayer {
   readonly vy: number;
   readonly facing: Facing;
   /**
-   * D-128: their feet are off the ground, mid-jump. The drawn ball does not
+   * D-130: their feet are off the ground, mid-jump. The drawn ball does not
    * come off them, so a running jump passes over it and leaves it where it
    * was, as the authority will also play it. A kick on E still reaches it.
    */
@@ -213,7 +213,7 @@ export function createBallPresenter(): BallPresenter {
       if (ball === null) return null;
       const { snapshot } = latest;
       // Walking into the ball answers at once: the push plays out here first.
-      // D-128: nothing to answer while the player is over it, in the air.
+      // D-130: nothing to answer while the player is over it, in the air.
       if (snapshot.phase === 'live' && local && pusher(local).length > 0) {
         const touching = Math.hypot(ball.x - local.x, ball.y - local.y) < BALL_R + FOOTBALL_PLAYER_RADIUS;
         if (touching) {

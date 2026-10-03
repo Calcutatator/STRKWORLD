@@ -259,7 +259,7 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-128)
+### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
 
 The brief was "make jumping actually move the character model … jump over the
 football or characters", on the premise that avatars are blocked by other

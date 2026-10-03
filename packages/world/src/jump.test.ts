@@ -267,7 +267,7 @@ describe('the climb window', () => {
   });
 });
 
-describe('the pass window: when the feet are clear of the ball (D-128)', () => {
+describe('the pass window: when the feet are clear of the ball (D-130)', () => {
   it('opens above knee height and closes at its mirror on the fall', () => {
     expect(inPassWindow(JUMP_PASS_FROM_PHASE * JUMP_AIR_MS - 1)).toBe(false);
     expect(inPassWindow(JUMP_PASS_FROM_PHASE * JUMP_AIR_MS)).toBe(true);

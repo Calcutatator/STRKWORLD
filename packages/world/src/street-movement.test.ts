@@ -240,7 +240,7 @@ describe('street movement seam', () => {
     ]);
   });
 
-  it('D-128: puts airborne on the placement only while the feet are clear', () => {
+  it('D-130: puts airborne on the placement only while the feet are clear', () => {
     const events: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
     let airborne = false;
     const reporter = createStreetMovementReporter(
@@ -259,7 +259,7 @@ describe('street movement seam', () => {
     expect(events[2]!.payload).toEqual({ position: { x: 30, y: 20 }, facing: 'right' });
   });
 
-  it('D-128: reads a reader that throws as feet on the ground', () => {
+  it('D-130: reads a reader that throws as feet on the ground', () => {
     const events: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
     const reporter = createStreetMovementReporter(
       { emit: (event, payload) => events.push({ event, payload }) },

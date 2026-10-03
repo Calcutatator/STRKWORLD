@@ -8,7 +8,7 @@
  *
  * - D-106: from `CLIMB_FROM_PHASE` of its air time until it lands it may step
  *   up onto a surface one block higher, once (`JumpState.canClimb`).
- * - D-128: between `JUMP_PASS_FROM_PHASE` and `JUMP_PASS_UNTIL_PHASE` the feet
+ * - D-130: between `JUMP_PASS_FROM_PHASE` and `JUMP_PASS_UNTIL_PHASE` the feet
  *   are above knee height, and the football is not a body the jumper meets
  *   (`JumpState.clearsBodies`), so a running jump carries them over the ball
  *   without dribbling it.
@@ -83,7 +83,7 @@ export interface JumpState {
    */
   readonly canClimb: boolean;
   /**
-   * D-128: whether the feet are clear of anything standing on the ground
+   * D-130: whether the feet are clear of anything standing on the ground
    * right now — airborne and inside the pass window — so the football is not
    * a body this jumper meets.
    */
@@ -168,7 +168,7 @@ export function inClimbWindow(elapsedMs: number, airMs = JUMP_AIR_MS): boolean {
 }
 
 /**
- * D-128: whether a jump `elapsedMs` after take-off has its feet clear of
+ * D-130: whether a jump `elapsedMs` after take-off has its feet clear of
  * anything standing on the ground: from `JUMP_PASS_FROM_PHASE` of its air
  * time to `JUMP_PASS_UNTIL_PHASE`, the mirror of it on the fall. Phase based
  * like `inClimbWindow`, so reduced motion's 0.3-unit hop passes over the same
