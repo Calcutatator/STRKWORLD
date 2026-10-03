@@ -38,7 +38,7 @@ function mulberry32(seed: number): () => number {
 }
 
 const snapshot = (tick: number, ball: BallState, extra: Partial<FootballSnapshot> = {}): FootballSnapshot =>
-  Object.freeze({ tick, x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, west: 0, east: 0, phase: 'live', ...extra });
+  Object.freeze({ tick, x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, starks: 0, snarks: 0, phase: 'live', ...extra });
 
 /**
  * A room: a real authority stepping a ball on its own clock, its states
@@ -94,8 +94,8 @@ describe('the ball the Shell draws (D-078)', () => {
   it('draws nothing before the authority has said anything, and a still ball where it says', () => {
     const presenter = createBallPresenter();
     expect(presenter.frame(0)).toBeNull();
-    presenter.push(snapshot(10, { x: 400, y: 300, vx: 0, vy: 0 }, { west: 2, east: 1, phase: 'goal' }), 500);
-    expect(presenter.frame(520)).toEqual({ x: 400, y: 300, vx: 0, vy: 0, west: 2, east: 1, phase: 'goal' });
+    presenter.push(snapshot(10, { x: 400, y: 300, vx: 0, vy: 0 }, { starks: 2, snarks: 1, phase: 'goal' }), 500);
+    expect(presenter.frame(520)).toEqual({ x: 400, y: 300, vx: 0, vy: 0, starks: 2, snarks: 1, phase: 'goal' });
     expect(Object.isFrozen(presenter.frame(520))).toBe(true);
     expect(presenter.frame(Number.NaN)).toBeNull();
   });
@@ -163,9 +163,9 @@ describe('the ball the Shell draws (D-078)', () => {
 
   it('draws a kick-off at the centre spot at once, and a jump past SNAP_DISTANCE likewise', () => {
     const presenter = createBallPresenter();
-    presenter.push(snapshot(0, { x: 26 * T, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 }, { phase: 'goal', west: 1 }), 0);
-    presenter.push(snapshot(70, { ...FOOTBALL_CENTRE, vx: 0, vy: 0 }, { phase: 'live', west: 1 }), 2800);
-    expect(presenter.frame(2800)).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, phase: 'live', west: 1 });
+    presenter.push(snapshot(0, { x: 26 * T, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 }, { phase: 'goal', starks: 1 }), 0);
+    presenter.push(snapshot(70, { ...FOOTBALL_CENTRE, vx: 0, vy: 0 }, { phase: 'live', starks: 1 }), 2800);
+    expect(presenter.frame(2800)).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, phase: 'live', starks: 1 });
     presenter.push(snapshot(71, { x: FOOTBALL_CENTRE.x - SNAP_DISTANCE - 10, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 }), 2840);
     expect(presenter.frame(2840)!.x).toBe(FOOTBALL_CENTRE.x - SNAP_DISTANCE - 10);
   });
@@ -254,9 +254,9 @@ describe('the ball the Shell draws (D-078)', () => {
 
   it('starts over for another authority: a tick from before the latest', () => {
     const presenter = createBallPresenter();
-    presenter.push(snapshot(500, { x: 300, y: 300, vx: 0, vy: 0 }, { west: 4 }), 20_000);
+    presenter.push(snapshot(500, { x: 300, y: 300, vx: 0, vy: 0 }, { starks: 4 }), 20_000);
     presenter.push(snapshot(3, { ...FOOTBALL_CENTRE, vx: 0, vy: 0 }), 20_100);
-    expect(presenter.frame(20_100)).toMatchObject({ x: FOOTBALL_CENTRE.x, west: 0 });
+    expect(presenter.frame(20_100)).toMatchObject({ x: FOOTBALL_CENTRE.x, starks: 0 });
     presenter.reset();
     expect(presenter.frame(20_200)).toBeNull();
   });

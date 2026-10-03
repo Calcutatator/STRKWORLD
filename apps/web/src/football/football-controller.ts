@@ -87,7 +87,7 @@ function isFootballClient(value: unknown): value is FootballLobbyClient {
 
 /** The side ahead, which at full time is the winner. */
 function leader(snapshot: FootballSnapshot): FootballSide {
-  return snapshot.west > snapshot.east ? 'west' : 'east';
+  return snapshot.starks > snapshot.snarks ? 'starks' : 'snarks';
 }
 
 export function createFootballController(options: FootballControllerOptions = {}): FootballController {
@@ -139,7 +139,7 @@ export function createFootballController(options: FootballControllerOptions = {}
   const fullTime = (snapshot: FootballSnapshot): void => {
     const winner = leader(snapshot);
     debugFootball({ event: 'full-time', winner });
-    emit(Object.freeze({ kind: 'full-time', winner, west: snapshot.west, east: snapshot.east }));
+    emit(Object.freeze({ kind: 'full-time', winner, starks: snapshot.starks, snarks: snapshot.snarks }));
   };
 
   const localPlayer = (now: number): LocalPlayer | null => {
@@ -245,7 +245,7 @@ export function createFootballController(options: FootballControllerOptions = {}
     });
     const stopGoals = client.onGoal((cue) => {
       if (lobby?.client !== client) return;
-      if (cue?.side === 'west' || cue?.side === 'east') goal(cue.side);
+      if (cue?.side === 'starks' || cue?.side === 'snarks') goal(cue.side);
     });
     current.stop = () => {
       stopState();

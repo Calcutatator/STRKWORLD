@@ -245,6 +245,15 @@ export type { FootballChannel, FootballFrame, FootballMoment } from './football-
 // the football, and the World never imports the lobby.
 export type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 
+// The gated pitch's match (D-135): the Shell supplies the channel, as for the
+// ball, and the two gates are stations on the shared press-E system (D-117).
+export {
+  PITCH_GATE_TARGET_ID,
+  isPitchLocked,
+  normalizePitchFrame,
+  pitchGateTargets,
+} from './pitch-channel.js';
+export type { PitchChannel } from './pitch-channel.js';
 // The Exchange roof's lookout swing (D-133), under the same rule: the Shell
 // supplies the channel, and the World only ever sends its two intents.
 export type {
@@ -277,6 +286,9 @@ export {
   PITCH_FULL_TIME_TEXT,
   PITCH_GATE,
   PITCH_GATE_TEXT,
+  PITCH_ENTER_PROMPT,
+  PITCH_LEAVE_PROMPT,
+  PITCH_LOCKED_TEXT,
   PITCH_GOAL_TEXT,
   PITCH_KICK_PROMPT,
   pitchScoreText,

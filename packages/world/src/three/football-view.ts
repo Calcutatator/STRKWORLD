@@ -16,6 +16,7 @@ import {
 } from 'three';
 import {
   FOOTBALL_BALL_RADIUS,
+  FOOTBALL_SIDE_GOAL,
   PITCH_FIELD,
   PITCH_GOAL,
   type FootballSide,
@@ -126,9 +127,13 @@ export function footballGeometry(radius = BALL_RADIUS): BufferGeometry {
   return geometry;
 }
 
-/** The goal a side scores into: West scores into the east goal. Its mouth's centre, in world units. */
+/**
+ * The goal a side scores into: the Starks keep the west goal, so they score
+ * into the east one (D-135, `FOOTBALL_SIDE_GOAL`). Its mouth's centre, in
+ * world units.
+ */
 function goalMouth(side: FootballSide): { x: number; z: number; into: number } {
-  const east = side === 'west';
+  const east = FOOTBALL_SIDE_GOAL[side] === 'west';
   const line = east ? PITCH_FIELD.x + PITCH_FIELD.width : PITCH_FIELD.x;
   // `into` points from the goal back into the field, where the confetti flies.
   return { x: line + (east ? PITCH_GOAL.depth / 2 : -PITCH_GOAL.depth / 2), z: PITCH_MIDDLE_Z, into: east ? -1 : 1 };
@@ -313,7 +318,7 @@ export function buildFootball(options: FootballViewOptions): FootballView {
         if (still) clearConfetti();
         else launch(mouth.x, mouth.z, mouth.into, false);
       } else {
-        cheer.setText(`${PITCH_FULL_TIME_TEXT}\n${pitchWinnerText(moment.west, moment.east)}`);
+        cheer.setText(`${PITCH_FULL_TIME_TEXT}\n${pitchWinnerText(moment.starks, moment.snarks)}`);
         cheer.object.position.set(PITCH_CENTRE_SPOT.x, FULL_TIME_Y, PITCH_CENTRE_SPOT.z);
         shown = { until: elapsed + FULL_TIME_CHEER_MS, baseY: FULL_TIME_Y, still, start: elapsed };
         if (still) clearConfetti();

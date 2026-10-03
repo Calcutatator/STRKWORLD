@@ -69,9 +69,17 @@ describe('default lobby vocabulary ownership', () => {
     expect(SERVER_MESSAGE.goal).toBe('football:goal');
     expect(Object.keys(MESSAGE).sort()).toEqual([
       'area', 'arenaAttack', 'arenaBlock', 'arenaClaim', 'arenaLeave', 'arenaSit', 'arenaUnblock',
-      'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
+      'jump', 'kick', 'move', 'pitchGate', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
       'swingClaim', 'swingLeave',
     ]);
+  });
+
+  it('does not expose mutable pitch protocol names (D-135)', () => {
+    expect(Reflect.set(MESSAGE, 'pitchGate', 'untrusted')).toBe(false);
+    expect(MESSAGE.pitchGate).toBe('pitch:gate');
+    // No new server message: the countdown, the score, the dummies and the
+    // winner all ride the view-filtered match entry.
+    expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['goal', 'resync', 'sandboxBurst', 'sandboxDrop', 'welcome']);
   });
 
   it('does not expose mutable arena protocol names (D-114)', () => {

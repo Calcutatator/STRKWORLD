@@ -46,8 +46,8 @@ export type VaultDebugKind = 'supply' | 'redeem' | 'borrow' | 'add-collateral' |
  */
 export type FootballDebugStep =
   | { readonly event: 'kick' }
-  | { readonly event: 'goal'; readonly side: 'west' | 'east' }
-  | { readonly event: 'full-time'; readonly winner: 'west' | 'east' };
+  | { readonly event: 'goal'; readonly side: 'starks' | 'snarks' }
+  | { readonly event: 'full-time'; readonly winner: 'starks' | 'snarks' };
 
 /**
  * One decision of the private placement (D-122, amended 2026-10-02). Either

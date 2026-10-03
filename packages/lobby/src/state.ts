@@ -122,8 +122,8 @@ export const FootballEntry = schema(
     y: 'int32',
     vx: 'int32',
     vy: 'int32',
-    west: 'uint8',
-    east: 'uint8',
+    starks: 'uint8',
+    snarks: 'uint8',
     phase: 'uint8',
   },
   'Football',
@@ -186,6 +186,54 @@ export type ArenaRingEntry = SchemaType<typeof ArenaRingEntry>;
 export const ARENA_RING_KEY = 'ring';
 
 /**
+ * One slot of the pitch match (D-135), written only by the room from its
+ * match authority.
+ *
+ * `kind` is a byte (0 empty, 1 player, 2 dummy: `PITCH_SLOT_KINDS`'s index).
+ * `gameId` is the ephemeral presence id when `kind` is a player and empty
+ * otherwise — the same id every street peer within interest already holds for
+ * that avatar. `x`/`y` are a *dummy's* centre in whole World pixels and are 0
+ * for any other kind: a dummy has no presence entry, so its place has to ride
+ * here, and whole pixels leave the field no spare precision. A player's place
+ * is their own presence entry and is never copied here. No field could hold
+ * anything else.
+ */
+export const PitchSlotEntry = schema(
+  {
+    kind: 'uint8',
+    gameId: 'string',
+    x: 'int16',
+    y: 'int16',
+  },
+  'PitchSlot',
+);
+export type PitchSlotEntry = SchemaType<typeof PitchSlotEntry>;
+
+/**
+ * The pitch match (D-135): the phase (`PITCH_MATCH_PHASES`'s index), the
+ * round (mod 65536, +1 per match started), the four slots in
+ * `PITCH_QUARTERS` order, the score, the whole seconds left of a countdown,
+ * and the winner (`FOOTBALL_SIDES`'s index plus one; 0 is none). Bytes, one
+ * 16-bit counter and the slots.
+ */
+export const PitchMatchEntry = schema(
+  {
+    phase: 'uint8',
+    round: 'uint16',
+    slots: { array: PitchSlotEntry },
+    starks: 'uint8',
+    snarks: 'uint8',
+    secondsLeft: 'uint8',
+    winner: 'uint8',
+  },
+  'PitchMatch',
+);
+export type PitchMatchEntry = SchemaType<typeof PitchMatchEntry>;
+
+/** The one key the `pitch` map holds. */
+export const PITCH_MATCH_KEY = 'match';
+
+/**
  * The Exchange roof's lookout swing (D-133): the phase (`SWING_PHASES`'s
  * index), the round (mod 65536, +1 per accepted claim), the rider's
  * ephemeral presence id while someone is on it (empty otherwise), the whole
@@ -238,6 +286,11 @@ export const SWING_KEY = 'swing';
  * sent who is fighting. That keeps D-087's rule that no field says which area
  * anyone is in.
  *
+ * `pitch` (D-135) holds one entry, key `'match'`, and is `view: true` for the
+ * same reason: the room adds it to a client's view only while that client is
+ * live on the street and near the pitch, so nobody elsewhere in the district
+ * learns who is playing. Everything in it is the match — a phase, the score,
+ * a countdown, the dummies' places and the four slots' presence ids.
  * `swing` (D-133) holds one entry, key `'swing'`, under the same rule for the
  * Exchange roof: it reaches a client only while that client is live on the
  * roof, so nobody elsewhere learns who is riding, or that anyone is up there.
@@ -248,6 +301,7 @@ export const LobbyState = schema(
     sandbox: { map: SandboxColumnEntry },
     football: FootballEntry,
     arena: { map: ArenaRingEntry, view: true },
+    pitch: { map: PitchMatchEntry, view: true },
     swing: { map: SwingEntry, view: true },
   },
   'LobbyState',

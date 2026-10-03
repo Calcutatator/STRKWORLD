@@ -22,13 +22,18 @@ import {
   SANDBOX_STEP_HEIGHT,
   arenaTileCentre,
   isAtStreetSeat,
+  PITCH_SLOTS,
+  isInsidePitchPen,
+  pitchTileCentre,
   roofTileCentre,
 } from '@strkworld/shared';
 import type {
   ArenaRingSnapshot,
   Facing,
+  FootballSide,
   FootballSnapshot,
   GameId,
+  PitchMatchSnapshot,
   PresenceArea,
   RoofSwingSnapshot,
   SandboxColumn,
@@ -52,7 +57,9 @@ import {
 } from './sandbox.js';
 import type { SandboxPlayer } from './sandbox-rules.js';
 import { LobbyFootball, type KickOutcome } from './football.js';
-import type { BallState, FootballEvent, FootballPlayer } from './football-rules.js';
+import { isNearPitch, type BallState, type FootballEvent, type FootballPlayer } from './football-rules.js';
+import { LobbyPitch } from './pitch.js';
+import type { PitchEvent, PitchGateOutcome, PitchGoneReason } from './pitch-rules.js';
 import { LobbyArena } from './arena.js';
 import {
   ARENA_CHALLENGER_WALKABLE,
@@ -77,6 +84,9 @@ import {
   ARENA_RING_KEY,
   ArenaRingEntry,
   LobbyState,
+  PITCH_MATCH_KEY,
+  PitchMatchEntry,
+  PitchSlotEntry,
   PresenceEntry,
   SWING_KEY,
   SwingEntry,
@@ -147,10 +157,12 @@ export type MoveOutcome =
    */
   | 'rejected'
   /**
-   * D-106: a step up onto a higher sandbox stack outside a jump window — no
-   * jump received in the last `CLIMB_WINDOW_MS`, a second climb in one jump,
-   * or more than one block at once. Nothing changed; the room resyncs the
-   * client to where it holds it (`resyncFor`).
+   * A step the street refuses and resyncs. D-106: a step up onto a higher
+   * sandbox stack outside a jump window — no jump received in the last
+   * `CLIMB_WINDOW_MS`, a second climb in one jump, or more than one block at
+   * once. D-135: a step inside the pitch's fence by a session that is not
+   * playing. Nothing changed; the room resyncs the client to where it holds
+   * it (`resyncFor`).
    */
   | 'refused'
   /** No live entry — unknown or currently suspended. */
@@ -198,6 +210,10 @@ export interface LobbyPresenceOptions {
   footballBall?: BallState;
   /** D-114: the round the arena's next claim increments from. A test seam (the wrap). */
   arenaRound?: number;
+  /** D-135: three dummies drop in with the first entrant. Default on. */
+  pitchDummyFill?: boolean;
+  /** D-135: the round the pitch's next match increments from. A test seam (the wrap). */
+  pitchRound?: number;
   /** D-133: the round the roof swing's next claim increments from. A test seam (the wrap). */
   swingRound?: number;
   /**
@@ -279,6 +295,10 @@ export class LobbyPresence {
   readonly #arena: LobbyArena;
   /** The ring entry itself, for the room to add to arena views only. */
   readonly #ringEntry: ArenaRingEntry;
+  /** D-135: the pitch's match, mirrored into `state.pitch`'s one entry. */
+  readonly #pitch: LobbyPitch;
+  /** The match entry itself, for the room to add to the views of street players near the pitch. */
+  readonly #matchEntry: PitchMatchEntry;
   /** D-133: the roof's lookout swing, mirrored into `state.swing`'s one entry. */
   readonly #swing: LobbySwing;
   /** The swing entry itself, for the room to add to roof views only. */
@@ -343,6 +363,17 @@ export class LobbyPresence {
       this.#ringEntry,
       options.arenaRound === undefined ? {} : { round: options.arenaRound },
     );
+    this.#matchEntry = new PitchMatchEntry();
+    // Four slots, always: the match authority never adds or removes one, so
+    // the array is built here once and only its entries are ever rewritten.
+    for (let index = 0; index < PITCH_SLOTS; index += 1) {
+      (this.#matchEntry.slots as unknown as { push(value: PitchSlotEntry): void }).push(new PitchSlotEntry());
+    }
+    (this.state.pitch as MapSchema<PitchMatchEntry>).set(PITCH_MATCH_KEY, this.#matchEntry);
+    this.#pitch = new LobbyPitch(this.#matchEntry, {
+      dummyFill: config.pitchDummyFill,
+      ...(options.pitchRound === undefined ? {} : { round: options.pitchRound }),
+    });
     this.#swingEntry = new SwingEntry();
     (this.state.swing as MapSchema<SwingEntry>).set(SWING_KEY, this.#swingEntry);
     this.#swing = new LobbySwing(
@@ -420,6 +451,14 @@ export class LobbyPresence {
     if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y }, extra)) {
       this.#rejected += 1;
       return 'rejected';
+    }
+    // D-135: outside the gates the pitch is not walkable. Only a session the
+    // match authority says is playing may stand inside the fence; anyone else
+    // is refused and resynced to where the room holds them, so a client that
+    // thinks it walked through the fence snaps back out of it.
+    if (session.area === 'street' && isInsidePitchPen(x, y) && !this.#pitch.holdsSlot(sessionKey)) {
+      this.#rejected += 1;
+      return 'refused';
     }
     // D-106: on the street, walking never steps up onto a higher stack; a
     // jump the room heard, inside its window, may step up one block, once.
@@ -535,6 +574,8 @@ export class LobbyPresence {
     this.#seen(now);
     // D-114: a fighter who steps out of the world forfeits, and is not returned.
     if (session.area === 'arena') this.#arena.gone(sessionKey, 'left', now);
+    // D-135: so does a player on the pitch — a dummy takes their place.
+    if (session.area === 'street') this.#pitch.gone(sessionKey, 'left', now);
     // D-133: so does a rider on the roof swing: the ride ends and nobody is put down.
     if (session.area === 'roof') this.#swing.gone(sessionKey, 'left', now);
     // Every live position, the leaver's included, before their entry goes.
@@ -660,6 +701,9 @@ export class LobbyPresence {
       // D-133: leaving the roof ends a ride on its swing, with no step-off.
       if (session.area === 'roof' && area !== 'roof') this.#swing.gone(sessionKey, 'left', now);
       if (session.area === 'street' && area !== 'street') {
+        // D-135: a player on the pitch who walks into a building gives their
+        // slot up, and a dummy takes it.
+        this.#pitch.gone(sessionKey, 'left', now);
         // Every street position, the leaver's included, before they go.
         const players = this.#livePlayers();
         this.#announce(this.#sandbox.returnCarried(sessionKey, players));
@@ -708,6 +752,9 @@ export class LobbyPresence {
     // D-114: a fighter who disconnects ends the fight as `disconnect`.
     this.#arena.gone(sessionKey, 'disconnect', now);
     this.#arena.forget(sessionKey);
+    // D-135: and a player on the pitch is replaced by a dummy.
+    this.#pitch.gone(sessionKey, 'disconnect', now);
+    this.#pitch.forget(sessionKey);
     // D-133: so does a rider on the roof swing.
     this.#swing.gone(sessionKey, 'disconnect', now);
     this.#swing.forget(sessionKey);
@@ -856,6 +903,9 @@ export class LobbyPresence {
     if (session === undefined || session.suspended || session.area !== 'street') return 'absent';
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
+    // D-135: the ball is inside the fence, so only a session the match says is
+    // playing can reach it — and not during a countdown or a winner's banner.
+    if (!this.#pitch.mayKick(sessionKey)) return 'rejected';
     return this.#football.kick(
       { key: sessionKey, x: entry.position.x, y: entry.position.y, facing: normalizeFacing(entry.facing) },
       now,
@@ -868,12 +918,32 @@ export class LobbyPresence {
    * step timer to match.
    */
   keepFootballRunning(now: number): boolean {
-    return this.#football.keepRunning(this.#footballPlayers(now), now);
+    return this.#football.keepRunning(this.#footballNear(), now);
   }
 
-  /** Every whole simulation step up to `now`, and what happened in them. Nothing while the ball is at rest. */
+  /**
+   * Every whole simulation step up to `now`, and what happened in them.
+   * Nothing while the ball is at rest.
+   *
+   * D-135: the match runs on the same tick, in one order every time — the
+   * match's own deadlines and its dummies' step first, then the dummies'
+   * kicks, then the ball, then the goal and full-time the ball reports back
+   * into the match. A reset the match asked for (a start or a close) is
+   * applied last, so the ball it hands the next phase is always a kick-off.
+   */
   footballTick(now: number): FootballEvent[] {
-    return this.#football.advance(now, this.#footballPlayers(now));
+    this.#applyPitchEvents(this.#pitch.advance(now, this.#football.snapshot()), now);
+    const events = this.#football.advance(now, this.#footballPlayers(now));
+    for (const event of events) {
+      if (event.kind === 'goal') {
+        const score = this.#football.snapshot();
+        this.#pitch.scored(score.starks, score.snarks, now);
+      } else if (event.kind === 'full-time') {
+        this.#pitch.fullTime(event.winner, now);
+      }
+    }
+    if (this.#pitch.takeReset()) this.#football.reset();
+    return events;
   }
 
   /** Whether the ball is running. */
@@ -887,13 +957,20 @@ export class LobbyPresence {
   }
 
   /**
-   * Every street entry as someone the ball meets, with when they last moved
-   * and (D-130) whether the room has them in the air at `now`.
+   * Every body the ball meets: the match's own players and its dummies, with
+   * when each last moved and (D-130) whether the room has a player in the air
+   * at `now`.
+   *
+   * D-135: only a participant. The ball is inside the fence, so nobody else
+   * can reach it — and a session that only *claims* to stand there (a join
+   * payload is a client's own) must not become an obstacle in the goal mouth.
+   * A dummy has no presence entry, so its place comes from the match.
    */
   #footballPlayers(now: number): FootballPlayer[] {
     const players: FootballPlayer[] = [];
     for (const [key, session] of this.#sessions) {
       if (session.suspended || session.area !== 'street') continue;
+      if (!this.#pitch.holdsSlot(key)) continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
       const player: FootballPlayer = {
@@ -903,6 +980,25 @@ export class LobbyPresence {
         at: this.#movedAt.get(key) ?? 0,
       };
       players.push(this.#airborne(key, now) ? { ...player, airborne: true } : player);
+    }
+    for (const dummy of this.#pitch.dummies()) {
+      players.push({ key: dummy.key, x: dummy.x, y: dummy.y, at: now });
+    }
+    return players;
+  }
+
+  /**
+   * Everyone on the street, as the ball reads "is anyone near?" — spectators
+   * in the stands included, so the ball still ticks while the pitch is watched
+   * from outside the fence. Who the ball *meets* is `#footballPlayers`.
+   */
+  #footballNear(): FootballPlayer[] {
+    const players: FootballPlayer[] = [];
+    for (const [key, session] of this.#sessions) {
+      if (session.suspended || session.area !== 'street') continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      players.push({ key, x: entry.position.x, y: entry.position.y, at: this.#movedAt.get(key) ?? 0 });
     }
     return players;
   }
@@ -932,6 +1028,117 @@ export class LobbyPresence {
       players.push({ key, x: entry.position.x, y: entry.position.y });
     }
     return players;
+  }
+
+  // -------------------------------------------------------------------------
+  // The gated pitch's match — D-135
+  // -------------------------------------------------------------------------
+
+  /**
+   * One press of E at a pitch gate, judged from the position the registry
+   * holds: the message carries nothing. An accepted press stands the sender
+   * inside the fence or back outside it; refusals are silent, and the match in
+   * state is the only answer.
+   */
+  pitchGate(sessionKey: string, now: number): PitchGateOutcome {
+    this.#seen(now);
+    const session = this.#sessions.get(sessionKey);
+    const entry = session === undefined || session.suspended ? undefined : this.peers.get(session.gameId);
+    const outcome = this.#pitch.gate(
+      {
+        key: sessionKey,
+        gameId: session?.gameId ?? ('' as GameId),
+        area: entry === undefined ? null : (session as Session).area,
+        x: entry?.position.x ?? Number.NaN,
+        y: entry?.position.y ?? Number.NaN,
+      },
+      now,
+    );
+    this.#applyPitchEvents(this.#pitch.advance(now, this.#football.snapshot()), now);
+    if (this.#pitch.takeReset()) this.#football.reset();
+    return outcome;
+  }
+
+  /**
+   * Run the match's deadlines up to `now` and keep `secondsLeft` current.
+   * Returns whether anyone was moved — the kick-off places, a restart after a
+   * goal, the close that puts everyone back outside — so the room knows its
+   * views are stale.
+   */
+  pitchTick(now: number): boolean {
+    this.#seen(now);
+    const moved = this.#applyPitchEvents(this.#pitch.advance(now, this.#football.snapshot()), now);
+    if (this.#pitch.takeReset()) this.#football.reset();
+    return moved;
+  }
+
+  /** Whether the match has a deadline pending: the room keeps its pitch clock running while true. */
+  get pitchActive(): boolean {
+    return this.#pitch.active;
+  }
+
+  /** The match as the authority holds it, at `now`. Frozen. */
+  pitchSnapshot(now: number): PitchMatchSnapshot {
+    return this.#pitch.snapshot(now);
+  }
+
+  /** The match's one schema entry, which the room adds to the views of street players near the pitch. */
+  get pitchMatchEntry(): PitchMatchEntry {
+    return this.#matchEntry;
+  }
+
+  /** Whether `key`'s session takes part in the match (and so walks inside the fence). */
+  pitchHoldsSlot(sessionKey: string): boolean {
+    return this.#pitch.holdsSlot(sessionKey);
+  }
+
+  /**
+   * Whether a connection may be sent the match: live on the street and near
+   * the pitch, by the same rule that keeps the ball running
+   * (`FOOTBALL_ACTIVE_AREA`). Everyone further down the road is told nothing
+   * about who is playing, which keeps the match inside the existing interest
+   * rules rather than inventing a second set.
+   */
+  isPitchViewer(sessionKey: string): boolean {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended || session.area !== 'street') return false;
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return false;
+    return isNearPitch(entry.position.x, entry.position.y);
+  }
+
+  /**
+   * Do what the match asked: stand each placed session where it says, if it
+   * is still live on the street, and send each dummy's kick to the ball.
+   *
+   * A place is a server move, not a client one: the move floor is stamped so
+   * the next client move waits a full interval, and a client still sending
+   * where it stood before is refused and resynced (the fence is between).
+   */
+  #applyPitchEvents(events: readonly PitchEvent[], now: number): boolean {
+    let moved = false;
+    for (const event of events) {
+      if (event.kind === 'kick') {
+        // A dummy's kick is the authority's own, from where the dummy stands:
+        // no floor, because the match already paces it, and no session.
+        this.#football.kickFrom({ x: event.x, y: event.y });
+        continue;
+      }
+      const session = this.#sessions.get(event.key);
+      if (session === undefined || session.suspended || session.area !== 'street') continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      const at = pitchTileCentre(event.spot);
+      entry.position.x = Math.round(at.x);
+      entry.position.y = Math.round(at.y);
+      entry.facing = event.facing;
+      // A placed player is standing, never still on a bench (D-127).
+      entry.seat = NO_SEAT;
+      this.#throttle.stamp(event.key, now);
+      this.#movedAt.set(event.key, now);
+      moved = true;
+    }
+    return moved;
   }
 
   // -------------------------------------------------------------------------

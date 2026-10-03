@@ -4,6 +4,7 @@ import type { RemotePeerSource } from './remote-peer.js';
 import type { SandboxChannel } from './sandbox-channel.js';
 import type { FootballChannel } from './football-channel.js';
 import type { ArenaChannel } from './arena-channel.js';
+import type { PitchChannel } from './pitch-channel.js';
 import type { RoofSwingChannel } from './roof-swing-channel.js';
 
 /**
@@ -33,6 +34,8 @@ export interface WorldConfig {
   football?: FootballChannel;
   /** Optional gladiator pit ring (D-114), supplied by the Shell. */
   arena?: ArenaChannel;
+  /** Optional gated pitch match (D-135), supplied by the Shell. */
+  pitch?: PitchChannel;
   /** D-133: the Exchange roof's lookout swing; absent means the roof has none. */
   roofSwing?: RoofSwingChannel;
   /**
@@ -186,6 +189,7 @@ function sameBinding(
     current.config.sandbox === config.sandbox &&
     current.config.football === config.football &&
     current.config.arena === config.arena &&
+    current.config.pitch === config.pitch &&
     current.config.roofSwing === config.roofSwing &&
     // Absent and false are the same locked Vault (D-077).
     (current.config.vaultOpen === true) === (config.vaultOpen === true) &&

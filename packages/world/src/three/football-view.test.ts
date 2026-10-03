@@ -26,8 +26,8 @@ const frame = (x: number, z: number, extra: Partial<FootballFrame> = {}): Footba
   y: z * T,
   vx: 0,
   vy: 0,
-  west: 0,
-  east: 0,
+  starks: 0,
+  snarks: 0,
   phase: 'live',
   ...extra,
 });
@@ -83,7 +83,7 @@ describe('the ball (D-078)', () => {
     const start = ball.quaternion.clone();
     view.setBall(frame(10, 15));
     expect(ball.quaternion.equals(start)).toBe(true);
-    // A quarter turn's worth of travel east: the ball's top turns east.
+    // A quarter turn's worth of travel snarks: the ball's top turns east.
     const quarter = (Math.PI / 2) * FOOTBALL_BALL_RADIUS;
     view.setBall(frame(10 + quarter, 15));
     const up = new Vector3(0, 1, 0).applyQuaternion(ball.quaternion);
@@ -118,7 +118,7 @@ describe('the pitch\'s moments (D-078)', () => {
   it('cheers GOAL! over the goal it went into, and throws confetti out of its mouth into the field', () => {
     const view = buildFootball({ labels: createNullLabelFactory() });
     const cheer = part(view.group, 'cheer');
-    view.celebrate({ kind: 'goal', side: 'west' });
+    view.celebrate({ kind: 'goal', side: 'starks' });
     expect(cheer.visible).toBe(true);
     expect(cheer.userData['text']).toBe(PITCH_GOAL_TEXT);
     // West scores into the east goal.
@@ -149,8 +149,8 @@ describe('the pitch\'s moments (D-078)', () => {
   it('holds FULL TIME over the centre spot, naming the winner and the score', () => {
     const view = buildFootball({ labels: createNullLabelFactory() });
     const cheer = part(view.group, 'cheer');
-    view.celebrate({ kind: 'full-time', winner: 'east', west: 3, east: 5 });
-    expect(cheer.userData['text']).toBe(`${PITCH_FULL_TIME_TEXT}\nEAST WIN 5 – 3`);
+    view.celebrate({ kind: 'full-time', winner: 'snarks', starks: 1, snarks: 3 });
+    expect(cheer.userData['text']).toBe(`${PITCH_FULL_TIME_TEXT}\nSNARKS WIN 3 – 1`);
     expect([cheer.position.x, cheer.position.z]).toEqual([PITCH_CENTRE_SPOT.x, PITCH_CENTRE_SPOT.z]);
     run(view, FULL_TIME_CHEER_MS - 100);
     expect(cheer.visible).toBe(true);
@@ -163,7 +163,7 @@ describe('the pitch\'s moments (D-078)', () => {
     let still = true;
     const view = buildFootball({ labels: createNullLabelFactory(), reducedMotion: () => still });
     const cheer = part(view.group, 'cheer');
-    view.celebrate({ kind: 'goal', side: 'east' });
+    view.celebrate({ kind: 'goal', side: 'snarks' });
     expect(confettiOf(view).count).toBe(0);
     const y = cheer.position.y;
     view.update(300);
@@ -171,7 +171,7 @@ describe('the pitch\'s moments (D-078)', () => {
     expect(cheer.position.y).toBe(y);
     expect(cheer.visible).toBe(true);
     still = false;
-    view.celebrate({ kind: 'goal', side: 'east' });
+    view.celebrate({ kind: 'goal', side: 'snarks' });
     expect(confettiOf(view).count).toBe(CONFETTI_COUNT);
     view.update(100);
     expect(cheer.scale.x).not.toBe(1);
@@ -182,7 +182,7 @@ describe('the pitch\'s moments (D-078)', () => {
     const view = buildFootball({ labels: createNullLabelFactory() });
     view.setBall(frame(12, 14));
     view.setPrompt(true);
-    view.celebrate({ kind: 'goal', side: 'west' });
+    view.celebrate({ kind: 'goal', side: 'starks' });
     view.reset();
     expect(part(view.group, 'football:ball').visible).toBe(false);
     expect(part(view.group, 'prompt').visible).toBe(false);

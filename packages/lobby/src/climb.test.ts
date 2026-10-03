@@ -86,8 +86,10 @@ describe('walking never steps up (D-106)', () => {
     expect(registry.move('p', centre(X + 1, Y), 1000)).toBe('applied');
     expect(position()).toEqual(centre(X + 1, Y));
     expect(registry.move('p', centre(X + 2, Y), 1100)).toBe('applied');
-    // The street outside the sandbox keeps its clamp-only rule.
-    expect(registry.move('p', centre(10, 12), 1200)).toBe('applied');
+    // The street outside the sandbox keeps its clamp-only rule — anywhere but
+    // inside the pitch's fence (D-135), which is nobody's but the players'.
+    expect(registry.move('p', centre(10, 2), 1200)).toBe('applied');
+    expect(registry.move('p', centre(10, 12), 1300)).toBe('refused');
   });
 
   it('walks across stacks of its own height without a jump', () => {

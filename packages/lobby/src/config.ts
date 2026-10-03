@@ -6,6 +6,7 @@
  */
 
 import { JUMP_AIR_MS, SANDBOX_MAX_BLOCKS, type Facing } from '@strkworld/shared';
+import { PITCH_INTENT_CLIENT_INTERVAL_MS } from './pitch-rules.js';
 import {
   SANDBOX_FAST_SPAWN_LIMIT,
   SANDBOX_SLOW_SPAWN_INTERVAL_MS,
@@ -133,12 +134,21 @@ export const JUMP_MIN_INTERVAL_MS = JUMP_AIR_MS;
  * The floor the client wrapper holds its own jumps to, in ms: 50 ms above the
  * server floor, so jitter never drops an honest jump. The World's own jump
  * (800 ms in the air, then a 150 ms cooldown: 950 ms) is slower still. Moves,
- * sandbox actions, kicks, jumps, the arena's intents, attacks and blocks, and
- * the swing's intents together stay under `MAX_MESSAGES_PER_SECOND`:
- * 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 4 + 1 = 37.7 a second, against 40 (D-128,
- * D-133; `client-arena.test.ts` pins the sum).
+ * sandbox actions, kicks, jumps, the arena's intents, attacks and blocks, the
+ * swing's intents and the pitch's gate together stay under
+ * `MAX_MESSAGES_PER_SECOND`:
+ * 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 4 + 1 + 1 = 38.7 a second, against 40
+ * (D-128, D-133, D-135; `client-arena.test.ts` pins the sum).
  */
 export const JUMP_CLIENT_INTERVAL_MS = JUMP_AIR_MS + 50;
+
+/**
+ * D-135: the floor the client wrapper holds its own pitch-gate presses to, in
+ * ms. One more deliberate key press, paced like the arena's intents, so the
+ * whole client vocabulary still sits under `MAX_MESSAGES_PER_SECOND`:
+ * 20 + 5 + 3.3 + 1.2 + 2.2 + 1 + 4 + 1 + 1 = 38.7 a second, against 40.
+ */
+export const PITCH_CLIENT_GATE_INTERVAL_MS = PITCH_INTENT_CLIENT_INTERVAL_MS;
 
 /**
  * D-106: the room sends a session at most one `resync` per this many ms,
@@ -247,7 +257,7 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Thirteen verbs, none of them financial. There is no message type through
+ * Seventeen verbs, none of them financial. There is no message type through
  * which a client could tell the room anything else, which is the
  * enforcement: the room's surface has no field for it.
  */
@@ -319,6 +329,15 @@ export const MESSAGE = Object.freeze({
    * champion, and moves them onto (or off) the throne itself. Never read.
    */
   arenaSit: 'arena:sit',
+  /**
+   * No payload — D-135: the sender pressed E at one of the pitch's two gates.
+   * The room judges it from where it holds them: outside a gate it takes them
+   * a slot in the match and stands them inside the fence; inside, it gives
+   * their slot up and stands them back out. Held to
+   * `PITCH_INTENT_MIN_INTERVAL_MS`, and whatever a client sends with it is
+   * never read.
+   */
+  pitchGate: 'pitch:gate',
   /**
    * No payload — D-133: claim the Exchange roof's lookout swing from the
    * deck in front of it. Only while the swing is idle and the sender is live
@@ -417,6 +436,13 @@ export interface PresenceRoomConfig {
    * `[50, FOOTBALL_CLIENT_KICK_INTERVAL_MS]`, like the sandbox floor.
    */
   readonly footballKickIntervalMs: number;
+  /**
+   * D-135: three dummies drop in with the first player to enter the pitch, so
+   * one person can test a 2v2 alone. On by default; an operator turns it off
+   * for real 2v2 through the trusted room config, and nothing a client sends
+   * can reach it.
+   */
+  readonly pitchDummyFill: boolean;
 }
 
 /** Operator-supplied overrides. Every field optional; all are clamped. */
@@ -438,6 +464,7 @@ export const DEFAULT_ROOM_CONFIG: PresenceRoomConfig = Object.freeze({
   sandboxFastSpawnLimit: SANDBOX_FAST_SPAWN_LIMIT,
   sandboxActionIntervalMs: SANDBOX_MIN_ACTION_INTERVAL_MS,
   footballKickIntervalMs: FOOTBALL_MIN_KICK_INTERVAL_MS,
+  pitchDummyFill: true,
 });
 
 /** Bounds on the sandbox spawner delays: never a busy loop, never longer than an hour. */
@@ -535,5 +562,8 @@ export function resolveRoomConfig(
       FOOTBALL_CLIENT_KICK_INTERVAL_MS,
       FOOTBALL_MIN_KICK_INTERVAL_MS,
     ),
+    // D-135: a boolean has no range to clamp; anything but an explicit false
+    // leaves the dummies on, which is the safe default for a lone tester.
+    pitchDummyFill: overrides.pitchDummyFill !== false,
   });
 }

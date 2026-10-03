@@ -193,7 +193,7 @@ x 3-24, y 7-22, long axis east-west); solid `footing` stands under every
 fixture: a goal at each end (net and posts), the stand along the north side,
 bleachers on the south, a floodlight in each corner (`map/pitch.ts`).
 `three/pitch-builder.ts` draws it into the street's groups and budget, with
-the scoreboard ("WEST 0 – 0 EAST") in the facade signs' brand-plate style.
+the scoreboard ("STARKS 0 – 0 SNARKS") in the facade signs' brand-plate style.
 
 - **The ball** is shared state with one authority, the lobby room or the
   same pure rules run by the Shell for solo play (`@strkworld/lobby/football`).
