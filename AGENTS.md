@@ -14208,11 +14208,35 @@ was used; the live ledger's `leaf_count()` has not been re-read.
 
 ---
 
+### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
+The arena (D-114) is a room, drawn at the interiors' origin over the hidden
+street (D-039). The city, the backdrop and D-124's south vista are all mounted
+in `street.ground`, which a room never shows — so outside the arena's arcade
+there was nothing but linear fog on a `SKY_HORIZON` background, which reads as
+"floating in blank white nothingness". The sky dome and the `Fog` *are* shared
+(one `Scene` in `world-engine.ts`), so the fix is not a second sky: it is
+mounting `backdropCity` and `createSouthVista` into the room's own group
+(`three/arena-surround.ts`, D-129). Verified by the arena room's draw-call test
+listing `arena:outside-city`, `arena:outside-windows` and the vista's six
+meshes, and by renders from the in-game camera on the sand and on the top tier.
+Two traps that cost time there. **The backdrop's plan is district-wide**: it
+lays fields and hedgerows west, east and south of the street as well as the
+city to the north, and at the offset that puts the city behind the arena's
+north wall those bands stand *inside* the stadium — the module had to be
+flushed through a triangle filter that keeps only what stays north of the
+wall. And **a geometry sweep over a backdrop is not free**: the arena's
+headroom test (sample every triangle, barycentric, against every walkable
+tile) went from seconds to a 30 s timeout the moment the city joined the
+group. The surround is excluded from that sweep by name and held clear of the
+stadium by its bounding box instead, which is the assertion that actually
+matters — it is tens of tiles away, not a hair over a tier.
+Also: the room drew bare earth on its `void` tiles, which was invisible while
+there was nothing around it and became a hard-edged brown apron the moment
+there was a lawn. When you give a scene a world, re-check every surface that
+was only ever seen against nothing.
 ## The arena's block and the emperor's box (D-128)
-
 Two traps cost time here, both about the gap between a test's shortcut and
 what a player can actually do.
-
 **A test may not teleport across a room.** `client-arena.test.ts` moved a new
 champion from the ring's return tile to the emperor's box with one
 `updatePosition`. The room refused every one of them and the test timed out on
@@ -14222,7 +14246,6 @@ walkable — and the line from the gate to the box runs clean through the ring's
 fence. The fix is a `walk` helper that steps round the fence tile by tile,
 waiting for the room to hold each step, which is also what a player does.
 Anything that asserts on a position in a shared room has to walk there.
-
 **A held key needs a release the gates cannot swallow.** Q is the World's only
 held action key, so `dom-keyboard.ts` gained `keyup-Q`. The press is gated like
 E; the release is gated by nothing except having seen that key go down, and is
@@ -14232,7 +14255,6 @@ window — and a release that the gates ate would leave the fighter guarding on
 the server for ever. The same rule runs through the session (`setBlock(false)`
 is never gated on the ring, and `destroy` sends it) and the HUD's touch button
 (`pointerup`, `pointercancel`, `pointerleave` and a lost capture all lower it).
-
 *Verified:* the rules tests drive a simulated attacker — `ArenaAuthorityOptions.opponent`, a
 test-only seam putting a second player in the opponent slot — into a guarding
 fighter and assert 0 damage with the target's `blocks` counter up; the
@@ -14242,11 +14264,8 @@ the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
 reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
 and then asserts `carrying` is null — unrelated to this work. Renders are from
 the offline rasteriser, not a GPU.
-
 ---
-
 ### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
-
 Every `ShadowAccountResolver` cached its own partial commitment "once per
 connection", and so did the placement's `LeaderboardReceipts`. Read route by
 route that is correct; read from the wallet it is five caches, and a placement
@@ -14256,7 +14275,6 @@ as "it requested to share the commitment a few times in the wallet". A prompt
 budget is a property of the connection, not of a route, so the cache has to
 live at the connection: one `WalletCommitmentCache` keyed by dapp name alone,
 handed to every route by `WalletApiPrivacyOperations`.
-
 The second half is that a read-only flow must never be allowed to prompt at
 all. A check now reads the feature shadows from the cache only
 (`cachedFullCommitment`, `cachedPartial`, both returning null when that
@@ -14266,12 +14284,10 @@ and keep each claim's last verified count instead, taking the higher of
 stored and re-verified. That keeps "first claim wins" and adds nothing to what
 it already stores: it already held every claim's `h('strkworld-lb-feat',
 season, p_feature) -> entry` mapping.
-
 Also worth knowing: an optional member on the frozen `PrivacyOperations` seam
 needs `operations.test.ts` taught about it — its `SeamMethod` mapped type
 drops `(() => T) | undefined`, so the pinned-member check fails unless the
 mapping uses `-?` and `NonNullable`.
-
 *Verified:* `packages/privacy/src/wallet-api/commitment-cache.test.ts` counts
 every `strk20ShadowAccountCommitment` call against the real operations — one
 on a session's first check, zero on the next two, zero after a receipt shared
@@ -14283,11 +14299,7 @@ Full suite (306 files, 6424 tests, merged with `origin/main` at 84b11a8) and
 `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used; the prompt count in a real Ready wallet
 has not been observed.
-
----
-
 ### 2026-10-03 — A guard with no message reads as a dead button
-
 The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
 refused the quote at 3.96% against a 3% bound, before anything was asked —
 correct behaviour on the ground floor, wrong on the degen floor, whose tokens
@@ -14297,7 +14309,6 @@ the panel said "That did not go through"; in the live quote path it was one
 faint note under an empty Buy field. Nobody could tell a refused swap from a
 broken button, and the real cause sat in the seam's message string, which the
 Shell is forbidden to render.
-
 Two rules came out of it, both now enforced by tests. **A guard that can refuse
 before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
 what both the log line and the counter's copy are keyed on, so `unknown` means
@@ -14307,7 +14318,6 @@ worse than the market price" without ever rendering the seam's own sentence.
 `SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
 no amount, no token — and `toFailure` reads them with the same own-descriptor
 discipline it reads `kind` with.
-
 *Verified:* reproduced red first — with the old throw restored,
 `apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
 `exchange-machine.test.ts` renders the generic copy. The figures survive two

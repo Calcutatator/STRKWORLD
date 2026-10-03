@@ -337,6 +337,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       reducedMotion: () => prefersReducedMotion(win),
       vaultOpen,
       placementStand,
+      // D-129: a phone gets the arena's lighter surround.
+      lowDetail: isTouchScreen(win),
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());
