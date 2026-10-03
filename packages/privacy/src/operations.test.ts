@@ -50,9 +50,21 @@ const PINNED_METHODS = [
 
 type PinnedMethod = (typeof PINNED_METHODS)[number];
 
+/**
+ * Optional members, pinned the same way (D-122, amended 2026-10-03): the
+ * placement's "will the wallet prompt?" read and the disconnect-time forget of
+ * this connection's cached commitments. Optional so an implementation that
+ * caches nothing, and the Shell's demo seam, need not offer them; the wallet
+ * adapter does (`commitment-cache.test.ts`).
+ */
+const PINNED_OPTIONAL_METHODS = ['placementWillPrompt', 'forgetCommitments'] as const;
+
+type PinnedOptionalMethod = (typeof PINNED_OPTIONAL_METHODS)[number];
+type PinnedMember = PinnedMethod | PinnedOptionalMethod;
+
 /** The seam's callable members. A method demoted to data drops out. */
 type SeamMethod = {
-  [K in keyof PrivacyOperations]: PrivacyOperations[K] extends (...args: never[]) => unknown
+  [K in keyof PrivacyOperations]-?: NonNullable<PrivacyOperations[K]> extends (...args: never[]) => unknown
     ? K
     : never;
 }[keyof PrivacyOperations];
@@ -60,17 +72,25 @@ type SeamMethod = {
 type MustBeNever<T extends never> = T;
 
 /** Fails to compile when the seam gains a member the freeze does not list. */
-type NoUnpinnedMember = MustBeNever<Exclude<keyof PrivacyOperations, PinnedMethod>>;
+type NoUnpinnedMember = MustBeNever<Exclude<keyof PrivacyOperations, PinnedMember>>;
 
 /** Fails to compile when a pinned method is removed or renamed. */
-type NoMissingMember = MustBeNever<Exclude<PinnedMethod, keyof PrivacyOperations>>;
+type NoMissingMember = MustBeNever<Exclude<PinnedMember, keyof PrivacyOperations>>;
 
 /** Fails to compile when a pinned member stops being callable. */
-type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMethod, SeamMethod>>;
+type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMember, SeamMethod>>;
+
+/** Fails to compile when a pinned optional member becomes required. */
+type EveryOptionalMemberStaysOptional = MustBeNever<
+  Exclude<PinnedOptionalMethod, {
+    [K in keyof PrivacyOperations]-?: undefined extends PrivacyOperations[K] ? K : never;
+  }[keyof PrivacyOperations]>
+>;
 
 describe('D-036 PrivacyOperations freeze', () => {
-  it('pins twenty distinct method names', () => {
+  it('pins twenty distinct required method names, and two optional ones', () => {
     expect(new Set(PINNED_METHODS).size).toBe(20);
+    expect(new Set(PINNED_OPTIONAL_METHODS).size).toBe(2);
   });
 
   it('names methods the shipped test double implements', () => {

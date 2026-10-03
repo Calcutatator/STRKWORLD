@@ -31,6 +31,7 @@ import {
   type TxResult,
 } from '../types.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
+import { WalletCommitmentCache } from './commitment-cache.js';
 import { mapCapabilityWalletError, mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowSwap } from './swap-operations.js';
@@ -130,9 +131,18 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly publicBalances: PublicBalanceReader | null;
   /** The private placement's receipts, or null when the leaderboard is off: then nothing about it runs. */
   private readonly leaderboard: LeaderboardReceipts | null;
+  /**
+   * This connection's one shadow-account commitment cache (D-122, amended
+   * 2026-10-03): memory only, shared by the Vault, the Borrow counter,
+   * unstaking, the swap and the placement, so no dapp name is ever asked for
+   * twice per connection. A new connection or account builds a new operations
+   * object, and so a new cache; `forgetCommitments` empties this one.
+   */
+  private readonly commitments: WalletCommitmentCache;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
+    this.commitments = new WalletCommitmentCache(options.wallet);
     this.publicBalances = options.publicBalances ?? null;
     assertAddress(options.wallet.address, 'wallet account');
     this.walletAddress = options.wallet.address;
@@ -142,6 +152,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     this.now = options.now ?? Date.now;
     this.vault = new ShadowVault({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.vault ? { reads: options.vault } : {}),
@@ -156,6 +167,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     // capability answer and receipt schedule as the Vault.
     this.borrow = new ShadowBorrow({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.borrow ? { reads: options.borrow } : {}),
@@ -170,6 +182,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     // D-085: Endur unstaking, on its own shadow account too, the same way.
     this.endur = new EndurUnstake({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.endur ? { reads: options.endur } : {}),
@@ -182,6 +195,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     });
     this.swap = new ShadowSwap({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       ...(options.vault ? { reads: options.vault } : {}),
       ...(options.swapQuotes ? { quotes: options.swapQuotes } : {}),
@@ -200,10 +214,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         ...(options.leaderboard ? { reads: options.leaderboard } : {}),
         ledger,
         ...(options.receiptNonces ? { nonces: options.receiptNonces } : {}),
+        commitments: this.commitments,
         supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+        // Cache reads only: a check never prompts for a feature commitment
+        // (D-122, amended 2026-10-03).
         features: [this.vault, this.borrow, this.endur, this.swap].map((feature) => ({
-          commitment: () => feature.ledgerCommitment(),
-          partial: () => feature.ledgerPartial(),
+          cachedCommitment: () => feature.ledgerCachedCommitment(),
+          cachedPartial: () => feature.ledgerCachedPartial(),
         })),
       });
       this.leaderboard = receipts;
@@ -219,6 +236,25 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   async checkPlacement(signal?: AbortSignal): Promise<PlacementCheck> {
     if (!this.leaderboard) throw new PrivacyError('unknown', 'The private placement is switched off.');
     return this.leaderboard.check(signal);
+  }
+
+  /**
+   * Whether the next placement check would ask the wallet for the season
+   * commitment, so the stand can warn before it happens. Counts only — it
+   * reads the memory cache and asks nothing. See `PrivacyOperations`.
+   */
+  placementWillPrompt(): boolean {
+    return this.leaderboard === null ? false : this.leaderboard.willPrompt();
+  }
+
+  /**
+   * Forget every shadow-account commitment this connection shared (D-122,
+   * amended 2026-10-03). The session calls it when it retires a connection —
+   * the HUD pill's "Disconnect & return to menu" (D-120) — and on an account
+   * change, so a second account never reads the first one's commitments.
+   */
+  forgetCommitments(): void {
+    this.commitments.clear();
   }
 
   /** D-083: Vesu's Prime pool for the admitted borrow tokens, read through the backend. See `PrivacyOperations`. */

@@ -400,6 +400,28 @@ export interface PrivacyOperations {
   checkPlacement(signal?: AbortSignal): Promise<PlacementCheck>;
 
   /**
+   * Whether the next `checkPlacement` would ask the wallet for the season
+   * commitment, so the stand can warn before the prompt appears (D-122,
+   * amended 2026-10-03). A commitment already shared this connection is
+   * cached in memory, so the second check prompts nothing and this is false.
+   *
+   * Synchronous, counts nothing, asks nothing — it reads the cache. Optional
+   * on the frozen seam (D-036): an implementation without it reads as "a
+   * prompt may come", which is the safe copy.
+   */
+  placementWillPrompt?(): boolean;
+
+  /**
+   * Forget every shadow-account commitment this connection shared (D-122,
+   * amended 2026-10-03). The commitments live in memory for the life of the
+   * connection so one check is one prompt at most; the session calls this
+   * wherever it releases a connection's operations, so a disconnect (D-120)
+   * or an account change empties them. Optional on the frozen seam (D-036);
+   * an implementation that caches nothing need not offer it.
+   */
+  forgetCommitments?(): void;
+
+  /**
    * xSTRK's live exchange rate (D-091): what one xSTRK converts to in STRK
    * now, by xSTRK's own `convert_to_assets`, read through the backend
    * (D-014). A public read about Endur's vault, naming nobody, and no wallet

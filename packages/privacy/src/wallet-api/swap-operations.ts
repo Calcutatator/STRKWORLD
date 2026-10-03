@@ -7,6 +7,7 @@ import { mapShadowWalletError, mapWalletError } from './errors.js';
 import { withLedgerTick } from '../leaderboard.js';
 import { noticeLeaderboard } from '../leaderboard-notice.js';
 import { ShadowAccountResolver } from './shadow-account.js';
+import type { WalletCommitmentCache } from './commitment-cache.js';
 import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 
@@ -34,6 +35,8 @@ import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 
 export interface ShadowSwapOptions {
   readonly wallet: WalletStrk20Account;
+  /** The connection's one shadow-account commitment cache (D-122, amended 2026-10-03). */
+  readonly commitments?: WalletCommitmentCache;
   readonly walletAddress: Address;
   readonly reads?: Pick<VaultReadClient, 'shadowAccount'>;
   readonly quotes?: SwapQuoteClient;
@@ -85,6 +88,7 @@ export class ShadowSwap {
     this.now = options.now;
     this.identity = new ShadowAccountResolver({
       wallet: options.wallet,
+      ...(options.commitments ? { commitments: options.commitments } : {}),
       dappName: SWAP_DAPP_NAME,
       nonce: SWAP_SHADOW_NONCE,
       ...(options.reads ? { reads: options.reads } : {}),
@@ -267,6 +271,20 @@ export class ShadowSwap {
   /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
   ledgerPartial(): Promise<string> {
     return this.identity.partial();
+  }
+
+  /**
+   * Leaderboard phase 1, for a placement check: the same two answers, but only
+   * if this counter's commitment is already in the connection's cache (D-122,
+   * amended 2026-10-03). Null otherwise, so a check never prompts the wallet
+   * for a counter the player has not used this session.
+   */
+  ledgerCachedCommitment(): string | null {
+    return this.identity.cachedFullCommitment();
+  }
+
+  ledgerCachedPartial(): string | null {
+    return this.identity.cachedPartial();
   }
 }
 

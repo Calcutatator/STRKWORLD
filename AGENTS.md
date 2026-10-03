@@ -14065,3 +14065,43 @@ backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 was used; the live ledger's `leaf_count()` has not been re-read.
 
 ---
+
+### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
+
+Every `ShadowAccountResolver` cached its own partial commitment "once per
+connection", and so did the placement's `LeaderboardReceipts`. Read route by
+route that is correct; read from the wallet it is five caches, and a placement
+check touches all five — the season commitment plus each feature shadow's
+commitment, and its partial again when the tally ranks DeFi. The lead saw it
+as "it requested to share the commitment a few times in the wallet". A prompt
+budget is a property of the connection, not of a route, so the cache has to
+live at the connection: one `WalletCommitmentCache` keyed by dapp name alone,
+handed to every route by `WalletApiPrivacyOperations`.
+
+The second half is that a read-only flow must never be allowed to prompt at
+all. A check now reads the feature shadows from the cache only
+(`cachedFullCommitment`, `cachedPartial`, both returning null when that
+counter has not been used), which means it can send fewer feature partials
+than before — so the tally had to stop treating "no partial" as "no points"
+and keep each claim's last verified count instead, taking the higher of
+stored and re-verified. That keeps "first claim wins" and adds nothing to what
+it already stores: it already held every claim's `h('strkworld-lb-feat',
+season, p_feature) -> entry` mapping.
+
+Also worth knowing: an optional member on the frozen `PrivacyOperations` seam
+needs `operations.test.ts` taught about it — its `SeamMethod` mapped type
+drops `(() => T) | undefined`, so the pinned-member check fails unless the
+mapping uses `-?` and `NonNullable`.
+
+*Verified:* `packages/privacy/src/wallet-api/commitment-cache.test.ts` counts
+every `strk20ShadowAccountCommitment` call against the real operations — one
+on a session's first check, zero on the next two, zero after a receipt shared
+`p`, and each dapp name exactly once across two receipts, three DeFi batches
+and two checks. Storage and console spies show nothing cached is written or
+logged. `apps/backend/src/leaderboard.test.ts` drives the kept counts, the
+monotonic update, a lost claim and the store file through the real service.
+Full suite (300 files, 6330 tests) and `npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used; the prompt count in a real Ready wallet
+has not been observed.
+
+---

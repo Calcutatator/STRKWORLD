@@ -33,11 +33,20 @@ import { PanelFrame } from '../PanelFrame.js';
  * `p` cannot leave the device until the player has answered Continue. It is
  * asked again before every check: consent is never remembered, here or on
  * the device.
+ *
+ * **One wallet prompt at most** (D-122, amended 2026-10-03). After Continue
+ * the privacy package asks the wallet for the season commitment only if this
+ * connection has not already shared it; it caches every commitment in memory
+ * for the life of the connection, and a check sends only the feature partials
+ * that connection already holds, so it never prompts to collect them. When a
+ * prompt is coming the waiting state says so, and a second check in the same
+ * session says nothing because nothing is asked.
  */
 
 export type PlacementPhase =
   | { readonly name: 'ready' }
-  | { readonly name: 'checking' }
+  /** `prompting`: the wallet is about to ask for the season commitment. */
+  | { readonly name: 'checking'; readonly prompting?: boolean }
   | { readonly name: 'result'; readonly view: PlacementView }
   | { readonly name: 'refused' }
   | { readonly name: 'failed' };
@@ -56,7 +65,10 @@ export function PlacementPanel({ onClose, now = Date.now }: { onClose: () => voi
     if (running.current) return;
     const controller = new AbortController();
     running.current = controller;
-    setPhase({ name: 'checking' });
+    // D-122 (amended 2026-10-03): a check makes at most one wallet prompt, and
+    // none when the season commitment is already in this connection's memory.
+    // Asked before the check starts, so the waiting state can warn in time.
+    setPhase({ name: 'checking', prompting: account !== null && (operations.placementWillPrompt?.() ?? true) });
     try {
       const result = await operations.checkPlacement(controller.signal);
       if (controller.signal.aborted) return;
@@ -132,6 +144,9 @@ export function PlacementPanelView({
               ) : null}
             </>
           )}
+          {phase.name === 'checking' && phase.prompting ? (
+            <p className="panel-notice placement-wallet-prompt" role="status">{copy.walletPrompt}</p>
+          ) : null}
           {phase.name === 'refused' ? <p className="panel-notice" role="status">{copy.refused}</p> : null}
           {phase.name === 'failed' ? <p className="panel-notice placement-failed" role="status">{copy.failed}</p> : null}
           {demo ? <p className="panel-notice placement-demo" role="note">{copy.demo}</p> : null}
