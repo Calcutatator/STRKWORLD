@@ -83,13 +83,14 @@ import {
   type FixedRoomLevelId,
   type FixedRoomLevelMap,
 } from '../fixed-room.js';
-import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
+import { CITY_FRONT, HINTERLAND, OUTSKIRT, RIM_SETBACK, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
 import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
 import { buildBunkerEntrance } from './bunker-builder.js';
 import { buildColosseum, type ColosseumOccluder } from './colosseum-builder.js';
 import { SOUTH_SHORE_Z, createSouthVista } from './south-vista.js';
+import { createSkyIsland, rockSpanAtZ } from './sky-island.js';
 import { BUNKER_BUILDING } from '../map/bunker.js';
 import { COLOSSEUM_BUILDING } from '../map/colosseum.js';
 import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
@@ -195,6 +196,12 @@ export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: nu
 export interface StreetBuildOptions {
   /** Reduced motion: the pit's braziers flicker slowly (D-114). Never off either way. */
   readonly reducedMotion?: () => boolean;
+  /**
+   * Scenery detail. `'low'` thins the sky island and the south vista for
+   * phones; the playable map, the buildings and the interiors are the same
+   * either way. Default `'high'`.
+   */
+  readonly quality?: 'low' | 'high';
 }
 
 export function buildStreet(map: DistrictMap, labels: LabelFactory, options: StreetBuildOptions = {}): StreetView {
@@ -353,14 +360,23 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     // scene, not a room of its own (presenter.ts). Nothing of it is walkable,
     // it casts and receives no shadow, and it stands entirely south of the
     // map, so no camera that looks north ever sees it.
-    const vista = createSouthVista({
-      // Read once: the vista is built once, and its only motion is a glitter
-      // on the water and two boats that take minutes to cross.
-      reducedMotion: options.reducedMotion?.() === true,
-    });
+    const quality = options.quality ?? 'high';
+    // Read once: both are built once, and their only motion is a glitter on
+    // the water, two boats that take minutes to cross, and the falls.
+    const still = options.reducedMotion?.() === true;
+    const vista = createSouthVista({ quality, reducedMotion: still });
     ground.add(vista.group);
     animators.push((elapsed) => vista.update(elapsed));
     res.disposable(vista);
+
+    // The sky island (D-132): the rock all of it stands on, the cloud sea
+    // round it and the falls where the river goes over the rim. Same group,
+    // for the same reasons as the vista, and laid out around the map rather
+    // than on it, so nothing playable moves.
+    const island = createSkyIsland({ quality, reducedMotion: still });
+    ground.add(island.group);
+    animators.push((elapsed) => island.update(elapsed));
+    res.disposable(island);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -916,8 +932,14 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
     // Paint runs off the map only where the road does; where the road ends
     // (into the sandbox, or into the pitch square, D-078), the lines end with it.
     const extent = roadExtent(kinds, band, map.width);
-    const start = extent.x0 <= 0 ? -HINTERLAND : extent.x0;
-    const end = extent.x1 >= map.width ? map.width + HINTERLAND : extent.x1;
+    // The rock's rim is the end of the world (D-132): the backdrop stops its
+    // own asphalt a setback short of the drop, so the paint on it stops there
+    // too rather than running out over the lip.
+    const rim = rockSpanAtZ(centre, RIM_SETBACK);
+    const westLimit = Math.max(-HINTERLAND, rim ? rim[0] : -HINTERLAND);
+    const eastLimit = Math.min(map.width + HINTERLAND, rim ? rim[1] : map.width + HINTERLAND);
+    const start = extent.x0 <= 0 ? westLimit : extent.x0;
+    const end = extent.x1 >= map.width ? eastLimit : extent.x1;
     // Dashes keep to one grid counted from the street's own start, a gap short of either square.
     const anchor = Math.max(0, extent.x0);
     const dashStart = extent.x0 <= 0 ? start : start + 1.2;
@@ -946,7 +968,7 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
     lanes(start, end, dashStart, dashEnd);
     // Past the pitch square the road runs on west, off the map, as it did
     // before the square took its end (D-078): its paint runs on with it.
-    if (extent.x0 > 0 && westRunoff(map, band.r0) === 'road') lanes(-HINTERLAND, 0, -HINTERLAND, 0);
+    if (extent.x0 > 0 && westRunoff(map, band.r0) === 'road') lanes(westLimit, 0, westLimit, 0);
     for (const run of crossings) {
       for (let row = band.r0; row <= band.r1; row++) {
         for (const offset of [0.125, 0.625]) {

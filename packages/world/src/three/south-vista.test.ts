@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, BufferAttribute, BufferGeometry, InstancedMesh, Material, Mesh, PlaneGeometry, MeshBasicMaterial, DoubleSide } from 'three';
+import { Box3, BufferAttribute, BufferGeometry, InstancedMesh, Material, Mesh, PlaneGeometry, MeshBasicMaterial, DoubleSide, Vector3 } from 'three';
 import { createStreetMap } from '../map/street.js';
 import { backdropSurface } from './backdrop.js';
 import { buildStreet } from './street-builder.js';
 import { MAP_SOUTH_EDGE, SOUTH_SHORE_Z, createSouthVista } from './south-vista.js';
+import { ROCK_CENTRE, ROCK_RADIUS, onRockTop } from './sky-island.js';
 import type { LabelFactory, TextLabel } from './types.js';
 
 /**
@@ -104,9 +105,25 @@ describe('the south vista (D-124)', () => {
       // Nor north of the shore the backdrop stops its own ground at, bar the
       // quay edge that holds the bank up.
       expect(box.min.z, quality).toBeGreaterThan(SOUTH_SHORE_Z - 5);
-      // The engine's camera is a 240 far plane; from the roof deck (z about 11)
-      // the whole vista has to be inside it or its back edge would clip.
-      expect(box.max.z - 11, quality).toBeLessThan(240);
+      // The engine's camera is a 360 far plane (D-132 pushed it out for the
+      // cloud sea); from the roof deck (z about 11) the whole vista has to be
+      // inside it or its back edge would clip.
+      expect(box.max.z - 11, quality).toBeLessThan(360);
+      // And it ends at the rock's rim, not at a straight line of its own: the
+      // far bank runs out to the drop and the water goes over both flanks
+      // (D-132). Every vertex of it is on the rock, to within rounding.
+      expect(box.max.z, quality).toBeLessThanOrEqual(ROCK_CENTRE.z + ROCK_RADIUS * 1.06);
+      const off: string[] = [];
+      const point = new Vector3();
+      for (const mesh of MESHES(vista.group)) {
+        mesh.updateMatrixWorld(true);
+        const position = mesh.geometry.getAttribute('position');
+        for (let i = 0; i < position.count; i += 3) {
+          point.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+          if (!onRockTop(point.x, point.z, -0.5)) off.push(`${mesh.name} (${point.x.toFixed(1)}, ${point.z.toFixed(1)})`);
+        }
+      }
+      expect(off.slice(0, 5), quality).toEqual([]);
       // And it sits on the water, not over the district: nothing towers.
       expect(box.max.y, quality).toBeLessThan(32);
       vista.dispose();

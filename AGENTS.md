@@ -14352,3 +14352,49 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
+---
+### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
+Making the World a floating rock (D-132) was not mostly modelling — it was
+finding every place that quietly assumed the ground went on forever. The
+backdrop's raster was the obvious one; the three that were not are
+street-builder's road paint (it runs to ±`HINTERLAND` on its own, not through
+the backdrop's ground codes), the south vista's water and far bank (fixed
+`VISTA_X0`/`VISTA_X1` and a straight back edge at `CITY_Z1 + 14`), and the
+sky dome's `SKY_GROUND`, a dust colour that exists only to fake land below the
+horizon. The fix that scales is one exported predicate — `onRockTop(x, z,
+margin)` in `three/sky-island.ts` — and a test that sweeps every backdrop
+surface and every vertex of the vista through it. Anything added outside the
+playable map from now on has to pass it or it hangs in the sky.
+Two numbers are load-bearing and not free to pick. The rim's radius is bounded
+*below* by `street-builder.test.ts`'s rooftop test, which fires 1,536 rays from
+the Exchange deck and requires every downward one to hit ground inside the fog
+— that needs about 161 from the rock's axis, which is why the radius is 182
+(3.3× the playable map) and not a literal 3× (167, which would be marginal).
+And the engine's camera far plane had to go from 240 to 360, or the cloud ring
+clips against the sky from the west and east ends of the street.
+*Verified:* the sweep test fails if `RIM_SETBACK` is removed from the
+backdrop's clip; the rooftop ray test fails at a radius of 150; the far-plane
+change was found by rendering the street camera from x 0 and x 111 with the
+offline rasteriser. Full suite (305 files, 6405 tests) and `npm run typecheck`
+pass.
+### 2026-10-03 — A white box in this scene is not white: give cloud its own shading
+The first cloud sea was `standardMaterial` boxes in the near-white the title
+screen uses, and every render came back the colour of wet sand. The lighting is
+why: a face pointing anywhere but up gets no sun (the hemisphere's ground term
+is `0x5b4a3c`, a dark brown), so a white box keeps only its top. The same
+arithmetic is why the rock's underside came back black — a downward normal
+lands at about 3% of the paint before tone mapping.
+Both are fixed on the paint, not on the light, because adding a light for
+scenery changes everything else in the scene. The clouds are drawn **unlit**
+(`unlitMaterial`, `toneMapped: false`, so a baked hex renders as that hex) and
+carry their own gradient: `cloudFace` takes a `-0.5..+0.5` share of the lump's
+own height and grades bright top to warm underside. Because a box's vertices
+are only at its corners, a side face interpolates that gradient for free. The
+cliff keeps the scene's light but its paint carries a warm lift that grows with
+depth, standing in for the bounce off the cloud sea — vertex colours are
+floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
+*Verified:* five rounds of offline renders in
+`scratchpad/floatrock-tools/render.sh` (a copy of the D-124 vista tool with the
+island's cameras); the sand look is reproducible by putting the cloud bin back
+on the lit material. Not verified on a real GPU — the rasteriser models the
+engine's hemisphere, sun, ACES and sRGB but not its exact shader.

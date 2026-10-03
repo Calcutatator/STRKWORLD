@@ -114,8 +114,9 @@ describe('the Colosseum in the street scene (D-114, D-129)', () => {
     expect(named(without.ground, 'colosseum:stone')).toBeUndefined();
     expect(streetCalls(view)).toBe(streetCalls(without) + 4);
     // Headroom, not the building's own cost: the south vista's six merged
-    // meshes joined the street's ground group since (D-124).
-    expect(streetCalls(view)).toBeLessThanOrEqual(96);
+    // meshes (D-124) and the sky island's five (D-132) joined the street's
+    // ground group since.
+    expect(streetCalls(view)).toBeLessThanOrEqual(101);
     expect(streetCalls(view)).toBeLessThan(150);
     without.dispose();
     view.dispose();

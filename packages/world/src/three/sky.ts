@@ -7,7 +7,17 @@ import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry } from 'three';
  */
 export const SKY_TOP = 0x6f9edb;
 export const SKY_HORIZON = 0xf2dcc0;
-export const SKY_GROUND = 0xd8c6ad;
+/**
+ * What lies under the horizon.
+ *
+ * It used to be a dust colour standing in for land running off past the fog.
+ * There is no land any more: the World is a rock floating in the sky (D-132),
+ * and everything below its rim is cloud. So the dome's lower half is the
+ * cloud sea's own warm white, lit from the same low sun, which is what the far
+ * banks of cloud geometry fade into rather than a brown the eye reads as
+ * ground.
+ */
+export const SKY_GROUND = 0xf6e3cb;
 
 /** A gradient dome that follows the camera; cheaper than a sky shader pass. */
 export function createSky(): Mesh<SphereGeometry, ShaderMaterial> {
