@@ -131,7 +131,9 @@ export type FootballEntry = SchemaType<typeof FootballEntry>;
  * empty otherwise: the same id every peer in the arena already holds for
  * that avatar, and nothing else. `hp` is 0..100, and `swings` and `hits`
  * are counters that wrap at 256 so peers can animate a swing or a hit from a
- * change. No field could hold anything else.
+ * change. D-128 adds `guarding` (0 or 1: the slot holds a block) and
+ * `blocks`, a counter that wraps the same way for blocked hits. No field
+ * could hold anything else.
  */
 export const ArenaSlotEntry = schema(
   {
@@ -140,6 +142,8 @@ export const ArenaSlotEntry = schema(
     hp: 'uint8',
     swings: 'uint8',
     hits: 'uint8',
+    guarding: 'uint8',
+    blocks: 'uint8',
   },
   'ArenaSlot',
 );
@@ -150,7 +154,9 @@ export type ArenaSlotEntry = SchemaType<typeof ArenaSlotEntry>;
  * (mod 65536, +1 per accepted claim), the two slots, the whole seconds left
  * in a countdown or a fight, and the result (`reason` and `winner` are
  * `ARENA_END_REASONS`'s and `ARENA_SIDES`'s index plus one; 0 is none).
- * Bytes and one 16-bit counter, plus the slots' presence ids.
+ * Bytes and one 16-bit counter, plus the slots' presence ids. D-128 adds
+ * `champion`, the ephemeral presence id of whoever last won a fight here (or
+ * empty), and `seated` (0 or 1: they are on the emperor's throne).
  */
 export const ArenaRingEntry = schema(
   {
@@ -161,6 +167,8 @@ export const ArenaRingEntry = schema(
     secondsLeft: 'uint8',
     reason: 'uint8',
     winner: 'uint8',
+    champion: 'string',
+    seated: 'uint8',
   },
   'ArenaRing',
 );

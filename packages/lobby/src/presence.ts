@@ -46,10 +46,14 @@ import type { BallState, FootballEvent, FootballPlayer } from './football-rules.
 import { LobbyArena } from './arena.js';
 import {
   ARENA_CHALLENGER_WALKABLE,
+  ARENA_THRONE_WALKABLE,
+  isOnArenaThrone,
   type ArenaAttackOutcome,
+  type ArenaBlockOutcome,
   type ArenaClaimOutcome,
   type ArenaEvent,
   type ArenaLeaveOutcome,
+  type ArenaSeatOutcome,
   type ArenaStance,
 } from './arena-rules.js';
 import {
@@ -361,7 +365,14 @@ export class LobbyPresence {
     // D-087: a shared room holds its players to its own walkable tiles. The
     // street keeps its rule, a clamp to the world.
     // D-114: the arena's challenger also walks the ring's interior.
-    const extra = session.area === 'arena' && this.#arena.holdsRing(sessionKey) ? ARENA_CHALLENGER_WALKABLE : undefined;
+    // D-128: the seated champion holds the emperor's box's own tile.
+    const extra = session.area !== 'arena'
+      ? undefined
+      : this.#arena.holdsRing(sessionKey)
+        ? ARENA_CHALLENGER_WALKABLE
+        : this.#arena.holdsSeat(sessionKey)
+          ? ARENA_THRONE_WALKABLE
+          : undefined;
     if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y }, extra)) {
       this.#rejected += 1;
       return 'rejected';
@@ -391,6 +402,9 @@ export class LobbyPresence {
     entry.position.y = y;
     entry.facing = normalizeFacing(ownDataField(request, 'facing'));
     this.#movedAt.set(sessionKey, now);
+    // D-128: a champion who walks off the throne's tile is no longer sitting
+    // on it, so nobody is drawn seated in mid-air on the sand.
+    if (session.area === 'arena' && !isOnArenaThrone(x, y)) this.#arena.unseat(sessionKey, now);
     return 'applied';
   }
 
@@ -851,6 +865,38 @@ export class LobbyPresence {
     return outcome;
   }
 
+  /**
+   * D-128: raise (`down`) or lower a session's guard. The message carries
+   * nothing; the ring decides whether the sender holds a fighting slot.
+   */
+  arenaBlock(sessionKey: string, down: boolean, now: number): ArenaBlockOutcome {
+    this.#seen(now);
+    return this.#arena.block(sessionKey, down, now);
+  }
+
+  /**
+   * D-128: the champion pressed E at the emperor's box, judged from the
+   * position the registry holds. An accepted press moves them onto the
+   * throne (or back down beside it); refusals are silent.
+   */
+  arenaSit(sessionKey: string, now: number): ArenaSeatOutcome {
+    this.#seen(now);
+    const session = this.#sessions.get(sessionKey);
+    const entry = session === undefined || session.suspended ? undefined : this.peers.get(session.gameId);
+    const outcome = this.#arena.seat(
+      {
+        key: sessionKey,
+        gameId: session?.gameId ?? ('' as GameId),
+        area: entry === undefined ? null : (session as Session).area,
+        x: entry?.position.x ?? Number.NaN,
+        y: entry?.position.y ?? Number.NaN,
+      },
+      now,
+    );
+    this.#applyArenaEvents(this.#arena.advance(now), now);
+    return outcome;
+  }
+
   /** Forfeit a session's fight: it ends as `left`. Silent like every arena refusal. */
   arenaLeave(sessionKey: string, now: number): ArenaLeaveOutcome {
     this.#seen(now);
@@ -994,7 +1040,9 @@ export class LobbyPresence {
       if (entry === undefined) continue;
       if (session.area === observer.area) {
         same.push(entry);
-        if (arenaView && this.#arena.holdsRing(key)) pinned.add(entry);
+        // D-128: the champion on the throne is pinned beside the fighter, so
+        // everyone in the arena sees the box taken however far away they are.
+        if (arenaView && (this.#arena.holdsRing(key) || this.#arena.holdsSeat(key))) pinned.add(entry);
       } else if (
         roofView &&
         session.area === 'street' &&

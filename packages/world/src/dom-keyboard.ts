@@ -38,11 +38,16 @@ const CAPTURED_CODES: ReadonlySet<string> = new Set([
  * One-shot action keys: the outfit toggle (D-053), the sandbox, plaza and
  * kick key (D-060, D-076, D-078) and the jump (D-097).
  */
-const ACTION_EVENTS: Readonly<Record<string, 'keydown-F' | 'keydown-E' | 'keydown-Space'>> = Object.freeze({
+const ACTION_EVENTS: Readonly<Record<string, 'keydown-F' | 'keydown-E' | 'keydown-Space' | 'keydown-Q'>> = Object.freeze({
   KeyF: 'keydown-F',
   KeyE: 'keydown-E',
   Space: 'keydown-Space',
+  // D-128: the arena's block. Unlike the rest it is a hold, so its release
+  // is an action too (`keyup-Q`, emitted from `onKeyUp`).
+  KeyQ: 'keydown-Q',
 });
+/** D-128: release events, delivered from `onKeyUp` whatever the gate state. */
+const RELEASE_EVENTS: Readonly<Record<string, 'keyup-Q'>> = Object.freeze({ KeyQ: 'keyup-Q' });
 
 const NO_MOVEMENT: MovementInput = Object.freeze({
   left: false,
@@ -108,6 +113,8 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     'keydown-F': new Set(),
     'keydown-E': new Set(),
     'keydown-Space': new Set(),
+    'keydown-Q': new Set(),
+    'keyup-Q': new Set(),
     'pointerdown-primary': new Set(),
   };
   let enabled = true;
@@ -131,7 +138,14 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   const onKeyUp: Listener = (event) => {
     if (destroyed) return;
     const code = typeof event.code === 'string' ? event.code : '';
-    if (code) held.delete(code);
+    if (!code) return;
+    const wasHeld = held.delete(code);
+    // D-128: a release is delivered on the same terms as a held key being
+    // cleared — whatever the target, the gate or the modifiers — so a block
+    // started in the World always comes down, even if Q is let go over a
+    // panel. Only a key this keyboard saw go down releases.
+    const release = RELEASE_EVENTS[code];
+    if (release && wasHeld) emitAction(release, { repeat: false, target: composedTarget(event) });
   };
 
   // D-114: a primary press on the canvas itself, never on a control over it.
@@ -142,12 +156,24 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     emitAction('pointerdown-primary', { repeat: false, target: event.target });
   }) as Listener;
 
-  const onBlur: Listener = () => {
+  /**
+   * Clear every held key, and deliver the release of any that has one
+   * (D-128's Q). A blur, a hidden tab or a `resetKeys` is exactly the case
+   * where the keyup is delivered somewhere else, so this is the only chance
+   * to lower a block.
+   */
+  const clearHeld = (): void => {
+    const releasing = [...held].filter((code) => RELEASE_EVENTS[code] !== undefined);
     held.clear();
+    for (const code of releasing) emitAction(RELEASE_EVENTS[code]!, { repeat: false, target: null });
+  };
+
+  const onBlur: Listener = () => {
+    clearHeld();
   };
 
   const onVisibilityChange: Listener = () => {
-    if (options.document?.visibilityState === 'hidden') held.clear();
+    if (options.document?.visibilityState === 'hidden') clearHeld();
   };
 
   const emitAction = (
@@ -200,7 +226,7 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
       capture = true;
     },
     resetKeys(): void {
-      held.clear();
+      clearHeld();
     },
     on(event, handler) {
       if (actionHandlers[event] && typeof handler === 'function' && !destroyed) {

@@ -30,6 +30,12 @@ export interface AvatarMotion {
   readonly attack?: AttackPose | null;
   /** D-114: the battle-stance idle (weapon raised, feet apart). */
   readonly guard?: boolean;
+  /**
+   * D-128: a held block (Q). The shield arm comes up across the chest, the
+   * weapon arm drops in and the crouch deepens, so a blocking fighter reads
+   * differently from one simply in the stance. Layered on `guard`.
+   */
+  readonly blocking?: boolean;
   /** D-114: a spectator sitting on an arena tier. */
   readonly seated?: boolean;
 }

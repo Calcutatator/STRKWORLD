@@ -60,6 +60,48 @@ describe('remote avatars in the arena (D-114)', () => {
     layer.destroy();
   });
 
+  it('setBlocker puts that peer in the block stance, and only that peer (D-128)', () => {
+    const source = createRemotePeerSource();
+    const { factory, motions } = fakeFigures();
+    const layer = createRemoteAvatarLayer3D({ source: source.source, figures: factory });
+    source.publish([peer()]);
+    // A spectator sees the guard the server published, over the battle stance.
+    layer.setFighter('g-fighter');
+    layer.setBlocker('g-fighter');
+    layer.update(16);
+    expect(motions.at(-1)).toMatchObject({ guard: true, blocking: true });
+    // Somebody else's block is not this peer's.
+    layer.setBlocker('g-nobody');
+    layer.update(16);
+    expect(motions.at(-1)?.blocking ?? false).toBe(false);
+    expect(motions.at(-1)?.guard).toBe(true);
+    layer.setBlocker(null);
+    layer.update(16);
+    expect(motions.at(-1)?.blocking ?? false).toBe(false);
+    layer.destroy();
+  });
+
+  it('setThroned seats the champion at once, with no idle wait, wherever they stand (D-128)', () => {
+    const source = createRemotePeerSource();
+    const { factory, motions } = fakeFigures();
+    const layer = createRemoteAvatarLayer3D({ source: source.source, figures: factory });
+    // On the box's own tile, which is not a tier seat: only the server's word seats them.
+    source.publish([peer()]);
+    layer.update(16);
+    expect(motions.at(-1)?.seated ?? false).toBe(false);
+    layer.setThroned('g-fighter');
+    layer.update(16);
+    expect(motions.at(-1)?.seated).toBe(true);
+    // Deposed: the next frame has them standing again.
+    layer.setThroned('g-other');
+    layer.update(16);
+    expect(motions.at(-1)?.seated ?? false).toBe(false);
+    layer.setThroned(null);
+    layer.update(16);
+    expect(motions.at(-1)?.seated ?? false).toBe(false);
+    layer.destroy();
+  });
+
   it('a peer standing still on a tier for 1.5 s sits, and stands to walk', () => {
     const source = createRemotePeerSource();
     const { factory, motions } = fakeFigures();

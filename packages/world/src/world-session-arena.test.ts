@@ -260,7 +260,7 @@ describe('the arena in the session (D-114)', () => {
   it('leaves by the west tunnel onto the pit\'s branch, facing west, never into the bowl', () => {
     const world = setup();
     world.onStreet(ARENA_PIT_DOOR.x, ARENA_PIT_DOOR.y);
-    ring.frame = { phase: 'idle', gate: 'open', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false };
+    ring.frame = { phase: 'idle', gate: 'open', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false, challengerGuarding: false, challengerBlocks: 0, championId: null, throneId: null, selfIsChampion: false, selfOnThrone: false };
     world.inRoom(20, 4);
     expect(world.last('syncArena')).toEqual([ring.frame]);
     const from = world.emitted.length;

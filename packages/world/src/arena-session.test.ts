@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ARENA_BLOCK_CLIENT_INTERVAL_MS,
+  ARENA_BOX_STAND,
   ARENA_DUMMY_TILE,
   ARENA_MAX_HP,
   ARENA_RING_RETURN,
@@ -12,13 +14,17 @@ import {
   type Facing,
   type GameId,
 } from '@strkworld/shared';
-import type { ArenaChannel, ArenaSessionHost } from './arena-channel.js';
+import type { ArenaChannel, ArenaGateTarget, ArenaSession, ArenaSessionHost } from './arena-channel.js';
 import {
+  ARENA_BOX_CLOSED_LABEL,
+  ARENA_BOX_TARGET_ID,
   ARENA_BUSY_LABEL,
   ARENA_BUSY_PROMPT,
   ARENA_CLAIM_LABEL,
   ARENA_CLAIM_PROMPT,
   ARENA_GATE_RECT,
+  ARENA_SIT_LABEL,
+  ARENA_STAND_LABEL,
   ARENA_STRIKE_PROMPT,
   createArenaSession,
   dummyWithinReach,
@@ -42,19 +48,39 @@ interface RingInit {
   hp?: number;
   swings?: number;
   hits?: number;
+  /** D-128. */
+  guarding?: boolean;
+  blocks?: number;
+  champion?: GameId | null;
+  seated?: boolean;
 }
 
-function ring({ phase = 'idle', round = 0, challenger = null, hp = ARENA_MAX_HP, swings = 0, hits = 0 }: RingInit = {}): ArenaRingSnapshot {
+const EMPTY_SLOT = { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0, guarding: false, blocks: 0 } as const;
+
+function ring({
+  phase = 'idle',
+  round = 0,
+  challenger = null,
+  hp = ARENA_MAX_HP,
+  swings = 0,
+  hits = 0,
+  guarding = false,
+  blocks = 0,
+  champion = null,
+  seated = false,
+}: RingInit = {}): ArenaRingSnapshot {
   const busy = phase !== 'idle';
   return {
     phase,
     round,
     challenger: busy && challenger
-      ? { kind: 'player', gameId: challenger, hp: ARENA_MAX_HP, swings, hits: 0 }
-      : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
-    opponent: busy ? { kind: 'dummy', gameId: null, hp, swings: 0, hits } : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
+      ? { kind: 'player', gameId: challenger, hp: ARENA_MAX_HP, swings, hits: 0, guarding, blocks }
+      : EMPTY_SLOT,
+    opponent: busy ? { kind: 'dummy', gameId: null, hp, swings: 0, hits, guarding: false, blocks: 0 } : EMPTY_SLOT,
     secondsLeft: phase === 'countdown' ? 3 : phase === 'fighting' ? 90 : 0,
     outcome: phase === 'ended' ? { reason: hp === 0 ? 'knockout' : 'left', winner: hp === 0 ? 'challenger' : null } : null,
+    champion,
+    seated: champion !== null && seated,
   };
 }
 
@@ -62,6 +88,7 @@ function fakeChannel(initial: ArenaRingSnapshot | null = ring(), self: GameId | 
   let current: unknown = initial;
   const listeners = new Set<(ring: ArenaRingSnapshot | null) => void>();
   const strikes = new Set<() => void>();
+  const blocks = new Set<(down: boolean) => void>();
   const channel = {
     ring: () => current as ArenaRingSnapshot | null,
     subscribe(listener: (ring: ArenaRingSnapshot | null) => void) {
@@ -76,6 +103,13 @@ function fakeChannel(initial: ArenaRingSnapshot | null = ring(), self: GameId | 
       strikes.add(listener);
       return () => strikes.delete(listener);
     },
+    // D-128: the block's two intents and the box's press.
+    block: vi.fn(),
+    sit: vi.fn(),
+    subscribeBlocks(listener: (down: boolean) => void) {
+      blocks.add(listener);
+      return () => blocks.delete(listener);
+    },
   } satisfies ArenaChannel;
   return {
     channel,
@@ -86,7 +120,11 @@ function fakeChannel(initial: ArenaRingSnapshot | null = ring(), self: GameId | 
     strike() {
       for (const listener of [...strikes]) listener();
     },
-    listenerCount: () => listeners.size + strikes.size,
+    /** D-128: the HUD's touch BLOCK button, as the World routes it. */
+    touchBlock(down: boolean) {
+      for (const listener of [...blocks]) listener(down);
+    },
+    listenerCount: () => listeners.size + strikes.size + blocks.size,
   };
 }
 
@@ -434,6 +472,13 @@ describe('arena session: the frame is the server’s counters', () => {
       challengerId: OTHER,
       challengerSwings: 4,
       selfIsChallenger: false,
+      // D-128: no guard, no champion and no throne in this snapshot.
+      challengerGuarding: false,
+      challengerBlocks: 0,
+      championId: null,
+      throneId: null,
+      selfIsChampion: false,
+      selfOnThrone: false,
     });
     // Attacking locally changes nothing in the frame: only a new snapshot does.
     fake.push(ring({ phase: 'ended', round: 1, challenger: OTHER, hp: 0, hits: 10 }));
@@ -598,5 +643,208 @@ describe('arena session: one attack path', () => {
     fake.strike();
     expect(fake.channel.attack).toHaveBeenCalledTimes(1);
     expect(host.playLocalSwing).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('arena session: the block (D-128)', () => {
+  /** A session whose client is the fighter in the ring, mid-fight. */
+  function fighting(at = NEXT_TO_DUMMY) {
+    const time = clock();
+    const fake = fakeChannel(ring());
+    const { host, state } = fakeHost(at);
+    const session = createArenaSession(fake.channel, { ...host, suspendInteractions: () => () => {} }, { now: time.now });
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF }));
+    return { time, fake, host, state, session };
+  }
+
+  it('sends a start on Q down and a release on Q up', () => {
+    const { fake, session } = fighting();
+    expect(session.onBlock!(true)).toBe(true);
+    expect(fake.channel.block).toHaveBeenCalledWith(true);
+    expect(session.onBlock!(false)).toBe(true);
+    expect(fake.channel.block).toHaveBeenLastCalledWith(false);
+    expect(fake.channel.block).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds a start to the 500 ms client floor, and never sends a release it does not owe', () => {
+    const { time, fake, session } = fighting();
+    // Nothing is raised, so there is nothing to release.
+    expect(session.onBlock!(false)).toBe(false);
+    expect(fake.channel.block).not.toHaveBeenCalled();
+    session.onBlock!(true);
+    session.onBlock!(false);
+    expect(fake.channel.block).toHaveBeenCalledTimes(2);
+    // Inside the floor the next start is swallowed, not queued.
+    session.onBlock!(true);
+    expect(fake.channel.block).toHaveBeenCalledTimes(2);
+    time.advance(ARENA_BLOCK_CLIENT_INTERVAL_MS);
+    session.onBlock!(true);
+    expect(fake.channel.block).toHaveBeenCalledTimes(3);
+    expect(fake.channel.block).toHaveBeenLastCalledWith(true);
+  });
+
+  it('refuses Q outside a fight: idle, a countdown, as a spectator and with no ring', () => {
+    const idle = fighting();
+    idle.fake.push(ring({ phase: 'idle', round: 1 }));
+    expect(idle.session.onBlock!(true)).toBe(false);
+
+    const counting = fighting();
+    counting.fake.push(ring({ phase: 'countdown', round: 2, challenger: SELF }));
+    expect(counting.session.onBlock!(true)).toBe(false);
+
+    const watching = fighting();
+    watching.fake.push(ring({ phase: 'fighting', round: 2, challenger: OTHER }));
+    expect(watching.session.onBlock!(true)).toBe(false);
+
+    const gone = fighting();
+    gone.fake.push(null);
+    expect(gone.session.onBlock!(true)).toBe(false);
+
+    for (const each of [idle, counting, watching, gone]) {
+      expect(each.fake.channel.block).not.toHaveBeenCalledWith(true);
+    }
+  });
+
+  it('refuses Q while the World’s input is suspended (a panel or a text field has it)', () => {
+    const { fake, state, session } = fighting();
+    state.suspended = true;
+    expect(session.onBlock!(true)).toBe(false);
+    expect(fake.channel.block).not.toHaveBeenCalled();
+    // The release still goes if one were ever owed: a guard must never stick.
+    state.suspended = false;
+    session.onBlock!(true);
+    state.suspended = true;
+    expect(session.onBlock!(false)).toBe(true);
+    expect(fake.channel.block).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lowers a raised guard on the way out of the ring and on destroy', () => {
+    const left = fighting();
+    left.session.onBlock!(true);
+    // The ring resets: this client no longer holds the challenger slot.
+    left.fake.push(ring({ phase: 'idle', round: 1 }));
+    expect(left.fake.channel.block).toHaveBeenLastCalledWith(false);
+
+    const killed = fighting();
+    killed.session.onBlock!(true);
+    killed.fake.channel.block.mockClear();
+    killed.session.destroy();
+    expect(killed.fake.channel.block).toHaveBeenCalledWith(false);
+  });
+
+  it('routes the HUD’s touch BLOCK button through the same gates and floor as Q', () => {
+    const { fake, session } = fighting();
+    fake.touchBlock(true);
+    expect(fake.channel.block).toHaveBeenCalledWith(true);
+    fake.touchBlock(false);
+    expect(fake.channel.block).toHaveBeenLastCalledWith(false);
+    // Off the fight it sends nothing, exactly as Q does.
+    fake.push(ring({ phase: 'idle', round: 1 }));
+    fake.channel.block.mockClear();
+    fake.touchBlock(true);
+    expect(fake.channel.block).not.toHaveBeenCalled();
+    session.destroy();
+  });
+
+  it('draws the stance from the server’s guarding, never from the local press', () => {
+    const { fake, session } = fighting();
+    session.onBlock!(true);
+    // The intent is out, but nothing is predicted: the frame still says no guard.
+    expect(session.frame()?.challengerGuarding).toBe(false);
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: SELF, guarding: true, blocks: 3 }));
+    expect(session.frame()?.challengerGuarding).toBe(true);
+    expect(session.frame()?.challengerBlocks).toBe(3);
+  });
+
+  it('a spectator reads the fighter’s guard from the same frame', () => {
+    const fake = fakeChannel(ring());
+    const { host } = fakeHost(SAND);
+    const session = createArenaSession(fake.channel, host);
+    fake.push(ring({ phase: 'fighting', round: 1, challenger: OTHER, guarding: true, blocks: 2 }));
+    expect(session.frame()).toMatchObject({
+      selfIsChallenger: false,
+      challengerId: OTHER,
+      challengerGuarding: true,
+      challengerBlocks: 2,
+    });
+  });
+});
+
+describe('arena session: the emperor’s box (D-128)', () => {
+  const BOX = arenaTileCentre(ARENA_BOX_STAND);
+
+  function atBox(self: GameId | null = SELF) {
+    const fake = fakeChannel(ring(), self);
+    const { host } = fakeHost(BOX);
+    const session = createArenaSession(fake.channel, host);
+    return { fake, host, session };
+  }
+
+  /** The box as the interaction system sees it: press-E runs the target's own `activate`. */
+  const boxTarget = (session: ArenaSession): ArenaGateTarget | null =>
+    session.gateTargets?.().find((target) => target.id === ARENA_BOX_TARGET_ID) ?? null;
+
+  it('offers the throne to the champion, and sits them with E', () => {
+    const { fake, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(boxTarget(session)?.label).toBe(ARENA_SIT_LABEL);
+    expect(boxTarget(session)?.activate()).toBe(true);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers STAND once seated, which sends the same intent', () => {
+    const { fake, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(boxTarget(session)?.label).toBe(ARENA_STAND_LABEL);
+    expect(session.frame()?.selfOnThrone).toBe(true);
+    expect(boxTarget(session)?.activate()).toBe(true);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows everyone else CHAMPION ONLY, and their E sends nothing', () => {
+    const { fake, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: OTHER }));
+    expect(boxTarget(session)?.label).toBe(ARENA_BOX_CLOSED_LABEL);
+    expect(session.frame()?.selfIsChampion).toBe(false);
+    expect(boxTarget(session)?.activate()).toBe(false);
+    expect(fake.channel.sit).not.toHaveBeenCalled();
+  });
+
+  it('shows CHAMPION ONLY while nobody has won yet', () => {
+    const { fake, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1 }));
+    expect(boxTarget(session)?.label).toBe(ARENA_BOX_CLOSED_LABEL);
+    expect(boxTarget(session)?.activate()).toBe(false);
+    expect(fake.channel.sit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the box’s own station id, so it keeps the room’s shimmer and glow (D-123)', () => {
+    const { fake, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(boxTarget(session)?.id).toBe(ARENA_BOX_TARGET_ID);
+  });
+
+  it('offers nothing at the box from off its approach', () => {
+    const fake = fakeChannel(ring());
+    const { host } = fakeHost(SAND);
+    const session = createArenaSession(fake.channel, host);
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(boxTarget(session)).toBeNull();
+  });
+
+  it('everyone in the arena sees who is on the throne, spectator or not', () => {
+    const fake = fakeChannel(ring());
+    const { host } = fakeHost(SAND);
+    const session = createArenaSession(fake.channel, host);
+    fake.push(ring({ phase: 'idle', round: 1, champion: OTHER, seated: true }));
+    expect(session.frame()).toMatchObject({
+      championId: OTHER,
+      throneId: OTHER,
+      selfIsChampion: false,
+      selfOnThrone: false,
+    });
+    // A champion who is not sitting is nobody's throne.
+    fake.push(ring({ phase: 'idle', round: 1, champion: OTHER }));
+    expect(session.frame()?.throneId).toBeNull();
   });
 });

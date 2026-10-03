@@ -12,18 +12,39 @@ import type { ArenaShellChannel } from './arena-controller.js';
 const SELF = 'g-self' as GameId;
 const OTHER = 'g-other' as GameId;
 
-function ring(over: { phase?: ArenaPhase; round?: number; challenger?: GameId; hp?: number; seconds?: number; reason?: 'knockout' | 'timeout' | 'left' | 'disconnect' } = {}): ArenaRingSnapshot {
+const EMPTY_SLOT = { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0, guarding: false, blocks: 0 } as const;
+
+function ring(
+  over: {
+    phase?: ArenaPhase;
+    round?: number;
+    challenger?: GameId;
+    hp?: number;
+    seconds?: number;
+    reason?: 'knockout' | 'timeout' | 'left' | 'disconnect';
+    guarding?: boolean;
+    champion?: GameId | null;
+    seated?: boolean;
+  } = {},
+): ArenaRingSnapshot {
   const phase = over.phase ?? 'fighting';
   const busy = phase !== 'idle';
   const hp = over.hp ?? ARENA_MAX_HP;
   const reason = over.reason ?? (hp === 0 ? 'knockout' : 'timeout');
+  const champion = over.champion ?? null;
   return {
     phase,
     round: over.round ?? 1,
-    challenger: busy ? { kind: 'player', gameId: over.challenger ?? SELF, hp: ARENA_MAX_HP, swings: 0, hits: 0 } : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
-    opponent: busy ? { kind: 'dummy', gameId: null, hp, swings: 0, hits: (ARENA_MAX_HP - hp) / 10 } : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
+    challenger: busy
+      ? { kind: 'player', gameId: over.challenger ?? SELF, hp: ARENA_MAX_HP, swings: 0, hits: 0, guarding: over.guarding === true, blocks: 0 }
+      : EMPTY_SLOT,
+    opponent: busy
+      ? { kind: 'dummy', gameId: null, hp, swings: 0, hits: (ARENA_MAX_HP - hp) / 10, guarding: false, blocks: 0 }
+      : EMPTY_SLOT,
     secondsLeft: over.seconds ?? (phase === 'countdown' ? 3 : phase === 'fighting' ? 90 : 0),
     outcome: phase === 'ended' ? { reason, winner: reason === 'knockout' ? 'challenger' : null } : null,
+    champion,
+    seated: champion !== null && over.seated === true,
   };
 }
 
@@ -41,6 +62,10 @@ function fakeChannel(initial: ArenaRingSnapshot | null, self: GameId | null = SE
     attack: vi.fn(),
     leave: vi.fn(),
     strike: vi.fn(),
+    // D-128.
+    block: vi.fn(),
+    sit: vi.fn(),
+    guard: vi.fn(),
     inArena: () => true,
   } satisfies ArenaShellChannel;
   return {
@@ -234,5 +259,79 @@ describe('ArenaHud', () => {
     const input = document.createElement('textarea');
     expect(keyBelongsElsewhere(input, null)).toBe(true);
     expect(keyBelongsElsewhere(document.body, null)).toBe(false);
+  });
+});
+
+describe('ArenaHud: the block (D-128)', () => {
+  const hints = () => container.querySelector('[data-testid="arena-hints"]');
+  const blockButton = () => button(COPY.arena.block);
+
+  it('shows the fighter “E STRIKE” and “Q BLOCK” on a keyboard, while the fight runs', () => {
+    const fake = fakeChannel(ring());
+    render(fake.channel, { coarse: false });
+    expect(hints()?.textContent).toBe(`E${COPY.arena.strike}Q${COPY.arena.block}`);
+    // The keys are chips, in the brand's own style.
+    expect([...hints()!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['E', 'Q']);
+    // Not during the countdown, when neither key does anything.
+    act(() => fake.push(ring({ phase: 'countdown' })));
+    expect(hints()).toBeNull();
+  });
+
+  it('hides the key hints from spectators and from a touch screen', () => {
+    const watcher = fakeChannel(ring({ challenger: OTHER }));
+    render(watcher.channel, { coarse: false });
+    expect(hints()).toBeNull();
+
+    const fake = fakeChannel(ring());
+    render(fake.channel, { coarse: true });
+    expect(hints()).toBeNull();
+  });
+
+  it('shows BLOCK beside STRIKE on a touch screen only, while fighting', () => {
+    const fake = fakeChannel(ring());
+    render(fake.channel, { coarse: false });
+    expect(blockButton()).toBeNull();
+    render(fake.channel, { coarse: true });
+    expect(blockButton()).not.toBeNull();
+    // Beside STRIKE, and before it: the guard sits under the left thumb.
+    const labels = [...container.querySelectorAll('.arena-hud-actions button')].map((b) => b.textContent);
+    expect(labels).toEqual([COPY.arena.block, COPY.arena.strike, COPY.arena.leave]);
+    act(() => fake.push(ring({ phase: 'countdown' })));
+    expect(blockButton()).toBeNull();
+  });
+
+  it('holds the guard for as long as the BLOCK button is held, and lets it go on every release', () => {
+    const fake = fakeChannel(ring());
+    render(fake.channel, { coarse: true });
+    const press = (type: string) =>
+      act(() => {
+        blockButton()!.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true }));
+      });
+    press('pointerdown');
+    expect(fake.channel.guard).toHaveBeenLastCalledWith(true);
+    press('pointerup');
+    expect(fake.channel.guard).toHaveBeenLastCalledWith(false);
+    // A cancelled gesture lowers it too. (The button also releases on
+    // pointerleave and on a lost capture — a finger sliding off — which React
+    // delivers through its enter/leave pairing, not a plain dispatch here.)
+    press('pointerdown');
+    press('pointercancel');
+    expect(fake.channel.guard).toHaveBeenLastCalledWith(false);
+    expect(fake.channel.guard.mock.calls).toEqual([[true], [false], [true], [false]]);
+  });
+
+  it('lights the hint and the button from the server’s guard, never from the press', () => {
+    const fake = fakeChannel(ring());
+    render(fake.channel, { coarse: false });
+    const hint = () => hints()!.querySelector('[data-state]') as HTMLElement | null;
+    expect(hints()!.querySelectorAll('[data-state="idle"]').length).toBe(1);
+    act(() => fake.push(ring({ guarding: true })));
+    expect(hint()?.dataset['state']).toBe('held');
+
+    render(fake.channel, { coarse: true });
+    expect(blockButton()?.dataset['state']).toBe('held');
+    expect(blockButton()?.getAttribute('aria-pressed')).toBe('true');
+    act(() => fake.push(ring({ guarding: false })));
+    expect(blockButton()?.getAttribute('aria-pressed')).toBe('false');
   });
 });
