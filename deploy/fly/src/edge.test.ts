@@ -32,6 +32,8 @@ async function fixture(): Promise<string> {
   await mkdir(join(root, 'assets'));
   await writeFile(join(root, 'index.html'), '<html>shell</html>');
   await writeFile(join(root, 'assets', 'app-abc123.js'), 'console.log(1);');
+  await writeFile(join(root, 'favicon.ico'), Buffer.from([0, 0, 1, 0]));
+  await writeFile(join(root, 'site.webmanifest'), '{"name":"STRKWORLD"}');
   return root;
 }
 
@@ -72,6 +74,15 @@ describe('Fly edge public boundary', () => {
     expect(asset.status).toBe(200);
     expect(asset.headers.get('content-type')).toContain('javascript');
     expect(asset.headers.get('cache-control')).toContain('immutable');
+
+    const favicon = await fetchEdge(port, '/favicon.ico');
+    expect(favicon.status).toBe(200);
+    expect(favicon.headers.get('content-type')).toBe('image/x-icon');
+    const manifest = await fetchEdge(port, '/site.webmanifest');
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get('content-type')).toBe('application/manifest+json; charset=utf-8');
+    expect(await manifest.text()).toBe('{"name":"STRKWORLD"}');
+    expect((await fetchEdge(port, '/apple-touch-icon.png')).status).toBe(404);
 
     const route = await fetchEdge(port, '/city/bank');
     expect(route.status).toBe(200);

@@ -4169,10 +4169,12 @@ p.exchange-price-check[data-status="unchecked"] {
   font-size: 0.95rem;
 }
 
-/* A plain text link for a secondary switch, such as "Use my wallet". It
- * re-points the shared button variables to nothing, so the theme's raised
- * button, hover lift and press never draw on it. */
-button.ui-link-button {
+/* A plain text link for a secondary switch, such as "Use my wallet", and the
+ * balance figure that fills the amount (D-131). Both re-point the shared
+ * button variables to nothing, so the theme's raised button, hover lift and
+ * press never draw on them. */
+button.ui-link-button,
+button.ui-balance-fill {
   --btn-bg: transparent;
   --btn-bg-hover: transparent;
   --btn-border: transparent;
@@ -4190,6 +4192,29 @@ button.ui-link-button {
   padding: 0;
   font-size: 0.85rem;
   text-decoration: underline;
+}
+
+/* D-131: it reads as the figure it always was — the balance line's own ink,
+ * the numeric face (D-121), no chrome — and brightens with an underline
+ * under the pointer or the focus ring. */
+button.ui-balance-fill {
+  font-family: var(--ui-number-font);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.ui-balance-fill:hover,
+button.ui-balance-fill:focus-visible {
+  --btn-text: var(--ui-text);
+  text-decoration: underline;
+}
+
+/* Nothing honest to fill from: the fee is not known, or it is the whole of
+ * this balance. The figure stays in the dim ink, with the reason on hover. */
+.ui-balance-fill-off {
+  cursor: help;
 }
 
 .ui-token-select {

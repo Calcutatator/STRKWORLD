@@ -20,7 +20,10 @@
  * The parts:
  *
  * - `AmountField`: label, token slot, number. Optional balance line
- *   ("Pool balance: 12.5 STRK"), Max and 50% (only when `max` is passed),
+ *   ("Pool balance: 12.5 STRK") — whose figure is a button that fills the
+ *   amount with it (D-131), exactly, less `balanceFee` where this action
+ *   charges a fee in the same asset on top, with a line saying what it kept
+ *   aside — Max and 50% (only when `max` is passed),
  *   USD line, hint and its own validation (invalid, exceeds balance, below
  *   minimum). `max` returns `null` for "no honest maximum", which disables
  *   the button; build it with `maxAfterReserve(maxBasis(balance), feeReserve(...))`
@@ -59,5 +62,6 @@ export { AmountSummary, amountSummaryRows, totalAcross, type AmountSummaryProps 
 export { FlipButton } from './FlipButton.js';
 export { QuoteTimer, type QuoteTimerProps } from './QuoteTimer.js';
 export {
-  balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor, type AmountCheck,
+  balanceText, checkAmount, feeReserve, fillFromBalance, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor,
+  type AmountCheck,
 } from './amount-math.js';

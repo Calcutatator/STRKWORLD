@@ -92,6 +92,28 @@ export function tidyFloor(amount: bigint, decimals: number, options: { readonly 
   return amount - (amount % unit);
 }
 
+/**
+ * What a press on the balance line fills in (D-131): the whole figure the
+ * line shows, less a fee charged in the same asset on top of the amount, and
+ * never above the field's own limit, so what it fills always passes the
+ * field's checks. Exact: the figure is the balance, not a tidied one.
+ *
+ * `null` is "nothing honest to fill", which leaves the line unpressable: no
+ * figure read yet, a fee whose size is not known, or a balance the fee alone
+ * would eat.
+ */
+export function fillFromBalance(
+  balance: bigint | null,
+  options: { readonly fee?: bigint | null; readonly limit?: bigint | null } = {},
+): bigint | null {
+  if (balance === null || balance <= 0n) return null;
+  const { fee = 0n, limit = null } = options;
+  if (fee === null) return null;
+  const left = fee > 0n ? balance - fee : balance;
+  const capped = limit !== null && limit < left ? limit : left;
+  return capped > 0n ? capped : null;
+}
+
 /** `amount × numerator / denominator`, truncated towards zero. 50% is `(amount, 1n, 2n)`. */
 export function fractionOf(amount: bigint, numerator: bigint, denominator: bigint): bigint {
   if (denominator <= 0n || numerator < 0n || amount < 0n) throw new RangeError('fractionOf takes non-negative figures');

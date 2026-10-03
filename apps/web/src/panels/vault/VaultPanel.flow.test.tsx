@@ -420,7 +420,9 @@ describe('the Vault counter, driven through the screen in demo (D-077, D-079, D-
     // Max on STRK, the fee token, leaves the 6 STRK pool fee behind, and says so.
     await click(button(COPY.kit.max));
     expect(vault().querySelector<HTMLInputElement>('input[name="amount"]')!.value).toBe('94');
-    expect(vault().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.balance.feeReserved);
+    // D-131: the same 94 a press on the balance line fills, so the field
+    // states the 6 STRK it kept aside.
+    expect(vault().querySelector('.ui-amount-hint')?.textContent).toBe(COPY.kit.feeKeptAside.replace('{amount}', '6 STRK'));
 
     // More than the pool balance: the field and the button both say so.
     await type('200');

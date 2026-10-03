@@ -540,7 +540,9 @@ describe('BankPanel rendering', () => {
     const shield = render(panel, seam);
     expect(shield).toContain(SHIELD_DISCLOSURE);
     expect(shield).not.toContain('class="balance-total"');
-    expect(shield).toContain(`<span class="ui-amount-balance">${COPY.kit.walletBalance}: <span class="ui-figure">1000 STRK</span></span>`);
+    // D-131: the figure is the button that fills the amount with it.
+    expect(shield).toContain(`<span class="ui-amount-balance">${COPY.kit.walletBalance}: <button type="button" class="ui-figure ui-balance-fill"`);
+    expect(shield).toContain('>1000 STRK</button></span>');
     expect(shield).not.toContain(COPY.kit.poolBalance);
     expect(shield).not.toContain(COPY.balance.maturityUnknown);
     expect(shield).toMatch(/<dt>[^]*?Pool fee[^]*?<\/dt><dd>6 STRK<\/dd>/);
@@ -548,7 +550,8 @@ describe('BankPanel rendering', () => {
     for (const mode of ['unshield', 'transfer', 'stake'] as const) {
       panel.setMode(mode);
       const markup = render(panel, seam);
-      expect(markup, mode).toContain(`<span class="ui-amount-balance">${COPY.kit.poolBalance}: <span class="ui-figure">100 STRK</span></span>`);
+      expect(markup, mode).toContain(`<span class="ui-amount-balance">${COPY.kit.poolBalance}: <button type="button" class="ui-figure ui-balance-fill"`);
+      expect(markup, mode).toContain('>100 STRK</button></span>');
       expect(markup, mode).not.toContain('class="balance-total"');
       // Its Refresh sits beside the balance line, and no empty card is left above.
       expect(markup, mode).toContain(`aria-label="${COPY.balance.refreshLabel}">${COPY.balance.refreshShort}</button>`);
@@ -629,7 +632,8 @@ describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094
     await panel.open();
     await settle();
     const markup = render(panel, seam);
-    expect(markup).toContain(`<span class="ui-amount-balance">Wallet balance: <span class="ui-figure">29 STRK</span></span>`);
+    expect(markup).toContain('<span class="ui-amount-balance">Wallet balance: <button type="button" class="ui-figure ui-balance-fill"');
+    expect(markup).toContain('>29 STRK</button></span>');
     expect(markup).not.toContain('Pool balance');
     expect(markup).not.toContain(COPY.balance.maturityUnknown);
     expect(markup).not.toContain('class="balance-total"');
@@ -692,7 +696,10 @@ describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094
     panel.applyMax();
     const markup = render(panel, seam);
     expect(markup).toContain('value="23"');
-    expect(markup).toContain(COPY.bank.shieldMaxNote);
+    // D-131: the field states the figure it kept aside, which is the same
+    // 6 STRK the machine's notice is about.
+    expect(markup).toContain(COPY.kit.feeKeptAside.replace('{amount}', '6 STRK'));
+    expect(markup).toContain(COPY.balance.feeReserved);
   });
 
   it('switching to Unshield shows the pool balance again, with its own note', async () => {
@@ -703,12 +710,14 @@ describe('BankPanel — the Shield tab shows the wallet balance it spends (D-094
     panel.setMode('unshield');
     await panel.refreshBalance();
     const markup = render(panel, seam);
-    expect(markup).toContain(`${COPY.kit.poolBalance}: <span class="ui-figure">100 STRK</span>`);
+    expect(markup).toContain(`${COPY.kit.poolBalance}: <button type="button" class="ui-figure ui-balance-fill"`);
+    expect(markup).toContain('>100 STRK</button>');
     expect(markup).not.toContain(COPY.kit.walletBalance);
 
     panel.setMode('shield');
     await settle();
-    expect(render(panel, seam)).toContain(`${COPY.kit.walletBalance}: <span class="ui-figure">29 STRK</span>`);
+    expect(render(panel, seam)).toContain(`${COPY.kit.walletBalance}: <button type="button" class="ui-figure ui-balance-fill"`);
+    expect(render(panel, seam)).toContain('>29 STRK</button>');
   });
 
   it('reviews the shield with the fee on top, and says when the funds appear', async () => {

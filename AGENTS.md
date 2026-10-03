@@ -14041,8 +14041,45 @@ transaction was used.
 
 ---
 
+### 2026-10-03 — A balance you can press: the fee has to come from the panel's own maths, and the figure shown is not the figure filled
+Making every balance line fill its amount input (D-131) looked like a UI
+change and was really an arithmetic one. Three traps.
+**The shown figure is rounded; the filled figure must not be.** `balanceText`
+goes through `formatTokenAmount`, which trims for reading: a pool holding
+`100.000000000000000001 STRK` reads "100 STRK". Filling what the line *reads*
+would silently drop or invent wei, so the press fills
+`formatTokenAmountExact(balance - fee)` — the Exchange's Max already did this,
+and its test (`94.000000000000000001`) is the one that catches a regression.
+The `aria-label` keeps the rounded words, so what a screen reader hears
+matches what the eye reads.
+**Never re-derive the fee in the component.** The fee that may be kept aside
+differs per counter and per asset — the pool fee comes out of the balance on
+UNSHIELD, STAKE, TRANSFER and a STRK SUPPLY, out of the *wallet* on SHIELD
+(same asset, so still kept aside), and not at all from a REDEEM, a REPAY or a
+withdrawal, whose figure is the loan's own. A swap keeps it aside only when
+the asset sold is the fee's token. So `AmountField` takes one `balanceFee`
+prop and the panel passes the very `feeReserve(token, pool)` it already uses
+for its `limit`, its Max and its review; the kit does the subtraction once
+(`fillFromBalance`) and nothing duplicates the 6 STRK.
+**"Not fetched", "unknown fee" and "too small" are three different states,
+and only one of them is "no balance line".** Balances are user-requested
+(the wallet prompts), so no line is drawn at all until a figure is read; a
+read balance with an unread pool fee, or one the fee alone would eat, still
+shows its figure but as plain dim text with the reason in `title`, never a
+dead button. `fillFromBalance` returns `null` for all three and the component
+branches on that single answer.
+*Verified:* `apps/web/src/panels/kit/amount-math.test.ts` and `kit.test.tsx`
+for the maths and the control (exact decimals at 18 and 6 places, the fee
+aside, keyboard activation without touching the game's E, Refresh unaffected,
+every unpressable state), plus a flow per panel family through the real
+windows in `panels/amount-standard.flow.test.tsx`,
+`exchange/ExchangePanel.amount.test.tsx` and `bridge/BridgePanel.test.tsx`.
+Full suite (295 files, 6255 tests) and `npm run typecheck` pass. A Playwright
+render of the Bank's SHIELD counter with the figure hovered and the amount
+filled by it is in the working scratchpad (`renders/balance-click.png`), shot
+through the real `VisitLayer` over the deterministic fake seam. No wallet,
+RPC, funds or transaction was used.
 ### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
-
 Adding a seated pose to shared presence looks like a new message and a new
 state block. It is neither. Sitting down *is* a move — onto the seat's own
 spot — so the seat index can ride on the existing `move` payload: the client's
@@ -14052,7 +14089,6 @@ server's copy matches, and the room's message budget does not change at all
 true). And because both sides share one frozen seat table, the wire needs only
 an index: the position, the facing and which bench it is all come out of the
 table. `PresenceState.seat` is therefore a single `int8`.
-
 Two things that only worked because of that shape. The server's whole rule is
 "the index is real, the position I just wrote is that seat's own spot, nobody
 else holds it, and you are on the street" — no geometry, no tolerance, no
@@ -14062,7 +14098,6 @@ trust. That needs the seat spots to be **whole pixels**, since
 mentions a seat the room refuses keeps re-sending it forever unless the
 reconcile comparison includes the seat, which is why `samePlacement` and the
 client's own view of its server entry both carry it.
-
 Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
 its sibling modules at the bottom, and `arena.ts` gets away with importing
 back from it only because every one of those imports is type-only; a *value*
@@ -14071,12 +14106,10 @@ read back at module scope is a real ESM cycle and dies in the TDZ. The new
 pinning the two together. And adding a field to a validated snapshot breaks
 every `toEqual` on it across three packages at once (51 tests here) — the
 field has to be added to the fixtures, not worked around.
-
 Also worth knowing: a bench did not need a "no cue" mechanism to look right —
 registering no affordance shell already leaves it dark. It needed one to *stay*
 right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
 even if a shell for that id turns up later.
-
 *Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
 `packages/world/src/world-session-benches.test.ts`,
 `packages/lobby/src/seats.test.ts`, plus a real-wire test in
@@ -14086,11 +14119,8 @@ harness in headless Chrome: `renders/benches-plaza.png`,
 `benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
 suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
 funds or transaction was used.
-
 ---
-
 ### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
-
 The D-123 shimmer is tuned as a single global level, and the amendment that
 made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
 dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
@@ -14103,7 +14133,6 @@ it worse, because a near-black station takes the pale warm fallback tint
 station in the game. The lead saw it as "the shimmer on the plaza pillar"
 specifically, 80% too strong, while the rest of the world was only 30% too
 strong.
-
 What this means for the next cue: a per-object strength knob is not a
 special case to be avoided, it is a requirement of any additive cue applied
 across both interiors and daylight. Keep the knob *relative* to the global
@@ -14114,7 +14143,6 @@ shell buffer's `aSweep` attribute had a free third component, so
 per-frame work. The ember edge glow is a separate effect and must not read the
 multiplier: widening the gap between "usable" and "the one E would use" is the
 point.
-
 *Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
 70%, the monument at 0.2 and every other station at 1, the multiplier baked
 per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
@@ -14123,13 +14151,8 @@ renders from the same harness and the same camera —
 the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
 used.
-
----
-
 ## 6. Findings log
-
 ### A hidden entrance is not a door, so none of the doors' machinery applies to it
-
 The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
 tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
 handles it before `DoorTrigger.update` is ever reached. So the Studio got none
@@ -14140,7 +14163,6 @@ up the path instead of outside the room (the lead's bug, D-125) — and it had n
 re-entry hold, which only looked harmless because the wrong return tile was too
 far away for a held key to carry anyone back in. Fixing the first on its own
 would have introduced the bounce PR #205 had already fixed for the doors.
-
 The lesson generalises past this entrance: when a feature is built *beside* a
 shared mechanism rather than *through* it, every invariant the mechanism
 carries has to be re-checked by hand, and a later amendment to the mechanism
@@ -14150,7 +14172,6 @@ one call site) found the whole gap in one pass; grepping for the *concept*
 now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
 trigger and the Studio's entrance as its two users, so the next amendment to it
 lands on both.
-
 *Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
 real keys end to end (walk in from the street entrance, walk out of the Studio
 exit, land on the tile outside the entrance facing away, with the street
@@ -14161,13 +14182,7 @@ each lands on a walkable street tile off its own door and touching it, none of
 which needed changing). Each new assertion was also run against the unfixed
 code and seen to fail. Full suite (296 files, 6260 tests) and
 `npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
-
----
-
-## 6. Findings log
-
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
-
 The private leaderboard's first mainnet probe had every variable set, the
 ledger address in the bundle, `?lb=1` in the tab and the placement stand on
 the lawn — and attached no receipt at all. `ownPolicy` in
@@ -14179,7 +14194,6 @@ one step before `WalletApiPrivacyOperations` could see it. With no ledger that
 class builds no receipts object, which is byte-for-byte a build with the
 leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
 line, and no error anywhere.
-
 Two things make this class of bug worth writing down. First, the stand kept
 working, which argued the probe was fine: it reads
 `placementStandFrom(environment)`, a seam that never passes through the
@@ -14192,7 +14206,6 @@ channel that reports every decision as a reason code (`no-ledger`,
 formatter admits each field from a fixed list, so `p`, a commitment, a shadow
 address, the account, a nonce and a transaction hash cannot be written even by
 a caller that offers them.
-
 *Verified:* reproduced red first — with `ownPolicy` restored,
 `apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
 policy's missing ledger. That file now drives the real production wiring (a
@@ -14205,9 +14218,6 @@ seven otherwise; the notices are checked against the real operations in
 backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 (298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
 was used; the live ledger's `leaf_count()` has not been re-read.
-
----
-
 ### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
 The arena (D-114) is a room, drawn at the interiors' origin over the hidden
 street (D-039). The city, the backdrop and D-124's south vista are all mounted
@@ -14279,7 +14289,6 @@ the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
 reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
 and then asserts `carrying` is null — unrelated to this work. Renders are from
 the offline rasteriser, not a GPU.
----
 ### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
 Every `ShadowAccountResolver` cached its own partial commitment "once per
 connection", and so did the placement's `LeaderboardReceipts`. Read route by
@@ -14343,5 +14352,3 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
-
----
