@@ -14065,3 +14065,38 @@ backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 was used; the live ledger's `leaf_count()` has not been re-read.
 
 ---
+
+### 2026-10-03 — A guard with no message reads as a dead button
+
+The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
+refused the quote at 3.96% against a 3% bound, before anything was asked —
+correct behaviour on the ground floor, wrong on the degen floor, whose tokens
+are thin by definition. The expensive half was not the number. It was that the
+refusal threw `PrivacyError('unknown', …)`, so the log said `kind=unknown` and
+the panel said "That did not go through"; in the live quote path it was one
+faint note under an empty Buy field. Nobody could tell a refused swap from a
+broken button, and the real cause sat in the seam's message string, which the
+Shell is forbidden to render.
+
+Two rules came out of it, both now enforced by tests. **A guard that can refuse
+before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
+what both the log line and the counter's copy are keyed on, so `unknown` means
+"nobody can explain this". **A guard that refuses on a figure carries that
+figure on the throw**, as own data properties, so the counter can say "4.0%
+worse than the market price" without ever rendering the seam's own sentence.
+`SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
+no amount, no token — and `toFailure` reads them with the same own-descriptor
+discipline it reads `kind` with.
+
+*Verified:* reproduced red first — with the old throw restored,
+`apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
+`exchange-machine.test.ts` renders the generic copy. The figures survive two
+passes of `toFailure` and are dropped when malformed, negative, fractional or
+behind a throwing getter. The degen floor's own limits (12% / 800 bps) and the
+Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
+`swap-operations.test.ts`, the backend's two ceilings in `degen-route.test.ts`.
+Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used, and no live LORDS swap has been run under
+the new bound.
+
+---

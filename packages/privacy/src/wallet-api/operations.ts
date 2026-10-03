@@ -21,6 +21,7 @@ import type {
 } from '../operations.js';
 import { depositStatusFromReceipt } from '../pool.js';
 import { shieldDeposits } from '../shield-deposit.js';
+import { SWAP_DEGEN_MAX_SLIPPAGE_BPS } from '../swap-prices.js';
 import {
   PrivacyError,
   type Address,
@@ -762,10 +763,12 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   for (const intent of intents) {
     // D-090: a swap may carry the player's own slippage, as an own data property.
     const swapSlippage = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'slippageBps') !== undefined;
+    // D-126: and a swap may say it is the degen floor's, likewise as an own data property.
+    const swapDegen = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'degen') !== undefined;
     const expectedKeys = intent.kind === 'shield'
       ? ['kind', 'token', 'amount']
       : intent.kind === 'swap'
-        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut', ...(swapSlippage ? ['slippageBps'] : [])]
+        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut', ...(swapSlippage ? ['slippageBps'] : []), ...(swapDegen ? ['degen'] : [])]
         : intent.kind === 'stake'
           ? ['kind', 'tokenIn', 'tokenOut', 'amountIn']
           : ['kind', 'token', 'amount', 'recipient'];
@@ -789,8 +792,17 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
     ) {
       throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
     }
+    // D-126: only a build with the degen floor on may mark a swap as its own,
+    // and only a boolean marks it. Everything else is the ground floor.
+    if (intent.kind === 'swap' && swapDegen) {
+      if (typeof intent.degen !== 'boolean' || (intent.degen && policy.swap?.degen !== true)) {
+        throw new PrivacyError('unknown', 'This build has no degen floor for a swap to run on.');
+      }
+    }
     if (intent.kind === 'swap' && swapSlippage) {
-      const ceiling = policy.swap?.slippageBps;
+      const ceiling = intent.degen === true
+        ? policy.swap?.degenSlippageBps ?? SWAP_DEGEN_MAX_SLIPPAGE_BPS
+        : policy.swap?.slippageBps;
       const chosen = intent.slippageBps;
       if (
         typeof chosen !== 'number' || !Number.isSafeInteger(chosen) || chosen <= 0

@@ -26,6 +26,14 @@ export interface RoutePolicy {
   quoteBound: boolean;
   allowedTokens: readonly string[];
   maxSlippageBps?: number;
+  /**
+   * D-126 (swap only): the wider ceiling a quote for a token only the degen
+   * list admits (D-067) may ask for, in bps. Read in place of
+   * `maxSlippageBps` for a pair the static allowlist does not name whole, so
+   * the ground-floor Exchange keeps its own ceiling either way. Absent, a
+   * degen pair takes `maxSlippageBps` like any other.
+   */
+  degenMaxSlippageBps?: number;
 }
 
 export interface BackendConfig {

@@ -1356,6 +1356,24 @@ describe('privacy-safe RPC and operations', () => {
     }
   });
 
+  /**
+   * D-126: the degen floor's own ceiling, where a build sets one. At most 8%,
+   * and never under the Exchange's own — a "degen" ceiling below the ground
+   * floor's would be a misconfiguration, not a tightening.
+   */
+  it('bounds the degen swap slippage ceiling by 8% and by the swap route\'s own', () => {
+    const { config } = fixture();
+    const swap = (degenMaxSlippageBps: number | undefined) => () => fixture({
+      routes: { ...config.routes, swap: { ...config.routes.swap, maxSlippageBps: 300, ...(degenMaxSlippageBps === undefined ? {} : { degenMaxSlippageBps }) } },
+    });
+    expect(swap(undefined)).not.toThrow();
+    expect(swap(300)).not.toThrow();
+    expect(swap(800)).not.toThrow();
+    for (const bad of [801, 10_000, 0, -1, 299, 500.5]) {
+      expect(swap(bad), String(bad)).toThrow(/degen swap slippage ceiling/);
+    }
+  });
+
   it('accepts a zero queue delay on the pool-native routes, the D-066 setting', () => {
     const { config } = fixture();
     expect(() => fixture({
