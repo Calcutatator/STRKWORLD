@@ -259,6 +259,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-128)
+
+The brief was "make jumping actually move the character model … jump over the
+football or characters", on the premise that avatars are blocked by other
+players and by the ball. Read before changing anything, that premise is false
+and most of the feature already shipped.
+
+- **The model rises and the run carries through, already.** `presenter.ts`
+  lifts the figure along `jumpLift` (1.15 units over 800 ms, D-097 amended) and
+  `remote-avatars.ts` plays the same arc for peers. D-097 made the jump touch
+  neither speed nor direction, so a walking jump is 4 tiles of ground and a
+  sprint 6 — already far more than the 0.5 tiles the ball is wide. A forward
+  boost would be pure extra speed with no server-side street cap to hold it
+  (D-087 kept the street's clamp-to-world and no path check at all).
+- **There is no avatar-to-avatar or avatar-to-ball collision anywhere.** Street
+  movement is `isSolidAt(map, …)` plus sandbox stacks higher than your level,
+  and that is the whole of it (`world-session.ts` `moveStreetPlayer`,
+  `stepOnHeightmap`). The lobby validates finiteness, a shared area's walkable
+  tiles, and D-106's climb window — never a peer, never the ball. Players walk
+  through each other today.
+- **The only thing in the way was the dribble.** D-078's `stepBall` pushes the
+  ball off every overlapping player's 12-pixel body. That rule did not know the
+  player was in the air, so jumping over the football shoved it away exactly as
+  running through it did. Dropping the jumper from the pushers — in the room,
+  in the solo authority and in the drawn ball — is the entire feature.
+- **Phase, never height.** The pass window is normalised like D-106's climb
+  window (`JUMP_PASS_FROM_PHASE` 0.1 to `JUMP_PASS_UNTIL_PHASE` 0.9), so
+  reduced motion's 0.3-unit hop clears the same ball as the 1.15-unit arc with
+  no second code path. Reading the lift instead would have silently excluded
+  reduced motion.
+- **The room must time its own jumps.** `player:moved` carries `airborne` for
+  the Shell's ball only; it is dropped structurally by `ownMovementPayload` and
+  the room reads its own `#jumps` record instead (`JUMP_PASS_WINDOW_MS`, 870
+  ms). A client-asserted airborne flag would be a free "never dribble me".
+
+*Verified:* read the shipped sources listed above rather than the docs, and
+pinned the premise in tests that fail if it changes — a run across the exact
+spot a peer stands on covers the same ground as a run with nobody there
+(`world-session-jump-over.test.ts`), and the same run over the ball with and
+without a jump leaves it still or dribbles it (`lobby/src/jump-over.test.ts`),
+one tick either side of the window edge. Solo play and the room are compared
+step for step over the ball (`football-controller.test.ts`). Full suite (306
+files, 6418 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
+
 ### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
 
 "I went to the bridge counter and it's not popping up an interface." Nothing in

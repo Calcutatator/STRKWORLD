@@ -32,6 +32,11 @@ import { createBallPresenter, type BallPresenter, type LocalPlayer } from './bal
  * and answers the local player's own touches at once. Switching backends
  * never changes the channel object the World holds.
  *
+ * D-128: every `player:moved` says whether the World has the player's feet
+ * off the ground, and an airborne player is not a body the ball meets — in
+ * the drawn ball here and in the solo authority, as in the room. So a running
+ * jump carries them over the ball instead of dribbling it away.
+ *
  * Goals and full time reach the World as moments; debug builds (D-069) log
  * `football.kick`, `football.goal` and `football.full-time` by side at most.
  */
@@ -103,6 +108,12 @@ export function createFootballController(options: FootballControllerOptions = {}
   /** The local player: where they stand, since when, and how they move. */
   let here: { x: number; y: number; facing: Facing; at: number } | null = null;
   let motion = { vx: 0, vy: 0 };
+  /**
+   * D-128: whether the World has the local player's feet off the ground. Read
+   * from every `player:moved` (the World publishes one a frame), not only the
+   * ones that change position, so a jump straight up is seen too.
+   */
+  let airborne = false;
 
   /** The lobby client currently acting as authority, if any. */
   let lobby: { readonly client: FootballLobbyClient; stop: () => void } | null = null;
@@ -135,10 +146,25 @@ export function createFootballController(options: FootballControllerOptions = {}
     if (here === null || away) return null;
     // Standing still for a moment is standing still, whatever the last step was.
     const moving = now - here.at <= FOOTBALL_PLAYER_WINDOW_MS;
-    return { x: here.x, y: here.y, facing: here.facing, vx: moving ? motion.vx : 0, vy: moving ? motion.vy : 0 };
+    return {
+      x: here.x,
+      y: here.y,
+      facing: here.facing,
+      vx: moving ? motion.vx : 0,
+      vy: moving ? motion.vy : 0,
+      ...(airborne ? { airborne: true } : {}),
+    };
   };
   const soloPlayer = (): FootballPlayer | null =>
-    here === null || away ? null : { key: LOCAL_PLAYER, x: here.x, y: here.y, at: here.at };
+    here === null || away
+      ? null
+      : {
+          key: LOCAL_PLAYER,
+          x: here.x,
+          y: here.y,
+          at: here.at,
+          ...(airborne ? { airborne: true } : {}),
+        };
 
   // -- solo authority ---------------------------------------------------------
 
@@ -275,9 +301,11 @@ export function createFootballController(options: FootballControllerOptions = {}
 
   const leaveStreet = (): void => {
     away = true;
+    airborne = false;
   };
   const backOnStreet = (): void => {
     away = false;
+    airborne = false;
   };
 
   // The solo ball starts at rest on the centre spot, drawn from the start.
@@ -292,6 +320,8 @@ export function createFootballController(options: FootballControllerOptions = {}
           const position = moved?.position;
           if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
           const facing: Facing = moved?.facing === 'up' || moved?.facing === 'left' || moved?.facing === 'right' ? moved.facing : 'down';
+          // D-128: present and true only while the feet are clear of the ground.
+          airborne = moved?.airborne === true;
           const now = clock();
           if (here === null || here.x !== position.x || here.y !== position.y) {
             if (here !== null) {

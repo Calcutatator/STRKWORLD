@@ -11,6 +11,7 @@ import {
   REDUCED_JUMP_HEIGHT,
   createJumpState,
   inClimbWindow,
+  inPassWindow,
   jumpAirPhase,
   jumpArc,
   jumpLift,
@@ -22,6 +23,9 @@ import {
   CLIMB_LATENCY_MS,
   CLIMB_WINDOW_MS,
   JUMP_AIR_MS as SHARED_JUMP_AIR_MS,
+  JUMP_PASS_FROM_PHASE,
+  JUMP_PASS_UNTIL_PHASE,
+  JUMP_PASS_WINDOW_MS,
   SANDBOX_BLOCK_HEIGHT,
   SANDBOX_STEP_HEIGHT,
 } from '@strkworld/shared';
@@ -260,5 +264,67 @@ describe('the climb window', () => {
     expect(CLIMB_WINDOW_MS).toBe(JUMP_AIR_MS + CLIMB_LATENCY_MS);
     expect(CLIMB_LATENCY_MS).toBeGreaterThanOrEqual(150);
     expect(CLIMB_WINDOW_MS - JUMP_AIR_MS).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe('the pass window: when the feet are clear of the ball (D-128)', () => {
+  it('opens above knee height and closes at its mirror on the fall', () => {
+    expect(inPassWindow(JUMP_PASS_FROM_PHASE * JUMP_AIR_MS - 1)).toBe(false);
+    expect(inPassWindow(JUMP_PASS_FROM_PHASE * JUMP_AIR_MS)).toBe(true);
+    expect(inPassWindow(JUMP_AIR_MS / 2)).toBe(true);
+    expect(inPassWindow(JUMP_PASS_UNTIL_PHASE * JUMP_AIR_MS)).toBe(true);
+    expect(inPassWindow(JUMP_PASS_UNTIL_PHASE * JUMP_AIR_MS + 1)).toBe(false);
+    // Symmetric about the apex, so the pass lasts as long on the way down.
+    expect(JUMP_PASS_UNTIL_PHASE).toBeCloseTo(1 - JUMP_PASS_FROM_PHASE, 10);
+  });
+
+  it('opens where the full arc is past the knee and short of the waist', () => {
+    const lift = JUMP_HEIGHT * jumpArc(JUMP_PASS_FROM_PHASE);
+    expect(lift).toBeGreaterThan(0.3);
+    expect(lift).toBeLessThan(0.6);
+    // And at the apex the feet are a whole block up, as D-097 derives it.
+    expect(jumpLift(JUMP_AIR_MS / 2)).toBeCloseTo(JUMP_HEIGHT, 10);
+  });
+
+  it('never reads the height, so reduced motion\'s lower hop passes over the same ball', () => {
+    // The hop is lower throughout and still inside the window at the same phases.
+    expect(REDUCED_JUMP_HEIGHT).toBeLessThan(JUMP_HEIGHT);
+    for (const phase of [JUMP_PASS_FROM_PHASE, 0.3, 0.5, 0.7, JUMP_PASS_UNTIL_PHASE]) {
+      expect(inPassWindow(phase * JUMP_AIR_MS)).toBe(true);
+      expect(jumpLift(phase * JUMP_AIR_MS, REDUCED_JUMP_HEIGHT)).toBeGreaterThan(0);
+    }
+  });
+
+  it('refuses meaningless input and anything outside the air', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1, JUMP_AIR_MS, JUMP_AIR_MS + 1]) {
+      expect(inPassWindow(value)).toBe(false);
+    }
+    expect(inPassWindow(100, 0)).toBe(false);
+  });
+
+  it('is what the state machine reports, for this jump only', () => {
+    const state = createJumpState();
+    expect(state.clearsBodies).toBe(false);
+    state.tryStart();
+    expect(state.clearsBodies).toBe(false);
+    state.advance(JUMP_PASS_FROM_PHASE * JUMP_AIR_MS);
+    expect(state.clearsBodies).toBe(true);
+    // A climb spends the climb, never the pass: still over the ball after it.
+    state.climbed();
+    expect(state.canClimb).toBe(false);
+    expect(state.clearsBodies).toBe(true);
+    state.advance(JUMP_AIR_MS);
+    expect(state.phase).toBe('cooldown');
+    expect(state.clearsBodies).toBe(false);
+    state.reset();
+    expect(state.clearsBodies).toBe(false);
+  });
+
+  it('fits inside the lobby window, with room for the move floor and jitter', () => {
+    expect(JUMP_PASS_WINDOW_MS).toBe(JUMP_AIR_MS * JUMP_PASS_UNTIL_PHASE + CLIMB_LATENCY_MS);
+    // The last frame of the pass, plus the latency the climb window allows.
+    expect(JUMP_PASS_WINDOW_MS).toBeGreaterThan(JUMP_PASS_UNTIL_PHASE * JUMP_AIR_MS);
+    // Shorter than the climb window: the pass closes before the jump lands.
+    expect(JUMP_PASS_WINDOW_MS).toBeLessThan(CLIMB_WINDOW_MS);
   });
 });

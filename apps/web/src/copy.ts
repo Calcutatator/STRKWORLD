@@ -1007,7 +1007,7 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you.' },
+      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you. A running jump carries you over the football without kicking it.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, an outfit in the Avatar Studio. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },

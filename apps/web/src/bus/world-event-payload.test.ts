@@ -17,6 +17,13 @@ describe('World event payload ownership', () => {
     expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: 3 })?.seat).toBe(3);
     expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: 1.5 })?.seat).toBe(-1);
     expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: '3' })?.seat).toBe(-1);
+    // D-128: `airborne` is for the ball the Shell draws, never for the lobby,
+    // so the owned placement does not carry it at all.
+    expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', airborne: true })).toEqual({
+      position: { x: 1, y: 2 },
+      facing: 'left',
+      seat: -1,
+    });
   });
 
   it('rejects unknown semantic values and non-finite positions', () => {
