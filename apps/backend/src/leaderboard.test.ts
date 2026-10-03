@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hash } from 'starknet';
@@ -402,8 +402,105 @@ describe('ranking DeFi behind BACKEND_LEADERBOARD_RANK_DEFI (off by default)', (
     await expect(lb.handle(withFeatures(P, [VAULT, SWAP]), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
     const histogram = await lb.handle({ method: 'GET', path: LB_HISTOGRAM_PATH, body: undefined }, signal());
     expect(histogram.body).toEqual({ season: 's1', total: 1, buckets: [{ count: 5, players: 1 }], rankDefi: true });
-    // p alone still works.
-    await expect(lb.handle(checkIn(P), signal())).resolves.toEqual({ status: 200, body: { count: '2' } });
+    // p alone still works, and keeps the DeFi points already verified
+    // (D-122, amended 2026-10-03): the client sends only the feature partials
+    // its own session shared, so a later check without them must not lose them.
+    await expect(lb.handle(checkIn(P), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+  });
+
+  describe('the verified DeFi counts kept per entry (D-122, amended 2026-10-03)', () => {
+    const vaultKey = leaderboardFeatureKey('s1', VAULT);
+    const entry = leaderboardEntryKey('s1', P);
+
+    it('keeps a feature\'s last verified count when a later check carries no partial for it', async () => {
+      const { rpc } = chain({ [P]: [0, 1] }, { [receiptCommitment(VAULT, 0)]: 3n });
+      const store = new LeaderboardStore(null);
+      const lb = ranked(rpc, store);
+      await expect(lb.handle(withFeatures(P, [VAULT]), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+      expect(store.defiCounts('s1', entry)).toEqual({ [vaultKey]: 3 });
+      // Two more checks with p alone: the Vault's 3 stay in the total.
+      await expect(lb.handle(checkIn(P, 'c1'), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+      await expect(lb.handle(checkIn(P, 'c2'), signal())).resolves.toEqual({ status: 200, body: { count: '5' } });
+      expect(store.defiCounts('s1', entry)).toEqual({ [vaultKey]: 3 });
+    });
+
+    it('re-verifies and raises a count the check does carry, and never lowers one', async () => {
+      const ticks = { [receiptCommitment(VAULT, 0)]: 3n };
+      const { rpc } = chain({ [P]: [0] }, ticks);
+      const store = new LeaderboardStore(null);
+      const lb = ranked(rpc, store);
+      await expect(lb.handle(withFeatures(P, [VAULT]), signal())).resolves.toEqual({ status: 200, body: { count: '4' } });
+      // The player uses the Vault twice more.
+      ticks[receiptCommitment(VAULT, 0)] = 5n;
+      await expect(lb.handle(withFeatures(P, [VAULT], 'c1'), signal())).resolves.toEqual({ status: 200, body: { count: '6' } });
+      expect(store.defiCounts('s1', entry)).toEqual({ [vaultKey]: 5 });
+      // A chain read that answers lower (a re-org, a wrong node) cannot take points away.
+      ticks[receiptCommitment(VAULT, 0)] = 1n;
+      await expect(lb.handle(withFeatures(P, [VAULT], 'c2'), signal())).resolves.toEqual({ status: 200, body: { count: '6' } });
+      expect(store.defiCounts('s1', entry)).toEqual({ [vaultKey]: 5 });
+    });
+
+    it('adds up several features, each kept under its own hash', async () => {
+      const { rpc } = chain({ [P]: [0] }, { [receiptCommitment(VAULT, 0)]: 2n, [receiptCommitment(SWAP, 0)]: 4n });
+      const store = new LeaderboardStore(null);
+      const lb = ranked(rpc, store);
+      await lb.handle(withFeatures(P, [VAULT]), signal());
+      await lb.handle(withFeatures(P, [SWAP], 'c1'), signal());
+      expect(store.defiCounts('s1', entry)).toEqual({ [vaultKey]: 2, [leaderboardFeatureKey('s1', SWAP)]: 4 });
+      await expect(lb.handle(checkIn(P, 'c2'), signal())).resolves.toEqual({ status: 200, body: { count: '7' } });
+    });
+
+    it('keeps nothing for an account whose claim lost: first claim still wins', async () => {
+      const OTHER = '0xabc123';
+      const { rpc } = chain({ [P]: [0], [OTHER]: [0] }, { [receiptCommitment(VAULT, 0)]: 4n });
+      const store = new LeaderboardStore(null);
+      const lb = ranked(rpc, store);
+      await lb.handle(withFeatures(P, [VAULT]), signal());
+      await expect(lb.handle(withFeatures(OTHER, [VAULT], 'c1'), signal())).resolves.toEqual({ status: 200, body: { count: '1' } });
+      expect(store.defiCounts('s1', leaderboardEntryKey('s1', OTHER))).toEqual({});
+      // And the loser's later p-alone check cannot pick them up either.
+      await expect(lb.handle(checkIn(OTHER, 'c2'), signal())).resolves.toEqual({ status: 200, body: { count: '1' } });
+    });
+
+    it('writes the counts as hashes and counts only, and reads them back', async () => {
+      const { mkdtemp: temp } = await import('node:fs/promises');
+      const dir = await temp(join(tmpdir(), 'strkworld-lb-'));
+      try {
+        const path = join(dir, 'leaderboard.json');
+        const store = new LeaderboardStore(path);
+        const { rpc } = chain({ [P]: [0] }, { [receiptCommitment(VAULT, 0)]: 2n });
+        await ranked(rpc, store).handle(withFeatures(P, [VAULT]), signal());
+        await store.flushed();
+        const text = await readFile(path, 'utf8');
+        expect(JSON.parse(text).seasons).toEqual({ s1: { [entry]: { count: 3, day: DAY, defi: { [vaultKey]: 2 } } } });
+        expect(text).not.toContain(BigInt(VAULT).toString(16));
+        expect(text).not.toContain(BigInt(P).toString(16));
+        const again = new LeaderboardStore(path);
+        await again.load();
+        expect(again.defiCounts('s1', entry)).toEqual({ [vaultKey]: 2 });
+        // And the reloaded tally keeps them through a p-alone check.
+        await expect(ranked(rpc, again).handle(checkIn(P, 'c9'), signal())).resolves.toEqual({ status: 200, body: { count: '3' } });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses a store file whose DeFi counts are not hashes and positive counts', async () => {
+      const { mkdtemp: temp } = await import('node:fs/promises');
+      const dir = await temp(join(tmpdir(), 'strkworld-lb-'));
+      try {
+        const path = join(dir, 'leaderboard.json');
+        for (const defi of [{ 'not-a-felt': 1 }, { [vaultKey]: 0 }, { [vaultKey]: 1.5 }, [1], 'x']) {
+          await writeFile(path, JSON.stringify({ v: 1, seasons: { s1: { [entry]: { count: 3, day: DAY, defi } } } }));
+          await expect(new LeaderboardStore(path).load()).rejects.toThrow('malformed');
+        }
+        // And refuses an unknown field beside them.
+        await writeFile(path, JSON.stringify({ v: 1, seasons: { s1: { [entry]: { count: 3, day: DAY, extra: 1 } } } }));
+        await expect(new LeaderboardStore(path).load()).rejects.toThrow('malformed');
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it('credits one feature shadow to one entry per season: a second account cannot borrow its ticks', async () => {

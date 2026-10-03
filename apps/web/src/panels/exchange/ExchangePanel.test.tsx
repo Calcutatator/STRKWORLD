@@ -246,3 +246,56 @@ describe('ExchangePanel review render', () => {
     expect(markup).not.toContain('Sent.');
   });
 });
+
+/**
+ * D-126: what the player actually sees. The live bug was a silent refusal:
+ * the oracle guard stopped the quote and the panel said nothing, so Review
+ * read as doing nothing. The refusal is now an alert with the figure; a quote
+ * inside its floor's cap but past 3% carries one subtle line and no gate.
+ */
+describe('ExchangePanel and the oracle guard (D-126)', () => {
+  const prepared = async (shortfallBps: number, options: { degen?: boolean; degenFloorOpen?: boolean } = {}) => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000,
+        priceCheck: { status: 'checked', boundBps: 300, shortfallBps, sellUsd: 4_310_000n, expectedBuyUsd: 4_310_000n },
+      },
+    });
+    const panel = createExchangePanel({
+      operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, ...options,
+    });
+    await panel.open(); await panel.refreshBalances(); panel.setAmount('1'); await panel.prepare();
+    return { operations, panel };
+  };
+  const render = (operations: FakePrivacyOperations, panel: ReturnType<typeof createExchangePanel>, mode: 'ground' | 'degen' = 'ground') =>
+    renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} mode={mode} onClose={() => {}} /></PrivacyProvider>);
+
+  it('says why a ground-floor swap was refused, and points at the degen floor', async () => {
+    const { operations, panel } = await prepared(396, { degenFloorOpen: true });
+    const markup = render(operations, panel);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("avnu&#x27;s price for ETH is 4.0% worse than the market price");
+    expect(markup).toContain('Thin tokens trade on the degen floor upstairs');
+    // A reason, not a dead end: the player can go back and try again.
+    expect(markup).toContain(COPY.flow.back);
+  });
+
+  it('shows the small warning line in a degen review, with no modal and no extra button', async () => {
+    const { operations, panel } = await prepared(410, { degen: true });
+    const markup = render(operations, panel, 'degen');
+    expect(markup).toContain('class="exchange-price-warning"');
+    expect(markup).toContain('Price is 4.1% below market: thin liquidity.');
+    // Inside the cap, so nothing to acknowledge and nothing extra to press.
+    expect(markup).not.toContain(COPY.exchange.acknowledgeUnchecked);
+    expect(markup).not.toContain('Swap anyway');
+    // A note, not an alert and not a dialog: it does not interrupt the review.
+    expect(markup).toContain('class="exchange-price-warning" role="note"');
+    expect(markup).not.toContain('role="dialog"');
+  });
+
+  it('shows no warning line for a quote inside 3%', async () => {
+    const { operations, panel } = await prepared(120, { degen: true });
+    expect(render(operations, panel, 'degen')).not.toContain('exchange-price-warning');
+  });
+});

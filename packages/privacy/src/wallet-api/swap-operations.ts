@@ -2,11 +2,19 @@ import type { STRK20_ACTION } from 'starknet';
 import type { BatchWarning, Intent, PoolConfig, PreparedBatch, SwapPriceCheck } from '../operations.js';
 import { PrivacyError, type Address, type OperationProgress, type ProgressCallback } from '../types.js';
 import { MAINNET_CHAIN_ID, SWAP_DAPP_NAME, SWAP_SHADOW_NONCE, ownSwapQuote, swapActions, type SwapQuote } from '../swap.js';
-import { SWAP_MAX_SLIPPAGE_BPS, checkSwapPrice, type PragmaPrice } from '../swap-prices.js';
+import {
+  SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+  SWAP_DEGEN_PRICE_BOUND_BPS,
+  SWAP_MAX_SLIPPAGE_BPS,
+  SWAP_PRICE_BOUND_BPS,
+  checkSwapPrice,
+  type PragmaPrice,
+} from '../swap-prices.js';
 import { mapShadowWalletError, mapWalletError } from './errors.js';
 import { withLedgerTick } from '../leaderboard.js';
 import { noticeLeaderboard } from '../leaderboard-notice.js';
 import { ShadowAccountResolver } from './shadow-account.js';
+import type { WalletCommitmentCache } from './commitment-cache.js';
 import type { SwapPriceReader, SwapQuoteClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 
@@ -27,6 +35,9 @@ import { freezeActions, submitThroughWallet } from './wallet-submission.js';
  *   wallet's own RPC (`swap-prices.ts`): a quote worth more than 3% less than
  *   the input is refused, and a pair with no oracle price is reviewed as
  *   unchecked and needs the player's explicit acknowledgement to confirm.
+ *   D-126: a swap intent marked `degen` runs under the degen floor's own,
+ *   wider pair of limits instead (12% and 8% by default), and a refusal
+ *   throws `SwapPriceGuardError` so the counter can say why in plain words.
  * - A quote older than `SWAP_QUOTE_TTL_MS` at confirmation is asked for again
  *   before the wallet is: a fresh floor at or above the reviewed one goes
  *   ahead, anything lower stops with nothing sent.
@@ -34,6 +45,8 @@ import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 
 export interface ShadowSwapOptions {
   readonly wallet: WalletStrk20Account;
+  /** The connection's one shadow-account commitment cache (D-122, amended 2026-10-03). */
+  readonly commitments?: WalletCommitmentCache;
   readonly walletAddress: Address;
   readonly reads?: Pick<VaultReadClient, 'shadowAccount'>;
   readonly quotes?: SwapQuoteClient;
@@ -63,6 +76,40 @@ interface CheckedQuote {
   readonly check: SwapPriceCheck;
 }
 
+/** D-126: one floor's two limits, decided once per prepare and reused by the re-quote. */
+interface SwapLimits {
+  /** How far below Pragma's price the expected output may sit before the guard refuses. */
+  readonly boundBps: number;
+  /** The widest slippage this floor allows, and the one an intent without its own uses. */
+  readonly slippageCeilingBps: number;
+}
+
+/**
+ * D-126: the limits this swap runs under. The degen floor's tokens are thin
+ * and illiquid, so it gets its own, wider pair — 12% and 8% by default, or
+ * whatever narrower pair the build set. The Exchange keeps 3% and 3%, and a
+ * build value past its own floor's cap is ignored rather than honoured: a
+ * misread config can only ever narrow a limit, never widen it.
+ */
+function swapLimits(intent: SwapIntent, policy: NonNullable<WalletRoutePolicy['swap']>): SwapLimits {
+  if (intent.degen !== true) {
+    return Object.freeze({
+      boundBps: SWAP_PRICE_BOUND_BPS,
+      slippageCeilingBps: Math.min(policy.slippageBps, SWAP_MAX_SLIPPAGE_BPS),
+    });
+  }
+  return Object.freeze({
+    boundBps: withinCap(policy.degenOracleBps, SWAP_DEGEN_PRICE_BOUND_BPS),
+    slippageCeilingBps: withinCap(policy.degenSlippageBps, SWAP_DEGEN_MAX_SLIPPAGE_BPS),
+  });
+}
+
+/** A configured bps value at or under its cap, or the cap when it is unset or unusable. */
+function withinCap(value: number | undefined, cap: number): number {
+  if (value === undefined || !Number.isSafeInteger(value) || value <= 0) return cap;
+  return Math.min(value, cap);
+}
+
 export class ShadowSwap {
   private readonly wallet: WalletStrk20Account;
   private readonly walletAddress: Address;
@@ -85,6 +132,7 @@ export class ShadowSwap {
     this.now = options.now;
     this.identity = new ShadowAccountResolver({
       wallet: options.wallet,
+      ...(options.commitments ? { commitments: options.commitments } : {}),
       dappName: SWAP_DAPP_NAME,
       nonce: SWAP_SHADOW_NONCE,
       ...(options.reads ? { reads: options.reads } : {}),
@@ -117,14 +165,17 @@ export class ShadowSwap {
     if (sameAddress(intent.tokenIn, intent.tokenOut)) {
       throw new PrivacyError('unknown', 'A swap needs two different tokens.');
     }
-    // D-090: the player's slippage, at or below the build's ceiling, or the ceiling itself.
-    const slippageBps = intent.slippageBps ?? swapPolicy.slippageBps;
-    if (!Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > swapPolicy.slippageBps) {
+    // D-126: which floor this swap is on decides both limits. The degen floor
+    // only ever widens its own; the Exchange's stay the package constants.
+    const limits = swapLimits(intent, swapPolicy);
+    // D-090: the player's slippage, at or below the floor's ceiling, or the ceiling itself.
+    const slippageBps = intent.slippageBps ?? limits.slippageCeilingBps;
+    if (!Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > limits.slippageCeilingBps) {
       throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");
     }
     const identity = await this.identity.resolve(signal, undefined);
     throwIfAborted(signal);
-    const { quote, check } = await this.quote(intent, identity.address, slippageBps, signal);
+    const { quote, check } = await this.quote(intent, identity.address, slippageBps, limits, signal);
     if (quote.minAmountOut < intent.minAmountOut) {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }
@@ -177,7 +228,7 @@ export class ShadowSwap {
             // A stale quote is asked for again before the wallet is. The
             // floor may only hold or rise: the player reviewed this one.
             // The fresh quote passes the same oracle check, or it throws.
-            const fresh = await owner.quote(canonicalIntent, identity.address, quote.slippageBps, confirmSignal);
+            const fresh = await owner.quote(canonicalIntent, identity.address, quote.slippageBps, limits, confirmSignal);
             if (fresh.quote.minAmountOut < canonicalIntent.minAmountOut) {
               throw new PrivacyError('unknown', SWAP_FLOOR_MOVED_MESSAGE);
             }
@@ -210,7 +261,7 @@ export class ShadowSwap {
   }
 
   /** Ask the backend for avnu's quote for the stand-in, own it, and hold it against the oracle. */
-  private async quote(intent: SwapIntent, taker: Address, slippageBps: number, signal?: AbortSignal): Promise<CheckedQuote> {
+  private async quote(intent: SwapIntent, taker: Address, slippageBps: number, limits: SwapLimits, signal?: AbortSignal): Promise<CheckedQuote> {
     const quotes = this.quotes;
     if (!quotes) throw new PrivacyError('unknown', 'The private swap quotes are not configured.');
     const request = Object.freeze({
@@ -250,6 +301,8 @@ export class ShadowSwap {
       slippageBps: quote.slippageBps,
       prices,
       nowMs: this.now(),
+      boundBps: limits.boundBps,
+      maxSlippageBps: limits.slippageCeilingBps,
     });
     return Object.freeze({ quote, check });
   }
@@ -267,6 +320,20 @@ export class ShadowSwap {
   /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
   ledgerPartial(): Promise<string> {
     return this.identity.partial();
+  }
+
+  /**
+   * Leaderboard phase 1, for a placement check: the same two answers, but only
+   * if this counter's commitment is already in the connection's cache (D-122,
+   * amended 2026-10-03). Null otherwise, so a check never prompts the wallet
+   * for a counter the player has not used this session.
+   */
+  ledgerCachedCommitment(): string | null {
+    return this.identity.cachedFullCommitment();
+  }
+
+  ledgerCachedPartial(): string | null {
+    return this.identity.cachedPartial();
   }
 }
 

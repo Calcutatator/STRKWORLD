@@ -521,7 +521,7 @@ describe('the presenter in the arena (D-114)', () => {
     const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: fakeFigures().factory });
     const view = presenter.bindSession();
     expect(parent.getObjectByName('room:arena')).toBeUndefined();
-    view.syncArena({ phase: 'countdown', gate: 'busy', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false });
+    view.syncArena({ phase: 'countdown', gate: 'busy', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false, challengerGuarding: false, challengerBlocks: 0, championId: null, throneId: null, selfIsChampion: false, selfOnThrone: false });
     view.setStreetVisible(false);
     view.showRoom('arena');
     const room = parent.getObjectByName('room:arena')!;
@@ -583,7 +583,7 @@ describe('the presenter in the arena (D-114)', () => {
   it('holds the battle stance while the local player fights, and turns to a leap\'s facing', () => {
     const world = setup();
     world.view.setPlayerPosition(roomTile(20, 18), true);
-    world.view.syncArena({ phase: 'fighting', gate: 'busy', dummy: { hp: 70, maxHp: 100, hits: 3, down: false }, challengerId: 'p1' as never, challengerSwings: 4, selfIsChallenger: true });
+    world.view.syncArena({ phase: 'fighting', gate: 'busy', dummy: { hp: 70, maxHp: 100, hits: 3, down: false }, challengerId: 'p1' as never, challengerSwings: 4, selfIsChallenger: true, challengerGuarding: false, challengerBlocks: 0, championId: null, throneId: null, selfIsChampion: false, selfOnThrone: false });
     world.presenter.update(16);
     expect(world.avatar.update.mock.calls.at(-1)![1]).toMatchObject({ guard: true });
     world.view.setPlayerFacing('up');

@@ -1,18 +1,30 @@
 /**
- * The cosmetic jump on Space (D-097), engine-agnostic.
+ * The jump on Space (D-097), engine-agnostic.
  *
- * The jump never moves the avatar across the ground: horizontal movement
- * carries on through it unchanged. Since D-106 it does one thing for
- * movement: from `CLIMB_FROM_PHASE` of its air time until it lands, it may
- * step up onto a surface one block higher, once (`JumpState.canClimb`).
- * Walking alone never steps up. The session owns the state machine (one jump
- * at a time, a short cooldown); the presenter and the remote layer own the
- * arc and the pose, from the same numbers here.
+ * The jump never changes the avatar's speed or direction: horizontal movement
+ * carries on through it unchanged, so a walking jump covers 4 tiles of ground
+ * and a sprinting one 6. What it changes is what the ground-level world does
+ * to the jumper:
+ *
+ * - D-106: from `CLIMB_FROM_PHASE` of its air time until it lands it may step
+ *   up onto a surface one block higher, once (`JumpState.canClimb`).
+ * - D-130: between `JUMP_PASS_FROM_PHASE` and `JUMP_PASS_UNTIL_PHASE` the feet
+ *   are above knee height, and the football is not a body the jumper meets
+ *   (`JumpState.clearsBodies`), so a running jump carries them over the ball
+ *   without dribbling it.
+ *
+ * Both windows are judged on the jump's normalised phase, never its height, so
+ * reduced motion's lower hop climbs and clears exactly the same things. The
+ * session owns the state machine (one jump at a time, a short cooldown); the
+ * presenter and the remote layer own the arc and the pose, from the same
+ * numbers here.
  */
 
 import {
   CLIMB_FROM_PHASE,
   JUMP_AIR_MS as SHARED_JUMP_AIR_MS,
+  JUMP_PASS_FROM_PHASE,
+  JUMP_PASS_UNTIL_PHASE,
   SANDBOX_BLOCK_HEIGHT,
   SANDBOX_STEP_HEIGHT,
 } from '@strkworld/shared';
@@ -70,6 +82,12 @@ export interface JumpState {
    * right now: airborne, inside the climb window, and not yet climbed.
    */
   readonly canClimb: boolean;
+  /**
+   * D-130: whether the feet are clear of anything standing on the ground
+   * right now — airborne and inside the pass window — so the football is not
+   * a body this jumper meets.
+   */
+  readonly clearsBodies: boolean;
   /** Take off if ready. Returns whether a jump started: no double jump, no jump in cooldown. */
   tryStart(): boolean;
   /** D-106: this jump has stepped up (or been refused one); no second climb until the next jump. */
@@ -94,6 +112,9 @@ export function createJumpState(airMs = JUMP_AIR_MS): JumpState {
     },
     get canClimb() {
       return phase === 'airborne' && !climbUsed && inClimbWindow(elapsed, airMs);
+    },
+    get clearsBodies() {
+      return phase === 'airborne' && inPassWindow(elapsed, airMs);
     },
     tryStart() {
       if (phase !== 'ready') return false;
@@ -144,6 +165,18 @@ export function jumpAirPhase(elapsedMs: number, airMs = JUMP_AIR_MS): number {
 export function inClimbWindow(elapsedMs: number, airMs = JUMP_AIR_MS): boolean {
   const phase = jumpAirPhase(elapsedMs, airMs);
   return phase >= CLIMB_FROM_PHASE && phase < 1;
+}
+
+/**
+ * D-130: whether a jump `elapsedMs` after take-off has its feet clear of
+ * anything standing on the ground: from `JUMP_PASS_FROM_PHASE` of its air
+ * time to `JUMP_PASS_UNTIL_PHASE`, the mirror of it on the fall. Phase based
+ * like `inClimbWindow`, so reduced motion's 0.3-unit hop passes over the same
+ * ball as the full 1.15-unit arc.
+ */
+export function inPassWindow(elapsedMs: number, airMs = JUMP_AIR_MS): boolean {
+  const phase = jumpAirPhase(elapsedMs, airMs);
+  return phase >= JUMP_PASS_FROM_PHASE && phase <= JUMP_PASS_UNTIL_PHASE;
 }
 
 /**

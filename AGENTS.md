@@ -259,6 +259,100 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
+
+The brief was "make jumping actually move the character model … jump over the
+football or characters", on the premise that avatars are blocked by other
+players and by the ball. Read before changing anything, that premise is false
+and most of the feature already shipped.
+
+- **The model rises and the run carries through, already.** `presenter.ts`
+  lifts the figure along `jumpLift` (1.15 units over 800 ms, D-097 amended) and
+  `remote-avatars.ts` plays the same arc for peers. D-097 made the jump touch
+  neither speed nor direction, so a walking jump is 4 tiles of ground and a
+  sprint 6 — already far more than the 0.5 tiles the ball is wide. A forward
+  boost would be pure extra speed with no server-side street cap to hold it
+  (D-087 kept the street's clamp-to-world and no path check at all).
+- **There is no avatar-to-avatar or avatar-to-ball collision anywhere.** Street
+  movement is `isSolidAt(map, …)` plus sandbox stacks higher than your level,
+  and that is the whole of it (`world-session.ts` `moveStreetPlayer`,
+  `stepOnHeightmap`). The lobby validates finiteness, a shared area's walkable
+  tiles, and D-106's climb window — never a peer, never the ball. Players walk
+  through each other today.
+- **The only thing in the way was the dribble.** D-078's `stepBall` pushes the
+  ball off every overlapping player's 12-pixel body. That rule did not know the
+  player was in the air, so jumping over the football shoved it away exactly as
+  running through it did. Dropping the jumper from the pushers — in the room,
+  in the solo authority and in the drawn ball — is the entire feature.
+- **Phase, never height.** The pass window is normalised like D-106's climb
+  window (`JUMP_PASS_FROM_PHASE` 0.1 to `JUMP_PASS_UNTIL_PHASE` 0.9), so
+  reduced motion's 0.3-unit hop clears the same ball as the 1.15-unit arc with
+  no second code path. Reading the lift instead would have silently excluded
+  reduced motion.
+- **The room must time its own jumps.** `player:moved` carries `airborne` for
+  the Shell's ball only; it is dropped structurally by `ownMovementPayload` and
+  the room reads its own `#jumps` record instead (`JUMP_PASS_WINDOW_MS`, 870
+  ms). A client-asserted airborne flag would be a free "never dribble me".
+
+*Verified:* read the shipped sources listed above rather than the docs, and
+pinned the premise in tests that fail if it changes — a run across the exact
+spot a peer stands on covers the same ground as a run with nobody there
+(`world-session-jump-over.test.ts`), and the same run over the ball with and
+without a jump leaves it still or dribbles it (`lobby/src/jump-over.test.ts`),
+one tick either side of the window edge. Solo play and the room are compared
+step for step over the ball (`football-controller.test.ts`). Full suite (306
+files, 6418 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
+
+### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
+
+"I went to the bridge counter and it's not popping up an interface." Nothing in
+`deploy/RAILWAY.md` disables the Bridge, and the whole press-E path is sound:
+driven end to end — the real engine-free World session, the real interaction
+system, the real Shell station registry, the real panels, the real presenter
+and `ProductionRoot` with the production route policy from `import.meta.env`
+(`VITE_WALLET_MODE=real` makes `detectRoutePolicy()` answer in a test) — every
+counter opens, the Bridge included. What is wrong is the lock, not the press.
+
+- **The gate's name was a lie.** `station-registry.ts` locks the DEPOSIT
+  counter on `bridgeAccountAvailable && bridgePlannerAvailable`, which
+  production has from boot. But `BridgeProvider.createRuntime` returned the
+  shared `unavailable` runtime (account `null`, planner `null`) for *any*
+  render without a `service` — and the service is the optional recovery
+  runtime, fetched only on Bridge entry and refused outright by
+  `production-runtime.ts`'s Web Storage write probe in a private window, with
+  site data blocked, or on a full quota. So the two capability bits really
+  meant "has the optional chunk landed?", and the counter was locked until it
+  had, or for ever.
+- **Since D-123 that lock is silent.** A locked counter has no shimmer, no key
+  chip, and `fixed-room.ts`'s `interaction()`/`activate()` return `null`/false,
+  so no `station:activated` is emitted and the `capability-unavailable` message
+  `station-registry.ts` prepares can never be rendered. The pre-D-117 walk-up
+  did not show it either; only Menu Mode ever did. A transient or
+  browser-dependent lock with no cue is indistinguishable from a bug — and it
+  only bites production, because the demo runtime needs no storage and no
+  chunk.
+- **The fix is to make the gate mean its name.** The provider publishes the
+  account and planner it was given with `service: null` until the runtime
+  lands, and carries a `loading` bit so the window says "still starting up"
+  rather than D-043's "saved recovery is unavailable in this browser" before
+  the loader has answered. D-061 (no planner → recovery-only) and D-043
+  (nothing pretends to persist) are unchanged.
+- **Two React traps on the way.** `setState(fn)` treats a function as an
+  updater, so parking a failed *loader function* in state calls it — box it
+  (`{ loader }`) or use `setState(() => fn)`. And `WorldSession.update` clamps
+  its delta (`clampFrame`), so a test cannot step D-114's 250 ms door
+  re-entry hold with one big tick; it needs real frames.
+
+*Verified:* `npx vitest run --reporter=default` (297 files, 6,273 tests) and
+`npm run typecheck`. `visits/counter-press-e.flow.test.tsx` walks the player
+into all twelve counters and presses E; the Bridge case with a loader that
+never answers failed before this change and passes after. Not verified: a real
+browser, and whether the lead's own session was the storage probe or a slow
+chunk — both end in the same silent counter, and both now open the window.
+
 ### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-122)
 
 Four traps from wiring the private leaderboard's game side. (1) `shadowAccountAddress` (`calculateContractAddressFromHash`, several Pedersen hashes in JS) costs about 30 ms. Cross-checking all 128 rows of a shadow page took about 4 s per page, in tests and in a browser alike. The count never rests on the addresses (each receipt's commitment is `h(p, n)`, derived locally, and its count is the ledger's), so only the newest deployed row is checked. (2) A value import of `@strkworld/privacy` anywhere in the Shell's eager graph fails `architecture.test.ts` (it pulls `starknet` into the entry chunk), so the placement maths runs inside `checkPlacement` and the Shell imports types only. `PrivacyError` is matched with `toFailure`, never `instanceof`. (3) `PrivacyOperations` is frozen (D-036, `operations.test.ts`): an optional member fails its "every pinned member is a method" type check, so `checkPlacement` is required and rejects while the leaderboard is off. Every test double implementing the seam needed it. (4) The tally's exposure is wider than "links a season's receipts to each other": a shield receipt rides in the shield's transaction, whose `Deposit` names the depositor, so whoever holds `p` can find the account of a player who shielded. Also, `count_of` is `-> u64` (one felt), and `tick` reverts a second receipt in one transaction, so a batch must never carry two.
@@ -13947,6 +14041,54 @@ transaction was used.
 
 ---
 
+### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
+
+Adding a seated pose to shared presence looks like a new message and a new
+state block. It is neither. Sitting down *is* a move — onto the seat's own
+spot — so the seat index can ride on the existing `move` payload: the client's
+move floor already paces it, the reconcile loop already re-sends it until the
+server's copy matches, and the room's message budget does not change at all
+(`client-arena.test.ts` now also pins the message set, which is how that stays
+true). And because both sides share one frozen seat table, the wire needs only
+an index: the position, the facing and which bench it is all come out of the
+table. `PresenceState.seat` is therefore a single `int8`.
+
+Two things that only worked because of that shape. The server's whole rule is
+"the index is real, the position I just wrote is that seat's own spot, nobody
+else holds it, and you are on the street" — no geometry, no tolerance, no
+trust. That needs the seat spots to be **whole pixels**, since
+`normalizeCoordinate` rounds everything the room is sent; a spot derived at
+`x * 32 * 0.425` and compared with `===` would never match. And a client that
+mentions a seat the room refuses keeps re-sending it forever unless the
+reconcile comparison includes the seat, which is why `samePlacement` and the
+client's own view of its server entry both carry it.
+
+Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
+its sibling modules at the bottom, and `arena.ts` gets away with importing
+back from it only because every one of those imports is type-only; a *value*
+read back at module scope is a real ESM cycle and dies in the TDZ. The new
+`seats.ts` therefore keeps its own copy of `STREET_ORIGIN_X` with a test
+pinning the two together. And adding a field to a validated snapshot breaks
+every `toEqual` on it across three packages at once (51 tests here) — the
+field has to be added to the fixtures, not worked around.
+
+Also worth knowing: a bench did not need a "no cue" mechanism to look right —
+registering no affordance shell already leaves it dark. It needed one to *stay*
+right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
+even if a shell for that id turns up later.
+
+*Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
+`packages/world/src/world-session-benches.test.ts`,
+`packages/lobby/src/seats.test.ts`, plus a real-wire test in
+`packages/lobby/src/client.test.ts` where a second player's claim on a taken
+seat is refused and they stand on its spot instead. Renders from a WebGL
+harness in headless Chrome: `renders/benches-plaza.png`,
+`benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
+suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
+funds or transaction was used.
+
+---
+
 ### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
 
 The D-123 shimmer is tuned as a single global level, and the amendment that
@@ -14067,7 +14209,6 @@ was used; the live ledger's `leaf_count()` has not been re-read.
 ---
 
 ### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
-
 The arena (D-114) is a room, drawn at the interiors' origin over the hidden
 street (D-039). The city, the backdrop and D-124's south vista are all mounted
 in `street.ground`, which a room never shows — so outside the arena's arcade
@@ -14078,7 +14219,6 @@ mounting `backdropCity` and `createSouthVista` into the room's own group
 (`three/arena-surround.ts`, D-129). Verified by the arena room's draw-call test
 listing `arena:outside-city`, `arena:outside-windows` and the vista's six
 meshes, and by renders from the in-game camera on the sand and on the top tier.
-
 Two traps that cost time there. **The backdrop's plan is district-wide**: it
 lays fields and hedgerows west, east and south of the street as well as the
 city to the north, and at the offset that puts the city behind the arena's
@@ -14090,10 +14230,103 @@ tile) went from seconds to a 30 s timeout the moment the city joined the
 group. The surround is excluded from that sweep by name and held clear of the
 stadium by its bounding box instead, which is the assertion that actually
 matters — it is tens of tiles away, not a hair over a tier.
-
 Also: the room drew bare earth on its `void` tiles, which was invisible while
 there was nothing around it and became a hard-edged brown apron the moment
 there was a lawn. When you give a scene a world, re-check every surface that
 was only ever seen against nothing.
+## The arena's block and the emperor's box (D-128)
+Two traps cost time here, both about the gap between a test's shortcut and
+what a player can actually do.
+**A test may not teleport across a room.** `client-arena.test.ts` moved a new
+champion from the ring's return tile to the emperor's box with one
+`updatePosition`. The room refused every one of them and the test timed out on
+a position that never changed. `isAreaStepAllowed` (D-087) samples the
+straight line between two points and rejects the move if any sample is not
+walkable — and the line from the gate to the box runs clean through the ring's
+fence. The fix is a `walk` helper that steps round the fence tile by tile,
+waiting for the room to hold each step, which is also what a player does.
+Anything that asserts on a position in a shared room has to walk there.
+**A held key needs a release the gates cannot swallow.** Q is the World's only
+held action key, so `dom-keyboard.ts` gained `keyup-Q`. The press is gated like
+E; the release is gated by nothing except having seen that key go down, and is
+also delivered from blur, a hidden tab and `resetKeys`. Every one of those is a
+case where the real keyup lands somewhere else — over a panel, on another
+window — and a release that the gates ate would leave the fighter guarding on
+the server for ever. The same rule runs through the session (`setBlock(false)`
+is never gated on the ring, and `destroy` sends it) and the HUD's touch button
+(`pointerup`, `pointercancel`, `pointerleave` and a lost capture all lower it).
+*Verified:* the rules tests drive a simulated attacker — `ArenaAuthorityOptions.opponent`, a
+test-only seam putting a second player in the opponent slot — into a guarding
+fighter and assert 0 damage with the target's `blocks` counter up; the
+champion path runs against a real server in `client-arena.test.ts`, including
+the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
+`npm run typecheck` pass. One pre-existing flake was seen once and did not
+reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
+and then asserts `carrying` is null — unrelated to this work. Renders are from
+the offline rasteriser, not a GPU.
+---
+### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
+Every `ShadowAccountResolver` cached its own partial commitment "once per
+connection", and so did the placement's `LeaderboardReceipts`. Read route by
+route that is correct; read from the wallet it is five caches, and a placement
+check touches all five — the season commitment plus each feature shadow's
+commitment, and its partial again when the tally ranks DeFi. The lead saw it
+as "it requested to share the commitment a few times in the wallet". A prompt
+budget is a property of the connection, not of a route, so the cache has to
+live at the connection: one `WalletCommitmentCache` keyed by dapp name alone,
+handed to every route by `WalletApiPrivacyOperations`.
+The second half is that a read-only flow must never be allowed to prompt at
+all. A check now reads the feature shadows from the cache only
+(`cachedFullCommitment`, `cachedPartial`, both returning null when that
+counter has not been used), which means it can send fewer feature partials
+than before — so the tally had to stop treating "no partial" as "no points"
+and keep each claim's last verified count instead, taking the higher of
+stored and re-verified. That keeps "first claim wins" and adds nothing to what
+it already stores: it already held every claim's `h('strkworld-lb-feat',
+season, p_feature) -> entry` mapping.
+Also worth knowing: an optional member on the frozen `PrivacyOperations` seam
+needs `operations.test.ts` taught about it — its `SeamMethod` mapped type
+drops `(() => T) | undefined`, so the pinned-member check fails unless the
+mapping uses `-?` and `NonNullable`.
+*Verified:* `packages/privacy/src/wallet-api/commitment-cache.test.ts` counts
+every `strk20ShadowAccountCommitment` call against the real operations — one
+on a session's first check, zero on the next two, zero after a receipt shared
+`p`, and each dapp name exactly once across two receipts, three DeFi batches
+and two checks. Storage and console spies show nothing cached is written or
+logged. `apps/backend/src/leaderboard.test.ts` drives the kept counts, the
+monotonic update, a lost claim and the store file through the real service.
+Full suite (306 files, 6424 tests, merged with `origin/main` at 84b11a8) and
+`npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used; the prompt count in a real Ready wallet
+has not been observed.
+### 2026-10-03 — A guard with no message reads as a dead button
+The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
+refused the quote at 3.96% against a 3% bound, before anything was asked —
+correct behaviour on the ground floor, wrong on the degen floor, whose tokens
+are thin by definition. The expensive half was not the number. It was that the
+refusal threw `PrivacyError('unknown', …)`, so the log said `kind=unknown` and
+the panel said "That did not go through"; in the live quote path it was one
+faint note under an empty Buy field. Nobody could tell a refused swap from a
+broken button, and the real cause sat in the seam's message string, which the
+Shell is forbidden to render.
+Two rules came out of it, both now enforced by tests. **A guard that can refuse
+before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
+what both the log line and the counter's copy are keyed on, so `unknown` means
+"nobody can explain this". **A guard that refuses on a figure carries that
+figure on the throw**, as own data properties, so the counter can say "4.0%
+worse than the market price" without ever rendering the seam's own sentence.
+`SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
+no amount, no token — and `toFailure` reads them with the same own-descriptor
+discipline it reads `kind` with.
+*Verified:* reproduced red first — with the old throw restored,
+`apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
+`exchange-machine.test.ts` renders the generic copy. The figures survive two
+passes of `toFailure` and are dropped when malformed, negative, fractional or
+behind a throwing getter. The degen floor's own limits (12% / 800 bps) and the
+Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
+`swap-operations.test.ts`, the backend's two ceilings in `degen-route.test.ts`.
+Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used, and no live LORDS swap has been run under
+the new bound.
 
 ---

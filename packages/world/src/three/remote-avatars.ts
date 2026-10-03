@@ -124,6 +124,10 @@ export interface RemoteAvatarLayer3D {
   playSwing(gameId: string): void;
   /** D-114: the peer in the ring holds the battle stance; null for nobody. */
   setFighter(gameId: string | null): void;
+  /** D-128: the peer holding a block (the server's `guarding`); null for nobody. */
+  setBlocker(gameId: string | null): void;
+  /** D-128: the champion on the emperor's throne, drawn seated wherever they are; null for nobody. */
+  setThroned(gameId: string | null): void;
   /** Unsubscribe and retire every figure, once. Inert afterwards. */
   destroy(): void;
 }
@@ -180,6 +184,13 @@ interface RemoteAvatar {
   /** D-114: this peer's arena swing, and how long it has stood on a seat. */
   readonly swing: SwingClock;
   readonly seat: SeatTracker;
+  /**
+   * D-127: the bench seat this peer sits on, or null standing. Unlike the
+   * arena's tiers, which are derived from standing still on one, a bench seat
+   * is on the wire: a sitter is drawn seated from the first snapshot, with no
+   * settling delay and no guessing from a position.
+   */
+  benchSeat: number | null;
   /** Set once figure.update has thrown: the figure stops animating, the loop does not. */
   frozen: boolean;
   /** Set while dispose() runs and once it has returned; cleared if it throws. */
@@ -230,6 +241,9 @@ export function createRemoteAvatarLayer3D({
   let clock = 0;
   /** D-114: the peer in the ring, who holds the battle stance. */
   let fighter: string | null = null;
+  /** D-128: the peer holding a block, and the champion on the throne. */
+  let blocker: string | null = null;
+  let throned: string | null = null;
 
   /** Detach and dispose one figure; true once nothing of it is left owned. */
   const retire = (avatar: RemoteAvatar, errors: unknown[]): boolean => {
@@ -331,6 +345,7 @@ export function createRemoteAvatarLayer3D({
     const avatar = standingAvatar(id, figures(look), look, peer);
     // A peer first seen mid-session takes its counter as a baseline.
     avatar.jumps = peer.jumps ?? 0;
+    avatar.benchSeat = peer.seat ?? null;
     // First appearance lands at once on whatever the peer stands on.
     landOn(avatar, surfaceGoal(avatar));
     if (destroyed) {
@@ -379,6 +394,8 @@ export function createRemoteAvatarLayer3D({
       avatar.jumps = jumps;
       startJump(avatar);
     }
+    // D-127: sitting on a bench is state, not an event; it simply follows.
+    avatar.benchSeat = peer.seat ?? null;
   };
 
   /** D-097: play one jump from where the peer is drawn; a jump mid-air restarts it. */
@@ -546,8 +563,10 @@ export function createRemoteAvatarLayer3D({
   /** This frame's motion; the shared frozen values unless the arena adds to them. */
   const motionOf = (avatar: RemoteAvatar, dt: number, moving: boolean, jump: AvatarMotion['jump']): AvatarMotion => {
     const attack = avatar.swing.step(dt);
-    let seated = false;
-    if (seatAt) {
+    // D-127: a bench sitter sits because the room says so — no idle timer, and
+    // it holds while the figure eases onto the seat.
+    let seated = avatar.benchSeat !== null && !jump;
+    if (seatAt && !seated) {
       let onSeat = false;
       try {
         onSeat = seatAt(avatar.x, avatar.y) === true;
@@ -556,9 +575,13 @@ export function createRemoteAvatarLayer3D({
       }
       seated = avatar.seat.step(dt, moving || jump != null, onSeat);
     }
+    // D-128: the champion sits the moment the server says so, without the
+    // tiers' idle wait: the server put them on the throne, so they are on it.
+    if (throned === avatar.id) seated = true;
     const guard = fighter === avatar.id;
-    if (!attack && !seated && !guard) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
-    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated };
+    const blocking = blocker === avatar.id;
+    if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
+    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking };
   };
 
   return {
@@ -570,6 +593,14 @@ export function createRemoteAvatarLayer3D({
     setFighter(gameId) {
       if (destroyed) return;
       fighter = typeof gameId === 'string' ? gameId : null;
+    },
+    setBlocker(gameId) {
+      if (destroyed) return;
+      blocker = typeof gameId === 'string' ? gameId : null;
+    },
+    setThroned(gameId) {
+      if (destroyed) return;
+      throned = typeof gameId === 'string' ? gameId : null;
     },
     setVisible(visible) {
       // A visibility callback that outlives teardown is stale, not an error.
@@ -652,6 +683,7 @@ function standingAvatar(
     jumpShadow: null,
     swing: createSwingClock(),
     seat: createSeatTracker(),
+    benchSeat: peer.seat ?? null,
     frozen: false,
     disposed: false,
   };

@@ -330,6 +330,26 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       this.#registry.arenaLeave(client.sessionId, performance.now());
       this.#scheduleArena();
     });
+
+    /*
+     * D-128. The block's two intents and the emperor's box. A block changes
+     * no position, so no view goes stale and no clock needs starting beyond
+     * the one the fight already runs. An accepted press at the box moves the
+     * champion onto (or off) the throne, so views are stale then.
+     */
+    this.onMessage(MESSAGE.arenaBlock, (client: Client) => {
+      this.#registry.arenaBlock(client.sessionId, true, performance.now());
+    });
+
+    this.onMessage(MESSAGE.arenaUnblock, (client: Client) => {
+      this.#registry.arenaBlock(client.sessionId, false, performance.now());
+    });
+
+    this.onMessage(MESSAGE.arenaSit, (client: Client) => {
+      if (this.#registry.arenaSit(client.sessionId, performance.now()) === 'applied') {
+        this.#viewsStale = true;
+      }
+    });
   }
 
   override onJoin(client: Client, options?: unknown): void {

@@ -3926,6 +3926,18 @@ p.exchange-price-check[data-status="unchecked"] {
   border-radius: var(--ui-radius-inner);
   background: var(--ui-surface-raised);
 }
+/*
+ * D-126: the small, non-blocking line a quote carries when it passes its
+ * floor's oracle bound but still sits more than 3% below Pragma's price, and
+ * the second line on a ground-floor refusal that points upstairs. Subtle on
+ * purpose: the theme's own warning colour (D-119/D-121) at the panel's body
+ * size, with no surface, no border and no button. Nothing here gates a swap.
+ */
+.exchange-price-warning {
+  margin: 0.4rem 0 0;
+  color: var(--ui-warn);
+  font-size: 0.9rem;
+}
 .exchange-acknowledge {
   display: flex;
   gap: 0.5em;
@@ -4604,6 +4616,74 @@ button.ui-link-button {
   min-block-size: 7.5rem;
   border-radius: 50%;
   font-size: 1.15rem;
+}
+
+/* D-128: BLOCK sits beside STRIKE, a touch smaller and in the window fill,
+   so the attack stays the loud one. Held, it lights gold. */
+.arena-hud-block {
+  min-inline-size: 5.5rem;
+  min-block-size: 5.5rem;
+  border-radius: 50%;
+  font-size: 1rem;
+  background: var(--arena-panel);
+  box-shadow: inset 0 0 0 2px var(--arena-rim), 0 5px 0 var(--arena-outline);
+  touch-action: none;
+}
+
+.arena-hud-block[data-state="held"] {
+  background: var(--arena-gold);
+  color: var(--arena-outline);
+}
+
+/* D-128: the two combat keys, low and centred, above the key chip's band.
+   A Silkscreen keycap on an Ember block, the words in VT323 (D-119/D-121). */
+.arena-hud-hints {
+  position: absolute;
+  bottom: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.arena-hud-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--arena-panel);
+  border: 3px solid var(--arena-outline);
+  box-shadow: inset 0 0 0 2px var(--arena-rim);
+  border-radius: 3px;
+}
+
+.arena-hud-key {
+  font-family: var(--arena-button);
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--arena-cream);
+  background: var(--arena-ember);
+  border: 3px solid var(--arena-outline);
+  border-radius: 2px;
+  padding: 0.2rem 0.4rem;
+}
+
+.arena-hud-hint-text {
+  font-family: var(--arena-body);
+  font-size: 1.3rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--arena-cream);
+}
+
+.arena-hud-hint[data-state="held"] .arena-hud-key {
+  background: var(--arena-gold);
+  color: var(--arena-outline);
+}
+
+.arena-hud-hint[data-state="held"] .arena-hud-hint-text {
+  color: var(--arena-gold);
 }
 
 .arena-hud-live {
