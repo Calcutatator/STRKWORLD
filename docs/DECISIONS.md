@@ -2799,6 +2799,28 @@ was 6 STRK (`get_fee_amount()` = 6e18 at mainnet block 15,523,237).
 - A governance fee rise is absorbed automatically: the live fee always wins
   over the 10 STRK floor.
 
+*Amended 2026-10-03, after the lead reported "I went to the bridge counter and
+it's not popping up an interface":* the DEPOSIT counter's lock is the account
+and the reserve planner — the two things it is named after and the two things
+production has from boot — and nothing else. It is no longer also locked on the
+optional recovery runtime (`bridge/production-runtime.ts`), which is fetched
+only when the player walks into the Bridge and which some browsers never
+supply at all: its Web Storage write probe refuses in a private window, with
+site data blocked, or on a full quota, and its chunk can simply fail to load.
+`BridgeProvider` published that runtime's absence as "no account, no planner",
+so the counter resolved `locked`/`capability-unavailable` — and since D-123 a
+locked counter has no shimmer, no key chip and swallows E, so the player got no
+window and no message, and the `capability-unavailable` line the Shell prepares
+could never reach the screen. The counter now opens, and its own window reports
+the runtime: "still starting up" while the load is in flight, and D-043's
+"saved recovery is unavailable in this browser" once the loader has answered
+with nothing. Nothing pretends to persist signed evidence it cannot save, and a
+build with shield off still has no planner, so the Bridge stays recovery-only
+exactly as above. Tests: `visits/counter-press-e.flow.test.tsx` (the counter
+opens on E while the runtime is still arriving; locked with no planner),
+`visits/bridge-entry.test.tsx` (open from the door, open when the loader
+answers with nothing, locked with no planner or no account).
+
 ---
 
 ## D-062 — The funded tester may enable the pool-native STRK unshield route

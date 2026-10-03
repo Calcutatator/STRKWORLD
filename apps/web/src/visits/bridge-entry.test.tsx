@@ -16,6 +16,13 @@ import { VisitLayer } from './VisitLayer.js';
  * account and the D-061 planner, and no service until the loader answers.
  * Before this, only BridgePanel's mount started the load, so the Game Mode
  * deposit station stayed locked until the player had opened Menu Mode once.
+ *
+ * D-061, amended: the DEPOSIT counter's lock reads the account and the
+ * planner, which production has from boot — not the optional recovery
+ * runtime, which arrives over the network and in some browsers never does.
+ * So the counter is open from the door and its window reports the runtime;
+ * a counter locked on something invisible is a counter that, since D-123,
+ * shows nothing and swallows E.
  */
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -23,13 +30,16 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 
-afterEach(() => {
+/** Unmount the tree, so a case that mounts several runs them one at a time. */
+function cleanUp(): void {
   const owner = root;
   root = null;
   if (owner) act(() => owner.unmount());
   container?.remove();
   container = null;
-});
+}
+
+afterEach(cleanUp);
 
 async function settle(): Promise<void> {
   await act(async () => {
@@ -37,19 +47,29 @@ async function settle(): Promise<void> {
   });
 }
 
-function harness(loadRuntime: BridgeRuntimeLoader) {
+function harness(
+  loadRuntime: BridgeRuntimeLoader,
+  capability: { account: string | null; planner: PublicShieldPlanner | null } = {
+    account: '0xabc',
+    planner: { planMax: async () => { throw new Error('not planned in this test'); } },
+  },
+) {
   const world = createEventBus<WorldEvents>();
   const shell = createEventBus<ShellEvents>();
   const snapshots: ShellEvents['world:stations'][] = [];
   shell.on('world:stations', (payload) => snapshots.push(payload));
-  const planner: PublicShieldPlanner = { planMax: async () => { throw new Error('not planned in this test'); } };
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root!.render(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
-        <BridgeProvider loadRuntime={loadRuntime} account="0xabc" readAccount={() => '0xabc'} planner={planner}>
+        <BridgeProvider
+          loadRuntime={loadRuntime}
+          account={capability.account}
+          readAccount={() => capability.account}
+          planner={capability.planner}
+        >
           <VisitLayer world={world} shell={shell} />
         </BridgeProvider>
       </PrivacyProvider>,
@@ -77,9 +97,9 @@ describe('entering the Bridge loads its runtime', () => {
     await act(async () => world.emit('building:entered', { building: 'bridge' }));
     await settle();
     expect(loadRuntime).toHaveBeenCalledOnce();
-    // The door snapshot predates the runtime; the next one follows its arrival,
-    // so the World admits the station in this same visit, with no Menu Mode.
-    expect(bridgeStations()).toEqual([['bridge:deposit:locked'], ['bridge:deposit:available']]);
+    // The counter is open on the door snapshot: the account and the planner
+    // are the capability, and both were there before the runtime was asked for.
+    expect(bridgeStations()).toEqual([['bridge:deposit:available']]);
 
     // Coming back later needs no second load, and the door already knows.
     await act(async () => world.emit('building:exited', { building: 'bridge' }));
@@ -104,23 +124,41 @@ describe('entering the Bridge loads its runtime', () => {
     await act(async () => land());
     await settle();
 
-    // No Bank station reads a Bridge capability, so its door snapshot stands.
+    // No Bank station reads a Bridge capability, so its door snapshot stands,
+    // and a runtime landing elsewhere republishes no room.
     expect(bankStations()).toEqual([['bank:shielding:available', 'bank:unshielding:available', 'bank:staking:available', 'bank:unstaking:available']]);
-    expect(bridgeStations()).toEqual([['bridge:deposit:locked']]);
+    expect(bridgeStations()).toEqual([['bridge:deposit:available']]);
 
-    // The Bridge's next door snapshot reads the runtime that landed.
     await act(async () => world.emit('building:exited', { building: 'bank' }));
     await act(async () => world.emit('building:entered', { building: 'bridge' }));
-    expect(bridgeStations()).toEqual([['bridge:deposit:locked'], ['bridge:deposit:available']]);
+    expect(bridgeStations()).toEqual([['bridge:deposit:available'], ['bridge:deposit:available']]);
   });
 
-  it('keeps the station locked when the optional runtime cannot load', async () => {
+  it('keeps the counter open when the optional runtime cannot load, so its window can say so', async () => {
     const loadRuntime = vi.fn(async () => null);
     const { world, bridgeStations } = harness(loadRuntime);
 
     await act(async () => world.emit('building:entered', { building: 'bridge' }));
     await settle();
     expect(loadRuntime).toHaveBeenCalledOnce();
-    expect(bridgeStations()).toEqual([['bridge:deposit:locked']]);
+    // A browser with Web Storage blocked or full gets no recovery runtime
+    // (`production-runtime.ts`). The counter must still answer E: the window
+    // is the only place that can tell the player what is unavailable.
+    expect(bridgeStations()).toEqual([['bridge:deposit:available']]);
+  });
+
+  it('locks the counter when this build has no planner (D-061), with no account, and with neither', async () => {
+    const loadRuntime = vi.fn(async () => ({ service: {} as never, loadSources: async () => [] }));
+    for (const [name, props] of [
+      ['no planner', { account: '0xabc' as const, planner: null }],
+      ['no account', { account: null, planner: { planMax: async () => { throw new Error('unused'); } } }],
+      ['neither', { account: null, planner: null }],
+    ] as const) {
+      const { world, bridgeStations } = harness(loadRuntime, props);
+      await act(async () => world.emit('building:entered', { building: 'bridge' }));
+      await settle();
+      expect(bridgeStations(), name).toEqual([['bridge:deposit:locked']]);
+      cleanUp();
+    }
   });
 });
