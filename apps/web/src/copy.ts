@@ -998,6 +998,17 @@ export const COPY = freezeCopy({
     countdownLive: 'Kick off in',
   },
 
+  /**
+   * D-133: the Exchange roof's lookout swing (`roof/SwingHud.tsx`). One
+   * hint, shown to the rider only. Game copy: no money, no names, no
+   * disclosure. The World's own chip words (`SWING`, `IN USE`) live in
+   * `roof-swing-session.ts`.
+   */
+  swing: {
+    label: 'Lookout swing',
+    getOff: 'Esc to get off',
+  },
+
   presence: {
     connecting: 'Connecting to multiplayer…',
     connected: 'Multiplayer connected',
@@ -1043,7 +1054,7 @@ export const COPY = freezeCopy({
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
       { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you. A running jump carries you over the football without kicking it.' },
       { input: 'F', effect: 'Swap your outfit.' },
-      { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, an outfit in the Avatar Studio. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
+      { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, a character in the Garden. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
     ],
     buildingsTitle: 'Inside a building',
@@ -1230,6 +1241,17 @@ export const COPY = freezeCopy({
     half: '50%',
     maxLabel: 'Fill in the most you can use',
     halfLabel: 'Fill in half of the most you can use',
+    /**
+     * D-131: the balance line fills the amount. `{amount}` is the figure the
+     * line shows, `{fee}` the fee in the same asset the press keeps aside.
+     */
+    useBalance: 'Use full balance: {amount}',
+    useBalanceLessFee: 'Use {amount}, keeping the {fee} fee aside',
+    feeKeptAside: '{amount} fee kept aside',
+    /** Why the figure cannot be used: the fee in the same asset is the whole of it. */
+    balanceUnderFee: 'Too little here to cover the {fee} fee on top.',
+    /** The fee has not been read yet, so nothing honest can be filled in. */
+    balanceFeeUnknown: 'The pool fee is not known yet.',
     enterAmount: 'Enter an amount',
     chooseToken: 'Choose a token',
     insufficient: 'Insufficient {symbol}',

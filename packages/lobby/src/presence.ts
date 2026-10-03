@@ -5,7 +5,8 @@
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
  * throttling, suspend, presence areas (D-087), interest, the block sandbox's actions and returns
- * (D-060), the football's kicks and steps (D-078) and the arena ring (D-114) — is exercisable in a
+ * (D-060), the football's kicks and steps (D-078), the arena ring (D-114)
+ * and the roof's lookout swing (D-133) — is exercisable in a
  * plain unit test against the same objects that get encoded in production.
  *
  * Nothing here persists. When the last session leaves, the registry is empty
@@ -24,6 +25,7 @@ import {
   PITCH_SLOTS,
   isInsidePitchPen,
   pitchTileCentre,
+  roofTileCentre,
 } from '@strkworld/shared';
 import type {
   ArenaRingSnapshot,
@@ -33,6 +35,7 @@ import type {
   GameId,
   PitchMatchSnapshot,
   PresenceArea,
+  RoofSwingSnapshot,
   SandboxColumn,
   SandboxTile,
 } from '@strkworld/shared';
@@ -70,6 +73,13 @@ import {
   type ArenaSeatOutcome,
   type ArenaStance,
 } from './arena-rules.js';
+import { LobbySwing } from './swing.js';
+import {
+  SWING_RIDER_TILES,
+  type SwingClaimOutcome,
+  type SwingEvent,
+  type SwingLeaveOutcome,
+} from './swing-rules.js';
 import {
   ARENA_RING_KEY,
   ArenaRingEntry,
@@ -78,6 +88,8 @@ import {
   PitchMatchEntry,
   PitchSlotEntry,
   PresenceEntry,
+  SWING_KEY,
+  SwingEntry,
   type FootballEntry,
   type SandboxColumnEntry,
 } from './state.js';
@@ -202,6 +214,8 @@ export interface LobbyPresenceOptions {
   pitchDummyFill?: boolean;
   /** D-135: the round the pitch's next match increments from. A test seam (the wrap). */
   pitchRound?: number;
+  /** D-133: the round the roof swing's next claim increments from. A test seam (the wrap). */
+  swingRound?: number;
   /**
    * Randomness source for server-minted identifiers. Injectable so a test can
    * be deterministic; production uses `crypto.getRandomValues`.
@@ -285,6 +299,10 @@ export class LobbyPresence {
   readonly #pitch: LobbyPitch;
   /** The match entry itself, for the room to add to the views of street players near the pitch. */
   readonly #matchEntry: PitchMatchEntry;
+  /** D-133: the roof's lookout swing, mirrored into `state.swing`'s one entry. */
+  readonly #swing: LobbySwing;
+  /** The swing entry itself, for the room to add to roof views only. */
+  readonly #swingEntry: SwingEntry;
   /**
    * The latest time any call brought, for the rare transitions that come
    * without one (a suspend or a release called with no `now`). Never read
@@ -356,6 +374,12 @@ export class LobbyPresence {
       dummyFill: config.pitchDummyFill,
       ...(options.pitchRound === undefined ? {} : { round: options.pitchRound }),
     });
+    this.#swingEntry = new SwingEntry();
+    (this.state.swing as MapSchema<SwingEntry>).set(SWING_KEY, this.#swingEntry);
+    this.#swing = new LobbySwing(
+      this.#swingEntry,
+      options.swingRound === undefined ? {} : { round: options.swingRound },
+    );
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -414,13 +438,16 @@ export class LobbyPresence {
     // street keeps its rule, a clamp to the world.
     // D-114: the arena's challenger also walks the ring's interior.
     // D-128: the seated champion holds the emperor's box's own tile.
-    const extra = session.area !== 'arena'
-      ? undefined
-      : this.#arena.holdsRing(sessionKey)
+    // D-133: the roof swing's rider also stands on its seat tile.
+    const extra = session.area === 'arena'
+      ? this.#arena.holdsRing(sessionKey)
         ? ARENA_CHALLENGER_WALKABLE
         : this.#arena.holdsSeat(sessionKey)
           ? ARENA_THRONE_WALKABLE
-          : undefined;
+          : undefined
+      : session.area === 'roof' && this.#swing.holdsSeat(sessionKey)
+        ? SWING_RIDER_TILES
+        : undefined;
     if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y }, extra)) {
       this.#rejected += 1;
       return 'rejected';
@@ -549,6 +576,8 @@ export class LobbyPresence {
     if (session.area === 'arena') this.#arena.gone(sessionKey, 'left', now);
     // D-135: so does a player on the pitch — a dummy takes their place.
     if (session.area === 'street') this.#pitch.gone(sessionKey, 'left', now);
+    // D-133: so does a rider on the roof swing: the ride ends and nobody is put down.
+    if (session.area === 'roof') this.#swing.gone(sessionKey, 'left', now);
     // Every live position, the leaver's included, before their entry goes.
     const players = this.#livePlayers();
     session.suspended = true;
@@ -644,6 +673,9 @@ export class LobbyPresence {
       // D-114: the arena's challenger refreshing their look keeps the place
       // the room holds for them, wherever the request says they stand.
       if (area === 'arena' && this.#refreshFighter(session, sessionKey, request, now)) return true;
+      // D-133: and so does the roof swing's rider, whose seat is ledge to
+      // everyone else and so never passes the walkable check.
+      if (area === 'roof' && this.#refreshRider(session, sessionKey, request, now)) return true;
       this.suspend(sessionKey, now);
       return false;
     }
@@ -651,6 +683,7 @@ export class LobbyPresence {
     // into the ring (and will move them out), so a look change racing either
     // move must not write back where the client last thought it stood.
     if (area === 'arena' && this.#refreshFighter(session, sessionKey, request, now)) return true;
+    if (area === 'roof' && this.#refreshRider(session, sessionKey, request, now)) return true;
 
     if (session.suspended) {
       if (!this.#place(session.gameId, request)) return false;
@@ -665,6 +698,8 @@ export class LobbyPresence {
       if (!this.#throttle.stamp(sessionKey, now)) return false;
       // D-114: leaving the arena forfeits a fight in its ring, with no return.
       if (session.area === 'arena' && area !== 'arena') this.#arena.gone(sessionKey, 'left', now);
+      // D-133: leaving the roof ends a ride on its swing, with no step-off.
+      if (session.area === 'roof' && area !== 'roof') this.#swing.gone(sessionKey, 'left', now);
       if (session.area === 'street' && area !== 'street') {
         // D-135: a player on the pitch who walks into a building gives their
         // slot up, and a dummy takes it.
@@ -720,6 +755,9 @@ export class LobbyPresence {
     // D-135: and a player on the pitch is replaced by a dummy.
     this.#pitch.gone(sessionKey, 'disconnect', now);
     this.#pitch.forget(sessionKey);
+    // D-133: so does a rider on the roof swing.
+    this.#swing.gone(sessionKey, 'disconnect', now);
+    this.#swing.forget(sessionKey);
     const players = this.#livePlayers();
     this.peers.delete(session.gameId);
     this.#sessions.delete(sessionKey);
@@ -1250,6 +1288,110 @@ export class LobbyPresence {
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
       const at = arenaTileCentre(event.tile);
+      entry.position.x = at.x;
+      entry.position.y = at.y;
+      entry.facing = event.facing;
+      this.#throttle.stamp(event.key, now);
+      this.#movedAt.set(event.key, now);
+      moved = true;
+    }
+    return moved;
+  }
+
+  // -------------------------------------------------------------------------
+  // The roof's lookout swing — D-133
+  // -------------------------------------------------------------------------
+
+  /**
+   * Claim the roof swing for a session live on the roof, from the position
+   * the registry holds: the claim message carries nothing. An accepted claim
+   * moves the rider's held position onto the seat, facing south over the
+   * edge. Refusals are silent; the swing in state is the only answer.
+   */
+  swingClaim(sessionKey: string, now: number): SwingClaimOutcome {
+    this.#seen(now);
+    const session = this.#sessions.get(sessionKey);
+    const entry = session === undefined || session.suspended ? undefined : this.peers.get(session.gameId);
+    const outcome = this.#swing.claim(
+      {
+        key: sessionKey,
+        gameId: session?.gameId ?? ('' as GameId),
+        area: entry === undefined ? null : (session as Session).area,
+        x: entry?.position.x ?? Number.NaN,
+        y: entry?.position.y ?? Number.NaN,
+      },
+      now,
+    );
+    this.#applySwingEvents(this.#swing.advance(now), now);
+    return outcome;
+  }
+
+  /** Get off the swing early (Esc, or the HUD): the ride ends as `left`. Silent like every refusal. */
+  swingLeave(sessionKey: string, now: number): SwingLeaveOutcome {
+    this.#seen(now);
+    const outcome = this.#swing.leave(sessionKey, now);
+    this.#applySwingEvents(this.#swing.advance(now), now);
+    return outcome;
+  }
+
+  /**
+   * Run the swing's deadlines up to `now` and keep `secondsLeft` current.
+   * Returns whether anyone was moved (the cooldown's close puts the rider
+   * down), so the room knows its views are stale.
+   */
+  swingTick(now: number): boolean {
+    this.#seen(now);
+    return this.#applySwingEvents(this.#swing.advance(now), now);
+  }
+
+  /** Whether the swing has a deadline pending: the room keeps its clock running while true. */
+  get swingActive(): boolean {
+    return this.#swing.active;
+  }
+
+  /** The swing as the authority holds it, at `now`. Frozen. */
+  swingSnapshot(now: number): RoofSwingSnapshot {
+    return this.#swing.snapshot(now);
+  }
+
+  /** The swing's one schema entry, which the room adds to roof members' views only. */
+  get swingEntry(): SwingEntry {
+    return this.#swingEntry;
+  }
+
+  /** Whether a connection is live on the roof, and so may be sent the swing. */
+  isRoofMember(sessionKey: string): boolean {
+    return this.areaFor(sessionKey) === 'roof';
+  }
+
+  /**
+   * The refresh rule, as the arena's: a same-area `area` request from the
+   * swing's rider updates the sprite only. The seat is ledge to everyone
+   * else, so a rider's own placement never passes the walkable check and a
+   * look change mid-ride would otherwise suspend them.
+   */
+  #refreshRider(session: Session, sessionKey: string, request: AreaRequest, now: number): boolean {
+    if (session.suspended || session.area !== 'roof' || !this.#swing.holdsSeat(sessionKey)) return false;
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return false;
+    if (!this.#throttle.stamp(sessionKey, now)) return false;
+    entry.sprite = normalizeSprite(ownDataField(request, 'sprite'), this.#spriteKeys, this.#defaultSprite);
+    return true;
+  }
+
+  /**
+   * Stand each placed session where the swing says, if it is still live on
+   * the roof. A server move, like the arena's: the move floor is stamped so
+   * the next client move waits a full interval.
+   */
+  #applySwingEvents(events: readonly SwingEvent[], now: number): boolean {
+    let moved = false;
+    for (const event of events) {
+      const session = this.#sessions.get(event.key);
+      if (session === undefined || session.suspended || session.area !== 'roof') continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      const at = roofTileCentre(event.tile);
       entry.position.x = at.x;
       entry.position.y = at.y;
       entry.facing = event.facing;

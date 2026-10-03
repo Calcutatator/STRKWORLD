@@ -13,7 +13,7 @@ import {
   plazaStationAtApproach,
   plazaStations,
 } from './map/plaza.js';
-import { ARENA_PIT_AREA, ARENA_PIT_PATH } from './map/arena-pit.js';
+import { COLOSSEUM_AREA, COLOSSEUM_PATH } from './map/colosseum.js';
 import { createStreetMap, isSolidAt } from './map/street.js';
 import { createNullLabelFactory } from './three/labels.js';
 import { PLACEMENT_BOARD_TEXT } from './three/plaza-builder.js';
@@ -104,7 +104,7 @@ describe('the placement stand on the map', () => {
     // West of the Avatar Studio's path, so the pit that branches off it (D-114) is clear too.
     const studio = map.avatarStudioEntrance;
     for (const [x] of [...mine, ...ringOf(PLACEMENT_STAND)]) expect(x).toBeLessThan(studio.x);
-    expect(PLACEMENT_STAND.x + 1).toBeLessThan(Math.min(ARENA_PIT_AREA.x, ARENA_PIT_PATH.x));
+    expect(PLACEMENT_STAND.x + 1).toBeLessThan(Math.min(COLOSSEUM_AREA.x, COLOSSEUM_PATH.x));
   });
 
   it('has an approach ring of its own, so E is never ambiguous', () => {

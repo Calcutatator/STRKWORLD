@@ -7,7 +7,7 @@ import {
   type Facing,
 } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
-import { ARENA_PIT_BUILDING, ARENA_PIT_DOOR, paintArenaPit } from './arena-pit.js';
+import { COLOSSEUM_BUILDING, COLOSSEUM_DOOR, paintColosseum } from './colosseum.js';
 import { BUNKER_BUILDING, BUNKER_DOOR, paintBunker } from './bunker.js';
 import { paintPitch } from './pitch.js';
 import { paintPlaza } from './plaza.js';
@@ -43,9 +43,9 @@ export type TileKind =
   | 'railing'
   | 'stairhead'
   | 'service'
-  | 'pitrim'
-  | 'pitbowl'
-  | 'pitstep';
+  | 'colwall'
+  | 'colcore'
+  | 'colstep';
 
 export interface TileSpec {
   kind: TileKind;
@@ -106,22 +106,23 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    */
   service: Object.freeze({ kind: 'service', solid: true, colour: 0x6f6a66 }),
   /**
-   * The gladiator pit's rim (D-114): a low parapet of weathered blocks round
-   * the sunken bowl, and the arch's gateposts. Solid; the renderer stands the
-   * rim, the posts and the braziers on these.
+   * The Colosseum's outer wall (D-114, D-129): the ring of masonry round the
+   * stadium, the grand arch's piers included. Solid; the renderer stands the
+   * stacked arcades, the attic and the cressets on these.
    */
-  pitrim: Object.freeze({ kind: 'pitrim', solid: true, colour: 0x8f8574 }),
+  colwall: Object.freeze({ kind: 'colwall', solid: true, colour: 0x8f8574 }),
   /**
-   * The gladiator pit's sunken bowl (D-114). Solid: nobody walks down into
-   * it, the arch's door takes them into the arena. The street ground skips
-   * these tiles and the pit builder draws the bowl below the lawn.
+   * What the Colosseum's wall encloses (D-114, D-129). Solid: nobody walks
+   * in off the street, the grand arch's door takes them into the arena. The
+   * street ground skips these tiles and the builder draws the sand bowl the
+   * camera glimpses over the near wall.
    */
-  pitbowl: Object.freeze({ kind: 'pitbowl', solid: true, colour: 0xcdb38a }),
+  colcore: Object.freeze({ kind: 'colcore', solid: true, colour: 0xcdb38a }),
   /**
-   * The gladiator pit's threshold under its arch (D-114), at pavement
+   * The Colosseum's threshold under its grand arch (D-114), at pavement
    * height. Walkable: it carries the arena's door.
    */
-  pitstep: Object.freeze({ kind: 'pitstep', solid: false, colour: 0x9d9384 }),
+  colstep: Object.freeze({ kind: 'colstep', solid: false, colour: 0x9d9384 }),
 });
 
 /**
@@ -237,7 +238,10 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // sandbox square at its east end (D-060), and the pitch square lies west of
   // it (D-078).
   const width = SANDBOX_AREA.x + SANDBOX_AREA.width;
-  const height = 28;
+  // D-134: the district is five rows deeper than the two end squares. Those
+  // five rows are the south lawn the Garden's gate stands at the far end of,
+  // so the gate is well clear of the Colosseum, the plaza and the spawn.
+  const height = 33;
 
   const tiles: TileKind[][] = Array.from({ length: height }, () =>
     Array.from({ length: width }, () => 'grass' as TileKind),
@@ -313,9 +317,9 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     });
   }
 
-  // The hidden Avatar Studio has no facade or BUILDINGS entry. It is reached
-  // by a two-tile path that continues directly south from the spawn column to
-  // the bottom edge, where the offscreen trigger lives.
+  // The Garden has no facade or BUILDINGS entry. It is reached by a two-tile
+  // stone path that continues directly south from the spawn column, across
+  // the south lawn, to the arch standing in the bottom hedge (D-134).
   fill(tiles, X + 23, 17, 2, height - 17, 'pavement');
 
   // The Privacy Plaza (D-076): a paved square below the south pavement at the
@@ -328,10 +332,10 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // Unmarked: no facade, no sign, no label (see bunker.ts).
   paintBunker(tiles);
 
-  // The gladiator pit (D-114): a sunken stone bowl on the south lawn just
-  // east of the Studio's path, its arch on its west front and a short stone
-  // path branching east off the Studio's path to it (see arena-pit.ts).
-  paintArenaPit(tiles);
+  // The Colosseum (D-114, D-129): the stadium on the south lawn just east of
+  // the Studio's path, its grand arch on its west front and a short stone
+  // path branching east off the Studio's path to it (see colosseum.ts).
+  paintColosseum(tiles);
 
   // The football pitch square where the road begins (D-078): its walkway,
   // field and furniture, and the fence on its street side with a gate where
@@ -348,7 +352,10 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   const gateTop = SANDBOX_ENTRANCE.y;
   const gateBottom = SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height;
   fill(tiles, SANDBOX_AREA.x - 1, SANDBOX_AREA.y, 1, gateTop - SANDBOX_AREA.y, 'fence');
-  fill(tiles, SANDBOX_AREA.x - 1, gateBottom, 1, SANDBOX_AREA.y + SANDBOX_AREA.height - gateBottom, 'fence');
+  // South of the gate the wall runs the full depth of the map, not just of
+  // the square (D-134): the district is deeper than the square, and a wall
+  // that stopped at the square's south edge could be walked round.
+  fill(tiles, SANDBOX_AREA.x - 1, gateBottom, 1, Math.max(SANDBOX_AREA.y + SANDBOX_AREA.height, height) - gateBottom, 'fence');
 
   return {
     name: 'street',
@@ -358,12 +365,12 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     // The hidden stair's top step is a door like the others, so entering and
     // leaving reuse the rooms' machinery; it is added here rather than in the
     // Tiled layer, whose loader admits only `BUILDINGS` (D-107). So is the
-    // gladiator pit's arch (D-114).
+    // Colosseum's grand arch (D-114).
     doors: [
       ...objectLayerToDoors(doorObjects, { width, height }),
       { building: BUNKER_BUILDING, ...BUNKER_DOOR, locked: false },
-      // The pit's arch (D-114), likewise a codename building outside `BUILDINGS`.
-      { building: ARENA_PIT_BUILDING, ...ARENA_PIT_DOOR, locked: false },
+      // The Colosseum's grand arch (D-114), likewise a codename building outside `BUILDINGS`.
+      { building: COLOSSEUM_BUILDING, ...COLOSSEUM_DOOR, locked: false },
     ],
     exteriorLabels,
     avatarStudioEntrance: { x: X + 23, y: height - 1, width: 2, height: 1 },
@@ -494,7 +501,11 @@ export function doorAt(map: DistrictMap, tileX: number, tileY: number): DoorZone
   return null;
 }
 
-/** Which bottom-edge tile enters the hidden Avatar Studio? */
+/**
+ * Which bottom-edge tile is the Garden's arch standing over? These are the
+ * arch's own opening tiles — being on one is necessary to go in, but since
+ * D-134 it is not sufficient: see `entersAvatarStudio`.
+ */
 export function isAvatarStudioEntrance(
   map: DistrictMap,
   tileX: number,
@@ -507,6 +518,31 @@ export function isAvatarStudioEntrance(
     tileY >= entrance.y &&
     tileY < entrance.y + entrance.height
   );
+}
+
+/**
+ * D-134: did this step walk the player THROUGH the Garden's arch?
+ *
+ * The arch is a doorway, not a tripwire. Standing on its opening is not
+ * enough: the step has to be a step *into* it, southward, from the tile
+ * north of it — the move a player makes when they mean to go in. Walking
+ * along the bottom hedge across the opening, or brushing the piers either
+ * side of it, keeps `from.y === to.y` and leaves the player on the street.
+ *
+ * This is deliberately a step rule rather than a facing rule. Facing is a
+ * presentation value that a camera turn or a wall slide can change while the
+ * player stands still; the tile they came from cannot.
+ */
+export function entersAvatarStudio(
+  map: DistrictMap,
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+): boolean {
+  if (!isAvatarStudioEntrance(map, to.x, to.y)) return false;
+  // Already under the arch: sidestepping between its two opening tiles is
+  // not walking through it either.
+  if (isAvatarStudioEntrance(map, from.x, from.y)) return false;
+  return to.y > from.y;
 }
 
 /**

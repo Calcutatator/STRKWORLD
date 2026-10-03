@@ -14,6 +14,7 @@ import { ArrivalNudgeProvider } from './bridge/ArrivalNudgeProvider.js';
 import { HudLayer } from './hud/HudLayer.js';
 import { ArenaHud } from './arena/ArenaHud.js';
 import { PitchHud } from './pitch/PitchHud.js';
+import { SwingHud } from './roof/SwingHud.js';
 import type { DegenCatalogSource } from './panels/exchange/degen-catalog.js';
 import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js';
 import { SeamEntryGate } from './connect/EntryGate.js';
@@ -98,12 +99,14 @@ export function App({
         football={presence.football}
         arena={presence.arena}
         pitch={presence.pitch}
+        roofSwing={presence.roofSwing}
         vaultOpen={VAULT_DOOR_OPEN}
         placementStand={PLACEMENT_STAND}
       />
       <HudLayer shell={shellIn} onSignOut={onSignOut} />
       {presence.arena ? <ArenaHud arena={presence.arena} /> : null}
       {presence.pitch ? <PitchHud pitch={presence.pitch} /> : null}
+      {presence.roofSwing ? <SwingHud swing={presence.roofSwing} /> : null}
       <VisitLayer world={worldOut} shell={shellIn} />
       <PresenceStatusLayer presence={presence} world={worldOut} />
       <SessionNoticeLayer />

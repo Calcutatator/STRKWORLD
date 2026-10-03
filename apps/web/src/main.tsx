@@ -15,6 +15,8 @@ import { createFootballController } from './football/football-controller.js';
 import { createArenaController } from './arena/arena-controller.js';
 import { createPitchController } from './pitch/pitch-controller.js';
 import { createArenaAuthority } from '@strkworld/lobby/arena';
+import { createSwingController } from './roof/swing-controller.js';
+import { createSwingAuthority } from '@strkworld/lobby/swing';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet, withLeaderboardProbe } from './production/config.js';
 import { detectLeaderboardProbe, leaderboardProbe } from './production/leaderboard-probe.js';
@@ -77,14 +79,21 @@ const stopArenaWorld = arena.listen(worldOut);
 // one, and solo play already has the open pitch (D-078) — so this has no solo
 // half: offline its channel simply holds no match and the HUD draws nothing.
 const pitch = createPitchController();
+// The Exchange roof's lookout swing (D-133), likewise: the lobby's swing
+// while connected, the same rules locally for solo play, one stable channel
+// for the World and the swing's HUD hint.
+const roofSwing = createSwingController({ solo: () => createSwingAuthority() });
+const stopSwingWorld = roofSwing.listen(worldOut);
 const createPresence = (): PresenceController => {
   const next = createPresenceController({
     endpoint: lobbyEndpoint(),
-    factory: (options) => pitch.adopt(arena.adopt(football.adopt(sandbox.adopt(new LobbyClient(options))))),
+    factory: (options) =>
+      roofSwing.adopt(pitch.adopt(arena.adopt(football.adopt(sandbox.adopt(new LobbyClient(options)))))),
     sandbox: sandbox.channel,
     football: football.channel,
     arena: arena.channel,
     pitch: pitch.channel,
+    roofSwing: roofSwing.channel,
   });
   activePresence = next;
   return next;
@@ -101,6 +110,8 @@ const presenceLifecycle = {
     stopArenaWorld();
     arena.destroy();
     pitch.destroy();
+    stopSwingWorld();
+    roofSwing.destroy();
     await activePresence?.destroy();
   },
 };

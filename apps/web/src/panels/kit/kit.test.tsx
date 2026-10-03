@@ -54,9 +54,9 @@ function Field(props: Partial<Parameters<typeof AmountField>[0]> & { initial?: s
 }
 
 describe('AmountField', () => {
-  it('has no Max or 50% unless the panel asks for them', () => {
+  it('has no Max or 50% unless the panel asks for them; the balance figure is always its own button (D-131)', () => {
     const view = render(<Field balance={12n * ONE} />);
-    expect(view.querySelectorAll('button')).toHaveLength(0);
+    expect([...view.querySelectorAll('button')].map((node) => node.className)).toEqual(['ui-figure ui-balance-fill']);
     expect(view.querySelector('.ui-amount-balance')!.textContent).toBe(`${COPY.kit.poolBalance}: 12 STRK`);
   });
 
@@ -142,6 +142,114 @@ describe('AmountField', () => {
   it('takes a token selector in its slot', () => {
     render(<Field token={<TokenSelect label="Token" labelHidden value={STRK} options={[{ token: STRK, symbol: 'STRK', decimals: 18 }]} onChange={() => {}} />} />);
     expect(container!.querySelector('.ui-amount-token select')).not.toBeNull();
+  });
+});
+
+/**
+ * D-131: the figure on the balance line fills the amount with itself. The
+ * figure the field fills in is exact, in the token's own decimals, so the
+ * field's own checks and the panel's review take it unchanged; a fee charged
+ * in the same asset on top is kept aside, as a Max keeps it.
+ */
+describe('the balance line fills the amount (D-131)', () => {
+  const fill = () => container!.querySelector<HTMLButtonElement>('button.ui-balance-fill')!;
+  const value = () => container!.querySelector('input')!.value;
+  const hint = () => container!.querySelector('.ui-amount-hint')?.textContent ?? null;
+
+  it('fills the whole balance, exactly, when no fee in this asset comes on top', () => {
+    const balance = 16n * ONE;
+    render(<Field balance={balance} />);
+    expect(fill().getAttribute('aria-label')).toBe('Use full balance: 16 STRK');
+    act(() => fill().click());
+    expect(value()).toBe('16');
+    expect(hint()).toBeNull();
+    expect(container!.querySelector('.ui-amount-message')!.textContent).toBe('');
+  });
+
+  it('fills the balance less a fee in the same asset, and says what it kept aside', () => {
+    const fee = 6n * ONE;
+    const balance = 100n * ONE;
+    render(<Field balance={balance} balanceFee={fee} limit={balance - fee} />);
+    expect(fill().getAttribute('aria-label')).toBe('Use 94 STRK, keeping the 6 STRK fee aside');
+    act(() => fill().click());
+    expect(value()).toBe('94');
+    expect(hint()).toBe('6 STRK fee kept aside');
+    // What it filled passes the field's own check, fee and all.
+    expect(container!.querySelector('.ui-amount-message')!.textContent).toBe('');
+  });
+
+  it('fills every decimal place the token has, with no trailing zeros and nothing rounded up', () => {
+    const fee = 6n * ONE;
+    // 12.500000000000000001 STRK: the line shows 12.5, the field takes it all.
+    const balance = 12n * ONE + 5n * 10n ** 17n + 1n;
+    render(<Field balance={balance} balanceFee={fee} limit={balance - fee} />);
+    expect(container!.querySelector('.ui-amount-balance')!.textContent).toBe(`${COPY.kit.poolBalance}: 12.5 STRK`);
+    act(() => fill().click());
+    expect(value()).toBe('6.500000000000000001');
+    act(() => root!.render(<Field balance={2_500_000n} decimals={6} symbol="USDC" />));
+    act(() => fill().click());
+    expect(value()).toBe('2.5');
+  });
+
+  it('never fills above the field\'s own limit', () => {
+    render(<Field balance={100n * ONE} limit={40n * ONE} />);
+    act(() => fill().click());
+    expect(value()).toBe('40');
+  });
+
+  it('is a real button the keyboard reaches, which Enter and Space press, and it takes no other key', () => {
+    render(<Field balance={16n * ONE} />);
+    const target = fill();
+    expect(target.tagName).toBe('BUTTON');
+    expect(target.type).toBe('button');
+    expect(target.disabled).toBe(false);
+    act(() => target.focus());
+    expect(document.activeElement).toBe(target);
+    // Enter and Space are a button's own activation, which fires this press.
+    act(() => target.click());
+    expect(value()).toBe('16');
+    // The game's E key is nobody's here: no handler, nothing swallowed.
+    const pressE = new KeyboardEvent('keydown', { code: 'KeyE', bubbles: true, cancelable: true });
+    act(() => { target.dispatchEvent(pressE); });
+    expect(pressE.defaultPrevented).toBe(false);
+    expect(value()).toBe('16');
+  });
+
+  it('has no figure to press before a balance is read, and leaves Refresh alone', () => {
+    const refresh = vi.fn();
+    render(<Field balanceAction={<button type="button" className="ui-chip" onClick={refresh}>Refresh</button>} />);
+    expect(container!.querySelector('.ui-amount-balance')).toBeNull();
+    expect(container!.querySelector('button.ui-balance-fill')).toBeNull();
+    // Once read, the figure is pressable and Refresh still does its own job.
+    act(() => root!.render(<Field balance={16n * ONE} balanceAction={<button type="button" className="ui-chip" onClick={refresh}>Refresh</button>} />));
+    act(() => button('Refresh').click());
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(value()).toBe('');
+    act(() => fill().click());
+    expect(value()).toBe('16');
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot be pressed when the fee in the same asset is the whole balance, and says why', () => {
+    const fee = 6n * ONE;
+    render(<Field balance={fee} balanceFee={fee} limit={0n} />);
+    expect(container!.querySelector('button.ui-balance-fill')).toBeNull();
+    const figure = container!.querySelector('.ui-balance-fill-off')!;
+    expect(figure.textContent).toBe('6 STRK');
+    expect(figure.getAttribute('title')).toBe('Too little here to cover the 6 STRK fee on top.');
+  });
+
+  it('cannot be pressed while the fee is unknown, or on a figure to read rather than type', () => {
+    render(<Field balance={100n * ONE} balanceFee={null} />);
+    expect(container!.querySelector('button.ui-balance-fill')).toBeNull();
+    expect(container!.querySelector('.ui-balance-fill-off')!.getAttribute('title')).toBe(COPY.kit.balanceFeeUnknown);
+    act(() => root!.render(<AmountField label="Buy" decimals={18} symbol="ETH" value="2" onChange={() => {}} readOnly balance={ONE} />));
+    expect(container!.querySelector('button.ui-balance-fill')).toBeNull();
+  });
+
+  it('cannot be pressed while the panel is busy', () => {
+    render(<Field balance={16n * ONE} disabled />);
+    expect(fill().disabled).toBe(true);
   });
 });
 

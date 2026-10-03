@@ -155,8 +155,12 @@ export function paintPitch(tiles: TileKind[][]): void {
     }
   }
   // The fence stands one tile east of the square, open at the gate: the
-  // road and both pavements already run through it there.
-  const fence = { x: PITCH_GATE.x, y: PITCH_AREA.y, width: 1, height: PITCH_AREA.height };
+  // road and both pavements already run through it there. It runs the full
+  // depth of the map, not just of the square: since D-134 the district is
+  // deeper than the square, and a fence that stopped at the square's south
+  // edge could be walked round into the pitch.
+  const depth = Math.max(PITCH_AREA.height, tiles.length - PITCH_AREA.y);
+  const fence = { x: PITCH_GATE.x, y: PITCH_AREA.y, width: 1, height: depth };
   for (let row = fence.y; row < fence.y + fence.height; row++) {
     if (row >= PITCH_GATE.y && row < PITCH_GATE.y + PITCH_GATE.height) continue;
     fillTiles(tiles, { x: fence.x, y: row, width: 1, height: 1 }, 'railing');

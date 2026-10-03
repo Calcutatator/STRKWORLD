@@ -540,20 +540,58 @@ export const ROOF_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
 });
 
 /**
- * D-087: the Avatar Studio, drawn at the interiors' origin (two tiles in from
- * the street's corner, over the hidden street): its floor inside the wall
- * ring, and the two-tile return portal in the top wall. Mirrors the World's
- * `AVATAR_STUDIO_DEFINITION`, and a World test fails if the two drift.
+ * D-087, D-134: the Garden (the area id stays `studio`), drawn at the
+ * interiors' origin (two tiles in from the street's corner, over the hidden
+ * street).
+ *
+ * Thirty by twenty-four inside a hedge, with the two-tile gate in the top
+ * wall. Walkable is the lane grid — five north-south lanes and five
+ * east-west walks — plus each of the sixteen nooks' lawn: the lip in front
+ * of the figure and the three tiles the figure stands on. A nook's back bed
+ * and its two side beds are planted, so they are not walkable.
+ *
+ * Mirrors the World's `AVATAR_STUDIO_DEFINITION`, and a World test fails
+ * tile by tile if the two drift.
  */
 export const STUDIO_PRESENCE_GRID: PresenceAreaGrid = Object.freeze({
   originX: 2 * 32,
   originY: 2 * 32,
   tileSize: 32,
-  width: 18,
-  height: 12,
+  width: 30,
+  height: 24,
   walkable: Object.freeze([
-    Object.freeze({ x: 1, y: 1, width: 16, height: 10 }),
-    Object.freeze({ x: 8, y: 0, width: 2, height: 1 }),
+    // The gate back to the street.
+    Object.freeze({ x: 14, y: 0, width: 2, height: 1 }),
+    // The five north-south lanes, gate to south walk.
+    Object.freeze({ x: 1, y: 1, width: 2, height: 22 }),
+    Object.freeze({ x: 8, y: 1, width: 1, height: 22 }),
+    Object.freeze({ x: 14, y: 1, width: 2, height: 22 }),
+    Object.freeze({ x: 21, y: 1, width: 1, height: 22 }),
+    Object.freeze({ x: 27, y: 1, width: 2, height: 22 }),
+    // The five east-west walks; each but the first carries the lip of the
+    // nook row north of it.
+    Object.freeze({ x: 1, y: 1, width: 28, height: 2 }),
+    Object.freeze({ x: 1, y: 5, width: 28, height: 3 }),
+    Object.freeze({ x: 1, y: 10, width: 28, height: 3 }),
+    Object.freeze({ x: 1, y: 15, width: 28, height: 3 }),
+    Object.freeze({ x: 1, y: 20, width: 28, height: 3 }),
+    // The sixteen nooks' lawn, where the figure stands between its beds.
+    Object.freeze({ x: 4, y: 4, width: 3, height: 1 }),
+    Object.freeze({ x: 10, y: 4, width: 3, height: 1 }),
+    Object.freeze({ x: 17, y: 4, width: 3, height: 1 }),
+    Object.freeze({ x: 23, y: 4, width: 3, height: 1 }),
+    Object.freeze({ x: 4, y: 9, width: 3, height: 1 }),
+    Object.freeze({ x: 10, y: 9, width: 3, height: 1 }),
+    Object.freeze({ x: 17, y: 9, width: 3, height: 1 }),
+    Object.freeze({ x: 23, y: 9, width: 3, height: 1 }),
+    Object.freeze({ x: 4, y: 14, width: 3, height: 1 }),
+    Object.freeze({ x: 10, y: 14, width: 3, height: 1 }),
+    Object.freeze({ x: 17, y: 14, width: 3, height: 1 }),
+    Object.freeze({ x: 23, y: 14, width: 3, height: 1 }),
+    Object.freeze({ x: 4, y: 19, width: 3, height: 1 }),
+    Object.freeze({ x: 10, y: 19, width: 3, height: 1 }),
+    Object.freeze({ x: 17, y: 19, width: 3, height: 1 }),
+    Object.freeze({ x: 23, y: 19, width: 3, height: 1 }),
   ]),
 });
 
@@ -766,3 +804,7 @@ export * from './arena.js';
 export * from './seats.js';
 // D-135: the gated pitch: its fence and gates, the four places, and the match as the wire carries it.
 export * from './pitch.js';
+// D-133: the Exchange roof's lookout swing: its tiles, the swing as the wire
+// carries it, and the ride's timings. Last, because it reads
+// `ROOF_PRESENCE_GRID` above (inside its functions only).
+export * from './roof-swing.js';

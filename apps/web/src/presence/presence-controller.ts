@@ -15,6 +15,7 @@ import { LobbyClient } from '@strkworld/lobby/client';
 import { ownMovementPayload, ownSharedAreaBuildingPayload } from '../bus/world-event-payload.js';
 import type { ArenaShellChannel } from '../arena/arena-controller.js';
 import type { PitchShellChannel } from '../pitch/pitch-controller.js';
+import type { SwingShellChannel } from '../roof/swing-controller.js';
 
 export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'unavailable';
 export interface PresenceState { readonly status: PresenceAvailability; readonly canReconnect: boolean; }
@@ -57,6 +58,8 @@ export interface PresenceController {
   readonly arena?: ArenaShellChannel;
   /** D-135: the gated pitch's match, for the HUD and the World's gate prompts. */
   readonly pitch?: PitchShellChannel;
+  /** The Exchange roof's lookout swing (D-133), when the composition provides one. */
+  readonly roofSwing?: SwingShellChannel;
   reconnect(): void;
   destroy(): Promise<void>;
 }
@@ -71,7 +74,7 @@ function freezePresenceState(next: PresenceState): PresenceState {
  */
 type SharedArea = Exclude<PresenceArea, 'street'>;
 
-export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football, arena, pitch }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel; arena?: ArenaShellChannel; pitch?: PitchShellChannel }): PresenceController {
+export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox, football, arena, pitch, roofSwing }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel; football?: FootballChannel; arena?: ArenaShellChannel; pitch?: PitchShellChannel; roofSwing?: SwingShellChannel }): PresenceController {
   let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
@@ -763,6 +766,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     ...(football ? { football } : {}),
     ...(arena ? { arena } : {}),
     ...(pitch ? { pitch } : {}),
+    ...(roofSwing ? { roofSwing } : {}),
     getState: () => state,
     reconnect() {
       if (!endpoint || destroyed) return;

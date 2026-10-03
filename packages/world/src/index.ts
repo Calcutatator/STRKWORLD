@@ -11,6 +11,7 @@ export {
   createStreetMap,
   doorAt,
   isAvatarStudioEntrance,
+  entersAvatarStudio,
   isSolidAt,
   objectLayerToDoors,
   TILE_SIZE,
@@ -63,6 +64,9 @@ export {
   AVATAR_STUDIO_WIDTH,
   avatarStudioFigureAt,
   avatarStudioTileColour,
+  avatarStudioTileRole,
+  gardenNookRect,
+  isGardenNookBed,
   createAvatarStudioPresentation,
   createAvatarStudioController,
   isAvatarStudioExit,
@@ -79,6 +83,9 @@ export type {
   AvatarStudioBounds,
   AvatarStudioPresentation,
   AvatarStudioPresentationPort,
+  GardenNookKind,
+  GardenNookPalette,
+  GardenTileRole,
 } from './avatar-studio.js';
 
 // Tiled object-layer property adapter. The seam a real Tiled export uses; see
@@ -247,6 +254,33 @@ export {
   pitchGateTargets,
 } from './pitch-channel.js';
 export type { PitchChannel } from './pitch-channel.js';
+// The Exchange roof's lookout swing (D-133), under the same rule: the Shell
+// supplies the channel, and the World only ever sends its two intents.
+export type {
+  RoofSwingChannel,
+  RoofSwingSession,
+  RoofSwingSessionHost,
+  RoofSwingTarget,
+  RoofSwingViewFrame,
+} from './roof-swing-channel.js';
+export {
+  SWING_APPROACH_RECT,
+  SWING_BUSY_LABEL,
+  SWING_LABEL,
+  SWING_TARGET_RECT,
+  createRoofSwingSession,
+} from './roof-swing-session.js';
+export {
+  SWING_CAMERA_YAW,
+  SWING_MAX_ANGLE,
+  SWING_PERIOD_MS,
+  SWING_REDUCED_MAX_ANGLE,
+  swingAngleAt,
+  swingCameraShot,
+  swingEnvelopeAt,
+  swingRideOver,
+  type SwingCameraShot,
+} from './roof-swing.js';
 export {
   PITCH_FIXTURES,
   PITCH_FULL_TIME_TEXT,

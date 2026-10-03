@@ -12,6 +12,7 @@ import {
 import {
   createStreetMap,
   doorAt,
+  entersAvatarStudio,
   isAvatarStudioEntrance,
   isSolidAt,
   objectLayerToDoors,
@@ -116,14 +117,55 @@ describe('the street is walkable', () => {
   });
 
   it('extends a hidden two-tile path from spawn to the south edge', () => {
-    expect(map.avatarStudioEntrance).toEqual({ x: X + 23, y: 27, width: 2, height: 1 });
+    // D-134: the district is 33 rows deep and the arch stands in the last
+    // of them, five rows below the Colosseum and the plaza.
+    expect(map.height).toBe(33);
+    expect(map.avatarStudioEntrance).toEqual({ x: X + 23, y: 32, width: 2, height: 1 });
     for (let y = map.spawn.y; y < map.height; y += 1) {
       expect(isSolidAt(map, X + 23, y)).toBe(false);
       expect(isSolidAt(map, X + 24, y)).toBe(false);
     }
-    expect(isAvatarStudioEntrance(map, X + 23, 27)).toBe(true);
-    expect(isAvatarStudioEntrance(map, X + 24, 27)).toBe(true);
-    expect(isAvatarStudioEntrance(map, X + 22, 27)).toBe(false);
+    expect(isAvatarStudioEntrance(map, X + 23, 32)).toBe(true);
+    expect(isAvatarStudioEntrance(map, X + 24, 32)).toBe(true);
+    expect(isAvatarStudioEntrance(map, X + 22, 32)).toBe(false);
+    expect(isAvatarStudioEntrance(map, X + 23, 31)).toBe(false);
+  });
+
+  it('only goes in when the step walks south through the arch (D-134)', () => {
+    const entrance = map.avatarStudioEntrance;
+    const west = entrance.x;
+    const east = entrance.x + 1;
+    const row = entrance.y;
+    // Walking down the path and through the opening.
+    expect(entersAvatarStudio(map, { x: west, y: row - 1 }, { x: west, y: row })).toBe(true);
+    expect(entersAvatarStudio(map, { x: east, y: row - 1 }, { x: east, y: row })).toBe(true);
+    // A diagonal step still has to be a step south into the opening.
+    expect(entersAvatarStudio(map, { x: west - 1, y: row - 1 }, { x: west, y: row })).toBe(true);
+    // Walking along the bottom hedge, across the opening: not a way in.
+    expect(entersAvatarStudio(map, { x: west - 1, y: row }, { x: west, y: row })).toBe(false);
+    expect(entersAvatarStudio(map, { x: east + 1, y: row }, { x: east, y: row })).toBe(false);
+    // Sidestepping between the two opening tiles is not walking through it.
+    expect(entersAvatarStudio(map, { x: west, y: row }, { x: east, y: row })).toBe(false);
+    // Brushing the piers either side of the arch.
+    expect(entersAvatarStudio(map, { x: west - 1, y: row - 1 }, { x: west - 1, y: row })).toBe(false);
+    expect(entersAvatarStudio(map, { x: east + 1, y: row - 1 }, { x: east + 1, y: row })).toBe(false);
+    // And stepping back north off the opening never re-enters.
+    expect(entersAvatarStudio(map, { x: west, y: row }, { x: west, y: row - 1 })).toBe(false);
+  });
+
+  it('keeps the Garden path clear of the Colosseum, the plaza and the pitch (D-134)', () => {
+    const entrance = map.avatarStudioEntrance;
+    // Nothing else claims the two path columns anywhere down the map.
+    for (let y = 17; y < map.height; y += 1) {
+      expect(map.tiles[y]![entrance.x], `path ${y}`).toBe('pavement');
+      expect(map.tiles[y]![entrance.x + 1], `path ${y}`).toBe('pavement');
+    }
+    // The south lawn either side of it is plain grass, well below the
+    // Colosseum (which stops at row 26) and the plaza (row 27).
+    for (let y = 28; y < map.height; y += 1) {
+      expect(map.tiles[y]![entrance.x - 2], `west lawn ${y}`).toBe('grass');
+      expect(map.tiles[y]![entrance.x + 3], `east lawn ${y}`).toBe('grass');
+    }
   });
 });
 

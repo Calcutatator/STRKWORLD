@@ -4169,10 +4169,12 @@ p.exchange-price-check[data-status="unchecked"] {
   font-size: 0.95rem;
 }
 
-/* A plain text link for a secondary switch, such as "Use my wallet". It
- * re-points the shared button variables to nothing, so the theme's raised
- * button, hover lift and press never draw on it. */
-button.ui-link-button {
+/* A plain text link for a secondary switch, such as "Use my wallet", and the
+ * balance figure that fills the amount (D-131). Both re-point the shared
+ * button variables to nothing, so the theme's raised button, hover lift and
+ * press never draw on them. */
+button.ui-link-button,
+button.ui-balance-fill {
   --btn-bg: transparent;
   --btn-bg-hover: transparent;
   --btn-border: transparent;
@@ -4190,6 +4192,29 @@ button.ui-link-button {
   padding: 0;
   font-size: 0.85rem;
   text-decoration: underline;
+}
+
+/* D-131: it reads as the figure it always was — the balance line's own ink,
+ * the numeric face (D-121), no chrome — and brightens with an underline
+ * under the pointer or the focus ring. */
+button.ui-balance-fill {
+  font-family: var(--ui-number-font);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.ui-balance-fill:hover,
+button.ui-balance-fill:focus-visible {
+  --btn-text: var(--ui-text);
+  text-decoration: underline;
+}
+
+/* Nothing honest to fill from: the fee is not known, or it is the whole of
+ * this balance. The figure stays in the dim ink, with the reason on hover. */
+.ui-balance-fill-off {
+  cursor: help;
 }
 
 .ui-token-select {
@@ -5070,6 +5095,83 @@ button.ui-link-button {
   .placement-result,
   .placement-check {
     border-color: CanvasText;
+  }
+}
+
+/* ==========================================================================
+ * D-133: the lookout swing's HUD — one hint, low on the screen, for the
+ * rider alone. The brand's menu face on an Outline-bordered dark window with
+ * the hard drop (docs/brand/README.md); it never takes a click meant for the
+ * World except on the hint itself, which is the touch screen's way off.
+ * ======================================================================== */
+
+.swing-hud {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 12;
+  display: flex;
+  justify-content: center;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  font-size-adjust: none;
+}
+
+.swing-hud-hint {
+  pointer-events: auto;
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  border: 4px solid var(--brand-outline, #24120a);
+  border-radius: 4px;
+  background: var(--brand-window-dark, #261810);
+  box-shadow: inset 0 0 0 2px var(--brand-window-rim, #6e3e1e), 0 5px 0 var(--brand-outline, #24120a);
+  color: var(--brand-cream, #fff6e6);
+  font-family: var(--brand-font-menu, var(--ui-btn-font));
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  animation: swing-hud-rise 260ms ease-out both;
+}
+
+.swing-hud-hint:active {
+  transform: translateY(3px);
+  box-shadow: inset 0 0 0 2px var(--brand-window-rim, #6e3e1e), 0 2px 0 var(--brand-outline, #24120a);
+}
+
+.swing-hud-hint:focus-visible {
+  outline: 3px solid var(--brand-sun-gold, #ffc12e);
+  outline-offset: 3px;
+}
+
+@keyframes swing-hud-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.swing-hud[data-motion="reduced"] .swing-hud-hint {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swing-hud-hint {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .swing-hud-hint {
+    border-color: CanvasText;
+  }
+}
+
+@media (max-width: 520px) {
+  .swing-hud {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .swing-hud-hint {
+    font-size: 0.85rem;
   }
 }
 

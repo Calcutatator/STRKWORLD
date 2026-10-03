@@ -78,10 +78,21 @@ const FOG_FAR = 64;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
 /**
+ * D-133: how far the fog is pushed back while a cinematic shot is running —
+ * the roof swing's ride, which looks south over the river to the skyline.
+ * Short of the camera's 240 far plane, so the horizon still fades out.
+ */
+export const VISTA_FOG_NEAR = 60;
+export const VISTA_FOG_FAR = 215;
+
+/**
  * The fog's linear range, in view depth, for a player `elevation` up: pushed
  * back as they climb, so a tower top still shows what they built below.
+ * `vista` (D-133) pushes it back further still for the swing's ride, so the
+ * south vista is inside it.
  */
-export function fogRange(elevation: number): { readonly near: number; readonly far: number } {
+export function fogRange(elevation: number, vista = false): { readonly near: number; readonly far: number } {
+  if (vista) return { near: Math.max(VISTA_FOG_NEAR, FOG_NEAR + elevation), far: VISTA_FOG_FAR };
   return { near: FOG_NEAR + elevation, far: FOG_FAR + elevation * 1.6 };
 }
 
@@ -139,7 +150,10 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   const placementStand = options.config.placementStand === true;
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
+  // 360, not the 240 it was: the World stands on a floating rock (D-132) and
+  // the cloud sea round it has to be inside the frustum from anywhere on the
+  // street, or a bank would clip against the sky instead of fading into it.
+  const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 360);
   const sun = new DirectionalLight(SUN_COLOR, SUN_INTENSITY);
   const sky = createSky();
 
@@ -206,6 +220,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
         ...(config.pitch ? { pitch: config.pitch } : {}),
+        // The Exchange roof's lookout swing (D-133).
+        ...(config.roofSwing ? { roofSwing: config.roofSwing } : {}),
         reducedMotion: () => prefersReducedMotion(win),
         // The creation value, never `config.vaultOpen`: the presenter drew
         // the street and rooms from it, and a session must walk the same map.
@@ -260,7 +276,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       const focus = presenter.player.ground;
       // A bad presentation value must never reach the light, fog or camera.
       const elevation = Number.isFinite(presenter.player.elevation) ? presenter.player.elevation : 0;
-      rig.update(delta, focus, presenter.cameraBounds, elevation, presenter.cameraPreset);
+      const shot = presenter.cameraShot;
+      rig.update(delta, focus, presenter.cameraBounds, elevation, presenter.cameraPreset, shot);
       presenter.updateOcclusion(camera.position, delta);
       // Snap the light to whole shadow texels so edges do not shimmer as the
       // player walks, and lift it with the player on tall sandbox towers.
@@ -273,7 +290,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       // Push the fog back as the player climbs, so a tower top still shows
       // what they built below.
       const fog = scene.fog as Fog;
-      const range = fogRange(elevation);
+      const range = fogRange(elevation, shot !== null);
       fog.near = range.near;
       fog.far = range.far;
       sky.position.copy(camera.position);
@@ -338,6 +355,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       reducedMotion: () => prefersReducedMotion(win),
       vaultOpen,
       placementStand,
+      // D-129: a phone gets the arena's lighter surround.
+      lowDetail: isTouchScreen(win),
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());

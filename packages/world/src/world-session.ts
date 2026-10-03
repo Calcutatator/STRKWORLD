@@ -20,6 +20,7 @@ import {
 import {
   AVATAR_STUDIO_RETURN_FACING,
   avatarStudioReturnTile,
+  entersAvatarStudio,
   createStreetMap,
   isAvatarStudioEntrance,
   isSolidAt,
@@ -128,6 +129,7 @@ import { normalizePitchFrame, pitchGateTargets, type PitchChannel } from './pitc
 import type { PitchMatchSnapshot } from '@strkworld/shared';
 import { withinKickRange } from './map/pitch.js';
 import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
+import { COLOSSEUM_RETURN, COLOSSEUM_RETURN_FACING } from './map/colosseum.js';
 import type { RemotePeerSource, RemotePeerSnapshot } from './remote-peer.js';
 import {
   STREET_BENCHES,
@@ -137,9 +139,16 @@ import {
   type WorldBench,
   type WorldSeat,
 } from './seats.js';
-import { ARENA_PIT_RETURN, ARENA_PIT_RETURN_FACING } from './map/arena-pit.js';
+import type { SeatPlace } from './three/types.js';
 import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 import { createArenaSession } from './arena-session.js';
+import type {
+  RoofSwingChannel,
+  RoofSwingSession,
+  RoofSwingSessionHost,
+  RoofSwingViewFrame,
+} from './roof-swing-channel.js';
+import { createRoofSwingSession } from './roof-swing-session.js';
 
 /**
  * The World's gameplay session, independent of any renderer (D-059).
@@ -251,10 +260,20 @@ export interface WorldSessionView {
   setPlayerFacing?(facing: Facing): void;
   // D-127: sittable benches. Optional: a view without it simply never shows
   // the seated pose, and sitting is then only a place and a facing.
-  /** The local avatar sits down on a bench, or stands up. */
-  setPlayerSeated?(seated: boolean): void;
+  /**
+   * The local avatar sits down on a bench, or stands up (null). The seat
+   * carries its own geometry (D-127, amended 2026-10-03): without it the view
+   * would leave the figure on the ground, sunk into the bench it sits on.
+   */
+  setPlayerSeated?(seat: SeatPlace | null): void;
   /** The ring gate's mesh in the arena room, for the gate station's press-E cues; null if none. */
   arenaGateObject?(): unknown;
+  // The Exchange roof's lookout swing (D-133). Optional: a view without it
+  // draws no swing, and the roof is a deck to stand on.
+  /** The swing as the session sees it this frame (its angle, its rider, the rider's camera), or none. */
+  syncRoofSwing?(frame: RoofSwingViewFrame | null): void;
+  /** The swing's seat mesh, for its press-E cues; null if the view has none. */
+  roofSwingObject?(): unknown;
 }
 
 /**
@@ -317,6 +336,11 @@ export interface WorldSessionOptions {
    * pitch is a fenced enclosure to watch from.
    */
   readonly pitch?: PitchChannel;
+  /**
+   * The Exchange roof's lookout swing (D-133); absent means the roof is a
+   * deck to stand on, with no swing to claim.
+   */
+  readonly roofSwing?: RoofSwingChannel;
   /** `prefers-reduced-motion`: arena leaps become cuts (D-114). Absent reads as false. */
   readonly reducedMotion?: () => boolean;
   /**
@@ -545,6 +569,20 @@ class Session implements WorldSession {
    * everything.
    */
   private heading = { x: 0, y: 0 };
+  /** D-133: the roof swing's channel and session, only with a channel. */
+  private readonly roofSwingChannel?: RoofSwingChannel;
+  private roofSwingSession?: RoofSwingSession;
+  /** D-133: removes the swing's press-E station from the interaction system. */
+  private stopRoofSwingSource?: () => void;
+  /** Whether the view currently holds a swing frame. */
+  private roofSwingShown = false;
+  /**
+   * D-133: holds on movement, by reason. While any is held the player stands
+   * still wherever the session put them: the swing's ride holds one for its
+   * whole twenty seconds, so no key walks the rider off the seat.
+   */
+  private readonly movementHolds = new Set<symbol>();
+
   /** D-114: the ring's combat session (C's arena-session.ts), only with a channel. */
   private readonly arenaChannel?: ArenaChannel;
   private arenaSession?: ArenaSession;
@@ -590,6 +628,7 @@ class Session implements WorldSession {
     this.football = options.football;
     this.pitch = options.pitch;
     this.arenaChannel = options.arena;
+    this.roofSwingChannel = options.roofSwing;
     this.reducedMotion = options.reducedMotion;
     this.peers = options.peers;
     this.vaultOpen = options.vaultOpen === true;
@@ -624,6 +663,7 @@ class Session implements WorldSession {
       this.createInteractionSources();
       this.createSeats();
       this.createArena();
+      this.createRoofSwing();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -724,10 +764,12 @@ class Session implements WorldSession {
       else this.moveRoomPlayer(delta, cameraYaw);
       this.movement.interiorUpdate(() => this.reportRoomTile());
       if (!this.cleanedUp) this.presentArena(delta);
+      if (!this.cleanedUp) this.presentRoofSwing(delta);
       this.refreshInteractions();
       return;
     }
     if (this.arenaShown) this.clearArena();
+    if (this.roofSwingShown) this.clearRoofSwing();
     this.doors?.advance(delta);
     this.studioEntranceHold.advance(delta);
     // Seated: no step, no door, no aim — only the placement keeps being
@@ -847,6 +889,13 @@ class Session implements WorldSession {
     const stopPitchSource = this.stopPitchSource;
     this.stopPitchSource = undefined;
     if (stopPitchSource) attempt(stopPitchSource);
+    const stopRoofSwingSource = this.stopRoofSwingSource;
+    this.stopRoofSwingSource = undefined;
+    if (stopRoofSwingSource) attempt(stopRoofSwingSource);
+    const roofSwingSession = this.roofSwingSession;
+    this.roofSwingSession = undefined;
+    if (roofSwingSession) attempt(() => roofSwingSession.destroy());
+    this.movementHolds.clear();
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
     attempt(() => inputGate.resume());
@@ -1236,7 +1285,7 @@ class Session implements WorldSession {
     // D-114: back on the pit's branch path, facing west, away from the arch.
     if (definition.building === ARENA_BUILDING) {
       this.clearArena();
-      this.view.setPlayerFacing?.(ARENA_PIT_RETURN_FACING);
+      this.view.setPlayerFacing?.(COLOSSEUM_RETURN_FACING);
     }
   }
 
@@ -1367,7 +1416,7 @@ class Session implements WorldSession {
       resumeStreet: () => this.movement.exit(
         { x: this.position.x, y: this.position.y },
         () => this.reportTile(),
-        definition.building === ARENA_BUILDING ? ARENA_PIT_RETURN_FACING : undefined,
+        definition.building === ARENA_BUILDING ? COLOSSEUM_RETURN_FACING : undefined,
       ),
     });
   }
@@ -1424,7 +1473,7 @@ class Session implements WorldSession {
   private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
     // D-114: the tile below the pit's door is lawn beside its bowl; the
     // return is the branch path, just west of the arch.
-    if (building === ARENA_BUILDING) return { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
+    if (building === ARENA_BUILDING) return { x: COLOSSEUM_RETURN.x, y: COLOSSEUM_RETURN.y };
     const door = this.map.doors.find((candidate) => candidate.building === building);
     return {
       x: door?.x ?? this.map.spawn.x,
@@ -1470,6 +1519,11 @@ class Session implements WorldSession {
     const map = this.activeRoomMap();
     const keyboard = this.keyboard;
     if (!keyboard || !controller || !map || controller.state.controlOwner !== 'world') {
+      this.view.setPlayerMotion(IDLE_MOTION);
+      return;
+    }
+    // D-133: a ride on the roof swing holds the player still for its length.
+    if (this.movementHeld) {
       this.view.setPlayerMotion(IDLE_MOTION);
       return;
     }
@@ -1747,7 +1801,7 @@ class Session implements WorldSession {
       this.view.setPlayerMotion(IDLE_MOTION);
       this.view.setPlayerPosition(this.position, false);
       this.view.setPlayerFacing?.(seat.facing);
-      this.view.setPlayerSeated?.(true);
+      this.view.setPlayerSeated?.(seat.place);
       this.publishSeatedPlace(seat.facing);
     } catch (error) {
       // Sitting down is one transaction: a failed handoff puts the player back
@@ -1761,7 +1815,7 @@ class Session implements WorldSession {
         }
         this.position = from;
         try {
-          this.view.setPlayerSeated?.(false);
+          this.view.setPlayerSeated?.(null);
           this.view.setPlayerPosition(this.position, false);
         } catch {
           // Preserve the original failure.
@@ -1784,7 +1838,7 @@ class Session implements WorldSession {
     }
     this.position = { x: sitting.from.x, y: sitting.from.y };
     try {
-      this.view.setPlayerSeated?.(false);
+      this.view.setPlayerSeated?.(null);
       this.view.setPlayerPosition(this.position, false);
     } catch (error) {
       errors.push(error);
@@ -1851,7 +1905,7 @@ class Session implements WorldSession {
       // The teleport is authoritative; a failed release only leaves the
       // stations suspended, which the next suspension release clears.
     }
-    this.view.setPlayerSeated?.(false);
+    this.view.setPlayerSeated?.(null);
   }
 
   // -- the jump (D-097) --------------------------------------------------------
@@ -1894,7 +1948,7 @@ class Session implements WorldSession {
    * (D-111). The Avatar Studio is no exception; its selection is by walking.
    */
   private canJump(): boolean {
-    if (this.inputSuspended) return false;
+    if (this.inputSuspended || this.movementHeld) return false;
     const room = this.activeRoomController();
     if (room?.state.inRoom && room.state.controlOwner !== 'world') return false;
     return true;
@@ -2090,6 +2144,118 @@ class Session implements WorldSession {
     if (before && before !== current) this.avatarOutfit.select(before);
   }
 
+  // -- the roof's lookout swing (D-133) ---------------------------------------
+
+  /**
+   * The swing's client session (`roof-swing-session.ts`), with this session
+   * as its host. Its one input is E, through the shared press-E system: the
+   * swing is a station like any counter, so it gets the chip, the shimmer and
+   * the glow for free. Built only with a channel: without one the roof is a
+   * deck to stand on and the swing never moves.
+   */
+  private createRoofSwing(): void {
+    const channel = this.roofSwingChannel;
+    if (!channel) return;
+    const session = createRoofSwingSession(channel, this.roofSwingHost());
+    this.roofSwingSession = session;
+    this.stopRoofSwingSource = this.interactionSystem.register({
+      targets: () => {
+        if (this.cleanedUp || !this.onRoofDeck() || !this.worldOwnsKeys()) return [];
+        try {
+          return session.targets();
+        } catch {
+          return [];
+        }
+      },
+    });
+  }
+
+  /** Whether the player is standing on the Exchange roof, where the swing is. */
+  private onRoofDeck(): boolean {
+    if (this.area === 'street' || this.avatarStudioActive) return false;
+    return this.activeRoomMap()?.rooftop != null;
+  }
+
+  /** What the swing session may ask of the World (`RoofSwingSessionHost`). */
+  private roofSwingHost(): RoofSwingSessionHost {
+    return Object.freeze({
+      position: () => Object.freeze({ x: this.position.x, y: this.position.y, facing: this.areaFacing }),
+      placeAt: (tile: { readonly x: number; readonly y: number }, facing: Facing) => this.placeOnRoof(tile, facing),
+      reducedMotion: () => this.prefersReducedMotion(),
+      swingObject: () => (this.cleanedUp ? null : this.view.roofSwingObject?.() ?? null),
+      inputSuspended: () => this.cleanedUp || !this.worldOwnsKeys(),
+      suspendInteractions: (reason: string) => this.interactionSystem.suspend(reason),
+      suspendInput: (reason: string) => this.suspendMovement(reason),
+    });
+  }
+
+  /**
+   * D-133: hold the player still until the returned release is called. The
+   * ride holds one for its whole length, so no held key walks the rider off
+   * the seat; releasing twice is harmless.
+   */
+  private suspendMovement(reason: string): () => void {
+    const token = Symbol(reason);
+    this.movementHolds.add(token);
+    return () => {
+      this.movementHolds.delete(token);
+    };
+  }
+
+  /** Whether anything is holding movement (D-133: a ride on the swing). */
+  private get movementHeld(): boolean {
+    return this.movementHolds.size > 0;
+  }
+
+  /**
+   * D-133: the server moved the rider (onto the seat on a claim, back to the
+   * step-off tile when the ride closes); stand there too and publish the new
+   * place. A roof-local tile; ignored off the roof or off its grid.
+   */
+  private placeOnRoof(tile: { readonly x: number; readonly y: number }, facing: Facing): void {
+    if (this.cleanedUp || !this.onRoofDeck()) return;
+    const map = this.activeRoomMap();
+    if (!map?.rooftop) return;
+    if (!tile || !Number.isInteger(tile.x) || !Number.isInteger(tile.y)) return;
+    if (tile.x < 0 || tile.y < 0 || tile.x >= map.width || tile.y >= map.height) return;
+    const target = floorTileCentre(map, tile);
+    this.position = { x: target.x, y: target.y };
+    this.view.setPlayerPosition(this.position, false);
+    this.view.setPlayerFacing?.(facing);
+    if (this.cleanedUp) return;
+    this.areaFacing = facing;
+    if (this.rooftopAnnounced) this.publishAreaPosition();
+    if (this.cleanedUp) return;
+    this.reportRoomTile();
+  }
+
+  /** Advance the swing session and hand the view its frame, on the roof only. */
+  private presentRoofSwing(delta: number): void {
+    if (!this.onRoofDeck()) {
+      if (this.roofSwingShown) this.clearRoofSwing();
+      return;
+    }
+    const session = this.roofSwingSession;
+    if (!session) return;
+    let frame: RoofSwingViewFrame | null = null;
+    try {
+      session.update(delta);
+      if (this.cleanedUp) return;
+      frame = session.frame();
+    } catch {
+      // A failing session draws a still swing; the roof carries on.
+      frame = null;
+    }
+    if (frame || this.roofSwingShown) this.view.syncRoofSwing?.(frame);
+    this.roofSwingShown = frame !== null;
+  }
+
+  /** Leaving the roof: no swing frame, and no camera shot, left on the view. */
+  private clearRoofSwing(): void {
+    if (this.roofSwingShown) this.view.syncRoofSwing?.(null);
+    this.roofSwingShown = false;
+  }
+
   // -- the football pitch (D-078) ---------------------------------------------
 
   /**
@@ -2275,8 +2441,12 @@ class Session implements WorldSession {
   private reportTile(): void {
     const tile = worldToTile(this.position.x, this.position.y);
     if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+    // D-134: the arch is a doorway. Being on its opening tiles only arms the
+    // hold; it takes a step south through the opening to go in.
     const onStudioEntrance = !this.avatarStudioActive &&
       isAvatarStudioEntrance(this.map, tile.x, tile.y);
+    const throughStudioArch = !this.avatarStudioActive &&
+      entersAvatarStudio(this.map, this.lastTile, tile);
     // D-125: every tile report feeds the hold, because stepping off the
     // entrance is what releases it. Swallowed, the tile is reported as any
     // other street tile would be: the entrance is no door, so nothing else
@@ -2285,7 +2455,7 @@ class Session implements WorldSession {
       onStudioEntrance ? AVATAR_STUDIO_ENTRANCE_HOLD_KEY : null,
       this.avatarStudioActive,
     );
-    if (onStudioEntrance && !studioShut) {
+    if (throughStudioArch && !studioShut) {
       this.avatarStudio?.enter();
       // Studio entry is an external lifecycle boundary. Commit the tile only
       // after the transition succeeds so a failed entry can retry while the

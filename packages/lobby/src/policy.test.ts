@@ -70,6 +70,7 @@ describe('default lobby vocabulary ownership', () => {
     expect(Object.keys(MESSAGE).sort()).toEqual([
       'area', 'arenaAttack', 'arenaBlock', 'arenaClaim', 'arenaLeave', 'arenaSit', 'arenaUnblock',
       'jump', 'kick', 'move', 'pitchGate', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
+      'swingClaim', 'swingLeave',
     ]);
   });
 

@@ -4,6 +4,7 @@ import type { FixedRoomStationPresentation } from '../fixed-room.js';
 import type { PlazaStatsPresentation } from '../plaza-stations.js';
 import type { JumpPose } from '../jump.js';
 import type { AffordanceSet } from './affordance.js';
+import type { RoofSwingView } from './roof-swing.js';
 
 /**
  * Contracts shared by the 3D presentation modules (D-059).
@@ -38,6 +39,40 @@ export interface AvatarMotion {
   readonly blocking?: boolean;
   /** D-114: a spectator sitting on an arena tier. */
   readonly seated?: boolean;
+  /**
+   * D-127 (amended 2026-10-03): the seat `seated` sits on. Without it a
+   * seated figure keeps its feet on the ground and only takes the pose, which
+   * is what sank a sitter into a bench; with it the figure rises until its
+   * backside rests on the seat top.
+   */
+  readonly seat?: SeatPlace | null;
+}
+
+/**
+ * Where a seat's surface is, in world units, as the sitter sees it: this is
+ * what lifts a seated figure onto a bench instead of leaving it on the floor.
+ *
+ * All three numbers are relative to the figure itself — `surface` above
+ * whatever its feet otherwise stand on, `front` and `back` along its own
+ * facing — so one seat description serves the plaza bench, a bleacher plank,
+ * the Bridge lounge, an arena tier and the throne without any of them knowing
+ * where the others are.
+ */
+export interface SeatPlace {
+  /** The seat top above the figure's own ground plane. */
+  readonly surface: number;
+  /**
+   * How far ahead of the sitter the seat surface ends. The figure does not
+   * read it; the geometry audit does (tools/avatar-seat.ts), because this is
+   * the edge the thighs and boots have to clear.
+   */
+  readonly front: number;
+  /**
+   * How far behind the spot the sitter settles, for a seat the walker stands
+   * in front of rather than on (an arena tier's plank). 0 for a bench whose
+   * seat spot is already the middle of its cushion.
+   */
+  readonly back?: number;
 }
 
 /**
@@ -162,6 +197,8 @@ export interface StreetView {
   readonly plaza?: PlazaView | null;
   /** The football pitch's live parts (D-078), or null on a map without it. */
   readonly pitch?: PitchView | null;
+  /** The Exchange roof's lookout swing (D-133), or null on a map without it. */
+  readonly swing?: RoofSwingView | null;
   update(deltaMs: number): void;
   dispose(): void;
 }

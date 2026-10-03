@@ -24,11 +24,14 @@ import {
   type ArenaTileKind,
 } from '@strkworld/shared';
 import type { FixedRoomLevelMap, FixedRoomStationPresentation } from '../fixed-room.js';
+import { COLOSSEUM_ATTIC_TOP, COLOSSEUM_WALL_TOP } from './colosseum-style.js';
+import { createArenaSurround, layArenaOutsideGround, type ArenaSurround } from './arena-surround.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import {
   GeometryBin,
+  PALETTE,
   ResourceBag,
   beamGeometry,
   boxGeometry,
@@ -52,7 +55,7 @@ import {
   type Face,
   type Point2,
 } from './palette.js';
-import type { LabelFactory, Occluder, RoomView, TextLabel } from './types.js';
+import type { LabelFactory, Occluder, RoomView, SeatPlace, TextLabel } from './types.js';
 import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 
 /**
@@ -77,9 +80,16 @@ import { createAffordanceShells, type AffordanceSet } from './affordance.js';
  * occluder (`arenaFades`): the near stands never hide the player, in the
  * tunnel or on the sand.
  *
+ * D-129: the stadium no longer floats in a white void. The city the street
+ * stands in is mounted round it (three/arena-surround.ts), the arcade carries
+ * an attic colonnade up to the Colosseum's own `COLOSSEUM_WALL_TOP`, and the
+ * ground beyond the wall goes into the sand's own bin, so inside and outside
+ * are one building.
+ *
  * Draw calls: sand, north stone, south stone, seats (one InstancedMesh, one
  * instance per tier tile), banners, flames (one InstancedMesh), fence, gate
- * (two leaves, one InstancedMesh), gate lamp, dummy, the emperor's box's affordance shell (D-123) and two labels: 13.
+ * (two leaves, one InstancedMesh), gate lamp, dummy, the emperor's box's affordance shell (D-123) and two labels: 13,
+ * plus the surround's city, its lit windows and the south vista's five.
  * The combat feedback (C's `arena-fx.ts`) mounts under `fxMount`.
  */
 
@@ -93,6 +103,44 @@ export const ARENA_SURFACE = Object.freeze({
   podium: 1.0,
   arcade: 3.6,
 });
+
+/**
+ * The arena's two seats as the figure sitting on one sees them — D-127 amended
+ * and D-128, 2026-10-03. Heights are above whatever the sitter's feet stand on
+ * (a tier's own surface, the podium floor), and `front`/`back` run along the
+ * sitter's facing, so the figure needs to know nothing about the arena.
+ *
+ * A tier's plank is behind where a spectator stands, so a sitter settles back
+ * onto it; the throne is drawn around its own tile's middle, so a champion
+ * sits where they stood.
+ */
+export const ARENA_TIER_SEAT: SeatPlace = Object.freeze({ surface: 0.1, front: 0.16, back: 0.24 });
+export const ARENA_THRONE_SEAT: SeatPlace = Object.freeze({ surface: 0.46, front: 0.22 });
+
+/** One solid of a seat, in the sitter's own frame: +Z ahead of them, y above their feet. */
+export interface SeatSolid {
+  readonly minY: number;
+  readonly maxY: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+}
+
+/**
+ * The tier plank a spectator sits on and the step it stands on, as the sitter
+ * sees them (the plank runs 0.08 to 0.4 out from the tile's middle, so after
+ * the settle back it straddles them). `seats()` draws the plank from these.
+ */
+export const ARENA_TIER_SOLIDS: readonly SeatSolid[] = Object.freeze([
+  Object.freeze({ minY: 0.02, maxY: ARENA_TIER_SEAT.surface, minZ: -0.16, maxZ: 0.16 }),
+  // The step itself, from the plank's front edge to the drop at the tile's edge.
+  Object.freeze({ minY: -ARENA_SURFACE.tierStep, maxY: 0, minZ: 0.16, maxZ: 0.74 }),
+]);
+
+/** The throne's seat pad and its back, as its sitter sees them; `emperorsBox()` draws both. */
+export const ARENA_THRONE_SOLIDS: readonly SeatSolid[] = Object.freeze([
+  Object.freeze({ minY: 0.4, maxY: ARENA_THRONE_SEAT.surface, minZ: -0.28, maxZ: ARENA_THRONE_SEAT.front }),
+  Object.freeze({ minY: ARENA_THRONE_SEAT.surface, maxY: 1.1, minZ: -0.36, maxZ: -0.28 }),
+]);
 
 export const ARENA_RING_SIGN_TEXT = 'THE RING';
 /** The gate lamp: green while the ring is free, red while a fight holds it. */
@@ -140,7 +188,8 @@ const ARCADE_SHADOW = 0x4a3a2c;
 const DOORWAY_SHADOW = 0x1f1812;
 const SAND = 0xdcc191;
 const SAND_DARK = 0xc2a473;
-const EARTH = 0x5b4a3a;
+/** D-129: the lawn outside the walls, the colour the street's south lawn is. */
+const OUTSIDE_LAWN = PALETTE.grassWarm;
 const TUNNEL = 0x8e7b62;
 const TIMBER = 0x7a5532;
 const ROPE = 0xcdb688;
@@ -191,7 +240,7 @@ export function buildArenaRoom(
   map: FixedRoomLevelMap,
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
-  options: { readonly reducedMotion?: () => boolean } = {},
+  options: { readonly reducedMotion?: () => boolean; readonly lowDetail?: boolean } = {},
 ): ArenaRoomView {
   const res = new ResourceBag();
   const group = new Group();
@@ -220,6 +269,7 @@ export function buildArenaRoom(
   const dummy = new Group();
   dummy.name = 'arena:dummy';
 
+  let surround: ArenaSurround | null = null;
   const bin = new GeometryBin();
   // D-123: the emperor's box (a reserved station: E shows it is closed) has
   // an affordance shell like any counter; the ring gate's is the presenter's.
@@ -228,6 +278,9 @@ export function buildArenaRoom(
   const boxStation = map.stations[0];
   try {
     sandFloor(bin);
+    // D-129: the ground the city beyond the wall stands on, in the sand's own
+    // bin, so it costs no draw call of its own.
+    layArenaOutsideGround(bin, 'sand');
     stands(bin);
     tunnel(bin);
     emperorsBox(boxStation ? shells.record(boxStation.station, bin) : bin);
@@ -323,6 +376,15 @@ export function buildArenaRoom(
     group.add(dummy);
     group.add(fxMount);
 
+    // D-129: the street's own city and water, hung round the arena. Built
+    // last, so a failure here cannot leave the stadium half-built.
+    surround = createArenaSurround({
+      lowDetail: options.lowDetail === true,
+      reducedMotion: reduced(),
+    });
+    group.add(surround.group);
+    animators.push((elapsed) => surround?.update(elapsed));
+
     // The ring's sign stands on the gate's crossbar, square to the camera,
     // which always looks north: the crossbar runs north to south, so the
     // sign faces south across it, a hair south of the lamp's bracket.
@@ -348,6 +410,11 @@ export function buildArenaRoom(
     }
   } catch (error) {
     bin.dispose();
+    try {
+      surround?.dispose();
+    } catch {
+      // The construction error stays authoritative.
+    }
     for (const label of textLabels) {
       try {
         label.dispose();
@@ -410,6 +477,12 @@ export function buildArenaRoom(
         }
       }
       textLabels.length = 0;
+      try {
+        surround?.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      surround = null;
       group.removeFromParent();
       group.clear();
       res.dispose();
@@ -526,7 +599,11 @@ function sandFloor(bin: GeometryBin): void {
   };
   for (let y = 0; y < ARENA_HEIGHT; y++) {
     for (const [x0, x1] of rowRuns(y, (kind) => kind === 'void')) {
-      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(EARTH, (hash01(Math.round(x), Math.round(z), 5) - 0.5) * 0.06));
+      // D-129: the ground outside the walls. It was bare earth while the room
+      // floated in a white void; now the city stands round it, it is the same
+      // lawn the Colosseum stands on in the street, so there is no apron of
+      // dirt under the building that the street does not have.
+      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(OUTSIDE_LAWN, (hash01(Math.round(x), Math.round(z), 5) - 0.5) * 0.05));
     }
     for (const [x0, x1] of rowRuns(y, (kind) => kind === 'tunnel')) {
       bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(TUNNEL, (hash01(Math.round(x), Math.round(z), 7) - 0.5) * 0.05));
@@ -589,6 +666,7 @@ function stands(bin: GeometryBin): void {
           shade(ARCADE, -0.08 + 0.06 * clamp01(py / top) + (hash01(x, y, 17) - 0.5) * 0.03),
         );
         bin.add(key, boxGeometry(x - 0.02, top, y - 0.02, x + 1.02, top + 0.12, y + 1.02), shade(ARCADE, -0.14));
+        atticColonnade(bin, key, x, y, top);
         // Arches every other tile of arc: one storey over the tiers, two to the outside.
         const arch = (x + y) % 2 === 0;
         for (const [dx, dy] of NEIGHBOURS) {
@@ -614,6 +692,40 @@ function stands(bin: GeometryBin): void {
         break;
     }
   });
+}
+
+/**
+ * The attic over the arcade's outer edge (D-129), on the tiles where the
+ * stadium meets the open air: a pier every other bay and the architrave they
+ * carry, up to `COLOSSEUM_WALL_TOP` — the height the Colosseum's wall reaches
+ * on the street, so inside and outside are plainly the same building.
+ *
+ * It is a colonnade and not a wall on purpose. The bays between the piers are
+ * open, so the city beyond (three/arena-surround.ts) still reads from the
+ * sand, and the silhouette still tops out where the street's does.
+ *
+ * Nothing of it stands over a walkable tile: the arcade is solid, and every
+ * piece here is inside the arcade tile it rises from.
+ */
+function atticColonnade(bin: GeometryBin, key: 'stone' | 'south', x: number, y: number, top: number): void {
+  const outward = NEIGHBOURS.filter(([dx, dy]) => arenaTileAt(x + dx, y + dy) === 'void');
+  if (outward.length === 0) return;
+  const cornice = top + 0.12;
+  // The architrave: a continuous band on the arcade's own tile, so the wall
+  // reads as one ring all the way round.
+  bin.add(key, boxGeometry(x, COLOSSEUM_ATTIC_TOP, y, x + 1, COLOSSEUM_WALL_TOP, y + 1), shade(ARCADE, -0.16));
+  bin.add(key, boxGeometry(x + 0.04, COLOSSEUM_ATTIC_TOP - 0.1, y + 0.04, x + 0.96, COLOSSEUM_ATTIC_TOP, y + 0.96), shade(ARCADE, -0.04));
+  if ((x + y) % 2 !== 0) return;
+  // The pier, inside its tile, and a flagpole on the piers that face out.
+  bin.add(key, boxGeometry(x + 0.18, cornice, y + 0.18, x + 0.82, COLOSSEUM_ATTIC_TOP, y + 0.82), (_px: number, py: number) =>
+    shade(ARCADE, -0.02 - 0.06 * clamp01((py - cornice) / (COLOSSEUM_ATTIC_TOP - cornice))),
+  );
+  for (const [dx, dy] of outward) {
+    const { face, u0, u1 } = sideFace(x, y, dx, dy);
+    const uc = (u0 + u1) / 2;
+    bin.add(key, faceQuad(face, uc - 0.22, cornice + 0.2, uc + 0.22, COLOSSEUM_ATTIC_TOP - 0.2, -0.19), ARCADE_SHADOW);
+    break;
+  }
 }
 
 /** The mouth's arch over the tunnel, in the last walled column: where it stands and how high. */
@@ -731,7 +843,18 @@ function emperorsBox(bin: GeometryBin): void {
   const face: Face = { normal: 'z+', plane: z + 1 };
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0, x + 0.95, floor + 0.32, 0.03), shade(PURPLE, 0.05));
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0.03, x + 0.95, floor - 0.54, 0.035), GOLD);
-  bin.add(key, boxGeometry(x + 0.3, floor, z + 0.25, x + 0.7, floor + 0.85, z + 0.55), shade(PURPLE, -0.1));
+  // The throne. D-128 drew it as one closed block through the middle of the
+  // tile, which a seated champion stood inside; it is now a seat a body fits
+  // on — a plinth, the pad `ARENA_THRONE_SEAT.surface` tops, and a back behind
+  // the shoulders — drawn from ARENA_THRONE_SOLIDS, which is what the figure
+  // sits on (D-127, amended 2026-10-03).
+  const pad = ARENA_THRONE_SOLIDS[0]!;
+  const rest = ARENA_THRONE_SOLIDS[1]!;
+  const mid = z + 0.5;
+  bin.add(key, boxGeometry(x + 0.22, floor, mid + pad.minZ + 0.05, x + 0.78, floor + pad.minY, mid + pad.maxZ - 0.05), shade(PURPLE, -0.22));
+  bin.add(key, boxGeometry(x + 0.18, floor + pad.minY, mid + pad.minZ, x + 0.82, floor + pad.maxY, mid + pad.maxZ), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.18, floor + rest.minY, mid + rest.minZ, x + 0.82, floor + rest.maxY, mid + rest.maxZ), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.18, floor + rest.maxY, mid + rest.minZ - 0.01, x + 0.82, floor + rest.maxY + 0.05, mid + rest.maxZ + 0.01), GOLD);
 }
 
 // ---------------------------------------------------------------------------
@@ -748,7 +871,11 @@ function seats(res: ResourceBag): InstancedMesh {
   let geometry: BufferGeometry | null;
   try {
     // Local +Z is outward (the back of the step); the plank and two risers.
-    bin.add('seat', boxGeometry(-0.44, 0.02, 0.08, 0.44, 0.1, 0.4), 0xffffff);
+    // The plank is ARENA_TIER_SOLIDS' first solid, mirrored: its sitter settles
+    // back onto it (`ARENA_TIER_SEAT.back`), so the two describe one plank.
+    const plank = ARENA_TIER_SOLIDS[0]!;
+    const back = ARENA_TIER_SEAT.back ?? 0;
+    bin.add('seat', boxGeometry(-0.44, plank.minY, back - plank.maxZ, 0.44, plank.maxY, back - plank.minZ), 0xffffff);
     bin.add('seat', boxGeometry(-0.36, 0, 0.12, -0.28, 0.02, 0.36), 0xbbbbbb);
     bin.add('seat', boxGeometry(0.28, 0, 0.12, 0.36, 0.02, 0.36), 0xbbbbbb);
     geometry = bin.take('seat');
