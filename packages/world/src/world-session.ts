@@ -384,15 +384,12 @@ const NO_MOVEMENT: MovementInput = Object.freeze({
 
 const IDLE_MOTION: PlayerMotion = Object.freeze({ vx: 0, vy: 0, sprinting: false });
 
-<<<<<<< HEAD
 /** D-127: no peer is sitting anywhere. Shared, so an empty snapshot allocates nothing. */
 const EMPTY_SEAT_INDICES: ReadonlySet<number> = Object.freeze(new Set<number>()) as ReadonlySet<number>;
 /** D-127: no bench seat is taken. */
 const NO_TAKEN_SEATS: ReadonlySet<string> = Object.freeze(new Set<string>()) as ReadonlySet<string>;
-=======
 /** The Studio's entrance is one zone, so the hold needs one identity (D-125). */
 const AVATAR_STUDIO_ENTRANCE_HOLD_KEY = 'avatar-studio';
->>>>>>> origin/main
 
 /** A destroyed session has no outfit to change; keep the field non-optional. */
 const NOOP_AVATAR_OUTFIT: AvatarOutfitSelection = {
@@ -690,14 +687,10 @@ class Session implements WorldSession {
     }
     if (this.arenaShown) this.clearArena();
     this.doors?.advance(delta);
-<<<<<<< HEAD
+    this.studioEntranceHold.advance(delta);
     // Seated: no step, no door, no aim — only the placement keeps being
     // published, so the seat claim reaches the room.
     const input = this.sitting ? this.seatedStreetFrame() : this.moveStreetPlayer(delta, cameraYaw);
-=======
-    this.studioEntranceHold.advance(delta);
-    const input = this.moveStreetPlayer(delta, cameraYaw);
->>>>>>> origin/main
     this.movement.streetUpdate({ x: this.position.x, y: this.position.y }, input, () => {
       if (this.cleanedUp) return;
       this.reportTile();
