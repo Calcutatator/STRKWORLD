@@ -259,6 +259,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
+
+"I went to the bridge counter and it's not popping up an interface." Nothing in
+`deploy/RAILWAY.md` disables the Bridge, and the whole press-E path is sound:
+driven end to end — the real engine-free World session, the real interaction
+system, the real Shell station registry, the real panels, the real presenter
+and `ProductionRoot` with the production route policy from `import.meta.env`
+(`VITE_WALLET_MODE=real` makes `detectRoutePolicy()` answer in a test) — every
+counter opens, the Bridge included. What is wrong is the lock, not the press.
+
+- **The gate's name was a lie.** `station-registry.ts` locks the DEPOSIT
+  counter on `bridgeAccountAvailable && bridgePlannerAvailable`, which
+  production has from boot. But `BridgeProvider.createRuntime` returned the
+  shared `unavailable` runtime (account `null`, planner `null`) for *any*
+  render without a `service` — and the service is the optional recovery
+  runtime, fetched only on Bridge entry and refused outright by
+  `production-runtime.ts`'s Web Storage write probe in a private window, with
+  site data blocked, or on a full quota. So the two capability bits really
+  meant "has the optional chunk landed?", and the counter was locked until it
+  had, or for ever.
+- **Since D-123 that lock is silent.** A locked counter has no shimmer, no key
+  chip, and `fixed-room.ts`'s `interaction()`/`activate()` return `null`/false,
+  so no `station:activated` is emitted and the `capability-unavailable` message
+  `station-registry.ts` prepares can never be rendered. The pre-D-117 walk-up
+  did not show it either; only Menu Mode ever did. A transient or
+  browser-dependent lock with no cue is indistinguishable from a bug — and it
+  only bites production, because the demo runtime needs no storage and no
+  chunk.
+- **The fix is to make the gate mean its name.** The provider publishes the
+  account and planner it was given with `service: null` until the runtime
+  lands, and carries a `loading` bit so the window says "still starting up"
+  rather than D-043's "saved recovery is unavailable in this browser" before
+  the loader has answered. D-061 (no planner → recovery-only) and D-043
+  (nothing pretends to persist) are unchanged.
+- **Two React traps on the way.** `setState(fn)` treats a function as an
+  updater, so parking a failed *loader function* in state calls it — box it
+  (`{ loader }`) or use `setState(() => fn)`. And `WorldSession.update` clamps
+  its delta (`clampFrame`), so a test cannot step D-114's 250 ms door
+  re-entry hold with one big tick; it needs real frames.
+
+*Verified:* `npx vitest run --reporter=default` (297 files, 6,273 tests) and
+`npm run typecheck`. `visits/counter-press-e.flow.test.tsx` walks the player
+into all twelve counters and presses E; the Bridge case with a loader that
+never answers failed before this change and passes after. Not verified: a real
+browser, and whether the lead's own session was the storage probe or a slow
+chunk — both end in the same silent counter, and both now open the window.
+
 ### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-122)
 
 Four traps from wiring the private leaderboard's game side. (1) `shadowAccountAddress` (`calculateContractAddressFromHash`, several Pedersen hashes in JS) costs about 30 ms. Cross-checking all 128 rows of a shadow page took about 4 s per page, in tests and in a browser alike. The count never rests on the addresses (each receipt's commitment is `h(p, n)`, derived locally, and its count is the ledger's), so only the newest deployed row is checked. (2) A value import of `@strkworld/privacy` anywhere in the Shell's eager graph fails `architecture.test.ts` (it pulls `starknet` into the entry chunk), so the placement maths runs inside `checkPlacement` and the Shell imports types only. `PrivacyError` is matched with `toFailure`, never `instanceof`. (3) `PrivacyOperations` is frozen (D-036, `operations.test.ts`): an optional member fails its "every pinned member is a method" type check, so `checkPlacement` is required and rejects while the leaderboard is off. Every test double implementing the seam needed it. (4) The tally's exposure is wider than "links a season's receipts to each other": a shield receipt rides in the shield's transaction, whose `Deposit` names the depositor, so whoever holds `p` can find the account of a player who shielded. Also, `count_of` is `-> u64` (one felt), and `tick` reverts a second receipt in one transaction, so a batch must never carry two.
