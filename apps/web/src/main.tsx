@@ -17,7 +17,9 @@ import { createArenaAuthority } from '@strkworld/lobby/arena';
 import { createSwingController } from './roof/swing-controller.js';
 import { createSwingAuthority } from '@strkworld/lobby/swing';
 import { installPresenceTeardown } from './presence/lifecycle.js';
-import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
+import { parseProductionWalletConfig, usesProductionWallet, withLeaderboardProbe } from './production/config.js';
+import { detectLeaderboardProbe, leaderboardProbe } from './production/leaderboard-probe.js';
+import { debugLeaderboard } from './debug/debug-tap.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
 import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
@@ -143,7 +145,13 @@ if (usesProductionWallet(environment)) {
     </StrictMode>,
   );
   try {
-    const config = parseProductionWalletConfig(environment);
+    // D-122's probe switch: the leaderboard's build flag counts only in a tab
+    // opened with `?lb=1`, so the session this page builds carries receipts
+    // for the lead's own probe and for nobody else's visit. Every other
+    // variable reaches the parser untouched.
+    const config = parseProductionWalletConfig(
+      withLeaderboardProbe(environment, detectLeaderboardProbe()),
+    );
     // The degen floor's list (D-067), read from the same-origin backend only
     // when the degen counter opens; while swap is off that counter is locked.
     const degenCatalog = createBackendDegenCatalog({ baseUrl: config.backendBaseUrl });
@@ -161,8 +169,25 @@ if (usesProductionWallet(environment)) {
         // The relay client binds fetch when the session is built, so an
         // opted-in debug logger must wrap it first (D-069).
         if (debugLogsReady) await debugLogsReady;
-        const { createProductionWalletSession, ReservePublicShieldPlanner } = await import('@strkworld/privacy');
+        const {
+          createProductionWalletSession,
+          ReservePublicShieldPlanner,
+          setLeaderboardNoticeSink,
+        } = await import('@strkworld/privacy');
         createShieldPlanner = (options) => new ReservePublicShieldPlanner(options);
+        // D-122, amended 2026-10-02: the placement's own decisions on D-069's
+        // channel, so a probe that attaches no receipt says which step
+        // declined. Reason codes only — never `p`, a commitment, a shadow
+        // address or the account. Without an opted-in logger every call is a
+        // no-op, so this is installed unconditionally and stays silent.
+        setLeaderboardNoticeSink((notice) => debugLeaderboard(notice));
+        const probe = leaderboardProbe();
+        debugLeaderboard({
+          event: 'probe',
+          on: probe.on,
+          reason: probe.reason,
+          build: environment.VITE_STRK20_LEADERBOARD_ENABLED === 'true',
+        });
         return createProductionWalletSession(config);
       },
       render: (session) => {

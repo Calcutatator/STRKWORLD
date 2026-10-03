@@ -87,6 +87,23 @@ export interface InteractionTarget {
    */
   readonly object?: object;
   /**
+   * D-127: what the 3D view shows for this target besides the chip.
+   *
+   * `'shell'` (the default, and what every station has) is D-123's pair of
+   * cues: the thing shimmers while it is usable and takes an ember edge glow
+   * while it is the target.
+   *
+   * `'none'` says the opposite out loud: **no shimmer and no edge glow, only
+   * the key chip**. The benches use it (the lead asked for "no shimmer or
+   * close highlight, only the popup 'E' 'sit'"). It is a declaration, not an
+   * omission: leaving `object` off and registering no shell would look the
+   * same today and go quietly wrong the day someone adds a shell for the same
+   * id. A `'none'` target must therefore carry no `object` — the view ignores
+   * one if it does — and no `AffordanceShells` entry should exist under its
+   * id.
+   */
+  readonly cue?: 'shell' | 'none';
+  /**
    * Use it. Synchronous: a Shell handoff happens inside, and its error is
    * the caller's. What it returns is ignored: a focused target always takes
    * the press, so E never falls through to an action behind a prompt.
@@ -117,6 +134,11 @@ export interface InteractionPrompt {
   readonly y: number;
   /** The target's 3D object, when it named one (`InteractionTarget.object`). */
   readonly object?: object;
+  /**
+   * D-127: `'none'` when the target asked for the chip alone — no shimmer and
+   * no edge glow. Absent means D-123's usual shell cues.
+   */
+  readonly cue?: 'none';
 }
 
 export interface InteractionPlayer {
@@ -362,20 +384,25 @@ export function createInteractionSystem(options: InteractionSystemOptions = {}):
 }
 
 function promptOf(target: InteractionTarget): InteractionPrompt {
-  const object = typeof target.object === 'object' && target.object !== null ? target.object : undefined;
+  // D-127: a "chip only" target never carries an object through, so no view can
+  // light one by accident.
+  const quiet = target.cue === 'none';
+  const object = !quiet && typeof target.object === 'object' && target.object !== null ? target.object : undefined;
   return Object.freeze({
     id: target.id,
     label: target.label,
     x: target.rect.x + target.rect.width / 2,
     y: target.rect.y + target.rect.height / 2,
     ...(object ? { object } : {}),
+    ...(quiet ? { cue: 'none' as const } : {}),
   });
 }
 
 function samePrompt(a: InteractionPrompt | null, b: InteractionPrompt | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.id === b.id && a.label === b.label && a.x === b.x && a.y === b.y && a.object === b.object;
+  return a.id === b.id && a.label === b.label && a.x === b.x && a.y === b.y &&
+    a.object === b.object && a.cue === b.cue;
 }
 
 function validTarget(target: unknown): target is InteractionTarget {

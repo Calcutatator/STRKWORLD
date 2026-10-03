@@ -11,11 +11,13 @@ import {
   type LeaderboardHistogram,
   type Placement,
 } from '../leaderboard.js';
+import { noticeLeaderboard, type LeaderboardSkipReason } from '../leaderboard-notice.js';
 import { PrivacyError, type Address } from '../types.js';
 import { shadowAccountAddress } from '../vault.js';
+import { WalletCommitmentCache } from './commitment-cache.js';
 import { mapShadowWalletError } from './errors.js';
 import { createReceiptNonceStore, receiptNonceKey, type ReceiptNonceStore } from './receipt-nonce-store.js';
-import { hasCommitmentMethod, isFelt, ownData, sameAddress, throwIfAborted } from './shadow-account.js';
+import { ownData, sameAddress, throwIfAborted } from './shadow-account.js';
 import type { LeaderboardReadClient, LeaderboardShadowRow, WalletStrk20Account } from './types.js';
 
 /**
@@ -36,11 +38,18 @@ import type { LeaderboardReadClient, LeaderboardShadowRow, WalletStrk20Account }
  * Nothing here branches on wallet identity.
  */
 
-/** A counter whose shadow account can tick the ledger: its own full commitment, and its partial. */
+/**
+ * A counter whose shadow account can tick the ledger, as a placement check
+ * may read it: both answers come from the connection's commitment cache and
+ * never from the wallet, so a check cannot prompt for a feature (D-122,
+ * amended 2026-10-03). A feature the player has not used this session is
+ * simply absent from the check — the tally keeps its last verified count.
+ */
 export interface LedgerTickSource {
-  commitment(): Promise<string>;
+  /** The feature shadow's full commitment `C`, if its partial is cached; null otherwise. */
+  cachedCommitment(): string | null;
   /** Sent to the tally only when it ranks DeFi (`rankDefi`), as proof this account owns the shadow. */
-  partial?(): Promise<string>;
+  cachedPartial(): string | null;
 }
 
 export interface LeaderboardReceiptsOptions {
@@ -53,6 +62,12 @@ export interface LeaderboardReceiptsOptions {
   readonly features: readonly LedgerTickSource[];
   /** Where this device remembers the next receipt nonce; guarded `localStorage` by default. */
   readonly nonces?: ReceiptNonceStore;
+  /**
+   * The connection's one commitment cache, shared with every feature route, so
+   * the season commitment is asked for at most once per connection and a
+   * receipt and a check never ask twice between them. Absent, its own.
+   */
+  readonly commitments?: WalletCommitmentCache;
 }
 
 /** A receipt ready to join a transaction, and the nonce it uses. */
@@ -93,12 +108,11 @@ const MAX_PAGES = MAX_LEADERBOARD_RECEIPTS / LEADERBOARD_SHADOW_PAGE;
 
 export class LeaderboardReceipts {
   readonly ledger: Address;
-  private readonly wallet: WalletStrk20Account;
   private readonly reads?: LeaderboardReadClient;
   private readonly supported: (signal?: AbortSignal) => Promise<boolean>;
   private readonly features: readonly LedgerTickSource[];
-  /** `p` once given, for this connection only. Deterministic, so asked once. */
-  private partial: Promise<string> | null = null;
+  /** Where `p` lives once given: the connection's shared cache, memory only. */
+  private readonly commitments: WalletCommitmentCache;
   /**
    * The lowest nonce not yet used by a transaction this connection submitted:
    * a submitted receipt is not on-chain until accepted, and the next action
@@ -110,21 +124,34 @@ export class LeaderboardReceipts {
 
   constructor(options: LeaderboardReceiptsOptions) {
     this.nonces = options.nonces ?? createReceiptNonceStore();
-    this.wallet = options.wallet;
     this.reads = options.reads;
     this.ledger = options.ledger;
     this.supported = options.supported;
     this.features = Object.freeze([...options.features]);
+    this.commitments = options.commitments ?? new WalletCommitmentCache(options.wallet);
+  }
+
+  /**
+   * Whether the next check would reach the wallet for the season commitment —
+   * so the panel can say "Your wallet will ask to share your season ID" only
+   * when it is true. Reads the cache; it never asks anything itself.
+   */
+  willPrompt(): boolean {
+    return this.commitments.willAsk(LEADERBOARD_DAPP_NAME);
   }
 
   /**
    * The receipt for the next shield, unshield or send, or null when there
    * cannot be one (fail open: the action goes out unchanged).
+   *
+   * Every exit reports itself on D-069's debug channel as a reason code, so a
+   * probe deploy that attaches nothing says which step declined. The code is
+   * all that is written: no commitment, no nonce, no address.
    */
   async receiptFor(signal?: AbortSignal): Promise<PreparedReceipt | null> {
     try {
-      if (!this.reads) return null;
-      if (!(await this.supported(signal))) return null;
+      if (!this.reads) return skipReceipt('no-reads');
+      if (!(await this.supported(signal))) return skipReceipt('unsupported-route');
       throwIfAborted(signal);
       const partial = await this.partialCommitment();
       throwIfAborted(signal);
@@ -135,12 +162,17 @@ export class LeaderboardReceipts {
       const known = this.nonces.read(key);
       const next = known ?? (await this.scan(partial, signal)).next;
       const nonce = next > this.floor ? next : this.floor;
-      if (nonce >= BigInt(MAX_LEADERBOARD_RECEIPTS)) return null;
-      return Object.freeze({
+      if (nonce >= BigInt(MAX_LEADERBOARD_RECEIPTS)) return skipReceipt('no-nonce');
+      const prepared = Object.freeze({
         action: receiptInvokeAction({ ledger: this.ledger, partialCommitment: partial, nonce }),
         nonce,
       });
+      noticeLeaderboard({ event: 'receipt', attached: true });
+      return prepared;
     } catch {
+      // A cancelled prepare is the player closing the counter, not a fault:
+      // it is the one exit that reports nothing.
+      if (signal?.aborted !== true) skipReceipt('scan-failed');
       return null;
     }
   }
@@ -185,15 +217,13 @@ export class LeaderboardReceipts {
     const best = [next, this.floor, known ?? 0n].reduce((a, b) => (b > a ? b : a));
     if (known === null || best > known) this.nonces.write(key, best);
 
-    // The DeFi counters' ticks: best effort, a refused or failed one adds nothing.
-    const featureCommitments: string[] = [];
-    for (const feature of this.features) {
-      try {
-        featureCommitments.push(await feature.commitment());
-      } catch {
-        throwIfAborted(signal);
-      }
-    }
+    // The DeFi counters' ticks, for the features this session has already
+    // used: their commitments come from the connection's cache, so a check
+    // never prompts for one. A feature the player has not touched this session
+    // is left out, and the tally keeps its last verified count for it.
+    const featureCommitments = this.features
+      .map((feature) => feature.cachedCommitment())
+      .filter((commitment): commitment is string => commitment !== null);
     let defi = 0;
     try {
       defi = await this.countOf(featureCommitments, signal);
@@ -210,20 +240,22 @@ export class LeaderboardReceipts {
     } catch {
       throwIfAborted(signal);
     }
-    const featurePartials: string[] = [];
-    if (rankDefi) {
-      for (const feature of this.features) {
-        try {
-          if (feature.partial) featurePartials.push(await feature.partial());
-        } catch {
-          throwIfAborted(signal);
-        }
-      }
-    }
+    // Only the partials already in this session's cache go out: never a prompt
+    // just to collect them for a check.
+    const featurePartials = rankDefi
+      ? this.features
+          .map((feature) => feature.cachedPartial())
+          .filter((partial): partial is string => partial !== null)
+      : [];
 
     let verified: number | null = null;
     try {
-      const answer = await reads.leaderboardCheckIn(LEADERBOARD_SEASON, partial, signal, rankDefi ? featurePartials : undefined);
+      const answer = await reads.leaderboardCheckIn(
+        LEADERBOARD_SEASON,
+        partial,
+        signal,
+        featurePartials.length > 0 ? featurePartials : undefined,
+      );
       verified = smallCount(answer.count);
     } catch {
       throwIfAborted(signal);
@@ -301,30 +333,20 @@ export class LeaderboardReceipts {
     return total;
   }
 
-  /** `p` for the season, asked once per connection; a refusal is asked again next time. */
+  /**
+   * `p` for the season, through the connection's shared cache: asked once per
+   * connection across every flow (a receipt, a check, a second check), and a
+   * refusal is asked again next time. Memory only, as the cache is.
+   */
   private partialCommitment(): Promise<string> {
-    if (this.partial) return this.partial;
-    const request = (async () => {
-      let answer: unknown;
-      try {
-        if (!hasCommitmentMethod(this.wallet)) {
-          throw new PrivacyError('shadow-accounts-unsupported', 'This wallet cannot check a private placement yet.');
-        }
-        answer = await this.wallet.strk20ShadowAccountCommitment!(LEADERBOARD_DAPP_NAME);
-      } catch (error) {
-        throw mapShadowWalletError(error);
-      }
-      if (typeof answer !== 'string' || !isFelt(answer) || BigInt(answer) === 0n) {
-        throw new PrivacyError('unknown', 'The wallet returned an invalid commitment.');
-      }
-      return answer;
-    })();
-    this.partial = request;
-    request.catch(() => {
-      if (this.partial === request) this.partial = null;
-    });
-    return request;
+    return this.commitments.commitment(LEADERBOARD_DAPP_NAME);
   }
+}
+
+/** Report a declined receipt by code, and answer null: the action goes out unchanged. */
+function skipReceipt(reason: LeaderboardSkipReason): null {
+  noticeLeaderboard({ event: 'receipt', attached: false, reason });
+  return null;
 }
 
 function smallCount(value: unknown): number {

@@ -156,22 +156,60 @@ export interface StreetMovementAdapter {
   initial(position: Position): void;
   streetUpdate(position: Position, input: MovementInput, afterMovement: () => void): void;
   interiorUpdate(afterMovement: () => void): void;
-  /** Back on the street, idle; `facing` turns the published facing (the arena's return faces north). */
+  /** Back on the street, idle; `facing` turns the published facing (the arena's return faces west). */
   exit(position: Position, afterPlacement: () => void, facing?: Facing): void;
 }
 
 export function createStreetMovementReporter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
+  seat?: () => number,
+  airborne?: () => boolean,
 ): StreetMovementReporter {
   let facing: Facing = 'down';
   let facingRevision = 0;
 
+  /**
+   * D-127: the bench seat the player sits on, or -1. Read at each publish, and
+   * only put on the payload while they are actually sitting, so a standing
+   * player's `player:moved` is exactly what it always was.
+   */
+  const seatNow = (): number => {
+    if (!seat) return -1;
+    try {
+      const value = seat();
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : -1;
+    } catch {
+      // A seat that cannot be read is no seat: the player is published standing.
+      return -1;
+    }
+  };
+
+  /**
+   * D-130: whether the feet are clear of the ground right now. Read and put on
+   * the payload exactly like `seat`: present only while it is true, so a
+   * walking player's `player:moved` is what it always was. The Shell reads it
+   * for the ball it draws; the lobby is never sent it (the room times the
+   * jump itself).
+   */
+  const airborneNow = (): boolean => {
+    if (!airborne) return false;
+    try {
+      return airborne() === true;
+    } catch {
+      // Feet on the ground is the safe answer: the ball behaves as before.
+      return false;
+    }
+  };
+
   const publish = (position: Position): void => {
     // The shell may have several synchronous listeners. Do not let one of
     // them rewrite the caller's position or the payload observed by another.
+    const sat = seatNow();
     out.emit('player:moved', Object.freeze({
       position: Object.freeze({ ...position }),
       facing,
+      ...(sat >= 0 ? { seat: sat } : {}),
+      ...(airborneNow() ? { airborne: true } : {}),
     }));
   };
 
@@ -210,8 +248,10 @@ export function createStreetMovementReporter(
  */
 export function createStreetMovementAdapter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
+  seat?: () => number,
+  airborne?: () => boolean,
 ): StreetMovementAdapter {
-  const reporter = createStreetMovementReporter(out);
+  const reporter = createStreetMovementReporter(out, seat, airborne);
   let transitionRevision = 0;
   return {
     get facing() {

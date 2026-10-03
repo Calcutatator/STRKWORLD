@@ -98,6 +98,8 @@ async function choose(control: HTMLSelectElement, value: string): Promise<void> 
 }
 
 const amount = () => container!.querySelector<HTMLInputElement>('input[name="amount"]')!;
+/** The Sell side's field, the one the pool balance and its fill button belong to. */
+const sellField = () => amount().closest('.ui-amount')!;
 const bought = () => container!.querySelector<HTMLInputElement>('input[name="buy-amount"]')!;
 const submit = () => container!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const rows = () => Object.fromEntries([...container!.querySelectorAll('.ui-detail')].map((row) => [row.querySelector('dt')!.textContent, row.querySelector('dd')!.textContent]));
@@ -110,7 +112,9 @@ describe('the Exchange swap: the Sell side', () => {
 
     await click(button(COPY.kit.maxLabel));
     expect(amount().value).toBe('94.000000000000000001');
-    expect(container!.textContent).toContain(COPY.balance.feeReserved);
+    // D-131: the field states the figure left aside, as it does for a press
+    // on the balance line, which fills the same amount.
+    expect(container!.querySelector('.ui-amount-hint')!.textContent).toBe(COPY.kit.feeKeptAside.replace('{amount}', '6 STRK'));
   });
 
   it('fills in half of what Max would with 50%', async () => {
@@ -142,6 +146,44 @@ describe('the Exchange swap: the Sell side', () => {
     await open(new FakePrivacyOperations({ balances: { [strk!.token]: 6n * ONE } }));
     expect(button(COPY.kit.maxLabel).disabled).toBe(true);
     expect(button(COPY.kit.halfLabel).disabled).toBe(true);
+  });
+
+  /**
+   * D-131: the figure on the balance line is the button that fills the Sell
+   * side with it, keeping the pool fee aside where the asset sold is the fee's
+   * own token, exactly as Max does, and the review quotes that same amount.
+   */
+  it('fills the Sell side from the balance line, fee aside, and the review takes that amount', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * ONE + 1n },
+      swapReview: { expectedAmountOut: 2n * ONE, slippageBps: 50, expiresAt: FAR },
+    });
+    await open(operations);
+    const figure = container!.querySelector<HTMLButtonElement>('button.ui-balance-fill')!;
+    expect(figure.textContent).toBe('100 STRK');
+    expect(figure.getAttribute('aria-label')).toBe('Use 94 STRK, keeping the 6 STRK fee aside');
+    await click(figure);
+    expect(amount().value).toBe('94.000000000000000001');
+    expect(container!.querySelector('.ui-amount-hint')!.textContent).toBe(COPY.kit.feeKeptAside.replace('{amount}', '6 STRK'));
+
+    await click(submit());
+    const gate = container!.querySelector('.confirm-gate')!.textContent!;
+    expect(gate).toContain('94.000000000000000001 STRK');
+  });
+
+  it('has nothing to press on the balance line while the fee token is all there is and the fee is the whole of it', async () => {
+    await open(new FakePrivacyOperations({ balances: { [strk!.token]: 6n * ONE } }));
+    expect(container!.querySelector('button.ui-balance-fill')).toBeNull();
+    expect(container!.querySelector('.ui-balance-fill-off')!.getAttribute('title')).toBe(COPY.kit.balanceUnderFee.replace('{fee}', '6 STRK'));
+  });
+
+  it('fills the whole balance of an asset the pool fee does not come out of', async () => {
+    await open(new FakePrivacyOperations({ balances: { [strk!.token]: 100n * ONE, [usdc!.token]: 25_000_000n } }));
+    await choose(select(COPY.exchange.sellToken), usdc!.token);
+    await click(container!.querySelector<HTMLButtonElement>('button.ui-balance-fill')!);
+    expect(amount().value).toBe('25');
+    // Nothing kept aside: the pool fee is STRK's, and this sells USDC.
+    expect(sellField().querySelector('.ui-amount-hint')?.textContent ?? '').not.toContain('fee kept aside');
   });
 
   it('flags an amount over the pool balance in the field and on the button', async () => {

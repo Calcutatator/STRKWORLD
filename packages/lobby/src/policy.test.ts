@@ -68,8 +68,9 @@ describe('default lobby vocabulary ownership', () => {
     expect(MESSAGE.kick).toBe('football:kick');
     expect(SERVER_MESSAGE.goal).toBe('football:goal');
     expect(Object.keys(MESSAGE).sort()).toEqual([
-      'area', 'arenaAttack', 'arenaClaim', 'arenaLeave', 'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace',
-      'suspend', 'swingClaim', 'swingLeave',
+      'area', 'arenaAttack', 'arenaBlock', 'arenaClaim', 'arenaLeave', 'arenaSit', 'arenaUnblock',
+      'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
+      'swingClaim', 'swingLeave',
     ]);
   });
 
@@ -78,6 +79,10 @@ describe('default lobby vocabulary ownership', () => {
     expect(MESSAGE.arenaClaim).toBe('arena:claim');
     expect(MESSAGE.arenaAttack).toBe('arena:attack');
     expect(MESSAGE.arenaLeave).toBe('arena:leave');
+    // D-128: the block's two intents and the emperor's box, all payload-less.
+    expect(MESSAGE.arenaBlock).toBe('arena:block');
+    expect(MESSAGE.arenaUnblock).toBe('arena:unblock');
+    expect(MESSAGE.arenaSit).toBe('arena:sit');
     // No new server message: swings, hits and results ride the ring entry.
     expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['goal', 'resync', 'sandboxBurst', 'sandboxDrop', 'welcome']);
   });

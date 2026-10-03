@@ -24,11 +24,14 @@ import {
   type ArenaTileKind,
 } from '@strkworld/shared';
 import type { FixedRoomLevelMap, FixedRoomStationPresentation } from '../fixed-room.js';
+import { COLOSSEUM_ATTIC_TOP, COLOSSEUM_WALL_TOP } from './colosseum-style.js';
+import { createArenaSurround, layArenaOutsideGround, type ArenaSurround } from './arena-surround.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import {
   GeometryBin,
+  PALETTE,
   ResourceBag,
   beamGeometry,
   boxGeometry,
@@ -43,6 +46,7 @@ import {
   flushBin,
   hash01,
   mixHex,
+  prismX,
   prismZ,
   shade,
   sphereGeometry,
@@ -56,13 +60,13 @@ import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 
 /**
  * The gladiator pit's arena in 3D (D-114): an open-air stadium oval at the
- * interiors' origin. Raked sand, a podium wall with two stairs, five stone
- * tiers with a wooden bench on every seat tile, an arcade behind them with
- * banners, braziers on the podium, the north tunnel from the pit's arch
- * (closed at its far end by the doorway out), the emperor's box (the
- * reserved station) on the south podium facing it and, in the middle, the
- * fenced ring with its gate on the tunnel's side, the gate lamp, its sign
- * and the training dummy.
+ * interiors' origin. Raked sand, a podium wall with a stair on its east
+ * side, five stone tiers with a wooden bench on every seat tile, an arcade
+ * behind them with banners, braziers on the podium, the west tunnel from the
+ * pit's arch (closed at its far end by the doorway out), the emperor's box
+ * (the reserved station) on the north podium and, in the middle, the fenced
+ * ring with its gate on the tunnel's (west) side, the gate lamp, its sign and
+ * the training dummy.
  *
  * The generic room shell (four walls round a flat floor) is wrong for a
  * 41 x 33 oval, so `buildFixedRoom` hands the arena to this builder. Every
@@ -71,12 +75,21 @@ import { createAffordanceShells, type AffordanceSet } from './affordance.js';
  * height (`arenaSurfaceHeightAt`, which the presenter stands feet on), so
  * over a walkable tile nothing rises more than a low bench above that
  * tile's own surface. The camera always looks north (camera-rig.ts), so the
- * south half of the stands, south of the ring, is its own material and fades
- * as an occluder: the near stands, the box among them, never hide the player.
+ * stands south of the ring, the tunnel's south wall and the stands south of
+ * it, and the tunnel's mouth arch are their own material and fade as an
+ * occluder (`arenaFades`): the near stands never hide the player, in the
+ * tunnel or on the sand.
+ *
+ * D-129: the stadium no longer floats in a white void. The city the street
+ * stands in is mounted round it (three/arena-surround.ts), the arcade carries
+ * an attic colonnade up to the Colosseum's own `COLOSSEUM_WALL_TOP`, and the
+ * ground beyond the wall goes into the sand's own bin, so inside and outside
+ * are one building.
  *
  * Draw calls: sand, north stone, south stone, seats (one InstancedMesh, one
  * instance per tier tile), banners, flames (one InstancedMesh), fence, gate
- * (two leaves, one InstancedMesh), gate lamp, dummy, the emperor's box's affordance shell (D-123) and two labels: 13.
+ * (two leaves, one InstancedMesh), gate lamp, dummy, the emperor's box's affordance shell (D-123) and two labels: 13,
+ * plus the surround's city, its lit windows and the south vista's five.
  * The combat feedback (C's `arena-fx.ts`) mounts under `fxMount`.
  */
 
@@ -137,7 +150,8 @@ const ARCADE_SHADOW = 0x4a3a2c;
 const DOORWAY_SHADOW = 0x1f1812;
 const SAND = 0xdcc191;
 const SAND_DARK = 0xc2a473;
-const EARTH = 0x5b4a3a;
+/** D-129: the lawn outside the walls, the colour the street's south lawn is. */
+const OUTSIDE_LAWN = PALETTE.grassWarm;
 const TUNNEL = 0x8e7b62;
 const TIMBER = 0x7a5532;
 const ROPE = 0xcdb688;
@@ -188,7 +202,7 @@ export function buildArenaRoom(
   map: FixedRoomLevelMap,
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
-  options: { readonly reducedMotion?: () => boolean } = {},
+  options: { readonly reducedMotion?: () => boolean; readonly lowDetail?: boolean } = {},
 ): ArenaRoomView {
   const res = new ResourceBag();
   const group = new Group();
@@ -217,6 +231,7 @@ export function buildArenaRoom(
   const dummy = new Group();
   dummy.name = 'arena:dummy';
 
+  let surround: ArenaSurround | null = null;
   const bin = new GeometryBin();
   // D-123: the emperor's box (a reserved station: E shows it is closed) has
   // an affordance shell like any counter; the ring gate's is the presenter's.
@@ -225,6 +240,9 @@ export function buildArenaRoom(
   const boxStation = map.stations[0];
   try {
     sandFloor(bin);
+    // D-129: the ground the city beyond the wall stands on, in the sand's own
+    // bin, so it costs no draw call of its own.
+    layArenaOutsideGround(bin, 'sand');
     stands(bin);
     tunnel(bin);
     emperorsBox(boxStation ? shells.record(boxStation.station, bin) : bin);
@@ -242,16 +260,26 @@ export function buildArenaRoom(
     const southMaterial = res.material(standardMaterial({ roughness: 0.88 }));
     const south = flushBin(bin, 'south', southMaterial, res, group, { name: 'arena:stone-south', cast: true, receive: true });
     if (south) {
-      // Everything south of the ring: the near stands, the emperor's box and
-      // the south arcade, which would otherwise hide the player.
+      // Everything that stands between the north-looking camera and the
+      // player: the stands south of the ring, the tunnel's south wall and the
+      // stands south of it, and the mouth's arch over the tunnel.
+      const box = (minX: number, maxX: number, minZ: number, maxZ: number, minY = 0, height = ARENA_SURFACE.arcade + 0.6) =>
+        Object.freeze({
+          minX: group.position.x + minX,
+          maxX: group.position.x + maxX,
+          minZ: group.position.z + minZ,
+          maxZ: group.position.z + maxZ,
+          minY,
+          height,
+        });
+      const mouth = tunnelMouth();
       occluders.push(Object.freeze({
-        bounds: Object.freeze({
-          minX: group.position.x,
-          maxX: group.position.x + ARENA_WIDTH,
-          minZ: group.position.z + ARENA_FADE_ROW,
-          maxZ: group.position.z + ARENA_HEIGHT,
-          height: ARENA_SURFACE.arcade + 0.6,
-        }),
+        bounds: box(0, ARENA_WIDTH, ARENA_TUNNEL.y, ARENA_HEIGHT),
+        boxes: Object.freeze([
+          box(0, ARENA_WIDTH, ARENA_FADE_ROW, ARENA_HEIGHT),
+          box(0, ARENA_FADE_WEST.maxX, ARENA_FADE_WEST.minY, ARENA_FADE_ROW),
+          box(mouth.x0, mouth.x1, ARENA_TUNNEL.y, ARENA_TUNNEL.y + ARENA_TUNNEL.height, mouth.spring, mouth.top),
+        ]),
         setOpacity: createOpacityFader([southMaterial]),
       }));
     }
@@ -280,8 +308,8 @@ export function buildArenaRoom(
     lampMaterial = res.material(unlitMaterial({ additive: true, vertexColors: false, color: ARENA_GATE_LAMP.open }));
     const lampBin = new GeometryBin();
     try {
-      const gx = ARENA_RING_GATE.x + ARENA_RING_GATE.width / 2;
-      const gz = ARENA_RING_GATE.y + 0.5;
+      const gx = ARENA_RING_GATE.x + 0.5;
+      const gz = ARENA_RING_GATE.y + ARENA_RING_GATE.height / 2;
       lampBin.add('lamp', sphereGeometry(gx, GATE_POST_TOP + 0.36, gz, 0.09, { widthSegments: 10, heightSegments: 6 }), 0xb0b0b0);
       lampBin.add('lamp', sphereGeometry(gx, GATE_POST_TOP + 0.36, gz, 0.15, { widthSegments: 10, heightSegments: 6 }), 0x303030);
       flushBin(lampBin, 'lamp', lampMaterial, res, group, { name: 'arena:gate-lamp', renderOrder: 2 });
@@ -290,9 +318,9 @@ export function buildArenaRoom(
     }
 
     // The training dummy, its own group so the combat fx can flash, wobble
-    // and topple it about the post's foot. Built facing south, it turns to
-    // face the gate; the yaw goes first, so the fx's topple (about local x)
-    // still falls backwards, away from the gate.
+    // and topple it about the post's foot. Built facing south, to the camera,
+    // as it always stood (`ARENA_DUMMY_YAW` is 0); the yaw goes first, so the
+    // fx's topple (about local z) falls east, away from the gate.
     dummy.position.set(ARENA_DUMMY_TILE.x + 0.5, 0, ARENA_DUMMY_TILE.y + 0.5);
     dummy.rotation.order = 'YXZ';
     dummy.rotation.y = ARENA_DUMMY_YAW;
@@ -310,11 +338,25 @@ export function buildArenaRoom(
     group.add(dummy);
     group.add(fxMount);
 
-    // The ring's sign on the gate's crossbar, on its ring side: signs face
-    // the camera, which always looks north, so it reads over the ring.
+    // D-129: the street's own city and water, hung round the arena. Built
+    // last, so a failure here cannot leave the stadium half-built.
+    surround = createArenaSurround({
+      lowDetail: options.lowDetail === true,
+      reducedMotion: reduced(),
+    });
+    group.add(surround.group);
+    animators.push((elapsed) => surround?.update(elapsed));
+
+    // The ring's sign stands on the gate's crossbar, square to the camera,
+    // which always looks north: the crossbar runs north to south, so the
+    // sign faces south across it, a hair south of the lamp's bracket.
     const sign = labels.sign(ARENA_RING_SIGN_TEXT, ARENA_RING_SIGN);
     textLabels.push(sign);
-    sign.object.position.set(ARENA_RING_GATE.x + ARENA_RING_GATE.width / 2, GATE_POST_TOP - 0.2, ARENA_RING_GATE.y + 0.62);
+    sign.object.position.set(
+      ARENA_RING_GATE.x + 0.5,
+      GATE_POST_TOP - 0.3 + ARENA_RING_SIGN.height / 2,
+      ARENA_RING_GATE.y + ARENA_RING_GATE.height / 2 + 0.08,
+    );
     sign.object.userData['area'] = 'arena-ring';
     group.add(sign.object);
 
@@ -330,6 +372,11 @@ export function buildArenaRoom(
     }
   } catch (error) {
     bin.dispose();
+    try {
+      surround?.dispose();
+    } catch {
+      // The construction error stays authoritative.
+    }
     for (const label of textLabels) {
       try {
         label.dispose();
@@ -392,6 +439,12 @@ export function buildArenaRoom(
         }
       }
       textLabels.length = 0;
+      try {
+        surround?.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      surround = null;
       group.removeFromParent();
       group.clear();
       res.dispose();
@@ -421,9 +474,24 @@ function ovalOutward(x: number, z: number): { readonly d: number; readonly ox: n
 /** The first row south of the ring's fence: from here south the stands fade (the camera looks north). */
 export const ARENA_FADE_ROW = ARENA_RING_FENCE.y + ARENA_RING_FENCE.height;
 
-/** The bin a stone volume on row `y` goes to: south of the ring fades. */
-function stoneKey(y: number): 'stone' | 'south' {
-  return y >= ARENA_FADE_ROW ? 'south' : 'stone';
+/**
+ * West of the tunnel's mouth the fade starts sooner: the tunnel's south wall
+ * and the stands south of it stand between the camera and a player in the
+ * tunnel, so from its wall row south they fade too.
+ */
+export const ARENA_FADE_WEST = Object.freeze({
+  maxX: ARENA_TUNNEL.x + ARENA_TUNNEL.width,
+  minY: ARENA_TUNNEL.y + ARENA_TUNNEL.height,
+});
+
+/** Whether a stone volume on tile (x, y) is part of the fading near stands. */
+export function arenaFades(x: number, y: number): boolean {
+  return y >= ARENA_FADE_ROW || (x < ARENA_FADE_WEST.maxX && y >= ARENA_FADE_WEST.minY);
+}
+
+/** The bin a stone volume on tile (x, y) goes to: the near stands fade. */
+function stoneKey(x: number, y: number): 'stone' | 'south' {
+  return arenaFades(x, y) ? 'south' : 'stone';
 }
 
 function forEachTile(visit: (x: number, y: number, kind: ArenaTileKind) => void): void {
@@ -493,14 +561,16 @@ function sandFloor(bin: GeometryBin): void {
   };
   for (let y = 0; y < ARENA_HEIGHT; y++) {
     for (const [x0, x1] of rowRuns(y, (kind) => kind === 'void')) {
-      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(EARTH, (hash01(Math.round(x), Math.round(z), 5) - 0.5) * 0.06));
+      // D-129: the ground outside the walls. It was bare earth while the room
+      // floated in a white void; now the city stands round it, it is the same
+      // lawn the Colosseum stands on in the street, so there is no apron of
+      // dirt under the building that the street does not have.
+      bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(OUTSIDE_LAWN, (hash01(Math.round(x), Math.round(z), 5) - 0.5) * 0.05));
     }
     for (const [x0, x1] of rowRuns(y, (kind) => kind === 'tunnel')) {
       bin.add('sand', strip(x0, x1, y, 0, 1), (x: number, _y: number, z: number) => shade(TUNNEL, (hash01(Math.round(x), Math.round(z), 7) - 0.5) * 0.05));
-      // A worn track down the tunnel's middle.
-      if (x0 <= ARENA_TUNNEL.x + 1 && x1 > ARENA_TUNNEL.x + 1) {
-        bin.add('sand', flatQuad(ARENA_TUNNEL.x + 1.2, y, ARENA_TUNNEL.x + 1.8, y + 1, 0.004), shade(SAND_DARK, -0.05));
-      }
+      // A worn track down the tunnel's middle row, from the doorway to the sand.
+      if (y === ARENA_TUNNEL.y + 1) bin.add('sand', flatQuad(x0, y + 0.2, x1, y + 0.8, 0.004), shade(SAND_DARK, -0.05));
     }
     for (const [x0, x1] of rowRuns(y, (kind) => SAND_KINDS.has(kind))) bin.add('sand', strip(x0, x1, y, 0, 2), sand);
   }
@@ -512,7 +582,7 @@ function sandFloor(bin: GeometryBin): void {
 
 function stands(bin: GeometryBin): void {
   forEachTile((x, y, kind) => {
-    const key = stoneKey(y);
+    const key = stoneKey(x, y);
     const top = arenaSurfaceHeightAt(x, y);
     switch (kind) {
       case 'tier': {
@@ -558,6 +628,7 @@ function stands(bin: GeometryBin): void {
           shade(ARCADE, -0.08 + 0.06 * clamp01(py / top) + (hash01(x, y, 17) - 0.5) * 0.03),
         );
         bin.add(key, boxGeometry(x - 0.02, top, y - 0.02, x + 1.02, top + 0.12, y + 1.02), shade(ARCADE, -0.14));
+        atticColonnade(bin, key, x, y, top);
         // Arches every other tile of arc: one storey over the tiers, two to the outside.
         const arch = (x + y) % 2 === 0;
         for (const [dx, dy] of NEIGHBOURS) {
@@ -586,9 +657,51 @@ function stands(bin: GeometryBin): void {
 }
 
 /**
+ * The attic over the arcade's outer edge (D-129), on the tiles where the
+ * stadium meets the open air: a pier every other bay and the architrave they
+ * carry, up to `COLOSSEUM_WALL_TOP` — the height the Colosseum's wall reaches
+ * on the street, so inside and outside are plainly the same building.
+ *
+ * It is a colonnade and not a wall on purpose. The bays between the piers are
+ * open, so the city beyond (three/arena-surround.ts) still reads from the
+ * sand, and the silhouette still tops out where the street's does.
+ *
+ * Nothing of it stands over a walkable tile: the arcade is solid, and every
+ * piece here is inside the arcade tile it rises from.
+ */
+function atticColonnade(bin: GeometryBin, key: 'stone' | 'south', x: number, y: number, top: number): void {
+  const outward = NEIGHBOURS.filter(([dx, dy]) => arenaTileAt(x + dx, y + dy) === 'void');
+  if (outward.length === 0) return;
+  const cornice = top + 0.12;
+  // The architrave: a continuous band on the arcade's own tile, so the wall
+  // reads as one ring all the way round.
+  bin.add(key, boxGeometry(x, COLOSSEUM_ATTIC_TOP, y, x + 1, COLOSSEUM_WALL_TOP, y + 1), shade(ARCADE, -0.16));
+  bin.add(key, boxGeometry(x + 0.04, COLOSSEUM_ATTIC_TOP - 0.1, y + 0.04, x + 0.96, COLOSSEUM_ATTIC_TOP, y + 0.96), shade(ARCADE, -0.04));
+  if ((x + y) % 2 !== 0) return;
+  // The pier, inside its tile, and a flagpole on the piers that face out.
+  bin.add(key, boxGeometry(x + 0.18, cornice, y + 0.18, x + 0.82, COLOSSEUM_ATTIC_TOP, y + 0.82), (_px: number, py: number) =>
+    shade(ARCADE, -0.02 - 0.06 * clamp01((py - cornice) / (COLOSSEUM_ATTIC_TOP - cornice))),
+  );
+  for (const [dx, dy] of outward) {
+    const { face, u0, u1 } = sideFace(x, y, dx, dy);
+    const uc = (u0 + u1) / 2;
+    bin.add(key, faceQuad(face, uc - 0.22, cornice + 0.2, uc + 0.22, COLOSSEUM_ATTIC_TOP - 0.2, -0.19), ARCADE_SHADOW);
+    break;
+  }
+}
+
+/** The mouth's arch over the tunnel, in the last walled column: where it stands and how high. */
+function tunnelMouth(): { readonly column: number; readonly x0: number; readonly x1: number; readonly spring: number; readonly rise: number; readonly top: number } {
+  const column = ARENA_TUNNEL.x + ARENA_TUNNEL.width - 2;
+  const spring = 2.15;
+  const rise = 0.45;
+  return { column, x0: column + 0.5, x1: column + 0.98, spring, rise, top: spring + rise + 0.38 };
+}
+
+/**
  * The tunnel's walls (as high as the stands either side), an arch over its
- * mouth on the sand and, across its far (north) end, the doorway out to the
- * pit's arch: the camera looks straight down the tunnel at it.
+ * mouth on the sand and, across its far (west) end, the doorway out to the
+ * pit's arch. The south wall and the arch fade with the near stands.
  */
 function tunnel(bin: GeometryBin): void {
   forEachTile((x, y, kind) => {
@@ -600,66 +713,62 @@ function tunnel(bin: GeometryBin): void {
       if (nk === 'arcade') neighbour = Math.max(neighbour, ARENA_SURFACE.tierStep * 4 + ARENA_SURFACE.tier1);
     }
     const top = neighbour + 0.28;
-    const key = stoneKey(y);
+    const key = stoneKey(x, y);
     bin.add(key, boxGeometry(x, 0, y, x + 1, top, y + 1), (_px: number, py: number) => shade(PODIUM, -0.1 + 0.08 * clamp01(py / top)));
     bin.add(key, boxGeometry(x - 0.02, top, y - 0.02, x + 1.02, top + 0.08, y + 1.02), shade(PODIUM, -0.18));
   });
-  // The mouth: an arch over the tunnel where it meets the sand, clear of
-  // heads, in the last walled row.
-  const x0 = ARENA_TUNNEL.x;
-  const x1 = ARENA_TUNNEL.x + ARENA_TUNNEL.width;
-  const mouthRow = ARENA_TUNNEL.y + ARENA_TUNNEL.height - 2;
-  const key = stoneKey(mouthRow);
-  const z0 = mouthRow + 0.5;
-  const z1 = mouthRow + 0.98;
-  const spring = 2.15;
-  const rise = 0.45;
-  const half = (x1 - x0) / 2;
-  const radius = (half * half + rise * rise) / (2 * rise);
-  const cx = (x0 + x1) / 2;
-  const cy = spring + rise - radius;
+  // The mouth: an arch across the tunnel where it meets the sand, clear of
+  // heads, in the east half of the last walled column. Its profile runs
+  // north to south, so it is extruded along x.
+  const mouth = tunnelMouth();
+  const z0 = ARENA_TUNNEL.y;
+  const z1 = ARENA_TUNNEL.y + ARENA_TUNNEL.height;
+  const half = (z1 - z0) / 2;
+  const radius = (half * half + mouth.rise * mouth.rise) / (2 * mouth.rise);
+  const cz = (z0 + z1) / 2;
+  const cy = mouth.spring + mouth.rise - radius;
   const limit = Math.asin(half / radius);
   const count = 7;
   for (let i = 0; i < count; i++) {
     const a0 = -limit + (2 * limit * i) / count;
     const a1 = -limit + (2 * limit * (i + 1)) / count;
-    const p0: Point2 = [cx + radius * Math.sin(a0), cy + radius * Math.cos(a0)];
-    const p1: Point2 = [cx + radius * Math.sin(a1), cy + radius * Math.cos(a1)];
-    const top = spring + rise + 0.38;
-    bin.add(key, prismZ([p0, p1, [p1[0], top], [p0[0], top]], z0, z1), shade(ARCADE, i === 3 ? 0.06 : i % 2 === 0 ? 0 : -0.05));
+    const p0: Point2 = [cz + radius * Math.sin(a0), cy + radius * Math.cos(a0)];
+    const p1: Point2 = [cz + radius * Math.sin(a1), cy + radius * Math.cos(a1)];
+    bin.add('south', prismX([p0, p1, [p1[0], mouth.top], [p0[0], mouth.top]], mouth.x0, mouth.x1), shade(ARCADE, i === 3 ? 0.06 : i % 2 === 0 ? 0 : -0.05));
   }
   doorwayOut(bin);
 }
 
 /**
- * The tunnel's far end, the arena's north edge: a dressed wall from wall to
+ * The tunnel's far end, the arena's west edge: a dressed wall from wall to
  * wall with a tall arched doorway, dark but for the daylight of the street
- * beyond, and a keystone. The exit tiles are the doorway's sill. It stands
- * just north of the edge, so nothing of it is over a walkable tile.
+ * beyond, and a keystone, facing east down the tunnel. The exit tiles are
+ * the doorway's sill. It stands just west of the edge, so nothing of it is
+ * over a walkable tile, and it closes the tunnel's end against the sky.
  */
 function doorwayOut(bin: GeometryBin): void {
-  const key = stoneKey(ARENA_TUNNEL.y);
+  const key = 'stone';
   // Set back a little from the edge, so even the frame stays off the exit tiles.
-  const z = ARENA_TUNNEL.y - 0.08;
-  const face: Face = { normal: 'z+', plane: z };
-  const left = ARENA_TUNNEL.x - 1;
-  const right = ARENA_TUNNEL.x + ARENA_TUNNEL.width + 1;
-  const height = ARENA_SURFACE.tier1 + ARENA_SURFACE.tierStep * 4 + 0.36;
-  const cx = ARENA_TUNNEL.x + ARENA_TUNNEL.width / 2;
+  const x = ARENA_TUNNEL.x - 0.08;
+  const face: Face = { normal: 'x+', plane: x };
+  const north = ARENA_TUNNEL.y - 1;
+  const south = ARENA_TUNNEL.y + ARENA_TUNNEL.height + 1;
+  const height = ARENA_SURFACE.arcade + 0.12;
+  const cz = ARENA_TUNNEL.y + ARENA_TUNNEL.height / 2;
   const half = 1.12;
   const spring = 1.9;
-  // The wall itself, a thin slab just north of the edge, and its coping.
-  bin.add(key, boxGeometry(left, 0, z - 0.3, right, height, z), (_px: number, py: number) => shade(PODIUM, -0.12 + 0.08 * clamp01(py / height)));
-  bin.add(key, boxGeometry(left - 0.02, height, z - 0.32, right + 0.02, height + 0.1, z), shade(PODIUM, -0.2));
+  // The wall itself, a thin slab just west of the edge, and its coping.
+  bin.add(key, boxGeometry(x - 0.3, 0, north, x, height, south), (_px: number, py: number) => shade(PODIUM, -0.12 + 0.08 * clamp01(py / height)));
+  bin.add(key, boxGeometry(x - 0.32, height, north - 0.02, x, height + 0.1, south + 0.02), shade(PODIUM, -0.2));
   // The doorway: a shadowed opening, the street's light low in it.
-  bin.add(key, faceQuad(face, cx - half, 0, cx + half, spring, 0.004), DOORWAY_SHADOW);
-  bin.add(key, faceDisc(face, cx, spring, 0.001, half, 0.004, 14), DOORWAY_SHADOW);
-  bin.add(key, faceQuad(face, cx - half + 0.12, 0, cx + half - 0.12, 1.25, 0.006), (_x: number, v: number) =>
+  bin.add(key, faceQuad(face, cz - half, 0, cz + half, spring, 0.004), DOORWAY_SHADOW);
+  bin.add(key, faceDisc(face, cz, spring, 0.001, half, 0.004, 14), DOORWAY_SHADOW);
+  bin.add(key, faceQuad(face, cz - half + 0.12, 0, cz + half - 0.12, 1.25, 0.006), (_x: number, v: number) =>
     shade(mixHex(SAND, 0xfff1cf, 0.55), -0.28 + 0.3 * clamp01(1 - v / 1.25)),
   );
   // The frame: jambs, an arch of voussoirs and the keystone, proud of the wall.
   for (const side of [-1, 1]) {
-    const u = cx + side * (half + 0.09);
+    const u = cz + side * (half + 0.09);
     bin.add(key, faceBox(face, u - 0.09, 0, 0, u + 0.09, spring, 0.06), shade(ARCADE, 0.02));
   }
   const ring = 9;
@@ -669,34 +778,34 @@ function doorwayOut(bin: GeometryBin): void {
     const r0 = half;
     const r1 = half + 0.2;
     const quad: Point2[] = [
-      [cx + r0 * Math.cos(a0), spring + r0 * Math.sin(a0)],
-      [cx + r0 * Math.cos(a1), spring + r0 * Math.sin(a1)],
-      [cx + r1 * Math.cos(a1), spring + r1 * Math.sin(a1)],
-      [cx + r1 * Math.cos(a0), spring + r1 * Math.sin(a0)],
+      [cz + r0 * Math.cos(a0), spring + r0 * Math.sin(a0)],
+      [cz + r0 * Math.cos(a1), spring + r0 * Math.sin(a1)],
+      [cz + r1 * Math.cos(a1), spring + r1 * Math.sin(a1)],
+      [cz + r1 * Math.cos(a0), spring + r1 * Math.sin(a0)],
     ];
-    bin.add(key, prismZ(quad, z, z + 0.06), shade(ARCADE, i % 2 === 0 ? 0.04 : -0.04));
+    bin.add(key, prismX(quad, x, x + 0.06), shade(ARCADE, i % 2 === 0 ? 0.04 : -0.04));
   }
-  bin.add(key, faceBox(face, cx - 0.13, spring + half - 0.04, 0, cx + 0.13, spring + half + 0.32, 0.09), shade(EMBER, -0.18));
+  bin.add(key, faceBox(face, cz - 0.13, spring + half - 0.04, 0, cz + 0.13, spring + half + 0.32, 0.09), shade(EMBER, -0.18));
 }
 
-/** The emperor's box on the south podium: a canopy on four posts over the reserved station, draped in purple, facing north over the sand to the tunnel. */
+/** The emperor's box on the north podium: a canopy on four posts over the reserved station, draped in purple, facing south over the sand. */
 function emperorsBox(bin: GeometryBin): void {
   const x = ARENA_BOX.x;
   const z = ARENA_BOX.y;
   const floor = ARENA_SURFACE.podium;
-  const key = stoneKey(z);
+  const key = stoneKey(x, z);
   for (const [px, pz] of [[x + 0.08, z + 0.08], [x + 0.92, z + 0.08], [x + 0.08, z + 0.92], [x + 0.92, z + 0.92]] as const) {
     bin.add(key, cylinderGeometry(px, floor, pz, 0.05, 0.06, 1.55, 6), shade(BONE, -0.05));
   }
   // The canopy stays inside the box's own tile, clear of heads on the tiers behind.
   bin.add(key, boxGeometry(x, floor + 1.55, z, x + 1, floor + 1.68, z + 1), GOLD);
   bin.add(key, prismZ([[x, floor + 1.68], [x + 1, floor + 1.68], [x + 0.5, floor + 1.98]], z, z + 1), PURPLE);
-  // The drape on the parapet facing the sand (north), and the closed chair
-  // behind it. The drape faces away from the sun now, so it is a shade lighter.
-  const face: Face = { normal: 'z-', plane: z };
-  bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0, x + 0.95, floor + 0.32, 0.03), shade(PURPLE, 0.2));
+  // The drape on the parapet facing the sand (south, to the camera), and the
+  // closed chair behind it.
+  const face: Face = { normal: 'z+', plane: z + 1 };
+  bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0, x + 0.95, floor + 0.32, 0.03), shade(PURPLE, 0.05));
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0.03, x + 0.95, floor - 0.54, 0.035), GOLD);
-  bin.add(key, boxGeometry(x + 0.3, floor, z + 0.45, x + 0.7, floor + 0.85, z + 0.75), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.3, floor, z + 0.25, x + 0.7, floor + 0.85, z + 0.55), shade(PURPLE, -0.1));
 }
 
 // ---------------------------------------------------------------------------
@@ -746,13 +855,14 @@ function seats(res: ResourceBag): InstancedMesh {
   return mesh;
 }
 
-/** Sixteen podium tiles, evenly round the oval, clear of the stairs and the box. */
+/** Sixteen podium tiles, evenly round the oval, clear of the stair, the tunnel's walls and the box. */
 export function torchTiles(): { readonly x: number; readonly y: number }[] {
   const podium: { x: number; y: number; angle: number }[] = [];
   forEachTile((x, y, kind) => {
     if (kind !== 'podium') return;
     if (Math.abs(x - ARENA_BOX.x) <= 1 && Math.abs(y - ARENA_BOX.y) <= 1) return;
-    if (arenaTileAt(x, y - 1) === 'stair' || arenaTileAt(x, y + 1) === 'stair') return;
+    const beside = (k: ArenaTileKind): boolean => arenaTileAt(x, y - 1) === k || arenaTileAt(x, y + 1) === k;
+    if (beside('stair') || beside('tunnel-wall')) return;
     podium.push({ x, y, angle: Math.atan2(y + 0.5 - OVAL_CY, x + 0.5 - OVAL_CX) });
   });
   podium.sort((a, b) => a.angle - b.angle);
@@ -766,7 +876,7 @@ export function torchTiles(): { readonly x: number; readonly y: number }[] {
 
 function brazierStand(bin: GeometryBin, x: number, z: number): void {
   const base = ARENA_SURFACE.podium;
-  const key = stoneKey(Math.floor(z));
+  const key = stoneKey(Math.floor(x), Math.floor(z));
   bin.add(key, cylinderGeometry(x, base, z, 0.04, 0.06, 0.34, 6), IRON);
   bin.add(key, cylinderGeometry(x, base + 0.3, z, 0.18, 0.1, 0.14, 8), IRON);
 }
@@ -891,19 +1001,20 @@ function fence(bin: GeometryBin): void {
       for (const y of [0.48, 0.9]) bin.add('fence', beamGeometry([x, y, z], [nx, y, nz], 0.045), ROPE);
     }
   }
-  // The gate's two posts, taller, and the crossbar the sign and lamp sit on.
-  const gz = ARENA_RING_GATE.y + 0.5;
-  const west = ARENA_RING_GATE.x - 0.5;
-  const east = ARENA_RING_GATE.x + ARENA_RING_GATE.width + 0.5;
-  for (const x of [west, east]) {
-    bin.add('fence', boxGeometry(x - 0.12, 0, gz - 0.12, x + 0.12, GATE_POST_TOP, gz + 0.12), shade(TIMBER, -0.05));
-    bin.add('fence', coneGeometry(x, GATE_POST_TOP, gz, 0.15, 0.18, 4), shade(TIMBER, -0.2));
+  // The gate's two posts, taller, on the fence's west side north and south
+  // of the opening, and the crossbar the sign and lamp sit on.
+  const gx = ARENA_RING_GATE.x + 0.5;
+  const north = ARENA_RING_GATE.y - 0.5;
+  const south = ARENA_RING_GATE.y + ARENA_RING_GATE.height + 0.5;
+  for (const z of [north, south]) {
+    bin.add('fence', boxGeometry(gx - 0.12, 0, z - 0.12, gx + 0.12, GATE_POST_TOP, z + 0.12), shade(TIMBER, -0.05));
+    bin.add('fence', coneGeometry(gx, GATE_POST_TOP, z, 0.15, 0.18, 4), shade(TIMBER, -0.2));
   }
-  bin.add('fence', boxGeometry(west, GATE_POST_TOP - 0.42, gz - 0.07, east, GATE_POST_TOP - 0.3, gz + 0.07), shade(TIMBER, -0.1));
+  bin.add('fence', boxGeometry(gx - 0.07, GATE_POST_TOP - 0.42, north, gx + 0.07, GATE_POST_TOP - 0.3, south), shade(TIMBER, -0.1));
   // The lamp's iron bracket over the crossbar's middle.
-  const cx = ARENA_RING_GATE.x + ARENA_RING_GATE.width / 2;
-  bin.add('fence', boxGeometry(cx - 0.03, GATE_POST_TOP - 0.3, gz - 0.03, cx + 0.03, GATE_POST_TOP + 0.2, gz + 0.03), IRON);
-  bin.add('fence', cylinderGeometry(cx, GATE_POST_TOP + 0.2, gz, 0.12, 0.08, 0.06, 8), IRON);
+  const cz = ARENA_RING_GATE.y + ARENA_RING_GATE.height / 2;
+  bin.add('fence', boxGeometry(gx - 0.03, GATE_POST_TOP - 0.3, cz - 0.03, gx + 0.03, GATE_POST_TOP + 0.2, cz + 0.03), IRON);
+  bin.add('fence', cylinderGeometry(gx, GATE_POST_TOP + 0.2, cz, 0.12, 0.08, 0.06, 8), IRON);
 }
 
 /** The gate's two leaves, hinged on its posts: one InstancedMesh, eased open or shut. */
@@ -912,9 +1023,10 @@ function gateLeaves(res: ResourceBag): {
   setTarget(open: number): void;
   update(elapsed: number, reduced: boolean): void;
 } {
-  const west = ARENA_RING_GATE.x - 0.5 + GATE_HINGE_INSET;
-  const east = ARENA_RING_GATE.x + ARENA_RING_GATE.width + 0.5 - GATE_HINGE_INSET;
-  const length = (east - west) / 2 - 0.02;
+  // Hinged on the posts north and south of the opening, on the fence's west side.
+  const north = ARENA_RING_GATE.y - 0.5 + GATE_HINGE_INSET;
+  const south = ARENA_RING_GATE.y + ARENA_RING_GATE.height + 0.5 - GATE_HINGE_INSET;
+  const length = (south - north) / 2 - 0.02;
   const bin = new GeometryBin();
   let geometry: BufferGeometry | null;
   try {
@@ -931,7 +1043,7 @@ function gateLeaves(res: ResourceBag): {
   const mesh = new InstancedMesh(res.geometry(geometry!), res.material(standardMaterial({ roughness: 0.85 })), 2);
   mesh.name = 'arena:gate';
   mesh.castShadow = true;
-  const gz = ARENA_RING_GATE.y + 0.5;
+  const gx = ARENA_RING_GATE.x + 0.5;
   const matrix = new Matrix4();
   const rotation = new Quaternion();
   const up = new Vector3(0, 1, 0);
@@ -941,12 +1053,13 @@ function gateLeaves(res: ResourceBag): {
   let open = 1;
   let last = 0;
   const place = (): void => {
-    // Open, both leaves swing in towards the ring (south); shut, they meet.
-    rotation.setFromAxisAngle(up, -(Math.PI / 2) * open);
-    position.set(west, 0, gz);
+    // Shut, the north leaf points south and the south leaf north, and they
+    // meet; open, both swing in towards the ring (east, local +X).
+    rotation.setFromAxisAngle(up, -(Math.PI / 2) * (1 - open));
+    position.set(gx, 0, north);
     mesh.setMatrixAt(0, matrix.compose(position, rotation, scale));
-    rotation.setFromAxisAngle(up, Math.PI + (Math.PI / 2) * open);
-    position.set(east, 0, gz);
+    rotation.setFromAxisAngle(up, (Math.PI / 2) * (1 - open));
+    position.set(gx, 0, south);
     mesh.setMatrixAt(1, matrix.compose(position, rotation, scale));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.userData['open'] = open;
@@ -987,7 +1100,7 @@ function trainingDummy(bin: GeometryBin): void {
   for (const side of [-1, 1]) {
     bin.add('dummy', coneGeometry(0, 0, 0, 0.07, 0.16, 5).rotateZ(-side * (Math.PI / 2)).translate(side * 0.6, 1.16, 0), straw);
   }
-  // The painted target on the chest, on the model's front (+Z): the group's yaw turns it to the gate.
+  // The painted target on the chest, on the model's front (+Z), facing south to the camera.
   const face: Face = { normal: 'z+', plane: 0.22 };
   bin.add('dummy', faceDisc(face, 0, 1.0, 0, 0.16, 0.012, 14), 0xf3ead6);
   bin.add('dummy', faceDisc(face, 0, 1.0, 0.012, 0.11, 0.008, 14), BANNER_RED);

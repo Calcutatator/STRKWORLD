@@ -2,6 +2,11 @@
  * D-114: the gladiator pit's arena. Geometry the World draws and the lobby
  * enforces, the ring's state as the wire carries it, and combat constants.
  * Nothing financial; the codename is never shown.
+ *
+ * D-128 adds the block (a slot's `guarding` and `blocks`) and the champion
+ * (`champion`, `seated`): both are server state carried by the same
+ * view-filtered ring, and the champion is named only by the ephemeral
+ * presence id every arena member already holds.
  */
 import type { Facing, GameId, Position, PresenceAreaGrid, TileRect } from './index.js';
 
@@ -15,41 +20,63 @@ export const ARENA_HEIGHT = 33;
 export interface ArenaTile { readonly x: number; readonly y: number }
 
 /*
- * The layout runs north to south (D-114, amended 2026-10-02): the pit's arch
- * is on the street side of the pit, so the player arrives walking south.
- * The tunnel, its spawn and its exit are on the north side too, so they
- * arrive facing into the arena and leave by walking north, back the way they
- * came. The emperor's box faces them from the south podium, and the ring's
- * gate is on the ring's north side, facing the tunnel. The oval, the fence,
- * the stairs and the tiers are symmetric north to south, so only these tiles
- * moved.
+ * The layout runs west to east (D-114, amended 2026-10-02, second note): the
+ * pit's arch is on its west side, so the player arrives walking east. The
+ * tunnel, its spawn and its exit are on the arena's west side too, so they
+ * arrive facing east into the arena and leave by walking west, back the way
+ * they came. The ring's gate is on the fence's west side, facing the tunnel.
+ * The emperor's box is where it always was, on the north podium, and the
+ * dummy faces south as it always did. The west tunnel takes the place of the
+ * west stair, so the stadium keeps one feature on each axis: the tunnel west,
+ * the stair east, the box north, the plain podium south.
  */
-export const ARENA_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 2 });
-export const ARENA_SPAWN_FACING: Facing = 'down';
-export const ARENA_EXIT: TileRect = Object.freeze({ x: 19, y: 0, width: 3, height: 1 });
-export const ARENA_TUNNEL: TileRect = Object.freeze({ x: 19, y: 0, width: 3, height: 9 });
+/**
+ * The spawn stands in the middle of the tunnel rather than just inside the
+ * exit: the camera looks north (D-059), so from here the doorway out is still
+ * in frame behind you and the stadium already opens to the east.
+ */
+export const ARENA_SPAWN: ArenaTile = Object.freeze({ x: 4, y: 16 });
+export const ARENA_SPAWN_FACING: Facing = 'right';
+export const ARENA_EXIT: TileRect = Object.freeze({ x: 0, y: 15, width: 1, height: 3 });
+/** From the west edge (the exit) to its mouth on the first column of sand (x 7). */
+export const ARENA_TUNNEL: TileRect = Object.freeze({ x: 0, y: 15, width: 8, height: 3 });
 export const ARENA_STAIRS: readonly TileRect[] = Object.freeze([
-  Object.freeze({ x: 6, y: 15, width: 1, height: 3 }),
   Object.freeze({ x: 34, y: 15, width: 1, height: 3 }),
 ]);
-export const ARENA_BOX: ArenaTile = Object.freeze({ x: 20, y: 25 });
+export const ARENA_BOX: ArenaTile = Object.freeze({ x: 20, y: 7 });
+/**
+ * D-128: the sand in front of the emperor's box. The champion presses E from
+ * here to take the throne, and this is where a deposed one is put back down.
+ * The podium row the box sits in is not walkable, so "beside the box" is the
+ * row of sand below it.
+ */
+export const ARENA_BOX_APPROACH: TileRect = Object.freeze({ x: 19, y: 8, width: 3, height: 1 });
+/** Where a champion stands when they leave (or are removed from) the throne, and the way they face. */
+export const ARENA_BOX_STAND: ArenaTile = Object.freeze({ x: 20, y: 8 });
+export const ARENA_BOX_STAND_FACING: Facing = 'down';
+/** On the throne: the box's own tile, facing south over the sand, as its drape and chair do. */
+export const ARENA_BOX_SEAT_FACING: Facing = 'down';
 export const ARENA_RING_FENCE: TileRect = Object.freeze({ x: 15, y: 12, width: 11, height: 9 });
 export const ARENA_RING_INTERIOR: TileRect = Object.freeze({ x: 16, y: 13, width: 9, height: 7 });
-export const ARENA_RING_GATE: TileRect = Object.freeze({ x: 19, y: 12, width: 3, height: 1 });
-export const ARENA_GATE_APPROACH: TileRect = Object.freeze({ x: 19, y: 10, width: 3, height: 2 });
-export const ARENA_DUMMY_TILE: ArenaTile = Object.freeze({ x: 20, y: 18 });
-/** The dummy's painted front faces the gate (north): its model, built facing +Z (south), turns by this yaw. */
-export const ARENA_DUMMY_YAW = Math.PI;
-export const ARENA_RING_SPAWN: ArenaTile = Object.freeze({ x: 20, y: 14 });
-export const ARENA_RING_SPAWN_FACING: Facing = 'down';
-export const ARENA_RING_RETURN: ArenaTile = Object.freeze({ x: 20, y: 10 });
-export const ARENA_RING_RETURN_FACING: Facing = 'up';
+export const ARENA_RING_GATE: TileRect = Object.freeze({ x: 15, y: 15, width: 1, height: 3 });
+export const ARENA_GATE_APPROACH: TileRect = Object.freeze({ x: 13, y: 15, width: 2, height: 3 });
+export const ARENA_DUMMY_TILE: ArenaTile = Object.freeze({ x: 21, y: 16 });
+/**
+ * The dummy's yaw: 0, its painted front (+Z) facing south, to the camera
+ * (D-059), as it always has. Its knockout topples it east, away from the gate
+ * (arena-fx.ts).
+ */
+export const ARENA_DUMMY_YAW = 0;
+export const ARENA_RING_SPAWN: ArenaTile = Object.freeze({ x: 17, y: 16 });
+export const ARENA_RING_SPAWN_FACING: Facing = 'right';
+export const ARENA_RING_RETURN: ArenaTile = Object.freeze({ x: 13, y: 16 });
+export const ARENA_RING_RETURN_FACING: Facing = 'left';
 /** The ring interior minus the dummy: walkable for the challenger only. */
 export const ARENA_RING_WALKABLE: readonly TileRect[] = Object.freeze([
-  Object.freeze({ x: 16, y: 13, width: 9, height: 5 }),
-  Object.freeze({ x: 16, y: 18, width: 4, height: 1 }),
-  Object.freeze({ x: 21, y: 18, width: 4, height: 1 }),
-  Object.freeze({ x: 16, y: 19, width: 9, height: 1 }),
+  Object.freeze({ x: 16, y: 13, width: 9, height: 3 }),
+  Object.freeze({ x: 16, y: 16, width: 5, height: 1 }),
+  Object.freeze({ x: 22, y: 16, width: 3, height: 1 }),
+  Object.freeze({ x: 16, y: 17, width: 9, height: 3 }),
 ]);
 
 export type ArenaTileKind =
@@ -72,8 +99,8 @@ function ovalDistance(x: number, y: number): number {
 export function arenaTileAt(x: number, y: number): ArenaTileKind {
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= ARENA_WIDTH || y >= ARENA_HEIGHT) return 'void';
   if (inRect(ARENA_TUNNEL, x, y)) return 'tunnel';
-  // Walls either side of the tunnel, all but its row on the sand (the mouth).
-  if ((x === ARENA_TUNNEL.x - 1 || x === ARENA_TUNNEL.x + ARENA_TUNNEL.width) && y <= ARENA_TUNNEL.y + ARENA_TUNNEL.height - 2) return 'tunnel-wall';
+  // Walls either side of the tunnel (north and south), all but its column on the sand (the mouth).
+  if ((y === ARENA_TUNNEL.y - 1 || y === ARENA_TUNNEL.y + ARENA_TUNNEL.height) && x >= ARENA_TUNNEL.x && x <= ARENA_TUNNEL.x + ARENA_TUNNEL.width - 2) return 'tunnel-wall';
   if (x === ARENA_BOX.x && y === ARENA_BOX.y) return 'box';
   if (x === ARENA_DUMMY_TILE.x && y === ARENA_DUMMY_TILE.y) return 'dummy';
   if (inRect(ARENA_RING_GATE, x, y)) return 'gate';
@@ -132,6 +159,16 @@ export const ARENA_ATTACK_MIN_INTERVAL_MS = 400;
 export const ARENA_ATTACK_CLIENT_INTERVAL_MS = 450;
 export const ARENA_INTENT_MIN_INTERVAL_MS = 900;
 export const ARENA_INTENT_CLIENT_INTERVAL_MS = 1000;
+/**
+ * D-128, the block (Q). The floor is spent by a block *start* only: a stop
+ * only ever lowers a guard, so dropping one would strand a fighter blocking
+ * for ever. One stop per start, so the pair's rate is twice the floor's and
+ * the room's message budget still holds (client-arena.test.ts).
+ */
+export const ARENA_BLOCK_MIN_INTERVAL_MS = 450;
+export const ARENA_BLOCK_CLIENT_INTERVAL_MS = 500;
+/** After a guard drops, this long before the fighter can swing again. */
+export const ARENA_GUARD_RECOVERY_MS = 300;
 export const ARENA_COUNTDOWN_MS = 3_000;
 export const ARENA_FIGHT_MS = 90_000;
 export const ARENA_RESULT_MS = 4_000;
@@ -162,6 +199,14 @@ export interface ArenaSlot {
   readonly swings: number;
   /** Mod 256: +1 each time this slot is hit. Damage shown = the hp delta. */
   readonly hits: number;
+  /**
+   * D-128: this slot holds a block (Q). Server state: while it is true the
+   * slot cannot swing, and a hit on it is blocked. Spectators draw the
+   * stance from it.
+   */
+  readonly guarding: boolean;
+  /** D-128, mod 256: +1 each time a hit on this slot was blocked. Peers spark from a change. */
+  readonly blocks: number;
 }
 
 export interface ArenaOutcome {
@@ -182,6 +227,15 @@ export interface ArenaRingSnapshot {
   readonly secondsLeft: number;
   /** Non-null exactly when phase is 'ended'. */
   readonly outcome: ArenaOutcome | null;
+  /**
+   * D-128: the ephemeral presence id of the player who most recently won a
+   * fight here and is still in the arena, or null. Only they may use the
+   * emperor's box. Cleared when they leave or drop; it names nobody but a
+   * peer every arena member already sees.
+   */
+  readonly champion: GameId | null;
+  /** D-128: the champion is on the throne. Never true without a champion. */
+  readonly seated: boolean;
 }
 
 
@@ -212,6 +266,8 @@ function normalizeArenaSlot(value: unknown): ArenaSlot | null {
   const hp = ownData(value, 'hp');
   const swings = ownData(value, 'swings');
   const hits = ownData(value, 'hits');
+  const guarding = ownData(value, 'guarding');
+  const blocks = ownData(value, 'blocks');
   if (typeof kind !== 'string' || !ARENA_SLOT_KINDS.includes(kind as ArenaSlotKind)) return null;
   if (kind === 'player') {
     if (typeof gameId !== 'string' || gameId.length === 0 || gameId.length > ARENA_GAME_ID_MAX_LENGTH) return null;
@@ -219,7 +275,18 @@ function normalizeArenaSlot(value: unknown): ArenaSlot | null {
     return null;
   }
   if (!isIntegerIn(hp, 0, ARENA_MAX_HP) || !isIntegerIn(swings, 0, 0xff) || !isIntegerIn(hits, 0, 0xff)) return null;
-  return Object.freeze({ kind: kind as ArenaSlotKind, gameId: gameId as GameId | null, hp, swings, hits });
+  // D-128: a slot that holds nobody holds no guard either.
+  if (typeof guarding !== 'boolean' || !isIntegerIn(blocks, 0, 0xff)) return null;
+  if (guarding && kind !== 'player') return null;
+  return Object.freeze({
+    kind: kind as ArenaSlotKind,
+    gameId: gameId as GameId | null,
+    hp,
+    swings,
+    hits,
+    guarding,
+    blocks,
+  });
 }
 
 function normalizeArenaOutcome(value: unknown): ArenaOutcome | null {
@@ -259,5 +326,21 @@ export function normalizeArenaRing(value: unknown): ArenaRingSnapshot | null {
   } else if (rawOutcome !== null) {
     return null;
   }
-  return Object.freeze({ phase: phase as ArenaPhase, round, challenger, opponent, secondsLeft, outcome });
+  // D-128: the champion is a presence id or nobody, and nobody sits without one.
+  const rawChampion = ownData(value, 'champion');
+  const seated = ownData(value, 'seated');
+  if (rawChampion !== null && (typeof rawChampion !== 'string' || rawChampion.length === 0 || rawChampion.length > ARENA_GAME_ID_MAX_LENGTH)) {
+    return null;
+  }
+  if (typeof seated !== 'boolean' || (seated && rawChampion === null)) return null;
+  return Object.freeze({
+    phase: phase as ArenaPhase,
+    round,
+    challenger,
+    opponent,
+    secondsLeft,
+    outcome,
+    champion: rawChampion as GameId | null,
+    seated,
+  });
 }

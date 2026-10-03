@@ -88,9 +88,9 @@ describe('buildStreet', () => {
     // Plaza's (D-076): its gateway sign, the monument's three faces, the
     // table's card (its E prompt is the World's shared one, D-117); then the
     // football pitch's (D-078): its scoreboard and its gate's board; then the
-    // gladiator pit's arch sign (D-114).
+    // Colosseum's nameplate (D-114, D-129).
     expect(view.labels.children).toHaveLength(20);
-    expect(view.labels.children.filter((child) => child.userData['area'] === 'arena-pit')).toHaveLength(1);
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'colosseum')).toHaveLength(1);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(5);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'pitch').map((child) => child.userData['pitch'])).toEqual(['scoreboard', 'gate']);
     const names = view.ground.children.map((child) => child.name);
@@ -204,8 +204,9 @@ describe('buildStreet', () => {
     const gates = occluders.filter((occluder): occluder is GateOccluder => occluder.kind === 'sandbox-gate');
     expect(gates).toHaveLength(1);
     // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts)
-    // the pitch gate (D-078, pitch-builder.test.ts) and the pit's arch (D-114, arena-pit-builder.test.ts).
-    expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch' && occluder.kind !== 'arena-pit')).toHaveLength(PLAN.length + 1);
+    // the pitch gate (D-078, pitch-builder.test.ts) and the Colosseum's shell
+    // and grand arch (D-129, colosseum-builder.test.ts).
+    expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch' && occluder.kind !== 'colosseum')).toHaveLength(PLAN.length + 1);
     const gate = gates[0]!;
     const mesh = meshNamed(view.ground, 'street:sandbox-gate');
     expect(gate.object).toBe(mesh);
@@ -346,7 +347,7 @@ describe('buildStreet', () => {
     const { map, view } = build();
     view.doors.updateMatrixWorld(true);
     // The hidden stair's door has no portal (D-107); its test is below. The
-    // pit's arch is its door (D-114, arena-pit-builder.test.ts).
+    // Colosseum's grand arch is its door (D-114, colosseum-builder.test.ts).
     for (const door of map.doors.filter((candidate) => candidate.building !== 'bunker' && candidate.building !== 'arena')) {
       const portal = view.doors.children.find((child) => child.userData['building'] === door.building);
       expect(portal, door.building).toBeDefined();

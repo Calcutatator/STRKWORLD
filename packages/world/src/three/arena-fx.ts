@@ -14,7 +14,7 @@ import {
   PlaneGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { ARENA_DUMMY_TILE, ARENA_DUMMY_YAW, ARENA_ORIGIN_PX, type GameId } from '@strkworld/shared';
+import { ARENA_DUMMY_TILE, ARENA_DUMMY_YAW, ARENA_ORIGIN_PX, ARENA_RING_SPAWN, type GameId } from '@strkworld/shared';
 import type { ArenaViewFrame } from '../arena-channel.js';
 import { CAMERA_PITCH } from './camera-rig.js';
 import { tileCenterToGround } from './coords.js';
@@ -49,6 +49,10 @@ export interface RemoteSwingPort {
   playSwing(gameId: GameId): void;
   /** C (optional): the peer in the ring holds the battle stance; null for nobody. */
   setFighter?(gameId: GameId | null): void;
+  /** D-128 (optional): the peer holding a block; null for nobody. */
+  setBlocker?(gameId: GameId | null): void;
+  /** D-128 (optional): the champion on the emperor's throne; null for nobody. */
+  setThroned?(gameId: GameId | null): void;
 }
 
 export interface ArenaFxDeps {
@@ -65,6 +69,14 @@ export interface ArenaFxDeps {
    * applied.
    */
   readonly dummy?: Object3D | null;
+  /**
+   * D-128 (optional): where the ring's fighter stands, in the fx group's own
+   * frame (World units), when the view can tell — the presenter supplies the
+   * local avatar's ground while this client fights. The blocked spark is
+   * drawn there; without it (a spectator's view of someone else's block) the
+   * spark falls back to the ring spawn, which is where a fight starts.
+   */
+  readonly fighterAt?: () => { readonly x: number; readonly z: number } | null;
 }
 
 export interface ArenaFx {
@@ -87,6 +99,12 @@ export const ARENA_FX_TOPPLE_MS = 500;
 export const ARENA_FX_NUMBER_POOL = 4;
 const FLECK_COUNT = 14;
 const FLECK_MS = 600;
+/** D-128: the blocked spark — how many shards, how long they live, and how far they fly. */
+export const ARENA_FX_SPARK_MS = 260;
+const SPARK_COUNT = 10;
+const SPARK_SPEED = 2.6;
+/** Chest height on the guard, where a blow is turned. */
+const SPARK_Y = 1.15;
 /** The bar eases to the server's HP with this time constant. */
 const BAR_EASE_MS = 90;
 /** Spring wobble about the post's base: stiffness and damping per second, and the kick per HP lost. */
@@ -118,6 +136,8 @@ const COLOURS = Object.freeze({
   number: 0xffc12e,
   numberEdge: 0x24120a,
   flash: 0xffffff,
+  /** D-128: the blocked spark, pale steel rather than the straw's gold. */
+  spark: 0xe8f0ff,
 });
 
 type Box = readonly [size: readonly [number, number, number], at: readonly [number, number, number], colour: number];
@@ -156,7 +176,16 @@ const GLYPHS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   '7': ['111', '001', '010', '010', '010'],
   '8': ['111', '101', '111', '101', '111'],
   '9': ['111', '101', '111', '001', '111'],
+  // D-128: the letters BLOCK, for the blocked-hit word. Same 3 x 5 cell.
+  B: ['110', '101', '110', '101', '110'],
+  L: ['100', '100', '100', '100', '111'],
+  O: ['111', '101', '101', '101', '111'],
+  C: ['111', '100', '100', '100', '111'],
+  K: ['101', '101', '110', '101', '101'],
 });
+
+/** D-128: what a blocked hit says, over the fighter who blocked it. */
+export const ARENA_FX_BLOCK_WORD = 'BLOCK';
 
 function colouredBox(size: readonly [number, number, number], at: readonly [number, number, number], colour: number): BufferGeometry {
   const box = new BoxGeometry(size[0], size[1], size[2]).toNonIndexed();
@@ -215,6 +244,10 @@ interface DamageNumber {
   life: number;
   rise: number;
   baseX: number;
+  /** The height it rises from: over the dummy for damage, chest-high for D-128's BLOCK. */
+  baseY: number;
+  /** D-128: false for a word pinned to the fighter, which the dummy's own moves must not drag. */
+  atDummy: boolean;
 }
 
 interface Fleck {
@@ -231,6 +264,8 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
   const group = new Group();
   group.name = 'arena-fx';
   const ground = tileCenterToGround(ARENA_DUMMY_TILE.x, ARENA_DUMMY_TILE.y, { x: ARENA_ORIGIN_PX, y: ARENA_ORIGIN_PX });
+  /** D-128: where a blocked spark falls back to when the view cannot say where the fighter is. */
+  const ringSpawnGround = tileCenterToGround(ARENA_RING_SPAWN.x, ARENA_RING_SPAWN.y, { x: ARENA_ORIGIN_PX, y: ARENA_ORIGIN_PX });
 
   // The dummy: the room's own when it has one, else ours at the tile. Either
   // way `pivot` turns about the post's foot for the wobble and the topple.
@@ -247,7 +282,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     const root = new Group();
     root.name = 'arena-fx-dummy';
     root.position.set(ground.x, 0, ground.z);
-    // Its front (+Z) to the gate, as the room's dummy; the pivot turns inside the yaw.
+    // Its front (+Z) to the camera (south), as the room's dummy; the pivot turns inside the yaw.
     root.rotation.y = ARENA_DUMMY_YAW;
     const ownPivot = new Group();
     ownPivot.name = 'arena-dummy-pivot';
@@ -359,14 +394,14 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     mesh.rotation.x = -CAMERA_PITCH;
     mesh.renderOrder = 10;
     group.add(mesh);
-    numbers.push({ mesh, age: 0, life: 0, rise: 0, baseX: 0 });
+    numbers.push({ mesh, age: 0, life: 0, rise: 0, baseX: 0, baseY: NUMBER_Y, atDummy: true });
   }
 
   /** The bar (and any numbers showing) over wherever the dummy stands. */
   const placeOverDummy = (): void => {
     bar.position.set(anchor.x, BAR_Y, anchor.z);
     for (const n of numbers) {
-      if (!n.mesh.visible) continue;
+      if (!n.mesh.visible || !n.atDummy) continue;
       n.mesh.position.x = anchor.x + NUMBER_X;
       n.mesh.position.z = anchor.z + 0.3;
     }
@@ -385,13 +420,27 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
   flecksMesh.frustumCulled = false;
   group.add(flecksMesh);
   const flecks: Fleck[] = [];
+  // D-128: the blocked spark — a short burst of pale shards off the guard,
+  // its own mesh so it never takes the straw's colour.
+  const sparkGeometry = new BoxGeometry(0.055, 0.055, 0.055);
+  const sparkMaterial = new MeshStandardMaterial({ color: COLOURS.spark, emissive: new Color(COLOURS.spark), emissiveIntensity: 0.6, roughness: 1 });
+  const sparksMesh = new InstancedMesh(sparkGeometry, sparkMaterial, SPARK_COUNT);
+  sparksMesh.name = 'arena:block-spark';
+  sparksMesh.visible = false;
+  sparksMesh.frustumCulled = false;
+  group.add(sparksMesh);
+  const sparks: Fleck[] = [];
   const scratch = new Object3D();
   const hidden = new Matrix4().makeScale(0, 0, 0);
   for (let i = 0; i < FLECK_COUNT; i += 1) flecksMesh.setMatrixAt(i, hidden);
+  for (let i = 0; i < SPARK_COUNT; i += 1) sparksMesh.setMatrixAt(i, hidden);
 
   let disposed = false;
   let previous: ArenaViewFrame | null = null;
   let fighter: GameId | null | undefined;
+  /** D-128: the peer the layer was last told is blocking, and who is on the throne. */
+  let blocking: GameId | null | undefined;
+  let throned: GameId | null | undefined;
   let fighterPort: RemoteSwingPort | null = null;
   let flashLeft = 0;
   let flashTotal = 0;
@@ -435,8 +484,9 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
   };
 
   const applyPivot = (): void => {
-    // Topple falls backwards (away from the gate, south); the wobble rocks the same way.
-    pivot.rotation.x = -(Math.PI / 2) * easeOut(toppled) - wobble;
+    // The topple falls east, away from the ring's west gate where the fighter
+    // comes in, flat across the screen; the wobble rocks the same way.
+    pivot.rotation.z = -(Math.PI / 2) * easeOut(toppled) - wobble;
   };
 
   const applyBar = (): void => {
@@ -464,7 +514,25 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     slot.life = quiet ? ARENA_FX_REDUCED_NUMBER_MS : ARENA_FX_NUMBER_MS;
     slot.rise = quiet ? 0 : ARENA_FX_NUMBER_RISE;
     slot.baseX = anchor.x + NUMBER_X + offset;
+    slot.baseY = NUMBER_Y;
+    slot.atDummy = true;
     slot.mesh.position.set(slot.baseX, NUMBER_Y, anchor.z + 0.3);
+    slot.mesh.material.opacity = 1;
+    slot.mesh.visible = true;
+  };
+
+  /** D-128: a pooled word at a spot of its own, rising like a damage number. */
+  const spawnWord = (text: string, at: { readonly x: number; readonly z: number }, quiet: boolean): void => {
+    const slot = numbers[numberCursor % numbers.length]!;
+    numberCursor += 1;
+    slot.mesh.geometry = numberGeometry(text);
+    slot.age = 0;
+    slot.life = quiet ? ARENA_FX_REDUCED_NUMBER_MS : ARENA_FX_NUMBER_MS;
+    slot.rise = quiet ? 0 : ARENA_FX_NUMBER_RISE * 0.6;
+    slot.baseX = at.x;
+    slot.baseY = SPARK_Y + 0.5;
+    slot.atDummy = false;
+    slot.mesh.position.set(slot.baseX, slot.baseY, at.z + 0.3);
     slot.mesh.material.opacity = 1;
     slot.mesh.visible = true;
   };
@@ -499,6 +567,39 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
     }
   };
 
+  /**
+   * D-128: a hit that was blocked. No damage number and no flash on the
+   * dummy — nothing took damage — but a pale spark burst and the word BLOCK
+   * over whoever turned it. Under reduced motion the shards sit still where
+   * they appeared and fade, like the damage numbers do.
+   */
+  const blocked = (): void => {
+    const quiet = reduced();
+    let at: { readonly x: number; readonly z: number } | null = null;
+    try {
+      at = deps.fighterAt?.() ?? null;
+    } catch {
+      at = null;
+    }
+    const spot = at !== null && Number.isFinite(at.x) && Number.isFinite(at.z) ? at : ringSpawnGround;
+    spawnWord(ARENA_FX_BLOCK_WORD, spot, quiet);
+    for (let i = 0; i < SPARK_COUNT; i += 1) {
+      const angle = (i / SPARK_COUNT) * Math.PI * 2;
+      const power = quiet ? 0 : SPARK_SPEED * (0.6 + random() * 0.6);
+      sparks.push({
+        x: spot.x + Math.cos(angle) * 0.1,
+        y: SPARK_Y,
+        z: spot.z + Math.sin(angle) * 0.1,
+        vx: Math.cos(angle) * power,
+        vy: Math.sin(angle) * power * 0.5,
+        vz: Math.sin(angle) * power * 0.4,
+        age: 0,
+      });
+    }
+    while (sparks.length > SPARK_COUNT) sparks.shift();
+    sparksMesh.visible = sparks.length > 0;
+  };
+
   const knockout = (instant: boolean): void => {
     wobble = 0;
     wobbleVelocity = 0;
@@ -515,18 +616,29 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
 
   const syncFighter = (frame: ArenaViewFrame | null, remote: RemoteSwingPort | null): void => {
     const next = frame && frame.phase !== 'idle' ? frame.challengerId : null;
-    if (remote === fighterPort && next === fighter) return;
+    // D-128: a peer's guard and the champion's throne, from the same frame.
+    // The blocking peer is only ever the fighter, and only while they guard.
+    const guarding = frame && frame.phase !== 'idle' && frame.challengerGuarding ? frame.challengerId : null;
+    const seated = frame?.throneId ?? null;
+    const same = remote === fighterPort && next === fighter && guarding === blocking && seated === throned;
+    if (same) return;
     if (fighterPort && fighterPort !== remote) {
       try {
         fighterPort.setFighter?.(null);
+        fighterPort.setBlocker?.(null);
+        fighterPort.setThroned?.(null);
       } catch {
         // A failing remote layer never stops the fx.
       }
     }
     fighterPort = remote;
     fighter = next;
+    blocking = guarding;
+    throned = seated;
     try {
       remote?.setFighter?.(next);
+      remote?.setBlocker?.(guarding);
+      remote?.setThroned?.(seated);
     } catch {
       // As above.
     }
@@ -555,6 +667,15 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
         } catch {
           // A failing remote layer never stops the fx.
         }
+      }
+      // D-128: a blocked hit, from the server's own counter. It is read
+      // before the dummy, because a block takes no HP and so would otherwise
+      // show nothing at all.
+      if (
+        prev !== null && frame.challengerId !== null && prev.challengerId === frame.challengerId &&
+        frame.challengerBlocks !== prev.challengerBlocks && (frame.phase === 'fighting' || frame.phase === 'ended')
+      ) {
+        blocked();
       }
       const d = frame.dummy;
       const pd = prev?.dummy ?? null;
@@ -615,7 +736,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
         if (!n.mesh.visible) continue;
         n.age += ms;
         const t = Math.min(1, n.age / n.life);
-        n.mesh.position.y = NUMBER_Y + n.rise * easeOut(t);
+        n.mesh.position.y = n.baseY + n.rise * easeOut(t);
         // Hold, then fade over the back half.
         n.mesh.material.opacity = t < 0.4 ? 1 : 1 - (t - 0.4) / 0.6;
         if (t >= 1) n.mesh.visible = false;
@@ -644,6 +765,37 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
         flecksMesh.instanceMatrix.needsUpdate = true;
         flecksMesh.visible = flecks.length > 0;
       }
+      // D-128: the blocked spark's shards, thrown out and dragged to a stop.
+      if (sparks.length > 0) {
+        for (let i = sparks.length - 1; i >= 0; i -= 1) {
+          const k = sparks[i]!;
+          k.age += ms;
+          k.x += k.vx * s;
+          k.y += k.vy * s;
+          k.z += k.vz * s;
+          const drag = Math.exp(-ms / 90);
+          k.vx *= drag;
+          k.vy *= drag;
+          k.vz *= drag;
+          if (k.age >= ARENA_FX_SPARK_MS) sparks.splice(i, 1);
+        }
+        for (let i = 0; i < SPARK_COUNT; i += 1) {
+          const k = sparks[i];
+          if (!k) {
+            sparksMesh.setMatrixAt(i, hidden);
+            continue;
+          }
+          const shrink = Math.max(0.1, 1 - k.age / ARENA_FX_SPARK_MS);
+          scratch.position.set(k.x, k.y, k.z);
+          scratch.rotation.set(k.age * 0.02, k.age * 0.017, 0);
+          scratch.scale.setScalar(shrink);
+          scratch.updateMatrix();
+          scratch.scale.setScalar(1);
+          sparksMesh.setMatrixAt(i, scratch.matrix);
+        }
+        sparksMesh.instanceMatrix.needsUpdate = true;
+        sparksMesh.visible = sparks.length > 0;
+      }
     },
     group,
     dispose(): void {
@@ -651,6 +803,8 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       disposed = true;
       try {
         fighterPort?.setFighter?.(null);
+        fighterPort?.setBlocker?.(null);
+        fighterPort?.setThroned?.(null);
       } catch {
         // Best effort.
       }
@@ -659,7 +813,7 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       owned?.geometry.dispose();
       for (const restore of restores) restore();
       for (const { material } of flashing) material.dispose();
-      if (adopted) (adopted as Object3D).rotation.x = 0;
+      if (adopted) (adopted as Object3D).rotation.z = 0;
       barBack.geometry.dispose();
       barBackMaterial.dispose();
       fillGeometry.dispose();
@@ -670,6 +824,9 @@ export function createArenaFx(deps: ArenaFxDeps): ArenaFx {
       fleckGeometry.dispose();
       fleckMaterial.dispose();
       flecksMesh.dispose();
+      sparkGeometry.dispose();
+      sparkMaterial.dispose();
+      sparksMesh.dispose();
     },
   });
 }

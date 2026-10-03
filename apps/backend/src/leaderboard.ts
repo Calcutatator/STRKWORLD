@@ -14,8 +14,10 @@ import { ApiFailure, isFelt, requireNonzeroFelt, requireRecord, requireVersion }
  * `p` their wallet derives for `strkworld-lb-s1`: no address, no signature.
  * This service recounts that player's receipts on-chain (the canonical
  * anonymizer's shadow accounts for `p`, and the ledger's `count_of` for each),
- * keeps only `(h(p, 'id'), count, updatedAt)` for the season, and drops `p`.
- * Anyone can read the season's histogram: counts only.
+ * keeps only `(h(p, 'id'), count, updatedAt)` for the season — and, while it
+ * ranks DeFi, the tick count last verified for each feature shadow that entry
+ * claimed, under that shadow's own hash — and drops `p`. Anyone can read the
+ * season's histogram: counts only.
  *
  * What it never does: log, persist or return `p`; log or keep a client's
  * address (rate limits key a salted, in-memory HMAC, `client-key.ts`); store
@@ -67,7 +69,9 @@ export interface LeaderboardConfig {
    * this service can tie the season pseudonym to the persistent Vault, Borrow,
    * unstaking and swap shadows. Each feature partial is credited to one entry
    * per season (first claim wins), so two accounts cannot share one shadow's
-   * ticks.
+   * ticks. Each claim's last verified count is kept with the entry, so a later
+   * check that carries no partial for that feature keeps its points (D-122,
+   * amended 2026-10-03).
    */
   readonly rankDefi?: boolean;
 }
@@ -94,12 +98,32 @@ export interface LeaderboardHistogramBody {
 }
 
 /**
- * The season tally: per entry key, the count and the day it was last
- * refreshed. Memory first; with a path, written to a JSON file after each
- * change (atomically, through a temporary file) and read back at start.
+ * One season entry: the ranked count, the day it was last refreshed, and —
+ * rank-DeFi only — the tick count last verified for each feature shadow this
+ * entry has claimed (D-122, amended 2026-10-03).
+ *
+ * The DeFi counts are kept because a check now sends only the feature
+ * partials the player's own session has already shared, so a check made
+ * without touching the Vault carries no Vault partial. Keeping the last
+ * verified count per feature means those points are not lost; a check that
+ * does carry the partial re-verifies it on-chain and may only raise it.
+ * Hashes and counts, as before: no address, and no partial is stored.
+ */
+export interface LeaderboardEntry {
+  count: number;
+  day: number;
+  /** Feature key (`h('strkworld-lb-feat', season, p_feature)`) to its last verified tick count. */
+  defi?: Record<string, number>;
+}
+
+/**
+ * The season tally: per entry key, the count, the day it was last refreshed
+ * and its verified DeFi counts. Memory first; with a path, written to a JSON
+ * file after each change (atomically, through a temporary file) and read back
+ * at start.
  */
 export class LeaderboardStore {
-  private readonly seasons = new Map<string, Map<string, { count: number; day: number }>>();
+  private readonly seasons = new Map<string, Map<string, LeaderboardEntry>>();
   /** Rank-DeFi only: per season, a feature key (a hash of a feature partial) to the entry that claimed it. */
   private readonly claims = new Map<string, Map<string, string>>();
   private writing: Promise<void> = Promise.resolve();
@@ -123,7 +147,12 @@ export class LeaderboardStore {
     for (const [season, claims] of parsed.claims) this.claims.set(season, claims);
   }
 
-  upsert(season: string, key: string, count: number, now: number): void {
+  /**
+   * Store this entry's count and day. `defi` replaces its verified DeFi
+   * counts; `undefined` leaves whatever is stored alone (the flag is off, so
+   * this check knows nothing about them).
+   */
+  upsert(season: string, key: string, count: number, now: number, defi?: Record<string, number>): void {
     let entries = this.seasons.get(season);
     if (!entries) {
       entries = new Map();
@@ -132,8 +161,22 @@ export class LeaderboardStore {
     if (!entries.has(key) && entries.size >= MAX_LEADERBOARD_ENTRIES) {
       throw new ApiFailure(503, 'The leaderboard is full for this season.');
     }
-    entries.set(key, { count, day: Math.floor(now / DAY_MS) * DAY_MS });
+    const kept = defi ?? entries.get(key)?.defi;
+    entries.set(key, {
+      count,
+      day: Math.floor(now / DAY_MS) * DAY_MS,
+      ...(kept && Object.keys(kept).length > 0 ? { defi: { ...kept } } : {}),
+    });
     this.schedule();
+  }
+
+  /**
+   * This entry's verified DeFi counts for the season, by feature key: what a
+   * check keeps when it carries no partial for that feature. Empty when it has
+   * none, and a copy, so nothing outside can edit the tally.
+   */
+  defiCounts(season: string, key: string): Record<string, number> {
+    return { ...(this.seasons.get(season)?.get(key)?.defi ?? {}) };
   }
 
   /**
@@ -166,11 +209,17 @@ export class LeaderboardStore {
     return { season, total: buckets.reduce((sum, bucket) => sum + bucket.players, 0), buckets };
   }
 
-  /** What is kept, for tests: never more than the key, the count and the day. */
-  snapshot(): Record<string, Record<string, { count: number; day: number }>> {
+  /**
+   * What is kept, for tests: never more than the key, the count, the day and
+   * the verified DeFi counts, which are themselves hashes and counts.
+   */
+  snapshot(): Record<string, Record<string, LeaderboardEntry>> {
     return Object.fromEntries([...this.seasons].map(([season, entries]) => [
       season,
-      Object.fromEntries([...entries].map(([key, value]) => [key, { ...value }])),
+      Object.fromEntries([...entries].map(([key, value]) => [
+        key,
+        { ...value, ...(value.defi ? { defi: { ...value.defi } } : {}) },
+      ])),
     ]));
   }
 
@@ -326,17 +375,27 @@ export class LeaderboardService {
     }
     const entry = leaderboardEntryKey(LEADERBOARD_SEASON, partial);
     let count = await this.countReceipts(partial, signal);
-    if (features.length > 0) {
+    // Rank-DeFi only: this entry's DeFi points are the counts last verified
+    // for each feature shadow it claimed, not only the ones this check carries
+    // (D-122, amended 2026-10-03). A check now sends only the feature partials
+    // the player's session already shared, so one made without touching the
+    // Vault must not drop the Vault's points.
+    const defi = this.config.rankDefi === true ? this.store.defiCounts(LEADERBOARD_SEASON, entry) : undefined;
+    if (defi && features.length > 0) {
       const ticks = await this.readCounts(features.map((feature) => receiptCommitment(feature, 0)), signal);
       features.forEach((feature, index) => {
         const tick = ticks[index]!;
-        if (tick > 0 && this.store.claimFeature(LEADERBOARD_SEASON, leaderboardFeatureKey(LEADERBOARD_SEASON, feature), entry)) {
-          count += tick;
+        const featureKey = leaderboardFeatureKey(LEADERBOARD_SEASON, feature);
+        // First claim wins, as before: another entry's shadow adds nothing here.
+        if (tick > 0 && this.store.claimFeature(LEADERBOARD_SEASON, featureKey, entry)) {
+          // Monotonic within the season: a re-verified count may rise, never fall.
+          defi[featureKey] = Math.max(defi[featureKey] ?? 0, tick);
         }
       });
     }
+    for (const verified of Object.values(defi ?? {})) count += verified;
     // Zero receipts store nothing: a random felt cannot pad the ranking.
-    if (count > 0) this.store.upsert(LEADERBOARD_SEASON, entry, count, this.now());
+    if (count > 0) this.store.upsert(LEADERBOARD_SEASON, entry, count, this.now(), defi);
     return { status: 200, body: { count: String(count) } };
   }
 
@@ -410,7 +469,7 @@ function rateLimited(): ApiResponse {
 }
 
 function parseStoreFile(text: string): {
-  seasons: Map<string, Map<string, { count: number; day: number }>>;
+  seasons: Map<string, Map<string, LeaderboardEntry>>;
   claims: Map<string, Map<string, string>>;
 } | null {
   let raw: unknown;
@@ -424,21 +483,34 @@ function parseStoreFile(text: string): {
   if (keys.some((key) => !['v', 'seasons', 'claims'].includes(key))) return null;
   const seasons = (raw as { seasons?: unknown }).seasons;
   if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) return null;
-  const out = new Map<string, Map<string, { count: number; day: number }>>();
+  const out = new Map<string, Map<string, LeaderboardEntry>>();
   for (const [season, entries] of Object.entries(seasons as Record<string, unknown>)) {
     if (!/^[a-z0-9]{1,8}$/.test(season) || !entries || typeof entries !== 'object' || Array.isArray(entries)) return null;
-    const map = new Map<string, { count: number; day: number }>();
+    const map = new Map<string, LeaderboardEntry>();
     for (const [key, entry] of Object.entries(entries as Record<string, unknown>)) {
       const count = (entry as { count?: unknown })?.count;
       const day = (entry as { day?: unknown })?.day;
+      const rawDefi = (entry as { defi?: unknown })?.defi;
+      const fields = Object.keys(entry as object);
       if (
         !isFelt(key) || !Number.isSafeInteger(count) || (count as number) <= 0
         || !Number.isSafeInteger(day) || (day as number) % DAY_MS !== 0
-        || Object.keys(entry as object).length !== 2
+        || fields.some((field) => !['count', 'day', 'defi'].includes(field))
+        || fields.length < 2
       ) {
         return null;
       }
-      map.set(key, { count: count as number, day: day as number });
+      // The verified DeFi counts: feature keys to positive counts, nothing else.
+      let defi: Record<string, number> | undefined;
+      if (rawDefi !== undefined) {
+        if (!rawDefi || typeof rawDefi !== 'object' || Array.isArray(rawDefi)) return null;
+        defi = {};
+        for (const [featureKey, verified] of Object.entries(rawDefi as Record<string, unknown>)) {
+          if (!isFelt(featureKey) || !Number.isSafeInteger(verified) || (verified as number) <= 0) return null;
+          defi[featureKey] = verified as number;
+        }
+      }
+      map.set(key, { count: count as number, day: day as number, ...(defi ? { defi } : {}) });
     }
     out.set(season, map);
   }

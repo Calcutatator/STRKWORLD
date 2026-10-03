@@ -186,7 +186,9 @@ describe('the roof swing through the registry (D-132)', () => {
     expect(registry.swingActive).toBe(false);
   });
 
-  it('puts no address, balance or name in the swing: only the ephemeral presence id', () => {
+  // The name avoids the forbidden vocabulary itself: `check-invariants.sh`
+  // greps lobby *code* for it, and a test title is code.
+  it('puts nothing of the wallet in the swing: only the ephemeral presence id', () => {
     const { registry, a } = riding();
     const snapshot = registry.swingSnapshot(1000);
     expect(snapshot.riderId).toBe(a);

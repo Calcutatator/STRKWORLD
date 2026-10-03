@@ -162,6 +162,17 @@ export interface PresenceState {
    * financial; only the room writes it, at most once per its jump floor.
    */
   jumps: number;
+  /**
+   * D-127: the bench seat this player is sitting on — an index into
+   * `STREET_SEATS` (seats.ts) — or -1 standing. One signed byte, and the whole
+   * of what sitting costs the wire: the seat's own spot and the way a sitter
+   * looks are in the shared table, so nothing about a position or a pose has to
+   * be sent. Cosmetic, like `carrying` and `jumps`. Only the room writes it,
+   * and only for a real seat whose spot is where the room already holds that
+   * player, and only while nobody else holds it. The Bridge room's lounge
+   * seats are in a solo interior and never reach here.
+   */
+  seat: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +303,37 @@ export const CLIMB_FROM_PHASE = 0.35;
  * 950 ms.
  */
 export const CLIMB_WINDOW_MS = JUMP_AIR_MS + CLIMB_LATENCY_MS;
+
+// ---------------------------------------------------------------------------
+// Jump over — D-130
+// ---------------------------------------------------------------------------
+//
+// The same shape of rule for the things that stand on the ground rather than
+// above it: between these two fractions of its air time, a jump's feet are
+// above knee height, and the football is not a body the jumper meets. Phase
+// based like the climb window, so reduced motion's lower hop clears the same
+// ball: the rule never reads the jump's height.
+
+/**
+ * D-130: from this fraction of a jump's air time, the feet are clear of
+ * anything standing on the ground. On the full arc 10% of the air is 0.47
+ * units up — past the knee, well short of the waist.
+ */
+export const JUMP_PASS_FROM_PHASE = 0.1;
+
+/** D-130: and until this fraction, the mirror of `JUMP_PASS_FROM_PHASE` on the fall. */
+export const JUMP_PASS_UNTIL_PHASE = 0.9;
+
+/**
+ * D-130: the lobby treats a session as airborne for this long after it
+ * receives the jump: to the end of the pass window (`JUMP_PASS_UNTIL_PHASE`
+ * of `JUMP_AIR_MS`, 720 ms) plus `CLIMB_LATENCY_MS` for the move floor and
+ * jitter, 870 ms. It opens as the jump arrives rather than at
+ * `JUMP_PASS_FROM_PHASE`, because the jump reaches the room before the move
+ * that carries the jumper over the ball and the extra 80 ms costs only a push
+ * that was not going to happen.
+ */
+export const JUMP_PASS_WINDOW_MS = JUMP_AIR_MS * JUMP_PASS_UNTIL_PHASE + CLIMB_LATENCY_MS;
 
 /**
  * The avatar's square collision body, in World pixels. The World collides
@@ -552,7 +594,20 @@ export type WorldEvents = {
   'building:locked': { building: BuildingId; reason: 'coming-soon' };
   /** Client-local presentation event. Financial meaning stays in the Shell. */
   'station:activated': { building: BuildingId; station: StationId };
-  'player:moved': { position: Position; facing: Facing };
+  /**
+   * Where the player stands on the street, and which way they face. D-127's
+   * `seat` is present only while they sit on a bench — an index into
+   * `STREET_SEATS` — so a standing player's payload is unchanged. The Shell
+   * passes it straight to the lobby with the position; the room decides
+   * whether the claim stands.
+   *
+   * D-130: `airborne` is present, and true, only while the jumper's feet are
+   * clear of the ground, so a walking player's payload is unchanged too. It is
+   * for the ball the Shell draws, and is never sent to the lobby: the room
+   * times its own jumps (`JUMP_PASS_WINDOW_MS`) rather than believe a client
+   * that says it is in the air.
+   */
+  'player:moved': { position: Position; facing: Facing; seat?: number; airborne?: boolean };
   'world:ready': Record<string, never>;
   /** D-047: non-financial hidden Avatar Studio lifecycle. */
   'avatar-studio:entered': Record<string, never>;
@@ -684,6 +739,8 @@ export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
 
 // D-114: the gladiator pit's arena: geometry, the ring as the wire carries it, combat constants.
 export * from './arena.js';
+// D-127: the overworld's sittable benches, and the seat table the wire indexes into.
+export * from './seats.js';
 // D-132: the Exchange roof's lookout swing: its tiles, the swing as the wire
 // carries it, and the ride's timings. Last, because it reads
 // `ROOF_PRESENCE_GRID` above (inside its functions only).

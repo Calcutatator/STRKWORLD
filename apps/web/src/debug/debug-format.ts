@@ -1,7 +1,14 @@
-import type { Intent, OperationStage, PrivacyErrorKind } from '@strkworld/privacy';
+import type {
+  Intent,
+  LeaderboardFeature,
+  LeaderboardSkipReason,
+  OperationStage,
+  PrivacyErrorKind,
+} from '@strkworld/privacy';
 import { SANDBOX_AREA } from '@strkworld/shared';
 import type { BankAddRefusal, BankConfirmStage, BankMode } from '../panels/bank/bank-machine.js';
 import type { EntryGateStateName } from '../connect/entry-gate.js';
+import type { LeaderboardProbeReason } from '../production/leaderboard-probe.js';
 import type { VaultConfirmStage } from '../panels/vault/vault-machine.js';
 
 /**
@@ -61,6 +68,8 @@ const KINDS = setOf({
   'submission-uncertain': true,
   'relay-not-configured': true,
   'shadow-accounts-unsupported': true,
+  // D-126: the swap's oracle guard refused the quote; it used to log as unknown.
+  'price-guard': true,
   unknown: true,
 } satisfies Record<PrivacyErrorKind, true>);
 
@@ -618,6 +627,76 @@ function describeVaultStage(stage: unknown): DebugEntry | null {
       if (!VAULT_RECEIPTS.has(status)) return null;
       const level: DebugLevel = status === 'reverted' ? 'error' : status === 'succeeded' ? 'info' : 'warn';
       return { level, event: 'vault.receipt', detail: `status=${String(status)}` };
+    }
+    default:
+      return null;
+  }
+}
+
+/*
+ * The private placement's decisions (D-122, amended 2026-10-02). Every field
+ * is admitted only from a fixed list, typed against the union it comes from, so
+ * whatever a caller passes, the season partial commitment `p`, a full
+ * commitment, a shadow-account address, the connected account, a nonce and a
+ * transaction hash can none of them be written. Codes only.
+ */
+const LEADERBOARD_PROBE_REASONS = setOf({
+  'url-on': true,
+  'url-off': true,
+  remembered: true,
+  'not-asked': true,
+} satisfies Record<LeaderboardProbeReason, true>);
+const LEADERBOARD_SKIP_REASONS = setOf({
+  'no-ledger': true,
+  'no-reads': true,
+  'unsupported-route': true,
+  'no-nonce': true,
+  'scan-failed': true,
+} satisfies Record<LeaderboardSkipReason, true>);
+const LEADERBOARD_FEATURES = setOf({
+  vault: true,
+  borrow: true,
+  unstake: true,
+  swap: true,
+} satisfies Record<LeaderboardFeature, true>);
+
+/**
+ * A placement decision as one entry, or null for anything unexpected:
+ * `leaderboard.probe on=true reason=url-on build=on`,
+ * `leaderboard.receipt attached=true`,
+ * `leaderboard.receipt attached=false reason=unsupported-route`,
+ * `leaderboard.tick feature=vault`.
+ */
+export function describeLeaderboardStep(step: unknown): DebugEntry | null {
+  switch (readData(step, 'event')) {
+    case 'probe': {
+      const on = readData(step, 'on');
+      const reason = readData(step, 'reason');
+      const build = readData(step, 'build');
+      if (typeof on !== 'boolean' || typeof build !== 'boolean' || !LEADERBOARD_PROBE_REASONS.has(reason)) return null;
+      return {
+        level: 'info',
+        event: 'leaderboard.probe',
+        detail: `on=${on} reason=${String(reason)} build=${build ? 'on' : 'off'}`,
+      };
+    }
+    case 'receipt': {
+      const attached = readData(step, 'attached');
+      if (attached === true) return { level: 'info', event: 'leaderboard.receipt', detail: 'attached=true' };
+      const reason = readData(step, 'reason');
+      if (attached !== false || !LEADERBOARD_SKIP_REASONS.has(reason)) return null;
+      // A build with the leaderboard off skips every action by design; the
+      // rest are the probe's own faults and read as warnings.
+      return {
+        level: reason === 'no-ledger' ? 'info' : 'warn',
+        event: 'leaderboard.receipt',
+        detail: `attached=false reason=${String(reason)}`,
+      };
+    }
+    case 'tick': {
+      const feature = readData(step, 'feature');
+      if (!LEADERBOARD_FEATURES.has(feature)) return null;
+      return { level: 'info', event: 'leaderboard.tick', detail: `feature=${String(feature)}` };
     }
     default:
       return null;

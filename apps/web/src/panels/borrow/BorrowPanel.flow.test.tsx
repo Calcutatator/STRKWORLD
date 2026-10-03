@@ -218,7 +218,9 @@ describe('the Borrow counter, driven through the screen in demo (D-083)', () => 
     expect(field('amount').querySelector('.ui-amount-hint')?.textContent).toBe(`${COPY.borrow.form.addCollateralFirst} ${COPY.borrow.form.maxCollateral}`);
     await click(button(COPY.borrow.form.maxCollateral));
     expect(counter().querySelector<HTMLInputElement>('input[name="collateral-amount"]')!.value).toBe('19994');
-    expect(field('collateral-amount').querySelector('.ui-amount-hint')?.textContent).toBe(COPY.balance.feeReserved);
+    // D-131: the same figure a press on the balance line fills, so the field
+    // states the 6 STRK it kept aside.
+    expect(field('collateral-amount').querySelector('.ui-amount-hint')?.textContent).toBe(COPY.kit.feeKeptAside.replace('{amount}', '6 STRK'));
     // The collateral field's own Max fills the same figure.
     await type('collateral-amount', '');
     await click(maxOf('collateral-amount'));

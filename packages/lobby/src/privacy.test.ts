@@ -75,6 +75,7 @@ const FROZEN_PRESENCE_FIELDS: Record<keyof PresenceState, true> = {
   sprite: true,
   carrying: true,
   jumps: true,
+  seat: true,
 };
 
 const FROZEN_POSITION_FIELDS: Record<keyof Position, true> = {
@@ -110,13 +111,15 @@ const FROZEN_SWING_FIELDS: Record<keyof RoofSwingSnapshot, true> = {
   reason: true,
 };
 
-/** D-114's ring slot, likewise: the frozen slot, field for field. */
+/** D-114's ring slot, likewise: the frozen slot, field for field (D-128 adds the block's two). */
 const FROZEN_ARENA_SLOT_FIELDS: Record<keyof ArenaSlot, true> = {
   kind: true,
   gameId: true,
   hp: true,
   swings: true,
   hits: true,
+  guarding: true,
+  blocks: true,
 };
 
 function fieldNames(klass: unknown): string[] {
@@ -210,7 +213,7 @@ describe('the schema is the enforcement point', () => {
     const ring = Metadata.getFields(ArenaRingEntry) as Record<string, unknown>;
     // The snapshot's fields, with the outcome split into its two codes.
     expect(Object.keys(ring).sort()).toEqual(
-      ['challenger', 'opponent', 'phase', 'reason', 'round', 'secondsLeft', 'winner'],
+      ['challenger', 'champion', 'opponent', 'phase', 'reason', 'round', 'seated', 'secondsLeft', 'winner'],
     );
     expect(ring).toEqual({
       phase: 'uint8',
@@ -220,11 +223,22 @@ describe('the schema is the enforcement point', () => {
       secondsLeft: 'uint8',
       reason: 'uint8',
       winner: 'uint8',
+      // D-128: the champion's ephemeral presence id, and whether they sit.
+      champion: 'string',
+      seated: 'uint8',
     });
     const slot = Metadata.getFields(ArenaSlotEntry) as Record<string, unknown>;
     expect(Object.keys(slot).sort()).toEqual(Object.keys(FROZEN_ARENA_SLOT_FIELDS).sort());
     // Numbers only, plus the one presence id string a player slot carries.
-    expect(slot).toEqual({ kind: 'uint8', gameId: 'string', hp: 'uint8', swings: 'uint8', hits: 'uint8' });
+    expect(slot).toEqual({
+      kind: 'uint8',
+      gameId: 'string',
+      hp: 'uint8',
+      swings: 'uint8',
+      hits: 'uint8',
+      guarding: 'uint8',
+      blocks: 'uint8',
+    });
   });
 
   it('carries exactly the frozen FootballSnapshot field set, in fields that hold numbers only', () => {
@@ -259,6 +273,8 @@ describe('the schema is the enforcement point', () => {
     expect(fields['carrying']).toBe('int8');
     // D-097: a jump counter, a byte that wraps; it holds nothing else.
     expect(fields['jumps']).toBe('uint8');
+    // D-127: a bench seat index or -1, and a byte cannot hold anything else.
+    expect(fields['seat']).toBe('int8');
 
     const column = Metadata.getFields(SandboxColumnEntry) as Record<string, unknown>;
     expect(column['x']).toBe('uint8');
@@ -861,7 +877,7 @@ describe('the arena ring names only its fighter, to arena members only (D-114)',
       expect(registry.enterArea(key, { area: 'arena', ...arenaTileCentre(tile), facing: 'down' }, 0)).toBe(true);
       return outcome.gameId;
     };
-    const fighter = place('fighter', { x: 20, y: 10 });
+    const fighter = place('fighter', { x: 13, y: 16 });
     const watcher = place('watcher', { x: 13, y: 14 });
     const walker = join(registry, 'walker', 100, 100);
 
@@ -883,7 +899,7 @@ describe('the arena ring names only its fighter, to arena members only (D-114)',
       now += 100;
       // A look change mid-fight with a hostile sprite, and hostile facings on moves.
       registry.enterArea('fighter', { area: 'arena', x: 0, y: 0, sprite: attempts[step % attempts.length] }, now);
-      registry.move('fighter', { ...arenaTileCentre({ x: 20, y: 17 }), facing: step % 2 ? 'down' : attempts[step % attempts.length] }, now + 1);
+      registry.move('fighter', { ...arenaTileCentre({ x: 20, y: 16 }), facing: step % 2 ? 'right' : attempts[step % attempts.length] }, now + 1);
       registry.arenaAttack('fighter', now + 2);
       registry.arenaTick(now + 3);
       wires.push(member.patch(), street.patch());

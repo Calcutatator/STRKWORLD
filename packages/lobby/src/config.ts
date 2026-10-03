@@ -133,9 +133,10 @@ export const JUMP_MIN_INTERVAL_MS = JUMP_AIR_MS;
  * The floor the client wrapper holds its own jumps to, in ms: 50 ms above the
  * server floor, so jitter never drops an honest jump. The World's own jump
  * (800 ms in the air, then a 150 ms cooldown: 950 ms) is slower still. Moves,
- * sandbox actions, kicks, jumps, arena intents and swing intents together
- * stay under `MAX_MESSAGES_PER_SECOND`: 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 1 a
- * second, against 40 (D-132; `policy.test.ts` pins the sum).
+ * sandbox actions, kicks, jumps, the arena's intents, attacks and blocks, and
+ * the swing's intents together stay under `MAX_MESSAGES_PER_SECOND`:
+ * 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 4 + 1 = 37.7 a second, against 40 (D-128,
+ * D-132; `client-arena.test.ts` pins the sum).
  */
 export const JUMP_CLIENT_INTERVAL_MS = JUMP_AIR_MS + 50;
 
@@ -251,7 +252,12 @@ export const DEFAULT_FACING: Facing = 'down';
  * enforcement: the room's surface has no field for it.
  */
 export const MESSAGE = Object.freeze({
-  /** `{ x, y, facing }` — the only high-rate message. */
+  /**
+   * `{ x, y, facing, seat }` — the only high-rate message. D-127's `seat` (an
+   * index into `STREET_SEATS`, or -1 standing) rides along on it rather than
+   * taking a message of its own: sitting down is a move onto the seat's spot,
+   * so the client floor already paces it and the budget below is unchanged.
+   */
   move: 'move',
   /** No payload. The avatar disappears for everyone else. See D-019. */
   suspend: 'suspend',
@@ -295,6 +301,24 @@ export const MESSAGE = Object.freeze({
   arenaAttack: 'arena:attack',
   /** No payload — D-114: forfeit the sender's fight (it ends as `left`). Never read. */
   arenaLeave: 'arena:leave',
+  /**
+   * No payload — D-128: the sender raised their guard (Q down). Only while
+   * they are a fighting slot, and held to `ARENA_BLOCK_MIN_INTERVAL_MS`.
+   * Whatever a client sends with it is never read.
+   */
+  arenaBlock: 'arena:block',
+  /**
+   * No payload — D-128: the sender's guard came down (Q up). Never
+   * throttled: it only ever lowers a guard, and a dropped one would leave a
+   * fighter blocking for ever. Never read.
+   */
+  arenaUnblock: 'arena:unblock',
+  /**
+   * No payload — D-128: the champion pressed E at the emperor's box. The
+   * room judges it from where it holds them and whether they are the
+   * champion, and moves them onto (or off) the throne itself. Never read.
+   */
+  arenaSit: 'arena:sit',
   /**
    * No payload — D-132: claim the Exchange roof's lookout swing from the
    * deck in front of it. Only while the swing is idle and the sender is live

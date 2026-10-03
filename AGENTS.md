@@ -259,6 +259,100 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
+
+The brief was "make jumping actually move the character model … jump over the
+football or characters", on the premise that avatars are blocked by other
+players and by the ball. Read before changing anything, that premise is false
+and most of the feature already shipped.
+
+- **The model rises and the run carries through, already.** `presenter.ts`
+  lifts the figure along `jumpLift` (1.15 units over 800 ms, D-097 amended) and
+  `remote-avatars.ts` plays the same arc for peers. D-097 made the jump touch
+  neither speed nor direction, so a walking jump is 4 tiles of ground and a
+  sprint 6 — already far more than the 0.5 tiles the ball is wide. A forward
+  boost would be pure extra speed with no server-side street cap to hold it
+  (D-087 kept the street's clamp-to-world and no path check at all).
+- **There is no avatar-to-avatar or avatar-to-ball collision anywhere.** Street
+  movement is `isSolidAt(map, …)` plus sandbox stacks higher than your level,
+  and that is the whole of it (`world-session.ts` `moveStreetPlayer`,
+  `stepOnHeightmap`). The lobby validates finiteness, a shared area's walkable
+  tiles, and D-106's climb window — never a peer, never the ball. Players walk
+  through each other today.
+- **The only thing in the way was the dribble.** D-078's `stepBall` pushes the
+  ball off every overlapping player's 12-pixel body. That rule did not know the
+  player was in the air, so jumping over the football shoved it away exactly as
+  running through it did. Dropping the jumper from the pushers — in the room,
+  in the solo authority and in the drawn ball — is the entire feature.
+- **Phase, never height.** The pass window is normalised like D-106's climb
+  window (`JUMP_PASS_FROM_PHASE` 0.1 to `JUMP_PASS_UNTIL_PHASE` 0.9), so
+  reduced motion's 0.3-unit hop clears the same ball as the 1.15-unit arc with
+  no second code path. Reading the lift instead would have silently excluded
+  reduced motion.
+- **The room must time its own jumps.** `player:moved` carries `airborne` for
+  the Shell's ball only; it is dropped structurally by `ownMovementPayload` and
+  the room reads its own `#jumps` record instead (`JUMP_PASS_WINDOW_MS`, 870
+  ms). A client-asserted airborne flag would be a free "never dribble me".
+
+*Verified:* read the shipped sources listed above rather than the docs, and
+pinned the premise in tests that fail if it changes — a run across the exact
+spot a peer stands on covers the same ground as a run with nobody there
+(`world-session-jump-over.test.ts`), and the same run over the ball with and
+without a jump leaves it still or dribbles it (`lobby/src/jump-over.test.ts`),
+one tick either side of the window edge. Solo play and the room are compared
+step for step over the ball (`football-controller.test.ts`). Full suite (306
+files, 6418 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
+
+### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
+
+"I went to the bridge counter and it's not popping up an interface." Nothing in
+`deploy/RAILWAY.md` disables the Bridge, and the whole press-E path is sound:
+driven end to end — the real engine-free World session, the real interaction
+system, the real Shell station registry, the real panels, the real presenter
+and `ProductionRoot` with the production route policy from `import.meta.env`
+(`VITE_WALLET_MODE=real` makes `detectRoutePolicy()` answer in a test) — every
+counter opens, the Bridge included. What is wrong is the lock, not the press.
+
+- **The gate's name was a lie.** `station-registry.ts` locks the DEPOSIT
+  counter on `bridgeAccountAvailable && bridgePlannerAvailable`, which
+  production has from boot. But `BridgeProvider.createRuntime` returned the
+  shared `unavailable` runtime (account `null`, planner `null`) for *any*
+  render without a `service` — and the service is the optional recovery
+  runtime, fetched only on Bridge entry and refused outright by
+  `production-runtime.ts`'s Web Storage write probe in a private window, with
+  site data blocked, or on a full quota. So the two capability bits really
+  meant "has the optional chunk landed?", and the counter was locked until it
+  had, or for ever.
+- **Since D-123 that lock is silent.** A locked counter has no shimmer, no key
+  chip, and `fixed-room.ts`'s `interaction()`/`activate()` return `null`/false,
+  so no `station:activated` is emitted and the `capability-unavailable` message
+  `station-registry.ts` prepares can never be rendered. The pre-D-117 walk-up
+  did not show it either; only Menu Mode ever did. A transient or
+  browser-dependent lock with no cue is indistinguishable from a bug — and it
+  only bites production, because the demo runtime needs no storage and no
+  chunk.
+- **The fix is to make the gate mean its name.** The provider publishes the
+  account and planner it was given with `service: null` until the runtime
+  lands, and carries a `loading` bit so the window says "still starting up"
+  rather than D-043's "saved recovery is unavailable in this browser" before
+  the loader has answered. D-061 (no planner → recovery-only) and D-043
+  (nothing pretends to persist) are unchanged.
+- **Two React traps on the way.** `setState(fn)` treats a function as an
+  updater, so parking a failed *loader function* in state calls it — box it
+  (`{ loader }`) or use `setState(() => fn)`. And `WorldSession.update` clamps
+  its delta (`clampFrame`), so a test cannot step D-114's 250 ms door
+  re-entry hold with one big tick; it needs real frames.
+
+*Verified:* `npx vitest run --reporter=default` (297 files, 6,273 tests) and
+`npm run typecheck`. `visits/counter-press-e.flow.test.tsx` walks the player
+into all twelve counters and presses E; the Bridge case with a loader that
+never answers failed before this change and passes after. Not verified: a real
+browser, and whether the lead's own session was the storage probe or a slow
+chunk — both end in the same silent counter, and both now open the window.
+
 ### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-122)
 
 Four traps from wiring the private leaderboard's game side. (1) `shadowAccountAddress` (`calculateContractAddressFromHash`, several Pedersen hashes in JS) costs about 30 ms. Cross-checking all 128 rows of a shadow page took about 4 s per page, in tests and in a browser alike. The count never rests on the addresses (each receipt's commitment is `h(p, n)`, derived locally, and its count is the ledger's), so only the newest deployed row is checked. (2) A value import of `@strkworld/privacy` anywhere in the Shell's eager graph fails `architecture.test.ts` (it pulls `starknet` into the entry chunk), so the placement maths runs inside `checkPlacement` and the Shell imports types only. `PrivacyError` is matched with `toFailure`, never `instanceof`. (3) `PrivacyOperations` is frozen (D-036, `operations.test.ts`): an optional member fails its "every pinned member is a method" type check, so `checkPlacement` is required and rejects while the leaderboard is off. Every test double implementing the seam needed it. (4) The tally's exposure is wider than "links a season's receipts to each other": a shield receipt rides in the shield's transaction, whose `Deposit` names the depositor, so whoever holds `p` can find the account of a player who shielded. Also, `count_of` is `-> u64` (one felt), and `tick` reverts a second receipt in one transaction, so a batch must never carry two.
@@ -13730,27 +13824,553 @@ the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
 
+### An additive brightness breathe under ~10% is invisible in this game
+
+The D-123 shimmer pulsed each usable station's surfaces between 3% and 9%
+additive ember over 2.5 s. On the Bank's near-black STRK20 counters that is
+below the eye's threshold at play distance — the lead's report was "I can't
+tell it on anything" — and the renders agree: the counters are
+indistinguishable from the locked ones. Two fixes, both needed:
+
+1. **Give the eye an edge to catch.** A band of light gliding along the thing
+   reads at a fraction of the energy a whole-surface brightening needs,
+   because motion with a boundary is what the periphery picks up. The band
+   has to be narrow: at a half-width of 0.26 of the object it reads as the
+   whole object brightening, at 0.18 it reads as a sweep.
+2. **Raise the floor.** 12-20% base plus a 45% crest is the point where the
+   dark interiors read clearly and the already-light surfaces (the Bank's
+   cream counter tops, the Vault's white desks) do not wash out. At a 55%
+   crest the Bank's wood panels lose their grain.
+
+Daylight is the hard case, not darkness: outdoors (the plaza, the arena) an
+additive cue competes with the sun, and the arena's ring gate is wood against
+sand, so a *colour-matched* tint on it is nearly the colour behind it. That
+is an inherent cost of colour-matching and is not worth fixing by shouting.
+
+*Verified:* headless-Chrome WebGL renders of the Bank, the Degen floor, the
+plaza, the Studio and the arena at several points in the cycle, against the
+same scenes with every station locked (shimmer off) and against the pre-change
+shader built from `HEAD` — `scratchpad/renders/shimmer-*.png`, 2026-10-02.
+
+### Derive a "dominant colour" from chroma, never from HSL saturation
+
+Picking each station's shimmer tint from its own paint needs a score that
+prefers what the eye notices. Weighting a colour's area by its HSL
+*saturation* picks the wrong thing every time on a voxel city: `#3b1b1b` (the
+Bank's desk, which reads black) has saturation 0.37, so the counter's dark
+bulk out-voted its own gold trim and the lifted result was a dusty rose with
+no relation to the counter. Chroma (max channel minus min, i.e.
+`2 * s * min(l, 1 - l)`) calls that same colour 0.13 and the gold 0.48, which
+is what the eye does. The shipped score is
+`area * (0.06 + chroma) * (0.15 + lightness + chroma / 2)`, with the result
+lifted to a fixed lightness so every station reads at one strength and no
+near-black station gets an invisible tint.
+
+*Verified:* dumping the per-station colour tallies while building every real
+room, the plaza, the Studio and the arena gate (a scratch vitest probe,
+2026-10-02); both scoring functions compared on the same tallies.
+
+### The engine's fog makes distant scenery impossible; bake your own haze
+
+`scene.fog` is linear in view depth and its range moves with the player's
+elevation: `fogRange(e) = { near: 26 + e, far: 64 + e * 1.6 }`
+(`three/world-engine.ts`). Standing on the Exchange roof (`EXCHANGE_ROOF_HEIGHT`
+is 36) that is whole by 122 units, and the camera's far plane is 240. So
+anything meant to be *seen* from a height at more than about 100 units — a far
+bank, a skyline, a mountain — is painted flat in `SKY_HORIZON` by the engine
+before it ever reaches the frame, and anything built to look right under one
+elevation's fog looks wrong under another. The south vista (D-124) therefore
+sets `material.fog = false` on every one of its materials and mixes its own
+haze into the vertex colours by distance. Two things to know if you do the
+same: the haze target must be a shade *off* `SKY_HORIZON` and must not reach 1,
+or the silhouette dissolves instead of receding; and the colours are albedo
+under a lit material, so a far surface facing away from the sun still goes
+darker than the sky — which is what a real hazy skyline does, so lean into it
+rather than fighting it.
+
+*Verified:* read of `fogRange` and the `PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240)`
+in `three/world-engine.ts`; renders of the vista at pitches from 6 to 32 degrees
+below the horizon through the offline rasteriser, with and without the fog
+opt-out, on 2026-10-02.
+
+### South of the map was never blank — it was backdrop country, and it is water now
+
+`backdrop.ts` already filled the south with fields, hedgerows, tree lines, a row
+of houses at z ≈ 50 and two hills centred at z 64 and 68, and street-builder
+laid its own meadow to `H + OUTSKIRT` (z 68). None of it had ever been in frame,
+because the camera always looks north (D-059), so it read as blank. It is not.
+Anything you put south of the district has to clear it: D-124's river stops all
+of it at `SOUTH_SHORE_Z` (58, exported from `three/south-vista.ts`), which is the
+line to respect — a hedge or a hill past it stands in the water. Note also that
+`backdropSurface()` returns null for the whole band `x ∈ [-40, 151)` south of the
+map even inshore of the shore: street-builder lays that ground itself, and the
+backdrop defers to it wherever `z >= CITY_FRONT`.
+
+*Verified:* read of `groundCode`, `hillSpots`, `houses` and `hedgerows` in
+`three/backdrop.ts` and `buildOutskirts` in `three/street-builder.ts`; renders
+over the south edge before and after the change; `south-vista.test.ts` pins both
+the shore and the band, on 2026-10-02.
+
+### The Exchange roof is part of the street scene, not a room
+
+`EXCHANGE_ROOF_LEVEL` carries a `rooftop` and `fixed-room.ts` says so in a
+comment, but it is easy to read "roof" as another `FixedRoomLevel` with its own
+scene. It is not: the presenter skips every level with a `rooftop` when it
+builds its rooms ("A roof is not here: it is the building's top in the street"),
+`street-builder.ts` draws the deck in `towerRoof` at `EXCHANGE_ROOF_HEIGHT`, and
+`showRooftop(building)` only records which roof the player is on and switches the
+camera preset — the street stays drawn. So anything that should be visible from
+the roof goes in the street scene and needs nothing else, and anything added to a
+"roof room" would never be drawn at all.
+
+*Verified:* read of `createPresenter` (`if (level.rooftop) continue`,
+`showRooftop`, `setStreetVisible`) in `three/presenter.ts` and `towerRoof` in
+`three/street-builder.ts`; `south-vista.test.ts` asserts the vista is reachable
+through `view.ground`, on 2026-10-02.
+
+---
+
+### 2026-10-02 — With a fixed north-looking camera, which way a feature faces decides how much of it you ever see
+
+Moving the gladiator pit's entrance from the north rim to the west rim
+(D-114, second amendment) cost nothing in geometry and a lot in looks, and the
+reason is D-059: the camera always looks north. Three things fell out of it
+that are worth keeping in mind for any street or room feature.
+
+**A façade turned 90° becomes a silhouette.** The street arch was a triumphal
+façade with its sign and banners facing the road; on the west front the camera
+only ever sees its end. Drawn unchanged it reads as a blank wall slab beside
+the player. Two cheap fixes made it read again: cap the attic and cornice over
+the *gateposts only*, so the silhouette dips to the arch's ring between them,
+and wrap a banner onto the posts' end faces, because the south post's end is
+the one face of the gate on screen.
+
+**A sign belongs on whatever surface faces south, not on the thing it names.**
+Keeping `GLADIATOR PIT` on the west arch put it edge-on and high above the
+pit. Standing it on two posts on the pit's *far* (north) rim, facing south,
+reads over the bowl from the road exactly as a stadium nameplate should — and
+because it is north of everyone it never occludes a player, so it drops out of
+the arch's fader entirely.
+
+**Entering from the west puts sky where the room used to be.** The pre-mirror
+south tunnel gave the best arrival in the game: standing at the arena's south
+edge, the whole stadium spread out ahead. Arriving at the *west* edge puts the
+off-map void in the upper-left of the frame, because the camera looks north,
+not east. Pushing the spawn from 2 tiles inside the tunnel to 4 (`ARENA_SPAWN`
+(4, 16)) recovers most of it — the doorway out stays in frame behind you and
+the stadium opens to the right — but it cannot be fixed, only traded. Decide
+the axis of travel against the camera before the geometry, not after.
+
+One mechanical trap came with the same change: `classifyTile` in
+`street-builder.ts` calls a pavement run a flush `path` only when *both* ends
+of the run are `grass`. A branch that ends at the pit's threshold therefore
+re-classified itself *and the Studio path it leaves* as kerbed `sidewalk`,
+silently raising a path 40 tiles long by `PAVEMENT_HEIGHT`. `isLawnEnd` now
+counts `pitstep` as a lawn end. Any new walkable kind at the end of a path run
+needs the same treatment.
+
+*Verified:* offline renders from the game camera (`arenawest-tools/render.sh`,
+a z-buffer rasterizer matching the engine's lighting, ACES and fog) compared
+side by side with the pre-mirror `renders/arena-final-*.png`; the raised-path
+regression caught by `three/street-builder.test.ts`'s
+`streetSurfaceHeightAt(map, X + 23, 22)` assertion, which is why that test
+exists.
+
+### 2026-10-02 — Reading a tile coordinate back out of a game screenshot
+
+An annotated screenshot of the fixed camera is enough to recover exact tile
+coordinates, because the rig (`three/camera-rig.ts`) has no free parameters:
+yaw is always north, pitch 28°, distance 11, FOV 50° vertical, and it aims
+`CAMERA_AIM_HEIGHT = 4` above the player's feet. So the camera sits at
+`(tx, 4 + 11·sin28, tz + 11·cos28)` and the only unknowns are the player's
+`(tx, tz)`. Two consequences make the solve easy: a ground line of constant
+z projects to a **horizontal** screen line (no roll, no yaw), so screen y
+alone gives z; and the player's feet land at a fixed screen y (865/1090 at
+the sketch's aspect), which confirms the whole model in one look before any
+fitting. Then one vertical ground edge at a known x — the plaza's east
+paving edge at world x 40 — gives `tx` to a hundredth of a tile, and it must
+give the *same* `tx` at every row, which is the check that the fit is real
+rather than fitted. Beware two traps: the screenshot must be the whole
+canvas (any crop or chrome shifts the principal point and the solve goes
+quietly wrong), and near-building rows read 1 tile off because facade shadow
+hides the pavement/road seam — calibrate on the open rows.
+
+*Verified:* solving the lead's placement sketch
+(`scratchpad/research/stand-location-sketch.webp`, 2000×1090) gave
+`tx = 42.73` from eight separate rows of the plaza's east edge, agreeing to
+0.03 of a tile, and predicted the Studio path's two columns (x 52-54) to
+within 4 px at its centre. The drawn path line then came out at world
+x 40.00 — the plaza's east edge to the pixel. Re-rendered the same frame
+offline from the same rig and overlaid it on the sketch: every landmark
+lines up.
+
+---
+
+### 2026-10-02 — A modal over a panel must stop keystrokes at the window in the capture phase
+
+The consent pop-up on the placement stand (D-122, amended) is a dialog inside
+the Shell's panel layer. Two listeners sit on `window` and would otherwise
+both act on its keystrokes: the visit layer's Escape handler, which closes the
+whole station window (`VisitLayer.handleVisitKeyDown`), and the World's own
+keyboard (`packages/world/src/dom-keyboard.ts`), which reads E, movement and
+Space. Both are **bubble-phase** listeners on `window`. A React `onKeyDown`
+inside the dialog is not enough to be sure of beating them, and `preventDefault`
+is wrong for a dialog (Space on a focused button activates it). The reliable
+shape is a `keydown` listener on `window` with `capture: true` that calls
+`stopPropagation()` on everything, handles Escape and Tab itself, and leaves
+`keyup` alone — `dom-keyboard` clears a held key on release whatever else is
+open, and swallowing that would leave a key held after the dialog closes.
+
+Two smaller traps found with it. A button styled with a plain `background` is
+undone by the shared `button:hover:not(:disabled)` rule, which is more
+specific and resets `--btn-bg-hover`: a hovered ember cap went grey in the
+first render. Styling through the `--btn-*` tokens instead keeps hover, press
+and focus (`.placement-check` has the same latent bug). And under this
+runner's `localStorage` shim there are no `key()`, `length` or even
+`getItem()` methods, so a test cannot enumerate or read storage directly —
+assert through `ViewerStorage` with an injected backing map instead.
+
+*Verified:* `apps/web/src/plaza/placement-consent.test.tsx` (7 tests), which
+includes a window-level bubble listener that hears nothing while the dialog is
+open and both keys again once it closes, and a real `VisitLayer` where the
+first Escape answers the dialog while the station window stays open and the
+Shell keeps the controls. The hover trap was seen in a Playwright render of
+the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
+(295 files, 6232 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
+
+### 2026-10-03 — A balance you can press: the fee has to come from the panel's own maths, and the figure shown is not the figure filled
+Making every balance line fill its amount input (D-131) looked like a UI
+change and was really an arithmetic one. Three traps.
+**The shown figure is rounded; the filled figure must not be.** `balanceText`
+goes through `formatTokenAmount`, which trims for reading: a pool holding
+`100.000000000000000001 STRK` reads "100 STRK". Filling what the line *reads*
+would silently drop or invent wei, so the press fills
+`formatTokenAmountExact(balance - fee)` — the Exchange's Max already did this,
+and its test (`94.000000000000000001`) is the one that catches a regression.
+The `aria-label` keeps the rounded words, so what a screen reader hears
+matches what the eye reads.
+**Never re-derive the fee in the component.** The fee that may be kept aside
+differs per counter and per asset — the pool fee comes out of the balance on
+UNSHIELD, STAKE, TRANSFER and a STRK SUPPLY, out of the *wallet* on SHIELD
+(same asset, so still kept aside), and not at all from a REDEEM, a REPAY or a
+withdrawal, whose figure is the loan's own. A swap keeps it aside only when
+the asset sold is the fee's token. So `AmountField` takes one `balanceFee`
+prop and the panel passes the very `feeReserve(token, pool)` it already uses
+for its `limit`, its Max and its review; the kit does the subtraction once
+(`fillFromBalance`) and nothing duplicates the 6 STRK.
+**"Not fetched", "unknown fee" and "too small" are three different states,
+and only one of them is "no balance line".** Balances are user-requested
+(the wallet prompts), so no line is drawn at all until a figure is read; a
+read balance with an unread pool fee, or one the fee alone would eat, still
+shows its figure but as plain dim text with the reason in `title`, never a
+dead button. `fillFromBalance` returns `null` for all three and the component
+branches on that single answer.
+*Verified:* `apps/web/src/panels/kit/amount-math.test.ts` and `kit.test.tsx`
+for the maths and the control (exact decimals at 18 and 6 places, the fee
+aside, keyboard activation without touching the game's E, Refresh unaffected,
+every unpressable state), plus a flow per panel family through the real
+windows in `panels/amount-standard.flow.test.tsx`,
+`exchange/ExchangePanel.amount.test.tsx` and `bridge/BridgePanel.test.tsx`.
+Full suite (295 files, 6255 tests) and `npm run typecheck` pass. A Playwright
+render of the Bank's SHIELD counter with the figure hovered and the amount
+filled by it is in the working scratchpad (`renders/balance-click.png`), shot
+through the real `VisitLayer` over the deterministic fake seam. No wallet,
+RPC, funds or transaction was used.
+### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
+Adding a seated pose to shared presence looks like a new message and a new
+state block. It is neither. Sitting down *is* a move — onto the seat's own
+spot — so the seat index can ride on the existing `move` payload: the client's
+move floor already paces it, the reconcile loop already re-sends it until the
+server's copy matches, and the room's message budget does not change at all
+(`client-arena.test.ts` now also pins the message set, which is how that stays
+true). And because both sides share one frozen seat table, the wire needs only
+an index: the position, the facing and which bench it is all come out of the
+table. `PresenceState.seat` is therefore a single `int8`.
+Two things that only worked because of that shape. The server's whole rule is
+"the index is real, the position I just wrote is that seat's own spot, nobody
+else holds it, and you are on the street" — no geometry, no tolerance, no
+trust. That needs the seat spots to be **whole pixels**, since
+`normalizeCoordinate` rounds everything the room is sent; a spot derived at
+`x * 32 * 0.425` and compared with `===` would never match. And a client that
+mentions a seat the room refuses keeps re-sending it forever unless the
+reconcile comparison includes the seat, which is why `samePlacement` and the
+client's own view of its server entry both carry it.
+Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
+its sibling modules at the bottom, and `arena.ts` gets away with importing
+back from it only because every one of those imports is type-only; a *value*
+read back at module scope is a real ESM cycle and dies in the TDZ. The new
+`seats.ts` therefore keeps its own copy of `STREET_ORIGIN_X` with a test
+pinning the two together. And adding a field to a validated snapshot breaks
+every `toEqual` on it across three packages at once (51 tests here) — the
+field has to be added to the fixtures, not worked around.
+Also worth knowing: a bench did not need a "no cue" mechanism to look right —
+registering no affordance shell already leaves it dark. It needed one to *stay*
+right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
+even if a shell for that id turns up later.
+*Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
+`packages/world/src/world-session-benches.test.ts`,
+`packages/lobby/src/seats.test.ts`, plus a real-wire test in
+`packages/lobby/src/client.test.ts` where a second player's claim on a taken
+seat is refused and they stand on its spot instead. Renders from a WebGL
+harness in headless Chrome: `renders/benches-plaza.png`,
+`benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
+suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
+funds or transaction was used.
+---
+### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
+The D-123 shimmer is tuned as a single global level, and the amendment that
+made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
+dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
+that tuning badly. It is tall, near-black, lit by the sun, and standing alone
+on pale paving with nothing behind it, so the same additive energy lands on a
+big unbroken silhouette with maximum contrast against its surroundings — it
+reads as a lit beacon rather than as a hint, and the colour-matching rules make
+it worse, because a near-black station takes the pale warm fallback tint
+(`SHIMMER_TINT_WARM_HUE`) at lightness 0.72, which is the largest lift of any
+station in the game. The lead saw it as "the shimmer on the plaza pillar"
+specifically, 80% too strong, while the rest of the world was only 30% too
+strong.
+What this means for the next cue: a per-object strength knob is not a
+special case to be avoided, it is a requirement of any additive cue applied
+across both interiors and daylight. Keep the knob *relative* to the global
+level (a multiplier, not an absolute), so a later global change carries the
+exceptions with it, and bake it where the per-vertex data already is — the
+shell buffer's `aSweep` attribute had a free third component, so
+`SHIMMER_STATION_SCALES` costs no mesh, no material, no uniform and no
+per-frame work. The ember edge glow is a separate effect and must not read the
+multiplier: widening the gap between "usable" and "the one E would use" is the
+point.
+*Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
+70%, the monument at 0.2 and every other station at 1, the multiplier baked
+per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
+renders from the same harness and the same camera —
+`scratchpad/renders/shimmer-tune-plaza.png` and `shimmer-tune-bank.png`, with
+the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
+tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
+used.
+## 6. Findings log
+### A hidden entrance is not a door, so none of the doors' machinery applies to it
+The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
+tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
+handles it before `DoorTrigger.update` is ever reached. So the Studio got none
+of what the doors get for free, and the gap had gone unnoticed in two places at
+once. It had no return tile — `createAvatarStudio` passed `map.spawn` as its
+`streetReturn`, so leaving the changing room teleported the player eleven rows
+up the path instead of outside the room (the lead's bug, D-125) — and it had no
+re-entry hold, which only looked harmless because the wrong return tile was too
+far away for a held key to carry anyone back in. Fixing the first on its own
+would have introduced the bounce PR #205 had already fixed for the doors.
+The lesson generalises past this entrance: when a feature is built *beside* a
+shared mechanism rather than *through* it, every invariant the mechanism
+carries has to be re-checked by hand, and a later amendment to the mechanism
+(the hold) will not reach it. Grepping for the trigger (`isAvatarStudioEntrance`,
+one call site) found the whole gap in one pass; grepping for the *concept*
+(`reset`, `returnTile`) did not, because the Studio names neither. The hold is
+now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
+trigger and the Studio's entrance as its two users, so the next amendment to it
+lands on both.
+*Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
+real keys end to end (walk in from the street entrance, walk out of the Studio
+exit, land on the tile outside the entrance facing away, with the street
+placement carrying it), the entrance held against a key still down after the
+exit and opening again once stepped off and back on, and an audit of every
+other room's exit (Bank, Vault, Exchange, Post Office, Bridge, bunker, arena:
+each lands on a walkable street tile off its own door and touching it, none of
+which needed changing). Each new assertion was also run against the unfixed
+code and seen to fail. Full suite (296 files, 6260 tests) and
+`npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
+### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
+The private leaderboard's first mainnet probe had every variable set, the
+ledger address in the bundle, `?lb=1` in the tab and the placement stand on
+the lawn — and attached no receipt at all. `ownPolicy` in
+`packages/privacy/src/wallet-api/session.ts` re-reads the route policy into a
+frozen copy of its own, and that copy is what every connection's operations
+are built from. It listed `maxIntents`, `maxRelayFee`, `enabledRoutes`,
+`allowedTokens` and `swap`, and not `leaderboard`, so the ledger was dropped
+one step before `WalletApiPrivacyOperations` could see it. With no ledger that
+class builds no receipts object, which is byte-for-byte a build with the
+leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
+line, and no error anywhere.
+Two things make this class of bug worth writing down. First, the stand kept
+working, which argued the probe was fine: it reads
+`placementStandFrom(environment)`, a seam that never passes through the
+session's policy copy. When one of several seams for the same switch works,
+compare the seams rather than the switch. Second, the feature fails open by
+design, and open failure with no log is indistinguishable from off — so the
+fix ships with `packages/privacy/src/leaderboard-notice.ts`, a sink on D-069's
+channel that reports every decision as a reason code (`no-ledger`,
+`no-reads`, `unsupported-route`, `no-nonce`, `scan-failed`) and whose
+formatter admits each field from a fixed list, so `p`, a commitment, a shadow
+address, the account, a nonce and a transaction hash cannot be written even by
+a caller that offers them.
+*Verified:* reproduced red first — with `ownPolicy` restored,
+`apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
+policy's missing ledger. That file now drives the real production wiring (a
+tab with `?lb=1`, Railway's own variables, `parseProductionWalletConfig` and
+the real `createWalletSession`) to a receipt on shield, unshield and send;
+`apps/web/src/panels/placement-review.test.tsx` asserts the review line inside
+the `ConfirmGate` subtree on all seven fee-paying flows and its absence on all
+seven otherwise; the notices are checked against the real operations in
+`packages/privacy/src/wallet-api/leaderboard-operations.test.ts` and as the
+backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
+(298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
+was used; the live ledger's `leaf_count()` has not been re-read.
+### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
+The arena (D-114) is a room, drawn at the interiors' origin over the hidden
+street (D-039). The city, the backdrop and D-124's south vista are all mounted
+in `street.ground`, which a room never shows — so outside the arena's arcade
+there was nothing but linear fog on a `SKY_HORIZON` background, which reads as
+"floating in blank white nothingness". The sky dome and the `Fog` *are* shared
+(one `Scene` in `world-engine.ts`), so the fix is not a second sky: it is
+mounting `backdropCity` and `createSouthVista` into the room's own group
+(`three/arena-surround.ts`, D-129). Verified by the arena room's draw-call test
+listing `arena:outside-city`, `arena:outside-windows` and the vista's six
+meshes, and by renders from the in-game camera on the sand and on the top tier.
+Two traps that cost time there. **The backdrop's plan is district-wide**: it
+lays fields and hedgerows west, east and south of the street as well as the
+city to the north, and at the offset that puts the city behind the arena's
+north wall those bands stand *inside* the stadium — the module had to be
+flushed through a triangle filter that keeps only what stays north of the
+wall. And **a geometry sweep over a backdrop is not free**: the arena's
+headroom test (sample every triangle, barycentric, against every walkable
+tile) went from seconds to a 30 s timeout the moment the city joined the
+group. The surround is excluded from that sweep by name and held clear of the
+stadium by its bounding box instead, which is the assertion that actually
+matters — it is tens of tiles away, not a hair over a tier.
+Also: the room drew bare earth on its `void` tiles, which was invisible while
+there was nothing around it and became a hard-edged brown apron the moment
+there was a lawn. When you give a scene a world, re-check every surface that
+was only ever seen against nothing.
+## The arena's block and the emperor's box (D-128)
+Two traps cost time here, both about the gap between a test's shortcut and
+what a player can actually do.
+**A test may not teleport across a room.** `client-arena.test.ts` moved a new
+champion from the ring's return tile to the emperor's box with one
+`updatePosition`. The room refused every one of them and the test timed out on
+a position that never changed. `isAreaStepAllowed` (D-087) samples the
+straight line between two points and rejects the move if any sample is not
+walkable — and the line from the gate to the box runs clean through the ring's
+fence. The fix is a `walk` helper that steps round the fence tile by tile,
+waiting for the room to hold each step, which is also what a player does.
+Anything that asserts on a position in a shared room has to walk there.
+**A held key needs a release the gates cannot swallow.** Q is the World's only
+held action key, so `dom-keyboard.ts` gained `keyup-Q`. The press is gated like
+E; the release is gated by nothing except having seen that key go down, and is
+also delivered from blur, a hidden tab and `resetKeys`. Every one of those is a
+case where the real keyup lands somewhere else — over a panel, on another
+window — and a release that the gates ate would leave the fighter guarding on
+the server for ever. The same rule runs through the session (`setBlock(false)`
+is never gated on the ring, and `destroy` sends it) and the HUD's touch button
+(`pointerup`, `pointercancel`, `pointerleave` and a lost capture all lower it).
+*Verified:* the rules tests drive a simulated attacker — `ArenaAuthorityOptions.opponent`, a
+test-only seam putting a second player in the opponent slot — into a guarding
+fighter and assert 0 damage with the target's `blocks` counter up; the
+champion path runs against a real server in `client-arena.test.ts`, including
+the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
+`npm run typecheck` pass. One pre-existing flake was seen once and did not
+reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
+and then asserts `carrying` is null — unrelated to this work. Renders are from
+the offline rasteriser, not a GPU.
+### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
+Every `ShadowAccountResolver` cached its own partial commitment "once per
+connection", and so did the placement's `LeaderboardReceipts`. Read route by
+route that is correct; read from the wallet it is five caches, and a placement
+check touches all five — the season commitment plus each feature shadow's
+commitment, and its partial again when the tally ranks DeFi. The lead saw it
+as "it requested to share the commitment a few times in the wallet". A prompt
+budget is a property of the connection, not of a route, so the cache has to
+live at the connection: one `WalletCommitmentCache` keyed by dapp name alone,
+handed to every route by `WalletApiPrivacyOperations`.
+The second half is that a read-only flow must never be allowed to prompt at
+all. A check now reads the feature shadows from the cache only
+(`cachedFullCommitment`, `cachedPartial`, both returning null when that
+counter has not been used), which means it can send fewer feature partials
+than before — so the tally had to stop treating "no partial" as "no points"
+and keep each claim's last verified count instead, taking the higher of
+stored and re-verified. That keeps "first claim wins" and adds nothing to what
+it already stores: it already held every claim's `h('strkworld-lb-feat',
+season, p_feature) -> entry` mapping.
+Also worth knowing: an optional member on the frozen `PrivacyOperations` seam
+needs `operations.test.ts` taught about it — its `SeamMethod` mapped type
+drops `(() => T) | undefined`, so the pinned-member check fails unless the
+mapping uses `-?` and `NonNullable`.
+*Verified:* `packages/privacy/src/wallet-api/commitment-cache.test.ts` counts
+every `strk20ShadowAccountCommitment` call against the real operations — one
+on a session's first check, zero on the next two, zero after a receipt shared
+`p`, and each dapp name exactly once across two receipts, three DeFi batches
+and two checks. Storage and console spies show nothing cached is written or
+logged. `apps/backend/src/leaderboard.test.ts` drives the kept counts, the
+monotonic update, a lost claim and the store file through the real service.
+Full suite (306 files, 6424 tests, merged with `origin/main` at 84b11a8) and
+`npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used; the prompt count in a real Ready wallet
+has not been observed.
+### 2026-10-03 — A guard with no message reads as a dead button
+The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
+refused the quote at 3.96% against a 3% bound, before anything was asked —
+correct behaviour on the ground floor, wrong on the degen floor, whose tokens
+are thin by definition. The expensive half was not the number. It was that the
+refusal threw `PrivacyError('unknown', …)`, so the log said `kind=unknown` and
+the panel said "That did not go through"; in the live quote path it was one
+faint note under an empty Buy field. Nobody could tell a refused swap from a
+broken button, and the real cause sat in the seam's message string, which the
+Shell is forbidden to render.
+Two rules came out of it, both now enforced by tests. **A guard that can refuse
+before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
+what both the log line and the counter's copy are keyed on, so `unknown` means
+"nobody can explain this". **A guard that refuses on a figure carries that
+figure on the throw**, as own data properties, so the counter can say "4.0%
+worse than the market price" without ever rendering the seam's own sentence.
+`SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
+no amount, no token — and `toFailure` reads them with the same own-descriptor
+discipline it reads `kind` with.
+*Verified:* reproduced red first — with the old throw restored,
+`apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
+`exchange-machine.test.ts` renders the generic copy. The figures survive two
+passes of `toFailure` and are dropped when malformed, negative, fractional or
+behind a throwing getter. The degen floor's own limits (12% / 800 bps) and the
+Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
+`swap-operations.test.ts`, the backend's two ceilings in `degen-route.test.ts`.
+Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used, and no live LORDS swap has been run under
+the new bound.
+
 ### A roof inside the street scene needs one vista mount, not two — and D-numbers go stale on a long branch
 
 The Exchange tower's roof is **not** a separate room scene: it is the tower's
 real top, built by `street-builder.ts` and drawn inside the street scene. So a
 backdrop mounted for the street (D-124's `createSouthVista`) is already behind
-anything you look at from the deck, and a second mount in a "roof scene" would
-be both wrong and a duplicate. Check which scene a walkable area belongs to
-before mounting scenery for it.
+anything you look at from the deck, and a second mount for a "roof scene"
+would be both wrong and a duplicate. Check which scene a walkable area belongs
+to before mounting scenery for it.
+
+This cost a real double mount at integration. The roof-swing branch, cut
+before D-124 landed, mounted its own placeholder vista in `three/presenter.ts`
+and on that branch `grep` honestly showed one call. Merging main — where D-124
+mounts the real module in `street-builder.ts` (and again in
+`arena-surround.ts`, for the arena room's own group) — made it two in the
+street scene. The presenter mount is gone; the swing's ride camera sees
+`street-builder.ts`'s mount, because the deck is in `street.ground` with it.
+**After any merge, re-grep for the mount of anything you mounted yourself** —
+a conflict marker never appears when the duplicate lives in another file.
 
 Separately: a branch that picks its D-number when it starts will collide. This
-branch wrote `D-125` throughout while `origin/main` moved from D-123 to D-130
+branch wrote `D-125` throughout while `origin/main` moved from D-123 to D-131
 under it, so D-125 became the Avatar Studio exit and every comment and test
 name here was wrong. **Re-fetch `origin/main` and renumber immediately before
 committing**, not when you start.
 
-*Verified:* `grep` for `createSouthVista` across the tree showed one call, in
-`three/presenter.ts`, added to `street.ground`; `rooftop`/`roofSurfaceHeightAt`
-in the same file read the roof out of the street build, with no roof scene.
-The number clash from `git fetch origin main` then
-`git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-130 against a
-local file ending at D-123; `git ls-tree origin/main
-packages/world/src/three/south-vista.ts` confirmed D-124's module is already
-on main, exporting exactly the `createSouthVista` / `SouthVista` signature
-this branch's placeholder was written against.
+*Verified:* after the merge, `grep -rn createSouthVista packages/world/src`
+shows the street's one mount in `three/presenter.ts` gone and exactly two
+calls in product code — `street-builder.ts` (into `ground`) and
+`arena-surround.ts` (the arena room's own group, a different scene) —
+with `rooftop`/`roofSurfaceHeightAt` in `presenter.ts` still reading the roof
+out of the street build, no roof scene. `south-vista.test.ts` pins the street
+mount and `arena-room.test.ts` the arena one; the ride renders
+(`renders/swing-ride-1..3.png`) show the real river, station and skyline from
+the rider's camera. The number clash came from `git fetch origin` then
+`git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-131 against a
+local file ending at D-123.

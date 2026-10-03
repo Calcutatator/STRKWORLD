@@ -273,6 +273,12 @@ describe('the Privacy Plaza in 3D (D-076)', () => {
     expect(top[0]).toBeGreaterThan(5);
     expect(top[1]).toBeGreaterThan(0.7);
     expect(top[1]).toBeLessThan(1.2);
+    // But the obelisk shimmers at a fifth of the table's: alone in an open
+    // square, the shared level reads as a beacon (D-123 amended 2026-10-02).
+    expect(shells.shimmerScale(PLAZA_MONUMENT_STATION)).toBe(0.2);
+    expect(shells.shimmerScale(PLAZA_SHELLS_STATION)).toBe(1);
+    const sweep = shells.mesh.geometry.getAttribute('aSweep');
+    for (let i = 0; i < slot.count; i++) expect(sweep.getZ(i)).toBeCloseTo(slot.getX(i) === 0 ? 0.2 : 1, 6);
     // The table carries its game's name all the time.
     expect(labelFor(plazaLabels, 'card').userData['text']).toBe("WHERE'S THE NOTE?");
     view.dispose();

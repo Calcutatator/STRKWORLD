@@ -21,6 +21,7 @@ import type {
 } from '../operations.js';
 import { depositStatusFromReceipt } from '../pool.js';
 import { shieldDeposits } from '../shield-deposit.js';
+import { SWAP_DEGEN_MAX_SLIPPAGE_BPS } from '../swap-prices.js';
 import {
   PrivacyError,
   type Address,
@@ -31,6 +32,7 @@ import {
   type TxResult,
 } from '../types.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
+import { WalletCommitmentCache } from './commitment-cache.js';
 import { mapCapabilityWalletError, mapTransferWalletError, mapWalletError } from './errors.js';
 import { compareSemver, highestVersion, parseSemver } from './semver.js';
 import { ShadowSwap } from './swap-operations.js';
@@ -39,6 +41,7 @@ import { ShadowBorrow } from './borrow-operations.js';
 import { EndurUnstake } from './endur-operations.js';
 import { freezeActions, submitThroughWallet } from './wallet-submission.js';
 import { withReceipt } from '../leaderboard.js';
+import { noticeLeaderboard } from '../leaderboard-notice.js';
 import { LeaderboardReceipts, type PlacementCheck, type PreparedReceipt } from './leaderboard-operations.js';
 import type { ReceiptNonceStore } from './receipt-nonce-store.js';
 import type {
@@ -129,9 +132,18 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly publicBalances: PublicBalanceReader | null;
   /** The private placement's receipts, or null when the leaderboard is off: then nothing about it runs. */
   private readonly leaderboard: LeaderboardReceipts | null;
+  /**
+   * This connection's one shadow-account commitment cache (D-122, amended
+   * 2026-10-03): memory only, shared by the Vault, the Borrow counter,
+   * unstaking, the swap and the placement, so no dapp name is ever asked for
+   * twice per connection. A new connection or account builds a new operations
+   * object, and so a new cache; `forgetCommitments` empties this one.
+   */
+  private readonly commitments: WalletCommitmentCache;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
+    this.commitments = new WalletCommitmentCache(options.wallet);
     this.publicBalances = options.publicBalances ?? null;
     assertAddress(options.wallet.address, 'wallet account');
     this.walletAddress = options.wallet.address;
@@ -141,6 +153,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     this.now = options.now ?? Date.now;
     this.vault = new ShadowVault({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.vault ? { reads: options.vault } : {}),
@@ -155,6 +168,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     // capability answer and receipt schedule as the Vault.
     this.borrow = new ShadowBorrow({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.borrow ? { reads: options.borrow } : {}),
@@ -169,6 +183,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     // D-085: Endur unstaking, on its own shadow account too, the same way.
     this.endur = new EndurUnstake({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       pool: this.pool,
       ...(options.endur ? { reads: options.endur } : {}),
@@ -181,6 +196,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     });
     this.swap = new ShadowSwap({
       wallet: this.wallet,
+      commitments: this.commitments,
       walletAddress: this.walletAddress,
       ...(options.vault ? { reads: options.vault } : {}),
       ...(options.swapQuotes ? { quotes: options.swapQuotes } : {}),
@@ -199,10 +215,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         ...(options.leaderboard ? { reads: options.leaderboard } : {}),
         ledger,
         ...(options.receiptNonces ? { nonces: options.receiptNonces } : {}),
+        commitments: this.commitments,
         supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+        // Cache reads only: a check never prompts for a feature commitment
+        // (D-122, amended 2026-10-03).
         features: [this.vault, this.borrow, this.endur, this.swap].map((feature) => ({
-          commitment: () => feature.ledgerCommitment(),
-          partial: () => feature.ledgerPartial(),
+          cachedCommitment: () => feature.ledgerCachedCommitment(),
+          cachedPartial: () => feature.ledgerCachedPartial(),
         })),
       });
       this.leaderboard = receipts;
@@ -218,6 +237,25 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   async checkPlacement(signal?: AbortSignal): Promise<PlacementCheck> {
     if (!this.leaderboard) throw new PrivacyError('unknown', 'The private placement is switched off.');
     return this.leaderboard.check(signal);
+  }
+
+  /**
+   * Whether the next placement check would ask the wallet for the season
+   * commitment, so the stand can warn before it happens. Counts only — it
+   * reads the memory cache and asks nothing. See `PrivacyOperations`.
+   */
+  placementWillPrompt(): boolean {
+    return this.leaderboard === null ? false : this.leaderboard.willPrompt();
+  }
+
+  /**
+   * Forget every shadow-account commitment this connection shared (D-122,
+   * amended 2026-10-03). The session calls it when it retires a connection —
+   * the HUD pill's "Disconnect & return to menu" (D-120) — and on an account
+   * change, so a second account never reads the first one's commitments.
+   */
+  forgetCommitments(): void {
+    this.commitments.clear();
   }
 
   /** D-083: Vesu's Prime pool for the admitted borrow tokens, read through the backend. See `PrivacyOperations`. */
@@ -502,7 +540,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   /** The receipt for a shield, unshield or send, or null: off, unsupported, refused or unreadable (fail open). */
   private async receiptFor(signal?: AbortSignal): Promise<PreparedReceipt | null> {
-    if (!this.leaderboard) return null;
+    if (!this.leaderboard) {
+      // D-069: the one skip the receipts object cannot report, since the build
+      // never built one. A reason code, nothing else.
+      noticeLeaderboard({ event: 'receipt', attached: false, reason: 'no-ledger' });
+      return null;
+    }
     const receipt = await this.leaderboard.receiptFor(signal);
     throwIfAborted(signal);
     return receipt;
@@ -756,10 +799,12 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   for (const intent of intents) {
     // D-090: a swap may carry the player's own slippage, as an own data property.
     const swapSlippage = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'slippageBps') !== undefined;
+    // D-126: and a swap may say it is the degen floor's, likewise as an own data property.
+    const swapDegen = intent.kind === 'swap' && Object.getOwnPropertyDescriptor(intent, 'degen') !== undefined;
     const expectedKeys = intent.kind === 'shield'
       ? ['kind', 'token', 'amount']
       : intent.kind === 'swap'
-        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut', ...(swapSlippage ? ['slippageBps'] : [])]
+        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut', ...(swapSlippage ? ['slippageBps'] : []), ...(swapDegen ? ['degen'] : [])]
         : intent.kind === 'stake'
           ? ['kind', 'tokenIn', 'tokenOut', 'amountIn']
           : ['kind', 'token', 'amount', 'recipient'];
@@ -783,8 +828,17 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
     ) {
       throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
     }
+    // D-126: only a build with the degen floor on may mark a swap as its own,
+    // and only a boolean marks it. Everything else is the ground floor.
+    if (intent.kind === 'swap' && swapDegen) {
+      if (typeof intent.degen !== 'boolean' || (intent.degen && policy.swap?.degen !== true)) {
+        throw new PrivacyError('unknown', 'This build has no degen floor for a swap to run on.');
+      }
+    }
     if (intent.kind === 'swap' && swapSlippage) {
-      const ceiling = policy.swap?.slippageBps;
+      const ceiling = intent.degen === true
+        ? policy.swap?.degenSlippageBps ?? SWAP_DEGEN_MAX_SLIPPAGE_BPS
+        : policy.swap?.slippageBps;
       const chosen = intent.slippageBps;
       if (
         typeof chosen !== 'number' || !Number.isSafeInteger(chosen) || chosen <= 0

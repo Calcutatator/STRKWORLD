@@ -28,6 +28,22 @@ export interface ArenaChannel {
    * attack itself.
    */
   subscribeStrikes?(listener: () => void): () => void;
+  /**
+   * D-128 (optional): the block, Q held. `down` raises the guard and false
+   * lowers it. Rate-limited on the way out; the server decides. A channel
+   * without it has no block, so Q does nothing.
+   */
+  block?(down: boolean): void;
+  /**
+   * D-128 (optional): the champion presses E at the emperor's box. The
+   * server decides whether they may, and seats them.
+   */
+  sit?(): void;
+  /**
+   * D-128 (optional): the HUD's touch BLOCK button, routed through the World
+   * like STRIKE, so it takes the same gates and client floor as Q.
+   */
+  subscribeBlocks?(listener: (down: boolean) => void): () => void;
 }
 
 /** What world-session (A) gives the arena session (C). */
@@ -80,6 +96,16 @@ export interface ArenaViewFrame {
   readonly challengerId: GameId | null;
   readonly challengerSwings: number;
   readonly selfIsChallenger: boolean;
+  /** D-128: the fighter holds a block, as the server says. Spectators draw the stance from it. */
+  readonly challengerGuarding: boolean;
+  /** D-128, mod 256: the fighter's blocked-hit counter. A change is a "blocked" spark. */
+  readonly challengerBlocks: number;
+  /** D-128: who may use the emperor's box, or null. */
+  readonly championId: GameId | null;
+  /** D-128: who is on the throne, drawn seated for everyone in the arena; null for nobody. */
+  readonly throneId: GameId | null;
+  readonly selfIsChampion: boolean;
+  readonly selfOnThrone: boolean;
 }
 
 /** Implemented by C in arena-session.ts; PR 0 ships a no-op. */
@@ -97,6 +123,12 @@ export interface ArenaSession {
    * One target while this client stands on the gate approach and is not
    * fighting: CLAIM while the ring is idle, IN USE (which does nothing) while
    * it is not. None otherwise.
+   *
+   * D-128: the emperor's box is a second target from the same source, while
+   * this client stands at it — SIT (or STAND) for the champion, and the
+   * CHAMPION ONLY notice for everyone else. It carries the box's own station
+   * id, so the room's affordance shell keeps its shimmer and glow, and the
+   * room's own reserved notice stands aside for it (`world-session.ts`).
    */
   gateTargets?(): readonly ArenaGateTarget[];
   /**
@@ -105,6 +137,12 @@ export interface ArenaSession {
    * only while this client fights; true when it took the press.
    */
   onAttack?(): boolean;
+  /**
+   * D-128 (optional): Q went down or came up. True when the session took it;
+   * it only ever does while this client is fighting. The caller gates on
+   * focus and on the World owning the keys; the session gates on the ring.
+   */
+  onBlock?(down: boolean): boolean;
   frame(): ArenaViewFrame | null;
   destroy(): void;
 }

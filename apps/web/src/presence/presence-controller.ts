@@ -1,5 +1,6 @@
 import type { EventBus } from '@strkworld/shared';
 import type { LobbyClientOptions, LobbyStatusEvent, PeerSnapshot } from '@strkworld/lobby/client';
+import { NO_SEAT } from '@strkworld/shared';
 import type { AvatarSpriteKey, Facing, PresenceArea, WorldEvents } from '@strkworld/shared';
 import {
   DEFAULT_AVATAR_SPRITE,
@@ -19,7 +20,12 @@ export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'u
 export interface PresenceState { readonly status: PresenceAvailability; readonly canReconnect: boolean; }
 export interface PresenceClient {
   connect(): Promise<void>;
-  updatePosition(x: number, y: number, facing: Facing): void;
+  /**
+   * D-127: `seat` claims a bench seat with the position — an index into
+   * `STREET_SEATS`, or -1 standing. A client that ignores the argument simply
+   * never shows anyone sitting.
+   */
+  updatePosition(x: number, y: number, facing: Facing, seat?: number): void;
   suspend(): void;
   resume(placement: { x: number; y: number; facing: Facing }, sprite: AvatarSpriteKey): void;
   /**
@@ -70,6 +76,12 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
   let placement: { x: number; y: number; facing: Facing } | null = null;
+  /**
+   * D-127: the bench seat the World last reported with the street placement, or
+   * -1. Kept beside the placement rather than in it, because a resume and an
+   * area switch are teleports and never carry a seat.
+   */
+  let placementSeat = NO_SEAT;
   let currentSprite: AvatarSpriteKey = DEFAULT_AVATAR_SPRITE;
   let inside = false;
   /**
@@ -275,7 +287,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     try {
       stopPeers = ownedClient.onPeers((snapshot) => {
         if (active && !destroyed && client === ownedClient) {
-          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite, carrying, jumps }) => ({ id: gameId, x, y, facing, sprite, carrying, jumps })));
+          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite, carrying, jumps, seat }) => ({ id: gameId, x, y, facing, sprite, carrying, jumps, seat })));
         }
       });
     } catch (error) {
@@ -377,7 +389,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         }
         setState({ status: 'suspended', canReconnect: true });
       } else if (state.status === 'connecting') {
-        next.updatePosition(placement!.x, placement!.y, placement!.facing);
+        sendPlacement(next, placement!, placementSeat);
         setState({ status: 'connected', canReconnect: true });
       }
       if (settlingOwner === owner) settlingOwner = null;
@@ -398,13 +410,28 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       }
     });
   };
+  /**
+   * Report the street placement, naming the seat only while the player sits on
+   * one (D-127): a standing player's call is the three-argument one it always
+   * was, so a client that never heard of seats is unaffected.
+   */
+  const sendPlacement = (
+    target: PresenceClient | null,
+    at: { x: number; y: number; facing: Facing },
+    seat: number,
+  ) => {
+    if (!target) return;
+    if (seat >= 0) target.updatePosition(at.x, at.y, at.facing, seat);
+    else target.updatePosition(at.x, at.y, at.facing);
+  };
   const onMoved = (value: WorldEvents['player:moved']) => {
     const owned = ownMovementPayload(value);
     if (!owned) return;
-    const { position, facing } = owned;
+    const { position, facing, seat } = owned;
     placement = { x: position.x, y: position.y, facing };
+    placementSeat = seat;
     if (inside) return;
-    if (state.status === 'connected') client?.updatePosition(position.x, position.y, facing);
+    if (state.status === 'connected') sendPlacement(client, placement, seat);
     else if (!hasAttempted) {
       hasAttempted = true;
       // A reconnect click may have happened before the first placement. The
@@ -503,6 +530,8 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const owned = ownMovementPayload(value);
     if (!owned) return;
     const { position, facing } = owned;
+    // D-127: a shared room's seats are its own and never reach the lobby, so
+    // an area placement is always a standing one.
     areaPlacement = { x: position.x, y: position.y, facing };
     const ownedClient = client;
     if (!ownedClient || sharedArea === null) return;

@@ -18,6 +18,8 @@ import {
   presenceAreaOfBuilding,
 } from '@strkworld/shared';
 import {
+  AVATAR_STUDIO_RETURN_FACING,
+  avatarStudioReturnTile,
   createStreetMap,
   isAvatarStudioEntrance,
   isSolidAt,
@@ -49,8 +51,15 @@ import {
 } from './avatar-outfit.js';
 import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
-import { createDoorTrigger, DOOR_REENTRY_HOLD_MS, type DoorTrigger } from './door-trigger.js';
 import {
+  createDoorTrigger,
+  createReentryHold,
+  DOOR_REENTRY_HOLD_MS,
+  type DoorTrigger,
+  type ReentryHold,
+} from './door-trigger.js';
+import {
+  ARENA_BOX_STATION,
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
@@ -117,7 +126,16 @@ import {
 } from './football-channel.js';
 import { withinKickRange } from './map/pitch.js';
 import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
-import { ARENA_PIT_RETURN, ARENA_PIT_RETURN_FACING } from './map/arena-pit.js';
+import { COLOSSEUM_RETURN, COLOSSEUM_RETURN_FACING } from './map/colosseum.js';
+import type { RemotePeerSource, RemotePeerSnapshot } from './remote-peer.js';
+import {
+  STREET_BENCHES,
+  benchTargets,
+  roomBenches,
+  streetSeatIdAt,
+  type WorldBench,
+  type WorldSeat,
+} from './seats.js';
 import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 import { createArenaSession } from './arena-session.js';
 import type {
@@ -231,6 +249,10 @@ export interface WorldSessionView {
   playerSwing?(): void;
   /** Turn the local avatar to a facing at once (a leap's landing, a street return). */
   setPlayerFacing?(facing: Facing): void;
+  // D-127: sittable benches. Optional: a view without it simply never shows
+  // the seated pose, and sitting is then only a place and a facing.
+  /** The local avatar sits down on a bench, or stands up. */
+  setPlayerSeated?(seated: boolean): void;
   /** The ring gate's mesh in the arena room, for the gate station's press-E cues; null if none. */
   arenaGateObject?(): unknown;
   // The Exchange roof's lookout swing (D-132). Optional: a view without it
@@ -241,8 +263,17 @@ export interface WorldSessionView {
   roofSwingObject?(): unknown;
 }
 
-/** The World's one-shot action keys. */
-export type WorldActionKey = 'keydown-F' | 'keydown-E' | 'keydown-Space' | 'pointerdown-primary';
+/**
+ * The World's one-shot action keys, plus D-128's one hold: `keydown-Q` and
+ * `keyup-Q` are the arena's block, so the only action key with a release.
+ */
+export type WorldActionKey =
+  | 'keydown-F'
+  | 'keydown-E'
+  | 'keydown-Space'
+  | 'keydown-Q'
+  | 'keyup-Q'
+  | 'pointerdown-primary';
 
 interface OutfitKeyEvent {
   readonly repeat: boolean;
@@ -263,7 +294,9 @@ export interface WorldKeyboard extends KeyboardLike {
    * Studio figure, the bunker's lift), or else picks or places a block
    * (D-060), kicks the ball (D-078) or acts in the arena's ring (D-114);
    * `keydown-Space` jumps (D-097); `pointerdown-primary`, a primary click or
-   * tap on the World's canvas, strikes in the arena (D-114).
+   * tap on the World's canvas, strikes in the arena (D-114); and
+   * `keydown-Q`/`keyup-Q` hold and lower the arena's block (D-128), the one
+   * action key with a release.
    */
   on(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: WorldActionKey, handler: (event: OutfitKeyEvent) => void): unknown;
@@ -302,6 +335,12 @@ export interface WorldSessionOptions {
    * like the plaza's other stations. Absent or false, it does not exist.
    */
   readonly placementStand?: boolean;
+  /**
+   * D-127: the nearby players, so a bench seat another player holds is never
+   * offered. Absent, every street seat looks free — the lobby still refuses a
+   * shared one, and the player simply stands on it.
+   */
+  readonly peers?: RemotePeerSource;
 }
 
 export interface WorldFrame {
@@ -340,6 +379,11 @@ export interface WorldSession {
   /** D-117: the "E · …" prompt showing now, or none. */
   readonly interactionPrompt: InteractionPrompt | null;
   /**
+   * D-127: the bench seat the player sits on, or null standing. `index` is its
+   * place in `STREET_SEATS` on the street, and -1 in a solo room.
+   */
+  readonly seat: WorldSeat | null;
+  /**
    * D-117: the interaction system's extension points: register a station
    * kind (`register`), a non-station use of E (`addAction`, e.g. a ring
    * attack), or hold E away from every station during a fight (`suspend`).
@@ -369,6 +413,13 @@ const NO_MOVEMENT: MovementInput = Object.freeze({
 });
 
 const IDLE_MOTION: PlayerMotion = Object.freeze({ vx: 0, vy: 0, sprinting: false });
+
+/** D-127: no peer is sitting anywhere. Shared, so an empty snapshot allocates nothing. */
+const EMPTY_SEAT_INDICES: ReadonlySet<number> = Object.freeze(new Set<number>()) as ReadonlySet<number>;
+/** D-127: no bench seat is taken. */
+const NO_TAKEN_SEATS: ReadonlySet<string> = Object.freeze(new Set<string>()) as ReadonlySet<string>;
+/** The Studio's entrance is one zone, so the hold needs one identity (D-125). */
+const AVATAR_STUDIO_ENTRANCE_HOLD_KEY = 'avatar-studio';
 
 /** A destroyed session has no outfit to change; keep the field non-optional. */
 const NOOP_AVATAR_OUTFIT: AvatarOutfitSelection = {
@@ -453,6 +504,13 @@ class Session implements WorldSession {
   private avatarOutfit: AvatarOutfitSelection = NOOP_AVATAR_OUTFIT;
   private avatarOutfitToggle?: AvatarOutfitToggleBinding;
   private avatarStudioActive = false;
+  /**
+   * D-125: the Studio's exit leaves the player on the street tile touching its
+   * hidden entrance, so that entrance takes the doors' re-entry hold
+   * (door-trigger.ts): a key held through the handoff cannot walk them
+   * straight back in, and the entrance stays shut until they step off it.
+   */
+  private readonly studioEntranceHold: ReentryHold<string> = createReentryHold();
   private movement!: StreetMovementAdapter;
   private returnTile = { x: 0, y: 0 };
   private viewOwned = false;
@@ -509,7 +567,15 @@ class Session implements WorldSession {
   private stopArenaAction?: () => void;
   /** D-114: removes the ring gate's station (C's `gateTargets`) from the interaction system. */
   private stopArenaSource?: () => void;
+  /**
+   * D-128: the arena session lists stations, so it owns the emperor's box and
+   * the room's own reserved notice for it stands aside.
+   */
+  private arenaOwnsBox = false;
   private arenaPrimary?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-128: the block's two keyboard handlers (Q down and up). */
+  private arenaBlockDown?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  private arenaBlockUp?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   /** Whether the view was last given a ring frame, so leaving clears it once. */
   private arenaShown = false;
   /** D-114: F is locked while the player fights. */
@@ -517,6 +583,18 @@ class Session implements WorldSession {
   /** D-114: the look to put back after a fight, if the ring switched it. */
   private lookBeforeFight: AvatarSpriteKey | null = null;
   private readonly reducedMotion?: () => boolean;
+  /** D-127: the nearby players, for which bench seats are taken. */
+  private readonly peers?: RemotePeerSource;
+  private stopPeers?: () => void;
+  /** D-127: the street seat indices peers hold right now. */
+  private peerSeats: ReadonlySet<number> = EMPTY_SEAT_INDICES;
+  /**
+   * D-127: where the player sits, the place they rose from, and the station
+   * suspension that holds E for standing up again. Null while standing.
+   */
+  private sitting: { readonly seat: WorldSeat; readonly from: { x: number; y: number }; readonly release: () => void } | null = null;
+  /** D-127: a floor's own benches, built once per floor. */
+  private readonly roomBenchCache = new Map<string, readonly WorldBench[]>();
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -528,15 +606,22 @@ class Session implements WorldSession {
     this.arenaChannel = options.arena;
     this.roofSwingChannel = options.roofSwing;
     this.reducedMotion = options.reducedMotion;
+    this.peers = options.peers;
     this.vaultOpen = options.vaultOpen === true;
     this.placementStand = options.placementStand === true;
     try {
       this.map = createStreetMap({ vaultOpen: this.vaultOpen, placementStand: this.placementStand });
       this.bounds = this.streetBounds();
       this.viewOwned = true;
-      this.movement = createStreetMovementAdapter({
-        emit: (event, payload) => this.config?.out.emit(event, payload),
-      });
+      this.movement = createStreetMovementAdapter(
+        { emit: (event, payload) => this.config?.out.emit(event, payload) },
+        // D-127: the seat rides along on every street placement, so the Shell
+        // never needs an event of its own for sitting down or standing up.
+        () => this.publishedSeat(),
+        // D-130: and so does whether the feet are off the ground, so the ball
+        // the Shell draws knows not to come off a jumper passing over it.
+        () => this.jumpState.clearsBodies,
+      );
       this.createPlayer();
       this.createInput();
       this.createInteractions();
@@ -551,6 +636,7 @@ class Session implements WorldSession {
       this.createFootball();
       this.createJump();
       this.createInteractionSources();
+      this.createSeats();
       this.createArena();
       this.createRoofSwing();
     } catch (error) {
@@ -604,6 +690,10 @@ class Session implements WorldSession {
     return this.interactionSystem.focused;
   }
 
+  get seat(): WorldSeat | null {
+    return this.sitting?.seat ?? null;
+  }
+
   get interactions(): WorldInteractions {
     const system = this.interactionSystem;
     return {
@@ -632,6 +722,10 @@ class Session implements WorldSession {
   update(deltaMs: number, frame?: WorldFrame): void {
     if (this.cleanedUp) return;
     const delta = clampFrame(deltaMs);
+    // D-127: any movement key stands the player off a bench, before anything
+    // reads where they are this frame.
+    if (this.sitting && this.standUpRequested()) this.standUp();
+    if (this.cleanedUp) return;
     this.jumpState.advance(delta);
     const cameraYaw = Number.isFinite(frame?.cameraYaw) ? (frame!.cameraYaw as number) : 0;
     const room = this.activeRoomController();
@@ -641,7 +735,8 @@ class Session implements WorldSession {
       return;
     }
     if (room?.state.inRoom) {
-      this.moveRoomPlayer(delta, cameraYaw);
+      if (this.sitting) this.view.setPlayerMotion(IDLE_MOTION);
+      else this.moveRoomPlayer(delta, cameraYaw);
       this.movement.interiorUpdate(() => this.reportRoomTile());
       if (!this.cleanedUp) this.presentArena(delta);
       if (!this.cleanedUp) this.presentRoofSwing(delta);
@@ -651,7 +746,10 @@ class Session implements WorldSession {
     if (this.arenaShown) this.clearArena();
     if (this.roofSwingShown) this.clearRoofSwing();
     this.doors?.advance(delta);
-    const input = this.moveStreetPlayer(delta, cameraYaw);
+    this.studioEntranceHold.advance(delta);
+    // Seated: no step, no door, no aim — only the placement keeps being
+    // published, so the seat claim reaches the room.
+    const input = this.sitting ? this.seatedStreetFrame() : this.moveStreetPlayer(delta, cameraYaw);
     this.movement.streetUpdate({ x: this.position.x, y: this.position.y }, input, () => {
       if (this.cleanedUp) return;
       this.reportTile();
@@ -705,6 +803,13 @@ class Session implements WorldSession {
     const stopSandboxResync = this.stopSandboxResync;
     this.stopSandboxResync = undefined;
     if (stopSandboxResync) attempt(stopSandboxResync);
+    const stopPeers = this.stopPeers;
+    this.stopPeers = undefined;
+    if (stopPeers) attempt(stopPeers);
+    const sitting = this.sitting;
+    this.sitting = null;
+    if (sitting) attempt(sitting.release);
+    this.roomBenchCache.clear();
     const plaza = this.plaza;
     this.plaza = undefined;
     if (plaza) attempt(() => plaza.destroy());
@@ -731,12 +836,23 @@ class Session implements WorldSession {
     if (stopArenaAction) attempt(stopArenaAction);
     const stopArenaSource = this.stopArenaSource;
     this.stopArenaSource = undefined;
+    this.arenaOwnsBox = false;
     if (stopArenaSource) attempt(stopArenaSource);
     const arenaPrimary = this.arenaPrimary;
     this.arenaPrimary = undefined;
     if (arenaPrimary && this.keyboard) {
       const keyboard = this.keyboard;
       attempt(() => keyboard.off('pointerdown-primary', arenaPrimary));
+    }
+    // D-128: the block's hold, both halves.
+    const arenaBlockDown = this.arenaBlockDown;
+    const arenaBlockUp = this.arenaBlockUp;
+    this.arenaBlockDown = undefined;
+    this.arenaBlockUp = undefined;
+    if (this.keyboard) {
+      const keyboard = this.keyboard;
+      if (arenaBlockDown) attempt(() => keyboard.off('keydown-Q', arenaBlockDown));
+      if (arenaBlockUp) attempt(() => keyboard.off('keyup-Q', arenaBlockUp));
     }
     const arenaSession = this.arenaSession;
     this.arenaSession = undefined;
@@ -854,6 +970,13 @@ class Session implements WorldSession {
         if (!controller?.state.inRoom || !map) return [];
         const usable = controller.interaction();
         if (!usable) return [];
+        // D-128: the emperor's box is a reserved station whose notice would
+        // only say it is closed. With a ring session that lists stations, the
+        // arena offers it instead (`gateTargets`), because only the server
+        // knows whether this client is the champion. It keeps the same target
+        // id, so the box keeps its own affordance shell either way. Without
+        // one the room's notice stands, so the box is never silent.
+        if (usable.station === ARENA_BOX_STATION && this.arenaOwnsBox) return [];
         const origin = floorOrigin(map);
         return [{
           id: usable.station,
@@ -985,6 +1108,7 @@ class Session implements WorldSession {
   private createAvatarStudio(): void {
     const config = this.config;
     const streetBounds = this.streetBounds();
+    const studioReturn = avatarStudioReturnTile(this.map);
     const studioBounds: AvatarStudioBounds = {
       x: ROOM_ORIGIN.x,
       y: ROOM_ORIGIN.y,
@@ -1020,7 +1144,10 @@ class Session implements WorldSession {
         setCameraBounds: (bounds) => this.view.setCameraBounds(bounds),
         setPlayerPosition: (position) => this.teleport(position),
         resetDoors: () => this.doors?.reset(),
-        resumeStreet: (position, report) => this.movement.exit(position, report),
+        // D-125: the street hears the player standing outside the Studio's
+        // entrance, facing north away from it, as the view shows them.
+        resumeStreet: (position, report) =>
+          this.movement.exit(position, report, AVATAR_STUDIO_RETURN_FACING),
         destroyStudio: () => this.view.destroyStudio(),
       },
       streetBounds,
@@ -1030,7 +1157,9 @@ class Session implements WorldSession {
         ROOM_ORIGIN,
         AVATAR_STUDIO_TILE_SIZE,
       ),
-      streetReturn: tileToWorld(this.map.spawn.x, this.map.spawn.y),
+      // D-125: outside the room, on the street tile touching its entrance —
+      // not the street spawn, which is rows north of it up the path.
+      streetReturn: tileToWorld(studioReturn.x, studioReturn.y),
       reportStreet: () => this.reportTile(),
     });
     this.avatarStudio = createAvatarStudioController({
@@ -1082,7 +1211,7 @@ class Session implements WorldSession {
               this.activeRoom === entered.building && controller.state.inRoom &&
               this.isSharedFloor(entered.building, 'ground')
             ) {
-              // D-114: the arena's spawn has its own facing (south, into it).
+              // D-114: the arena's spawn has its own facing (east, into it).
               this.areaFacing = entered.building === ARENA_BUILDING ? ARENA_SPAWN_FACING : this.movement.facing;
               this.publishAreaPosition();
               if (this.cleanedUp || this.activeRoom !== entered.building) return;
@@ -1108,9 +1237,9 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).enter();
     this.lastTile = { x: -1, y: -1 };
     this.renderRoom();
-    // D-114: through the pit's arch you drop into the arena's north tunnel
-    // with a leap, still facing south into the arena; under reduced motion it
-    // is a plain handoff.
+    // D-114: through the pit's west arch you drop into the arena's west
+    // tunnel with a leap, still facing east into the arena; under reduced
+    // motion it is a plain handoff.
     if (definition.building === ARENA_BUILDING) {
       this.view.setPlayerFacing?.(ARENA_SPAWN_FACING);
       if (!this.prefersReducedMotion()) this.view.playerJump?.();
@@ -1121,10 +1250,10 @@ class Session implements WorldSession {
     this.fixedRoomPresentation(definition).exit();
     this.lastTile = { x: -1, y: -1 };
     this.activeRoom = undefined;
-    // D-114: back on the pit's path, facing north, away from the arch.
+    // D-114: back on the pit's branch path, facing west, away from the arch.
     if (definition.building === ARENA_BUILDING) {
       this.clearArena();
-      this.view.setPlayerFacing?.(ARENA_PIT_RETURN_FACING);
+      this.view.setPlayerFacing?.(COLOSSEUM_RETURN_FACING);
     }
   }
 
@@ -1250,12 +1379,12 @@ class Session implements WorldSession {
       // A room exit holds the doors briefly (door-trigger.ts), so a key held
       // through the handoff cannot walk the player straight back in.
       resetDoors: () => this.doors?.reset({ holdMs: DOOR_REENTRY_HOLD_MS }),
-      // D-114: off the arena, the street hears the player facing north, away
+      // D-114: off the arena, the street hears the player facing west, away
       // from the arch, as the view shows them.
       resumeStreet: () => this.movement.exit(
         { x: this.position.x, y: this.position.y },
         () => this.reportTile(),
-        definition.building === ARENA_BUILDING ? ARENA_PIT_RETURN_FACING : undefined,
+        definition.building === ARENA_BUILDING ? COLOSSEUM_RETURN_FACING : undefined,
       ),
     });
   }
@@ -1281,6 +1410,9 @@ class Session implements WorldSession {
   private exitAvatarStudioRoom(): void {
     this.avatarStudioActive = false;
     this.lastTile = { x: -1, y: -1 };
+    // Before the handoff: it ends in a street tile report from the tile next
+    // to the entrance, which the hold must already be guarding.
+    this.studioEntranceHold.start(DOOR_REENTRY_HOLD_MS);
     try {
       this.avatarStudioPresentation?.exit();
     } catch (error) {
@@ -1290,6 +1422,9 @@ class Session implements WorldSession {
       if (!this.cleanedUp) this.avatarStudioActive = true;
       throw error;
     }
+    // D-125: standing on the street outside the entrance, turned away from it,
+    // the way the arena's return faces off its arch (D-114).
+    this.view.setPlayerFacing?.(AVATAR_STUDIO_RETURN_FACING);
   }
 
   private renderAvatarStudio(): void {
@@ -1304,8 +1439,9 @@ class Session implements WorldSession {
   }
 
   private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
-    // D-114: the tile below the pit's door is its bowl; the return is the path.
-    if (building === ARENA_BUILDING) return { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
+    // D-114: the tile below the pit's door is lawn beside its bowl; the
+    // return is the branch path, just west of the arch.
+    if (building === ARENA_BUILDING) return { x: COLOSSEUM_RETURN.x, y: COLOSSEUM_RETURN.y };
     const door = this.map.doors.find((candidate) => candidate.building === building);
     return {
       x: door?.x ?? this.map.spawn.x,
@@ -1452,6 +1588,9 @@ class Session implements WorldSession {
   }
 
   private teleport(position: { readonly x: number; readonly y: number }): void {
+    // D-127: a teleport is authoritative, so a seat held here is simply given
+    // up rather than walked away from.
+    this.clearSeat();
     this.position = { x: position.x, y: position.y };
     this.view.setPlayerPosition(this.position, true);
     // Room spawns and street return tiles are never in the sandbox, nor by the ball.
@@ -1521,6 +1660,222 @@ class Session implements WorldSession {
     });
   }
 
+  // -- sittable benches (D-127) -----------------------------------------------
+
+  /**
+   * Benches as an interaction source, and E again as the way back up.
+   *
+   * A bench is no station: it opens nothing and emits nothing semantic. It
+   * borrows D-117's machinery for the chip and the gates, and opts out of
+   * D-123's other cues with `cue: 'none'` (seats.ts), so standing by a bench
+   * shows "[E] SIT" and nothing else lights up.
+   *
+   * While the player sits, the stations are suspended — the same combat yield
+   * the arena uses — so nothing near the bench is focused, no chip shows, and E
+   * reaches the one action registered here, which stands them up. A movement
+   * key or Space does the same (`update`, `createJump`).
+   */
+  private createSeats(): void {
+    const source = this.peers;
+    if (source) {
+      try {
+        this.stopPeers = source.subscribe((snapshot) => this.applyPeerSeats(snapshot));
+      } catch {
+        // A peer source that cannot be read leaves every seat looking free;
+        // the lobby still refuses a seat someone else holds.
+      }
+    }
+    this.interactionSystem.register({ targets: () => this.seatTargets() });
+    this.interactionSystem.addAction({
+      id: 'seat:stand',
+      // Above the arena's own use of E: a player cannot be sitting on a bench
+      // and fighting in the ring, and standing up must never be out-voted.
+      priority: 20,
+      run: () => {
+        if (this.cleanedUp || !this.sitting) return false;
+        this.standUp();
+        return true;
+      },
+    });
+  }
+
+  /** The benches in reach with a free seat: the street's, or the floor's own. */
+  private seatTargets(): readonly InteractionTarget[] {
+    if (this.cleanedUp || this.sitting) return [];
+    if (this.avatarStudioActive) return [];
+    if (this.area === 'street') {
+      return benchTargets(STREET_BENCHES, this.position, this.takenSeats(), (seat) => this.sitOn(seat));
+    }
+    const controller = this.activeRoomController();
+    const map = this.activeRoomMap();
+    if (!controller?.state.inRoom || !map) return [];
+    // A solo interior: only this player can be on its seats.
+    return benchTargets(this.benchesOf(map), this.position, NO_TAKEN_SEATS, (seat) => this.sitOn(seat));
+  }
+
+  /** One floor's benches, built once. */
+  private benchesOf(map: FixedRoomLevelMap): readonly WorldBench[] {
+    const key = `${map.building}:${map.level}`;
+    let benches = this.roomBenchCache.get(key);
+    if (!benches) {
+      benches = roomBenches(map);
+      this.roomBenchCache.set(key, benches);
+    }
+    return benches;
+  }
+
+  /** D-127: the street seats peers hold, as seat ids. */
+  private takenSeats(): ReadonlySet<string> {
+    if (this.peerSeats.size === 0) return NO_TAKEN_SEATS;
+    const taken = new Set<string>();
+    for (const index of this.peerSeats) {
+      const id = streetSeatIdAt(index);
+      if (id !== null) taken.add(id);
+    }
+    return taken;
+  }
+
+  /**
+   * Which street seats the nearby players hold. Read from the same validated
+   * snapshot the figures are drawn from, so a seat only counts as taken while
+   * someone the lobby reports is actually sitting on it.
+   */
+  private applyPeerSeats(snapshot: readonly RemotePeerSnapshot[]): void {
+    if (this.cleanedUp) return;
+    let next: Set<number> | null = null;
+    if (Array.isArray(snapshot)) {
+      for (const peer of snapshot) {
+        const seat = peer?.seat;
+        if (typeof seat !== 'number' || !Number.isInteger(seat) || seat < 0) continue;
+        (next ??= new Set<number>()).add(seat);
+      }
+    }
+    this.peerSeats = next ?? EMPTY_SEAT_INDICES;
+  }
+
+  /**
+   * Sit on `seat`: snap onto it, face out from the bench, hold the stations,
+   * and publish the place (on the street, with the seat). The tile the player
+   * pressed E from is kept, because the seat itself is a solid fixture: that is
+   * where standing up puts them back.
+   */
+  private sitOn(seat: WorldSeat): void {
+    if (this.cleanedUp || this.sitting) return;
+    const from = { x: this.position.x, y: this.position.y };
+    const release = this.interactionSystem.suspend('seated');
+    this.sitting = { seat, from, release };
+    try {
+      this.position = { x: seat.x, y: seat.y };
+      this.view.setPlayerMotion(IDLE_MOTION);
+      this.view.setPlayerPosition(this.position, false);
+      this.view.setPlayerFacing?.(seat.facing);
+      this.view.setPlayerSeated?.(true);
+      this.publishSeatedPlace(seat.facing);
+    } catch (error) {
+      // Sitting down is one transaction: a failed handoff puts the player back
+      // on their feet where they were, so E can be pressed again.
+      if (this.sitting?.seat === seat && !this.cleanedUp) {
+        this.sitting = null;
+        try {
+          release();
+        } catch {
+          // Preserve the original failure.
+        }
+        this.position = from;
+        try {
+          this.view.setPlayerSeated?.(false);
+          this.view.setPlayerPosition(this.position, false);
+        } catch {
+          // Preserve the original failure.
+        }
+      }
+      throw error;
+    }
+  }
+
+  /** Stand up: back to the place E was pressed from, stations live again. */
+  private standUp(): void {
+    const sitting = this.sitting;
+    if (!sitting) return;
+    this.sitting = null;
+    const errors: unknown[] = [];
+    try {
+      sitting.release();
+    } catch (error) {
+      errors.push(error);
+    }
+    this.position = { x: sitting.from.x, y: sitting.from.y };
+    try {
+      this.view.setPlayerSeated?.(false);
+      this.view.setPlayerPosition(this.position, false);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (!this.cleanedUp) {
+      try {
+        this.publishSeatedPlace();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Standing up failed');
+  }
+
+  /**
+   * Publish where the player now sits or stands. On the street that is the
+   * ordinary placement (`player:moved`, which carries the seat while they sit);
+   * a solo room publishes nothing at all.
+   */
+  private publishSeatedPlace(facing?: Facing): void {
+    if (this.area !== 'street') return;
+    this.movement.exit({ x: this.position.x, y: this.position.y }, () => {
+      if (!this.cleanedUp) this.reportTile();
+    }, facing);
+  }
+
+  /**
+   * A street frame spent sitting: nothing moves, and the reporter publishes the
+   * seat again, so a claim the room has not applied yet is re-sent like any
+   * position.
+   */
+  private seatedStreetFrame(): MovementInput {
+    this.view.setPlayerMotion(IDLE_MOTION);
+    return NO_MOVEMENT;
+  }
+
+  /** D-127: the seat index `player:moved` carries, or -1 when standing or in a room. */
+  private publishedSeat(): number {
+    const seat = this.sitting?.seat;
+    return seat && seat.index >= 0 ? seat.index : -1;
+  }
+
+  /**
+   * Whether a held movement key should stand the player up. The keyboard reads
+   * all-false while the gate is closed, so a panel never lifts them.
+   */
+  private standUpRequested(): boolean {
+    const held = this.keyboard?.held;
+    return held !== undefined && (held.left || held.right || held.up || held.down);
+  }
+
+  /**
+   * Give up the seat without walking anywhere: a teleport (a room handoff, a
+   * resync, a lift) has already decided where the player is.
+   */
+  private clearSeat(): void {
+    const sitting = this.sitting;
+    if (!sitting) return;
+    this.sitting = null;
+    try {
+      sitting.release();
+    } catch {
+      // The teleport is authoritative; a failed release only leaves the
+      // stations suspended, which the next suspension release clears.
+    }
+    this.view.setPlayerSeated?.(false);
+  }
+
   // -- the jump (D-097) --------------------------------------------------------
 
   /**
@@ -1541,6 +1896,11 @@ class Session implements WorldSession {
     const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
       if (this.cleanedUp || event.repeat) return;
       if (!this.canJump()) return;
+      // D-127: Space off a bench stands the player up; it does not also jump.
+      if (this.sitting) {
+        this.standUp();
+        return;
+      }
       if (!this.jumpState.tryStart()) return;
       this.view.playerJump?.();
       if (this.cleanedUp) return;
@@ -1583,6 +1943,7 @@ class Session implements WorldSession {
     // makes win outright by suspending the stations while it fights. A
     // session without them (PR 0's stub) gets the press as a plain action.
     if (typeof session.gateTargets === 'function') {
+      this.arenaOwnsBox = true;
       this.stopArenaSource = this.interactionSystem.register({
         targets: () => {
           if (this.cleanedUp || !this.arenaInputLive()) return [];
@@ -1610,6 +1971,27 @@ class Session implements WorldSession {
     };
     keyboard.on('pointerdown-primary', onPrimary);
     this.arenaPrimary = onPrimary;
+    /*
+     * D-128: Q is the block, and the only key the World holds rather than
+     * taps. The press runs the same gates as E (in the arena, the World
+     * owning the keyboard, the room's controls, no text field — the keyboard
+     * never delivers a keystroke aimed at an editable element) and the
+     * session refuses it outside a fight or in a countdown. The release runs
+     * no gate at all: whatever happened in between, a raised guard must come
+     * down, so it goes straight to the session.
+     */
+    const onBlockDown = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat || !this.arenaInputLive()) return;
+      this.arenaSession?.onBlock?.(true);
+    };
+    const onBlockUp = (): void => {
+      if (this.cleanedUp) return;
+      this.arenaSession?.onBlock?.(false);
+    };
+    keyboard.on('keydown-Q', onBlockDown);
+    keyboard.on('keyup-Q', onBlockUp);
+    this.arenaBlockDown = onBlockDown;
+    this.arenaBlockUp = onBlockUp;
   }
 
   /** Whether arena input may act: in the arena, the World owning the keyboard and the room's controls. */
@@ -1979,7 +2361,17 @@ class Session implements WorldSession {
   private reportTile(): void {
     const tile = worldToTile(this.position.x, this.position.y);
     if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
-    if (!this.avatarStudioActive && isAvatarStudioEntrance(this.map, tile.x, tile.y)) {
+    const onStudioEntrance = !this.avatarStudioActive &&
+      isAvatarStudioEntrance(this.map, tile.x, tile.y);
+    // D-125: every tile report feeds the hold, because stepping off the
+    // entrance is what releases it. Swallowed, the tile is reported as any
+    // other street tile would be: the entrance is no door, so nothing else
+    // here treats it specially.
+    const studioShut = this.studioEntranceHold.swallows(
+      onStudioEntrance ? AVATAR_STUDIO_ENTRANCE_HOLD_KEY : null,
+      this.avatarStudioActive,
+    );
+    if (onStudioEntrance && !studioShut) {
       this.avatarStudio?.enter();
       // Studio entry is an external lifecycle boundary. Commit the tile only
       // after the transition succeeds so a failed entry can retry while the

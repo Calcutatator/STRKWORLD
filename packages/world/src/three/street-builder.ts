@@ -89,9 +89,10 @@ import { buildRoofSwing, type RoofSwingView } from './roof-swing.js';
 import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
 import { buildBunkerEntrance } from './bunker-builder.js';
-import { buildArenaPit, type ArenaPitOccluder } from './arena-pit-builder.js';
+import { buildColosseum, type ColosseumOccluder } from './colosseum-builder.js';
+import { SOUTH_SHORE_Z, createSouthVista } from './south-vista.js';
 import { BUNKER_BUILDING } from '../map/bunker.js';
-import { ARENA_PIT_BUILDING } from '../map/arena-pit.js';
+import { COLOSSEUM_BUILDING } from '../map/colosseum.js';
 import type { LabelFactory, Occluder, OccluderBounds, PitchView, PlazaView, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
@@ -156,7 +157,7 @@ type Animator = (elapsedMs: number) => void;
  * Privacy Plaza piece (D-076), the pitch gate (D-078) or the gladiator
  * pit's arch (D-114).
  */
-export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder | PitchOccluder | ArenaPitOccluder;
+export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder | PitchOccluder | ColosseumOccluder;
 
 /** A street occluder that also names the building it fades. */
 export interface BuildingOccluder extends Occluder {
@@ -187,7 +188,7 @@ export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: nu
   // the hidden stair's top step (D-107).
   if (kind === 'bunker') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'stairhead' ? PAVEMENT_HEIGHT : 0;
   // The gladiator pit's threshold too (D-114); its rim and bowl are solid.
-  if (kind === 'pit') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'pitstep' ? PAVEMENT_HEIGHT : 0;
+  if (kind === 'colosseum') return map.tiles[Math.floor(tileY)]?.[Math.floor(tileX)] === 'colstep' ? PAVEMENT_HEIGHT : 0;
   return kind === 'sidewalk' || kind === 'plaza' ? PAVEMENT_HEIGHT : 0;
 }
 
@@ -231,7 +232,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     for (const door of map.doors) {
       // The hidden stair has no portal: nothing marks it (D-107). The
       // gladiator pit's door is its own arch (D-114).
-      if (door.building === BUNKER_BUILDING || door.building === ARENA_PIT_BUILDING) continue;
+      if (door.building === BUNKER_BUILDING || door.building === COLOSSEUM_BUILDING) continue;
       const footprint = footprints.find((candidate) => doorInside(candidate, door));
       const portal = buildDoorPortal(door, footprint ? built.get(footprint) : undefined, res);
       doors.add(portal.group);
@@ -320,20 +321,21 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     // ground. No label and no sign: nothing here names it.
     buildBunkerEntrance(map, res, { ground, animators, floorHeight: PAVEMENT_HEIGHT });
 
-    // The gladiator pit (D-114), in its own module: the sunken bowl, the rim
-    // and its braziers, the steps, and the arch with its banners and sign,
-    // merged into the street's groups. The arch fades like the plaza gateway.
-    const pitOccluders: ArenaPitOccluder[] = [];
-    buildArenaPit(map, labels, res, {
+    // The Colosseum (D-114, D-129), in its own module: the stacked arcades,
+    // the attic with its banners and cressets, the grand arch on the west
+    // front and the nameplate, merged into the street's groups. The building
+    // fades like any other when it stands between the camera and the player.
+    const colosseumOccluders: ColosseumOccluder[] = [];
+    buildColosseum(map, labels, res, {
       ground,
       labels: signs,
       textLabels,
       animators,
-      occluders: pitOccluders,
+      occluders: colosseumOccluders,
       floorHeight: PAVEMENT_HEIGHT,
       ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
     });
-    occluders.push(...pitOccluders);
+    occluders.push(...colosseumOccluders);
 
     // The football pitch (D-078), likewise in its own module and merged into
     // the street's groups: its field, stands, goals, fence and scoreboard.
@@ -346,6 +348,23 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
       occluders: pitchOccluders,
     });
     occluders.push(...pitchOccluders);
+
+    // The south vista (D-124): the river past the map's south edge, the
+    // station across it and the city behind, in its own module so the
+    // Exchange roof's swing can mount the same thing. It goes into the
+    // street's ground group, which means it hides with the street indoors and
+    // stays drawn on the roof — the roof is the building's top in the street
+    // scene, not a room of its own (presenter.ts). Nothing of it is walkable,
+    // it casts and receives no shadow, and it stands entirely south of the
+    // map, so no camera that looks north ever sees it.
+    const vista = createSouthVista({
+      // Read once: the vista is built once, and its only motion is a glitter
+      // on the water and two boats that take minutes to cross.
+      reducedMotion: options.reducedMotion?.() === true,
+    });
+    ground.add(vista.group);
+    animators.push((elapsed) => vista.update(elapsed));
+    res.disposable(vista);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -410,7 +429,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
  * tiles are laid by pitch-builder.ts (D-078), as the plaza's are by
  * plaza-builder.ts.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch' | 'bunker' | 'pit';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza' | 'pitch' | 'bunker' | 'colosseum';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -434,8 +453,8 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   if (kind === 'turf' || kind === 'walkway' || kind === 'footing') return 'pitch';
   // And the hidden stair, its cut and the vending machine's pad (D-107).
   if (kind === 'stairhead' || kind === 'service') return 'bunker';
-  // And the gladiator pit, its rim, sunken bowl and threshold (D-114).
-  if (kind === 'pitrim' || kind === 'pitbowl' || kind === 'pitstep') return 'pit';
+  // And the Colosseum, its wall, its core and its threshold (D-114, D-129).
+  if (kind === 'colwall' || kind === 'colcore' || kind === 'colstep') return 'colosseum';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
   if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
@@ -444,8 +463,17 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const [west, east] = runEnds(map, x, y, 1, 0);
   const [north, south] = runEnds(map, x, y, 0, 1);
   if ((west === 'road' && east === 'road') || (north === 'road' && south === 'road')) return 'crossing';
-  if ((west === 'grass' && east === 'grass') || (north === 'grass' && south === 'grass')) return 'path';
+  // A path is a pavement run laid across the lawn. The Colosseum's threshold
+  // (D-114) counts as a lawn end: the branch to its west arch runs from the
+  // Studio's path to the arch, over grass the whole way, so it is a flush path
+  // and not a kerbed sidewalk — and it must not raise the Studio's path it leaves.
+  if ((isLawnEnd(west) && isLawnEnd(east)) || (isLawnEnd(north) && isLawnEnd(south))) return 'path';
   return 'sidewalk';
+}
+
+/** Where a path across the lawn ends: the lawn itself, or the Colosseum's threshold (D-114). */
+function isLawnEnd(kind: TileKind | undefined): boolean {
+  return kind === 'grass' || kind === 'colstep';
 }
 
 /**
@@ -682,9 +710,9 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
           case 'bunker':
             // Laid by bunker-builder.ts: the stair's slab and cut (D-107).
             break;
-          case 'pit':
-            // Laid by arena-pit-builder.ts: the rim, the bowl below the lawn
-            // and the threshold (D-114).
+          case 'colosseum':
+            // Laid by colosseum-builder.ts: the building's own footing and
+            // the threshold under its grand arch (D-114, D-129).
             break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'
@@ -943,7 +971,9 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
   const H = map.height;
   // North only to where the backdrop's own ground starts (backdrop.ts).
   meadow(bin, -OUTSKIRT, CITY_FRONT, W + OUTSKIRT, 0, 2, 2);
-  meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
+  // South only to the shore: past it the south vista's water lies over this
+  // ground, and grass under a river is grass nobody pays for (D-124).
+  meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, Math.min(H + OUTSKIRT, SOUTH_SHORE_Z), 2, 2);
   for (let y = 0; y < H; y++) {
     for (const side of [-1, 1] as const) {
       const edgeX = W - 1;

@@ -38,6 +38,12 @@ export interface LocalPlayer {
   readonly vx: number;
   readonly vy: number;
   readonly facing: Facing;
+  /**
+   * D-130: their feet are off the ground, mid-jump. The drawn ball does not
+   * come off them, so a running jump passes over it and leaves it where it
+   * was, as the authority will also play it. A kick on E still reaches it.
+   */
+  readonly airborne?: boolean;
 }
 
 export interface BallPresenter {
@@ -128,7 +134,7 @@ export function createBallPresenter(): BallPresenter {
   };
 
   const pusher = (local: LocalPlayer | null | undefined): FootballPusher[] =>
-    local && [local.x, local.y, local.vx, local.vy].every(Number.isFinite)
+    local && local.airborne !== true && [local.x, local.y, local.vx, local.vy].every(Number.isFinite)
       ? [{ x: local.x, y: local.y, vx: local.vx, vy: local.vy }]
       : [];
 
@@ -207,6 +213,7 @@ export function createBallPresenter(): BallPresenter {
       if (ball === null) return null;
       const { snapshot } = latest;
       // Walking into the ball answers at once: the push plays out here first.
+      // D-130: nothing to answer while the player is over it, in the air.
       if (snapshot.phase === 'live' && local && pusher(local).length > 0) {
         const touching = Math.hypot(ball.x - local.x, ball.y - local.y) < BALL_R + FOOTBALL_PLAYER_RADIUS;
         if (touching) {

@@ -88,7 +88,9 @@
  * it changes. `arenaClaim()`, `arenaAttack()` and `arenaLeave()` send the
  * three payload-less intents, only while live in the arena, each held to its
  * client floor (`ARENA_INTENT_CLIENT_INTERVAL_MS`, shared by claim and leave;
- * `ARENA_ATTACK_CLIENT_INTERVAL_MS` for attacks). A call inside its floor is
+ * `ARENA_ATTACK_CLIENT_INTERVAL_MS` for attacks). D-128 adds `arenaBlock`
+ * (a start on `ARENA_BLOCK_CLIENT_INTERVAL_MS`, a release sent only after a
+ * start went) and `arenaSit` (on the intent floor). A call inside its floor is
  * dropped, not held. A claim or an attack lets a newer position still
  * waiting on the move floor go first, so the room judges it from where the
  * player stands and faces now. Swings, hits and results arrive only as state.
@@ -109,12 +111,15 @@
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
 import {
   ARENA_ATTACK_CLIENT_INTERVAL_MS,
+  ARENA_BLOCK_CLIENT_INTERVAL_MS,
   ARENA_END_REASONS,
   ARENA_INTENT_CLIENT_INTERVAL_MS,
   ARENA_PHASES,
   ARENA_SIDES,
   ARENA_SLOT_KINDS,
   FOOTBALL_WIN_SCORE,
+  NO_SEAT,
+  streetSeatAt,
   normalizeArenaRing,
   type ArenaRingSnapshot,
   PITCH_AREA,
@@ -216,12 +221,25 @@ export interface PeerSnapshot {
    * not a byte from the server reads as 0.
    */
   readonly jumps: number;
+  /**
+   * D-127: the bench seat this player sits on — an index into `STREET_SEATS` —
+   * or null standing. Anything that is not a real seat index from the server
+   * reads as null, so a peer is only ever drawn sitting on a seat that exists.
+   */
+  readonly seat: number | null;
 }
 
 export interface Placement {
   readonly x: number;
   readonly y: number;
   readonly facing?: Facing;
+  /**
+   * D-127: the bench seat to claim with this placement — an index into
+   * `STREET_SEATS` — or -1 / absent for standing. The room judges it against
+   * the position it writes and against who else is sitting there, so a claim
+   * it refuses is simply a standing player on the seat's spot.
+   */
+  readonly seat?: number;
 }
 
 export interface LobbyClientOptions {
@@ -419,6 +437,10 @@ export class LobbyClient {
   #lastArenaIntentAt: number | null = null;
   /** When the last attack left this client, for its client floor. */
   #lastArenaAttackAt: number | null = null;
+  /** D-128: when the last block *start* left this client, for its client floor. */
+  #lastArenaBlockAt: number | null = null;
+  /** D-128: a block start went and no release has followed it yet. */
+  #arenaGuardSent = false;
   /** A claim or an attack waiting only for a newer position to go first. */
   #arenaClaimHandle: ReturnType<typeof setTimeout> | null = null;
   #arenaAttackHandle: ReturnType<typeof setTimeout> | null = null;
@@ -537,8 +559,13 @@ export class LobbyClient {
    * desired one and reconciled toward the server: sent no faster than the floor,
    * re-sent until the server's copy matches, and dropped only once confirmed. A
    * call made while suspended or disconnected does nothing.
+   *
+   * D-127: `seat` claims a bench seat with the same message — an index into
+   * `STREET_SEATS`, or -1 standing. Anything that is not a real index is sent
+   * as standing, and the room may still refuse the claim silently; the next
+   * snapshot of this avatar's own entry is the only answer.
    */
-  updatePosition(x: number, y: number, facing: Facing = 'down'): void {
+  updatePosition(x: number, y: number, facing: Facing = 'down', seat: number = NO_SEAT): void {
     if (this.#status !== 'connected' || this.#room === null) return;
     // Match the server's finite rounding and world-bound clamp before storing
     // desired state. Without this, an out-of-bounds finite coordinate would be
@@ -551,6 +578,8 @@ export class LobbyClient {
       x: normalizedX,
       y: normalizedY,
       facing: normalizeFacing(facing),
+      // D-127: only a real seat index travels; everything else is standing.
+      seat: streetSeatAt(seat) === null ? NO_SEAT : seat,
     };
     this.#pump(performance.now());
   }
@@ -617,7 +646,9 @@ export class LobbyClient {
     if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
-    const next: Required<Placement> = {
+    // A resume and an area switch are teleports, never sits: they carry no
+    // seat, and the room gives up whatever seat it held (D-127).
+    const next: SentPlacement = {
       x,
       y,
       facing: normalizeFacing(ownDataField(placement, 'facing')),
@@ -668,7 +699,7 @@ export class LobbyClient {
     if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
-    const next: Required<Placement> = {
+    const next: SentPlacement = {
       x,
       y,
       facing: normalizeFacing(ownDataField(placement, 'facing')),
@@ -1064,6 +1095,47 @@ export class LobbyClient {
   }
 
   /**
+   * D-128: raise (`down`) or lower this player's guard. No payload: the room
+   * decides whether the sender holds a fighting slot.
+   *
+   * A raise is held to `ARENA_BLOCK_CLIENT_INTERVAL_MS` and returns false
+   * inside that floor; a release is always sent, but only when a raise
+   * actually went, so the pair's rate is bounded by the floor too. There is
+   * no held-send dance here: a block changes no position, so it never has to
+   * wait behind one.
+   */
+  arenaBlock(down: boolean): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    if (down !== true) {
+      if (!this.#arenaGuardSent) return false;
+      this.#arenaGuardSent = false;
+      return this.#sendArena(MESSAGE.arenaUnblock, false, 'none');
+    }
+    const last = this.#lastArenaBlockAt;
+    if (last !== null && now - last < ARENA_BLOCK_CLIENT_INTERVAL_MS) return false;
+    const sent = this.#sendArena(MESSAGE.arenaBlock, false, 'block');
+    if (sent) this.#arenaGuardSent = true;
+    return sent;
+  }
+
+  /**
+   * D-128: the champion presses E at the emperor's box. No payload: the room
+   * judges it from where it holds this player and whether they are the
+   * champion, and moves them onto (or off) the throne itself. Held to the
+   * intent floor it shares with `arenaClaim` and `arenaLeave`.
+   */
+  arenaSit(): boolean {
+    if (!this.#inArena() || this.#room === null) return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastArenaIntentAt;
+    if (last !== null && now - last < ARENA_INTENT_CLIENT_INTERVAL_MS) return false;
+    return this.#sendArena(MESSAGE.arenaSit, false, 'intent');
+  }
+
+  /**
    * D-114: forfeit this player's fight. No payload. Returns whether it was
    * sent; false unless live in the arena, or inside the intent floor it
    * shares with `arenaClaim`.
@@ -1193,7 +1265,7 @@ export class LobbyClient {
   }
 
   /** Send an arena intent, after the waiting position if `moveFirst`, and stamp its floor. */
-  #sendArena(message: string, moveFirst: boolean, floor: 'intent' | 'attack'): boolean {
+  #sendArena(message: string, moveFirst: boolean, floor: 'intent' | 'attack' | 'block' | 'none'): boolean {
     if (!this.#inArena() || this.#room === null) return false;
     const now = performance.now();
     if (moveFirst) {
@@ -1208,13 +1280,15 @@ export class LobbyClient {
     if (this.#room !== room || !this.#inArena()) return false;
     if (isValidMonotonicTime(now)) {
       if (floor === 'intent') this.#lastArenaIntentAt = now;
-      else this.#lastArenaAttackAt = now;
+      else if (floor === 'attack') this.#lastArenaAttackAt = now;
+      else if (floor === 'block') this.#lastArenaBlockAt = now;
     }
     return true;
   }
 
-  /** Forget a held claim or swing. Called wherever this client stops sending to the arena. */
+  /** Forget a held claim or swing, and any guard this client believes it raised. */
   #cancelArena(): void {
+    this.#arenaGuardSent = false;
     if (this.#arenaClaimHandle !== null) {
       clearTimeout(this.#arenaClaimHandle);
       this.#arenaClaimHandle = null;
@@ -1532,7 +1606,11 @@ export class LobbyClient {
     const elapsed = this.#lastSentAt === null ? null : now - this.#lastSentAt;
     if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
       const room = this.#room;
-      room.send(MESSAGE.move, desired);
+      // D-127: a standing player's move is exactly the message it always was;
+      // only a sitter's carries the extra field.
+      room.send(MESSAGE.move, desired.seat >= 0
+        ? desired
+        : { x: desired.x, y: desired.y, facing: desired.facing });
       this.#lastSentPlacement = desired;
       // A transport can report closure synchronously from send. Do not stamp
       // the retired room's send time or schedule work against its replacement.
@@ -1572,7 +1650,9 @@ export class LobbyClient {
     if (entry === undefined) return null;
     const snapshot = readPeerSnapshot(entry);
     if (snapshot === null || snapshot.gameId !== id) return null;
-    return snapshot;
+    // D-127: the room's answer to a seat claim is part of what has to match
+    // before a move counts as confirmed, so a refused seat is re-sent.
+    return { x: snapshot.x, y: snapshot.y, facing: snapshot.facing, seat: snapshot.seat ?? NO_SEAT };
   }
 
   #scheduleReconcile(delay: number): void {
@@ -2153,6 +2233,9 @@ interface PendingSandboxAction {
   readonly tile: SandboxTile;
 }
 
+/** A placement as a lifecycle message carries it: no seat (D-127). */
+type SentPlacement = { readonly x: number; readonly y: number; readonly facing: Facing };
+
 type SandboxActionMessage = typeof MESSAGE.sandboxPick | typeof MESSAGE.sandboxPlace;
 
 function ownDataField(value: object, key: string): unknown {
@@ -2196,10 +2279,16 @@ function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
       sprite: entry.sprite,
       carrying: normalizeSandboxColour(entry.carrying),
       jumps: normalizeJumps(entry.jumps),
+      seat: normalizeSeat(entry.seat),
     };
   } catch {
     return null;
   }
+}
+
+/** D-127: a real seat index, or null — standing, and anything else. */
+function normalizeSeat(value: unknown): number | null {
+  return streetSeatAt(value) === null ? null : (value as number);
 }
 
 /** D-097: a byte counter, or 0. */
@@ -2419,7 +2508,9 @@ function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): b
 function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
   if (value === null || typeof value !== 'object') return null;
   try {
-    const record = value as Partial<Record<'phase' | 'round' | 'challenger' | 'opponent' | 'secondsLeft' | 'reason' | 'winner', unknown>>;
+    const record = value as Partial<
+      Record<'phase' | 'round' | 'challenger' | 'opponent' | 'secondsLeft' | 'reason' | 'winner' | 'champion' | 'seated', unknown>
+    >;
     const code = (table: readonly string[], raw: unknown, offset: number): string | null | undefined => {
       if (typeof raw !== 'number' || !Number.isInteger(raw)) return undefined;
       if (offset === 1 && raw === 0) return null;
@@ -2427,19 +2518,33 @@ function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
     };
     const slot = (raw: unknown): unknown => {
       if (raw === null || typeof raw !== 'object') return null;
-      const fields = raw as Partial<Record<'kind' | 'gameId' | 'hp' | 'swings' | 'hits', unknown>>;
+      const fields = raw as Partial<Record<'kind' | 'gameId' | 'hp' | 'swings' | 'hits' | 'guarding' | 'blocks', unknown>>;
       const kind = code(ARENA_SLOT_KINDS, fields.kind, 0);
       const gameId = fields.gameId;
       if (typeof gameId !== 'string') return null;
       // A presence id rides only a player slot; anywhere else it is malformed.
       if (kind !== 'player' && gameId !== '') return null;
-      return { kind, gameId: kind === 'player' ? gameId : null, hp: fields.hp, swings: fields.swings, hits: fields.hits };
+      // D-128: `guarding` is a byte on the wire and a boolean in the snapshot.
+      if (fields.guarding !== 0 && fields.guarding !== 1) return null;
+      return {
+        kind,
+        gameId: kind === 'player' ? gameId : null,
+        hp: fields.hp,
+        swings: fields.swings,
+        hits: fields.hits,
+        guarding: fields.guarding === 1,
+        blocks: fields.blocks,
+      };
     };
     const phase = code(ARENA_PHASES, record.phase, 0);
     const reason = code(ARENA_END_REASONS, record.reason, 1);
     const winner = code(ARENA_SIDES, record.winner, 1);
     if (reason === undefined || winner === undefined) return null;
     if (reason === null && winner !== null) return null;
+    // D-128: the champion is a presence id or the empty string, and `seated` a byte.
+    const champion = record.champion;
+    if (typeof champion !== 'string') return null;
+    if (record.seated !== 0 && record.seated !== 1) return null;
     return normalizeArenaRing({
       phase,
       round: record.round,
@@ -2447,6 +2552,8 @@ function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
       opponent: slot(record.opponent),
       secondsLeft: record.secondsLeft,
       outcome: reason === null ? null : { reason, winner },
+      champion: champion === '' ? null : champion,
+      seated: record.seated === 1,
     });
   } catch {
     return null;
@@ -2454,7 +2561,10 @@ function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
 }
 
 function sameArenaSlot(a: ArenaRingSnapshot['challenger'], b: ArenaRingSnapshot['challenger']): boolean {
-  return a.kind === b.kind && a.gameId === b.gameId && a.hp === b.hp && a.swings === b.swings && a.hits === b.hits;
+  return (
+    a.kind === b.kind && a.gameId === b.gameId && a.hp === b.hp && a.swings === b.swings && a.hits === b.hits &&
+    a.guarding === b.guarding && a.blocks === b.blocks
+  );
 }
 
 function sameArena(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): boolean {
@@ -2464,6 +2574,8 @@ function sameArena(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): bo
     a.phase === b.phase &&
     a.round === b.round &&
     a.secondsLeft === b.secondsLeft &&
+    a.champion === b.champion &&
+    a.seated === b.seated &&
     sameArenaSlot(a.challenger, b.challenger) &&
     sameArenaSlot(a.opponent, b.opponent) &&
     (a.outcome === b.outcome ||
@@ -2534,5 +2646,5 @@ function isValidMonotonicTime(value: number): boolean {
 }
 
 function samePlacement(a: Required<Placement>, b: Required<Placement>): boolean {
-  return a.x === b.x && a.y === b.y && a.facing === b.facing;
+  return a.x === b.x && a.y === b.y && a.facing === b.facing && a.seat === b.seat;
 }

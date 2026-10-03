@@ -294,6 +294,24 @@ the swap probe above has passed, with every swap variable from it still set.
    | `BACKEND_DEGEN_MIN_DAILY_VOLUME_USD` | `100` | runtime |
    | `BACKEND_DEGEN_CACHE_TTL_MS` | `600000` (10 minutes) | runtime |
    | `VITE_STRK20_SWAP_DEGEN_ENABLED` | `true` | build (compiled into the bundle; the Dockerfile declares it) |
+   | `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS` | optional, `800` (8%) when unset; 1 to 800, and never below `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS` | runtime |
+   | `VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS` | optional, `800` (8%) when unset; the widest slippage the degen cog offers | build (the Dockerfile declares it) |
+   | `VITE_STRK20_SWAP_DEGEN_ORACLE_BPS` | optional, `1200` (12%) when unset; how far below Pragma's price a degen quote may sit before it is refused | build (the Dockerfile declares it) |
+
+   **The degen floor's own limits (D-126).** Its tokens are the thin ones, and
+   a 3% oracle bound refused every real LORDS quote before the wallet was ever
+   asked — the panel said nothing, so it read as the button doing nothing.
+   Upstairs the bound is 12% and the slippage ceiling 8%; the ground floor
+   keeps 3% and 3%. All three variables above are optional and default to those
+   figures, so the floor works with none of them set; set them only to narrow
+   it. A build value above its ceiling is ignored in the browser (it takes the
+   ceiling), while `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS` above 800, below
+   `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS`, or malformed stops the backend
+   starting. The backend applies its degen ceiling only to a pair its static
+   `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` does not name on both sides, so none of
+   this widens the Exchange. A quote inside the cap but more than 3% below
+   Pragma's price is still shown with a small warning line in the review, on
+   both floors.
 
    All four `BACKEND_DEGEN_*` are required together: one set without
    `BACKEND_DEGEN_ENABLED`, a tag outside those four (`Unknown` never
@@ -325,15 +343,21 @@ the swap probe above has passed, with every swap variable from it still set.
    the acknowledgement tick (D-084). Read the balance: both arrive as pool
    notes. Then sell the DREAMS back for STRK.
 
-To close it again, unset the five variables and redeploy; the counter then
-says its list is unavailable while the ground floor keeps swapping.
+To close it again, unset the five switches and redeploy; the counter then
+says its list is unavailable while the ground floor keeps swapping. The three
+D-126 limits are inert without the degen floor, so they can be left set.
 
 ## The private leaderboard probe (leaderboard phase 1, D-122)
 
 Off by default, in three pieces that switch on together: the browser's
 receipts and ticks, the placement stand by the plaza, and the backend's blind
-tally. The ledger is live (D-116); the web side is new, so this is its first
-live check.
+tally. The ledger is live (D-116) at
+`0x01517eeedc0d7a352e841a87a55312e2e19d28e6d09247822b28d044541766f8`; the web
+side is new, so this is its first live check.
+
+The browser half is **probe-only**: the build flag counts only in a tab opened
+with `?lb=1` (step 3), so this can be set on the live service without
+switching receipts or the stand on for anybody else.
 
 1. Give the service a volume for the tally. In the Railway dashboard, add a
    volume to the `strkworld` service mounted at `/data`. The tally is one
@@ -360,26 +384,57 @@ live check.
    means that send goes out without a receipt (fail open). A check shows
    "can't be checked right now" without the backend. Both halves follow
    `BACKEND_GLOBAL_ENABLED`.
-3. With a funded account on a wallet that runs shadow accounts (Wallet API
+3. **Open the site with `?lb=1`.** The browser flag alone is not enough
+   (D-122, amended 2026-10-02): receipts and the stand turn on only for a tab
+   that asked for them, so the variables above can stay set on a live deploy
+   while every other player's visit is byte-for-byte what it was — no
+   receipt on any action, no wallet asked for a season commitment, and no
+   stand on the plaza lawn. For example
+   `https://strkworld-production.up.railway.app/?lb=1`. It stays on for that
+   tab's browser session, reloads and walking the city included (it is kept in
+   `sessionStorage` under `strkworld:lb-probe`); `?lb=0` turns it off again,
+   and so does a new tab. A browser that refuses storage simply needs `?lb=1`
+   on each page load. The same shape as `?debug=1` below, and the two can be
+   used together.
+4. With a funded account on a wallet that runs shadow accounts (Wallet API
    0.10.4), do one small private send. Its review should say "Counts toward
    your private placement". The wallet prompt is still one transaction with
    one 6 STRK pool fee; note whether it now asks for anything extra (a
    season commitment prompt, a higher network fee for the shadow deploy).
-4. Walk to the stand east of the plaza (the scoreboard on the lawn beside the
-   shell-game table), press E, and Check privately. Expect "1 private action"
-   and a placement among whoever has checked in. Do a second send and check
-   again: "+1 since your last check".
-5. What to record, since none of it is verified yet: whether Ready accepts a
-   `shadow_account_invoke` to the ledger next to a deposit, a transfer and a
-   withdraw (receipt mode); whether it accepts the extra `tick` call in a
-   Vault, Borrow, unstaking or swap action (DeFi mode); whether it prompts on
-   the season commitment; and the extra network fee of a fresh shadow deploy.
+5. Walk to the stand east of the plaza (the scoreboard on the lawn beside the
+   shell-game table), press E, and Check privately. A pop-up says the check
+   shares tracking information with the app owner only; press **Continue**
+   (Cancel, Escape or a press outside it sends nothing). Expect "1 private
+   action" and a placement among whoever has checked in. Do a second send and
+   check again: "+1 since your last check". The pop-up appears before every
+   check, by design.
+
+### What to record (nothing below is verified yet)
+
+One line each, from the probe above. None of it needs an address, an amount or
+a hash — yes/no, the wallet's own code, and the fee.
+
+- [ ] **Shield** (the Bank) carries a receipt and Ready accepts it.
+- [ ] **Unshield** carries a receipt and Ready accepts it.
+- [ ] **Private send** (the Post Office) carries a receipt and Ready accepts it.
+- [ ] **Vault** supply or redeem carries its `tick` and Ready accepts it.
+- [ ] **Borrow** carries its `tick` and Ready accepts it.
+- [ ] **Unstake** (Endur) carries its `tick` and Ready accepts it. The Endur
+      *stake* carries none by design: one external invoke per transaction.
+- [ ] **Swap** (the Exchange) carries its `tick` and Ready accepts it, the
+      re-quote included.
+- [ ] Whether the wallet **prompts for the season commitment**, and how often
+      (a check asks for five commitments; four are usually already cached).
+- [ ] The **extra network fee per action**, against the same action with the
+      leaderboard off: a receipt deploys a fresh shadow account. The 6 STRK
+      pool fee is unchanged — one transaction, one fee.
 
 The tally logs nothing per request. Its routes take their own rate windows
 (30 at once per client, one more every 2 s; check-ins 3 at once per client,
 one more a minute, and 60 a minute overall), keyed by the same salted,
 in-memory client hash as the swap quotes. To switch it all off, unset the
 five variables and redeploy; the file can stay, or be deleted with the volume.
+Leaving them set with nobody opening `?lb=1` is off for every player too.
 
 ## Debug logs
 

@@ -212,6 +212,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
         football: config.football,
+        // D-127: the session reads the peers to know which bench seats are taken.
+        ...(config.remotePeers ? { peers: config.remotePeers } : {}),
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
         // The Exchange roof's lookout swing (D-132).
@@ -349,6 +351,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       reducedMotion: () => prefersReducedMotion(win),
       vaultOpen,
       placementStand,
+      // D-129: a phone gets the arena's lighter surround.
+      lowDetail: isTouchScreen(win),
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());
