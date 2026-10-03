@@ -309,6 +309,7 @@ describe('the sky island (D-132)', () => {
     expect(STREET_ORIGIN_X).toBe(29);
     const map = createStreetMap();
     expect(map.width).toBe(111);
-    expect(map.height).toBe(28);
+    // D-134: the Garden arch moved south, so the map runs five rows deeper.
+    expect(map.height).toBe(33);
   });
 });

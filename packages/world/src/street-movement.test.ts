@@ -208,7 +208,7 @@ describe('street movement seam', () => {
 
   it('uses the same bounded collision seam for Avatar Studio movement', () => {
     const position = moveWithCollisionSubsteps({
-      position: { x: 5 * 32 + 16, y: 9 * 32 + 16 },
+      position: { x: 1 * 32 + 16, y: 9 * 32 + 16 },
       velocity: { x: 0, y: -160 },
       delta: 2200,
       tileSize: 32,
@@ -216,7 +216,7 @@ describe('street movement seam', () => {
       isSolidAt: (x, y) => isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
     });
 
-    expect(position).toEqual({ x: 5 * 32 + 16, y: 32 });
+    expect(position).toEqual({ x: 1 * 32 + 16, y: 32 });
   });
 
   it('emits the initial placement with only the frozen movement payload', () => {

@@ -355,7 +355,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
     return room;
   };
 
-  const studio: StudioView = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, options.figures, options.labels);
+  const studio: StudioView = buildAvatarStudio(
+    AVATAR_STUDIO_DEFINITION,
+    options.figures,
+    options.labels,
+    ROOM_ORIGIN,
+    {
+      ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+      ...(options.lowDetail === true ? { lowDetail: true } : {}),
+    },
+  );
   studio.sync({ visible: false, highlightedFigure: null });
   root.add(studio.group);
   disposers.push(() => studio.dispose());

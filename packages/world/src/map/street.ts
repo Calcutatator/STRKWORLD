@@ -238,7 +238,10 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // sandbox square at its east end (D-060), and the pitch square lies west of
   // it (D-078).
   const width = SANDBOX_AREA.x + SANDBOX_AREA.width;
-  const height = 28;
+  // D-134: the district is five rows deeper than the two end squares. Those
+  // five rows are the south lawn the Garden's gate stands at the far end of,
+  // so the gate is well clear of the Colosseum, the plaza and the spawn.
+  const height = 33;
 
   const tiles: TileKind[][] = Array.from({ length: height }, () =>
     Array.from({ length: width }, () => 'grass' as TileKind),
@@ -314,9 +317,9 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
     });
   }
 
-  // The hidden Avatar Studio has no facade or BUILDINGS entry. It is reached
-  // by a two-tile path that continues directly south from the spawn column to
-  // the bottom edge, where the offscreen trigger lives.
+  // The Garden has no facade or BUILDINGS entry. It is reached by a two-tile
+  // stone path that continues directly south from the spawn column, across
+  // the south lawn, to the arch standing in the bottom hedge (D-134).
   fill(tiles, X + 23, 17, 2, height - 17, 'pavement');
 
   // The Privacy Plaza (D-076): a paved square below the south pavement at the
@@ -349,7 +352,10 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   const gateTop = SANDBOX_ENTRANCE.y;
   const gateBottom = SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height;
   fill(tiles, SANDBOX_AREA.x - 1, SANDBOX_AREA.y, 1, gateTop - SANDBOX_AREA.y, 'fence');
-  fill(tiles, SANDBOX_AREA.x - 1, gateBottom, 1, SANDBOX_AREA.y + SANDBOX_AREA.height - gateBottom, 'fence');
+  // South of the gate the wall runs the full depth of the map, not just of
+  // the square (D-134): the district is deeper than the square, and a wall
+  // that stopped at the square's south edge could be walked round.
+  fill(tiles, SANDBOX_AREA.x - 1, gateBottom, 1, Math.max(SANDBOX_AREA.y + SANDBOX_AREA.height, height) - gateBottom, 'fence');
 
   return {
     name: 'street',
@@ -495,7 +501,11 @@ export function doorAt(map: DistrictMap, tileX: number, tileY: number): DoorZone
   return null;
 }
 
-/** Which bottom-edge tile enters the hidden Avatar Studio? */
+/**
+ * Which bottom-edge tile is the Garden's arch standing over? These are the
+ * arch's own opening tiles — being on one is necessary to go in, but since
+ * D-134 it is not sufficient: see `entersAvatarStudio`.
+ */
 export function isAvatarStudioEntrance(
   map: DistrictMap,
   tileX: number,
@@ -508,6 +518,31 @@ export function isAvatarStudioEntrance(
     tileY >= entrance.y &&
     tileY < entrance.y + entrance.height
   );
+}
+
+/**
+ * D-134: did this step walk the player THROUGH the Garden's arch?
+ *
+ * The arch is a doorway, not a tripwire. Standing on its opening is not
+ * enough: the step has to be a step *into* it, southward, from the tile
+ * north of it — the move a player makes when they mean to go in. Walking
+ * along the bottom hedge across the opening, or brushing the piers either
+ * side of it, keeps `from.y === to.y` and leaves the player on the street.
+ *
+ * This is deliberately a step rule rather than a facing rule. Facing is a
+ * presentation value that a camera turn or a wall slide can change while the
+ * player stands still; the tile they came from cannot.
+ */
+export function entersAvatarStudio(
+  map: DistrictMap,
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+): boolean {
+  if (!isAvatarStudioEntrance(map, to.x, to.y)) return false;
+  // Already under the arch: sidestepping between its two opening tiles is
+  // not walking through it either.
+  if (isAvatarStudioEntrance(map, from.x, from.y)) return false;
+  return to.y > from.y;
 }
 
 /**

@@ -236,7 +236,7 @@ describe('interest in the arena (D-114)', () => {
   it.each([
     ['street', { x: 100, y: 100 }],
     ['roof', { x: ROOF_PRESENCE_GRID.originX + 48, y: ROOF_PRESENCE_GRID.originY + 48 }],
-    ['studio', { x: STUDIO_PRESENCE_GRID.originX + 48 + 64, y: STUDIO_PRESENCE_GRID.originY + 48 + 64 }],
+    ['studio', { x: STUDIO_PRESENCE_GRID.originX + 48, y: STUDIO_PRESENCE_GRID.originY + 48 }],
     ['bunker', { x: BUNKER_PRESENCE_GRID.originX + 48 + 64, y: BUNKER_PRESENCE_GRID.originY + 48 + 64 }],
   ] as const)('a %s observer is never sent an arena player, nor an arena observer one of theirs', (area, place) => {
     const registry = new LobbyPresence();

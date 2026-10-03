@@ -100,6 +100,13 @@ const STREET_BOUNDS = {
   height: STREET_MAP.height * TILE_SIZE,
 };
 const INTERIOR_BOUNDS = { x: ROOM_ORIGIN.x, y: ROOM_ORIGIN.y, width: 576, height: 384 };
+/** D-134: the Garden is its own, larger envelope — 30 by 24 tiles. */
+const STUDIO_BOUNDS = {
+  x: ROOM_ORIGIN.x,
+  y: ROOM_ORIGIN.y,
+  width: AVATAR_STUDIO_DEFINITION.width * AVATAR_STUDIO_TILE_SIZE,
+  height: AVATAR_STUDIO_DEFINITION.height * AVATAR_STUDIO_TILE_SIZE,
+};
 /** Distance covered by one 16 ms walking frame. */
 const WALK_STEP = (PLAYER_WALK_SPEED * 16) / 1000;
 
@@ -670,8 +677,8 @@ describe('WorldSession lifecycle', () => {
 
     const error = new Error('selection delivery failed');
     world.bus.failNext('avatar:selected', error);
-    // Figure 2 stands on Studio tile (5, 3).
-    place(world.session, studioTileCentre({ x: 5, y: 3 }));
+    // Figure 2 stands in the Garden's second nook, on tile (11, 4).
+    place(world.session, studioTileCentre({ x: 11, y: 4 }));
     const sentinel = { ...internals(world.session).lastTile };
 
     // Walking onto it selects nothing: it only shows the prompt.
@@ -722,7 +729,7 @@ describe('WorldSession lifecycle', () => {
     expect(world.selected()).toBe('avatar-1');
 
     // E at a figure selects it (D-117), and F pairs that figure.
-    stepOntoStudioTile(world, { x: 14, y: 6 });
+    stepOntoStudioTile(world, { x: 24, y: 9 });
     expect(world.selected()).toBe('avatar-1');
     world.keyboard.pressE();
     expect(world.selected()).toBe('avatar-8');
@@ -1440,8 +1447,8 @@ describe('WorldSession orchestration', () => {
     const world = createWorld();
     const session = world.start();
     enterStudioByEntrance(world);
-    // Figure 3 stands on Studio tile (8, 3).
-    place(session, studioTileCentre({ x: 8, y: 3 }));
+    // Figure 3 stands in the Garden's third nook, on tile (18, 4).
+    place(session, studioTileCentre({ x: 18, y: 4 }));
 
     tick(world);
     expect(world.selected()).toBe('avatar-1');
@@ -1755,7 +1762,7 @@ describe('WorldSession camera', () => {
     expect(world.view.last('setCameraBounds')).toEqual([STREET_BOUNDS]);
 
     enterStudioByEntrance(world);
-    expect(world.view.last('setCameraBounds')).toEqual([INTERIOR_BOUNDS]);
+    expect(world.view.last('setCameraBounds')).toEqual([STUDIO_BOUNDS]);
     stepOntoStudioTile(world, STUDIO_EXIT);
     expect(world.view.last('setCameraBounds')).toEqual([STREET_BOUNDS]);
   });
@@ -1948,9 +1955,10 @@ describe('WorldSession movement (D-059)', () => {
 
     leaveRoomByExit(world, 'bank');
     enterStudioByEntrance(world);
-    place(session, { x: interiorEast + 40, y: session.player.y });
+    const gardenEast = STUDIO_BOUNDS.x + STUDIO_BOUNDS.width;
+    place(session, { x: gardenEast + 40, y: session.player.y });
     tickHolding(world, { left: true });
-    expect(session.player.x).toBe(interiorEast);
+    expect(session.player.x).toBe(gardenEast);
   });
 
   it('does not move the player on a NaN or negative frame', () => {
@@ -2840,7 +2848,7 @@ describe('WorldSession: press E to interact (D-117)', () => {
     const world = createWorld();
     world.start();
     enterStudioByEntrance(world);
-    stepOntoStudioTile(world, { x: 9, y: 6 });
+    stepOntoStudioTile(world, { x: 18, y: 9 });
     expect(world.selected()).toBe('avatar-1');
     expect(world.session.interactionPrompt).toMatchObject({ id: 'studio:figure-7', label: 'WEAR' });
     world.keyboard.pressE();
@@ -2848,7 +2856,7 @@ describe('WorldSession: press E to interact (D-117)', () => {
     // Worn now: no prompt.
     tick(world);
     expect(world.session.interactionPrompt).toBeNull();
-    stepOntoStudioTile(world, { x: 6, y: 5 });
+    stepOntoStudioTile(world, { x: 15, y: 7 });
     expect(world.studio().state.highlightedFigure).toBeNull();
   });
 
@@ -2985,10 +2993,32 @@ describe('WorldSession: press E to interact (D-117)', () => {
     },
   );
 
-  it('still walks into the Avatar Studio without E', () => {
+  it('still walks into the Garden without E', () => {
     const world = createWorld();
     world.start();
     enterStudioByEntrance(world);
+    expect(world.bus.count('avatar-studio:entered')).toBe(1);
+  });
+
+  it('only goes into the Garden by walking south through its arch (D-134)', () => {
+    const world = createWorld();
+    world.start();
+    const row = STUDIO_ENTRANCE.y;
+    const west = STUDIO_ENTRANCE.x;
+    // Walking the bottom row westward, across the arch's own opening.
+    for (const x of [west + 3, west + 2, west + 1, west, west - 1]) {
+      place(world.session, streetTileCentre({ x, y: row }));
+      tick(world);
+      expect(world.session.area, `walking past at ${x}`).toBe('street');
+    }
+    expect(world.bus.count('avatar-studio:entered')).toBe(0);
+    // Back up the path and down through the opening: that is the way in.
+    place(world.session, streetTileCentre({ x: west, y: row - 1 }));
+    tick(world);
+    expect(world.session.area).toBe('street');
+    place(world.session, streetTileCentre({ x: west, y: row }));
+    tick(world);
+    expect(world.session.area).toBe('studio');
     expect(world.bus.count('avatar-studio:entered')).toBe(1);
   });
 });

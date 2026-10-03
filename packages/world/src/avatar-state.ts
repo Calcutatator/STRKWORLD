@@ -32,10 +32,17 @@ export function validateAvatarSprite(value: unknown): AvatarSpriteKey {
   return isAvatarSpriteKey(value) ? value : DEFAULT_AVATAR_SPRITE;
 }
 
-/** Return the cosy state represented by a 1-based figure number. */
+/**
+ * Return the cosmetic state represented by a 1-based figure number.
+ *
+ * The Garden stands one figure per look, cosy 1..8 then fighting 9..16, so a
+ * figure number and a sprite key are the same number (D-134). F still pairs
+ * the two stances (`pairedAvatarSprite`); the Garden simply lets a player
+ * walk to either of them.
+ */
 export function avatarSpriteForFigure(figure: number): AvatarSpriteKey {
-  if (!Number.isInteger(figure) || figure < 1 || figure > 8) {
-    throw new Error('Avatar Studio figure must be an integer from 1 to 8');
+  if (!Number.isInteger(figure) || figure < 1 || figure > 16) {
+    throw new Error('Garden figure must be an integer from 1 to 16');
   }
   return `avatar-${figure}` as AvatarSpriteKey;
 }

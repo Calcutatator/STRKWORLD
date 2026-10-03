@@ -56,9 +56,16 @@ const ACCEPTED: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'vault ground': [],
   'exchange degen': [],
   'exchange roof': [],
-  // The exit's surround and its lights in the north wall (2.02–2.05), reached
-  // only by a jump right at the threshold.
-  studio: ['avatar-studio:wall-north:body', 'avatar-studio:wall-north:lights'],
+  // The gate's surround and its lights in the north hedge (2.02–2.05),
+  // reached only by a jump right at the threshold, and the Garden's drifting
+  // fireflies and pollen (D-134), which hang from 1.86 up over the whole
+  // lane grid: 4 cm additive specks, accepted deliberately — a jumping head
+  // passing through the sparkles is the point of them, and they hide nothing.
+  studio: [
+    'avatar-studio:motes',
+    'avatar-studio:wall-north:body',
+    'avatar-studio:wall-north:lights',
+  ],
 });
 
 /** Whether a head could be at (x, z): some body centre within `HEAD` of it stands on walkable floor whole. */

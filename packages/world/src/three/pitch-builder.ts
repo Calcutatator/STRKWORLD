@@ -128,7 +128,7 @@ export function buildPitch(map: DistrictMap, labels: LabelFactory, res: Resource
     }
     const hasGate = gatePosts(map) !== null;
     streetFence(map, bin);
-    perimeterFence(bin);
+    perimeterFence(map, bin);
 
     const groundMaterial = res.material(standardMaterial({ roughness: 0.95 }));
     const decorMaterial = res.material(standardMaterial({ roughness: 0.78 }));
@@ -624,10 +624,13 @@ function streetFence(map: DistrictMap, bin: GeometryBin): void {
  * south edges: posts and rails, tall behind the stand and low on the south,
  * nearest the camera. Outside the map, so never in anyone's way.
  */
-function perimeterFence(bin: GeometryBin): void {
-  const { x: x0, y: z0, width, height } = PITCH_AREA;
+function perimeterFence(map: DistrictMap, bin: GeometryBin): void {
+  const { x: x0, y: z0, width } = PITCH_AREA;
   const x1 = x0 + width;
-  const z1 = z0 + height;
+  // The south run follows the map's edge, not the square's: since D-134 the
+  // district is deeper than the square, and a fence on the square's own south
+  // edge would stand across the grass inside it.
+  const z1 = Math.max(z0 + PITCH_AREA.height, map.height);
   const run = (xa: number, za: number, xb: number, zb: number, h: number): void => {
     const alongX = Math.abs(xb - xa) >= Math.abs(zb - za);
     const length = alongX ? Math.abs(xb - xa) : Math.abs(zb - za);
