@@ -112,8 +112,12 @@ function setup() {
   controller.listen(world);
   const moments: FootballMoment[] = [];
   controller.channel.subscribeMoments?.((moment) => moments.push(moment));
-  const move = (x: number, y: number, facing: 'up' | 'down' | 'left' | 'right' = 'right') =>
-    world.emit('player:moved', { position: { x, y }, facing });
+  const move = (
+    x: number,
+    y: number,
+    facing: 'up' | 'down' | 'left' | 'right' = 'right',
+    airborne = false,
+  ) => world.emit('player:moved', { position: { x, y }, facing, ...(airborne ? { airborne: true } : {}) });
   return { controller, world, time, moments, move, frame: () => controller.channel.frame() };
 }
 
@@ -308,6 +312,68 @@ describe('solo play is the lobby\'s play (D-078)', () => {
     expect(trace[scored]!.lobby.x).toBeGreaterThan(X1);
     expect(trace.at(-1)!.lobby).toMatchObject({ west: 1, phase: 'live', x: FOOTBALL_CENTRE.x });
     expect(solo.moments).toEqual([{ kind: 'goal', side: 'west' }]);
+  });
+});
+
+describe('jumping over the ball (D-130)', () => {
+  it('runs the solo ball exactly as the room does: over it in the air, dribbled on the ground', () => {
+    /** One run due east through the centre spot, in the room and in solo play at once. */
+    const over = (jump: boolean) => {
+      const registry = new LobbyPresence({ minUpdateIntervalMs: 0 });
+      const solo = setup();
+      const start = solo.time.now();
+      const y = Math.round(FOOTBALL_CENTRE.y);
+      let x = Math.round(FOOTBALL_CENTRE.x - 60);
+      expect(registry.admit('p', { x, y, facing: 'right' }).ok).toBe(true);
+      registry.keepFootballRunning(start);
+      // The jump leaves on the key press, before the moves it carries.
+      if (jump) expect(registry.jump('p', start)).toBe('applied');
+      solo.move(x, y, 'right', jump);
+      for (let step = 1; step <= 16; step++) {
+        const t = start + step * FOOTBALL_TICK_MS;
+        x += 6;
+        registry.move('p', { x, y, facing: 'right' }, t - 1);
+        solo.time.advance(FOOTBALL_TICK_MS - 1);
+        solo.move(x, y, 'right', jump);
+        solo.time.advance(1);
+        registry.footballTick(t);
+      }
+      return {
+        lobby: registry.footballSnapshot(),
+        solo: solo.controller.snapshot()!,
+        drawn: solo.frame()!,
+        playerX: x,
+      };
+    };
+
+    const jumped = over(true);
+    // Past the ball, which neither authority moved an inch.
+    expect(jumped.playerX).toBeGreaterThan(FOOTBALL_CENTRE.x);
+    expect(jumped.lobby).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 });
+    expect(jumped.solo.x).toBeCloseTo(jumped.lobby.x, 6);
+    expect(jumped.solo.vx).toBeCloseTo(jumped.lobby.vx, 6);
+    // And the drawn ball agrees: no local push answer for a jumper.
+    expect(jumped.drawn.x).toBeCloseTo(FOOTBALL_CENTRE.x, 6);
+
+    const walked = over(false);
+    expect(walked.lobby.vx).toBeGreaterThan(0);
+    expect(walked.solo.x).toBeCloseTo(walked.lobby.x, 6);
+    expect(walked.solo.vx).toBeCloseTo(walked.lobby.vx, 6);
+  });
+
+  it('forgets the air when the player steps off the street, so they come back as a body', () => {
+    const solo = setup();
+    const y = Math.round(FOOTBALL_CENTRE.y);
+    solo.move(Math.round(FOOTBALL_CENTRE.x - 60), y, 'right', true);
+    solo.world.emit('building:entered', { building: 'bank' });
+    solo.world.emit('building:exited', { building: 'bank' });
+    let x = Math.round(FOOTBALL_CENTRE.x - 40);
+    for (let step = 0; step < 12; step++) {
+      x += 6;
+      solo.move(x, y);
+      solo.time.advance(FOOTBALL_TICK_MS);
+    }
+    expect(solo.controller.snapshot()!.x).not.toBe(FOOTBALL_CENTRE.x);
   });
 });
 
