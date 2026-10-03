@@ -7,7 +7,8 @@ import {
   type RemotePeerSnapshot,
 } from './remote-peer.js';
 
-// Validated snapshots always state `carrying` and `jumps`, so the fixture does too.
+// Validated snapshots always state `carrying`, `jumps` and `seat`, so the
+// fixture does too.
 const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot => ({
   id: 'peer-1',
   x: 40,
@@ -16,6 +17,7 @@ const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot =
   sprite: 'avatar-1',
   carrying: null,
   jumps: 0,
+  seat: null,
   ...overrides,
 });
 

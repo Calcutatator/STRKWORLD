@@ -83,10 +83,17 @@ export function BridgePanel({
   }, [owned]);
 
   if (!owned || !runtime.service) {
+    // The optional terminal runtime is fetched when the player reaches the
+    // Bridge, so the window can open before it lands: say it is starting up
+    // while it is still on its way, and what is missing once it is not.
     return (
-      <PanelFrame title={COPY.bridge.title} building="bridge" disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
-        <p className="room-locked" role="note">{COPY.bridge.recoveryUnavailable}</p>
-      </PanelFrame>
+      <section className="bridge-experience" data-experience={experience}>
+        <PanelFrame title={COPY.bridge.title} building="bridge" disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
+          <p className={runtime.loading ? 'panel-notice' : 'room-locked'} role="note">
+            {runtime.loading ? COPY.bridge.arriving : COPY.bridge.recoveryUnavailable}
+          </p>
+        </PanelFrame>
+      </section>
     );
   }
 

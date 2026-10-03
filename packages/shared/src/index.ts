@@ -162,6 +162,17 @@ export interface PresenceState {
    * financial; only the room writes it, at most once per its jump floor.
    */
   jumps: number;
+  /**
+   * D-127: the bench seat this player is sitting on — an index into
+   * `STREET_SEATS` (seats.ts) — or -1 standing. One signed byte, and the whole
+   * of what sitting costs the wire: the seat's own spot and the way a sitter
+   * looks are in the shared table, so nothing about a position or a pose has to
+   * be sent. Cosmetic, like `carrying` and `jumps`. Only the room writes it,
+   * and only for a real seat whose spot is where the room already holds that
+   * player, and only while nobody else holds it. The Bridge room's lounge
+   * seats are in a solo interior and never reach here.
+   */
+  seat: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +563,14 @@ export type WorldEvents = {
   'building:locked': { building: BuildingId; reason: 'coming-soon' };
   /** Client-local presentation event. Financial meaning stays in the Shell. */
   'station:activated': { building: BuildingId; station: StationId };
-  'player:moved': { position: Position; facing: Facing };
+  /**
+   * Where the player stands on the street, and which way they face. D-127's
+   * `seat` is present only while they sit on a bench — an index into
+   * `STREET_SEATS` — so a standing player's payload is unchanged. The Shell
+   * passes it straight to the lobby with the position; the room decides
+   * whether the claim stands.
+   */
+  'player:moved': { position: Position; facing: Facing; seat?: number };
   'world:ready': Record<string, never>;
   /** D-047: non-financial hidden Avatar Studio lifecycle. */
   'avatar-studio:entered': Record<string, never>;
@@ -684,3 +702,5 @@ export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
 
 // D-114: the gladiator pit's arena: geometry, the ring as the wire carries it, combat constants.
 export * from './arena.js';
+// D-127: the overworld's sittable benches, and the seat table the wire indexes into.
+export * from './seats.js';

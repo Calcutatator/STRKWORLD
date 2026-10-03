@@ -69,6 +69,14 @@ export type Intent =
        * else is refused. Absent, the swap uses the build's ceiling, as before.
        */
       slippageBps?: number;
+      /**
+       * D-126: this swap is the degen floor's, so it runs under that floor's
+       * own, wider oracle bound and slippage ceiling
+       * (`SWAP_DEGEN_PRICE_BOUND_BPS`, `SWAP_DEGEN_MAX_SLIPPAGE_BPS`). Only a
+       * build whose swap policy has the degen floor on may set it; absent or
+       * false is the ground floor's 3% and 3%, unchanged.
+       */
+      degen?: boolean;
     }
   /**
    * Endur private staking (D-063): shielded STRK in, shielded xSTRK out,

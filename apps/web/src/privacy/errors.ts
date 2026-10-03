@@ -26,6 +26,7 @@ const KIND_SET: Readonly<Record<PrivacyErrorKind, true>> = Object.freeze({
   'submission-uncertain': true,
   'relay-not-configured': true,
   'shadow-accounts-unsupported': true,
+  'price-guard': true,
   unknown: true,
 });
 const KINDS = Object.freeze(Object.keys(KIND_SET)) as readonly PrivacyErrorKind[];
@@ -41,6 +42,43 @@ export interface ShellFailure {
    * rendered.
    */
   operation?: Intent['kind'];
+  /**
+   * D-126: a `price-guard` refusal's two figures, when the throw carried
+   * them: how far below the oracle price the quote sat, and the cap that
+   * floor allows, both in bps. The counter turns them into its own sentence;
+   * the seam's message string is still never rendered.
+   */
+  priceGuard?: { readonly shortfallBps: number; readonly boundBps: number };
+}
+
+/** A whole number of bps a refusal may carry: nothing negative, nothing absurd. */
+function bpsFigure(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 100_000 ? value : null;
+}
+
+/**
+ * D-126: the guard's figures off a `price-guard` throw, read as own data
+ * properties for the same reason `kind` is. Either figure missing or
+ * malformed leaves them off, and the counter falls back to the kind's copy.
+ */
+function priceGuardFigures(error: object): ShellFailure['priceGuard'] {
+  try {
+    // Idempotent like the rest of this: a `ShellFailure` handed back in
+    // carries the figures nested, the seam's throw carries them flat.
+    const nested = Object.getOwnPropertyDescriptor(error, 'priceGuard');
+    const source = nested && 'value' in nested && nested.value && typeof nested.value === 'object'
+      ? (nested.value as object)
+      : error;
+    const shortfall = Object.getOwnPropertyDescriptor(source, 'shortfallBps');
+    const bound = Object.getOwnPropertyDescriptor(source, 'boundBps');
+    if (!shortfall || !('value' in shortfall) || !bound || !('value' in bound)) return undefined;
+    const shortfallBps = bpsFigure(shortfall.value);
+    const boundBps = bpsFigure(bound.value);
+    if (shortfallBps === null || boundBps === null) return undefined;
+    return Object.freeze({ shortfallBps, boundBps });
+  } catch {
+    return undefined;
+  }
 }
 
 function isKind(value: unknown): value is PrivacyErrorKind {
@@ -67,7 +105,8 @@ export function toFailure(error: unknown): ShellFailure {
       // own data field: inherited/accessor values are not trustworthy, and a
       // throwing getter must not escape the sanitizing classifier.
       if (descriptor && 'value' in descriptor && isKind(descriptor.value)) {
-        return { kind: descriptor.value, cause: error };
+        const priceGuard = descriptor.value === 'price-guard' ? priceGuardFigures(error) : undefined;
+        return { kind: descriptor.value, cause: error, ...(priceGuard ? { priceGuard } : {}) };
       }
     } catch {
       // Hostile proxies and descriptor traps are unknown failures too.

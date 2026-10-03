@@ -2,7 +2,7 @@ import { AVNU_SWAP_MAX_CALLDATA } from './avnu-swap-quotes.js';
 import { BORROW_MARKET_PATH, BORROW_POSITION_PATH } from './borrow.js';
 import { DEBUG_LOGS_PATH, DebugLogSink } from './debug-logs.js';
 import type { LeaderboardService } from './leaderboard.js';
-import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
+import { SWAP_DEGEN_MAX_SLIPPAGE_BPS, publicDegenToken, validateDegenConfig } from './degen-catalog.js';
 import { ENDUR_XSTRK_ASSET } from './endur.js';
 import {
   AggregateBudget,
@@ -434,12 +434,21 @@ export class BackendApi {
     if (sameAddress(sellToken, buyToken)) throw new ApiFailure(400, 'A swap needs two different tokens.');
     if (BigInt(taker) >= CONTRACT_ADDRESS_BOUND) throw new ApiFailure(400, 'Invalid taker.');
     if (sellAmount >= U128_BOUND) throw new ApiFailure(400, 'Invalid sell amount.');
-    if (slippageBps > (policy.maxSlippageBps ?? 500)) {
+    // D-126: the swap route has two slippage ceilings — the Exchange's, and
+    // the degen floor's wider one for the thin tokens only the degen list
+    // admits. Which applies depends on the pair, so the widest of the two is
+    // refused first (nothing above it can be admitted on either floor, and a
+    // plainly-bad request must not cost a catalog read), then the exact one.
+    const groundCeilingBps = policy.maxSlippageBps ?? 500;
+    const degenCeilingBps = policy.degenMaxSlippageBps ?? groundCeilingBps;
+    if (slippageBps > Math.max(groundCeilingBps, degenCeilingBps)) {
       throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
     }
     const allowlist = policy.allowedTokens;
     const listed = (token: string) => allowlist.some((allowed) => sameAddress(allowed, token));
-    if (!listed(sellToken) || !listed(buyToken)) {
+    // The ground floor's pair is one the static allowlist names on both sides.
+    const groundFloor = listed(sellToken) && listed(buyToken);
+    if (!groundFloor) {
       // D-067: beyond the static allowlist, only the backend's own degen list
       // admits a token. The request's addresses are checked, never added.
       const degen = await this.degenAdmissions(signal);
@@ -447,6 +456,9 @@ export class BackendApi {
       if (!admitted(sellToken) || !admitted(buyToken)) {
         throw new ApiFailure(400, 'Swap token is not allowlisted.');
       }
+    }
+    if (slippageBps > (groundFloor ? groundCeilingBps : degenCeilingBps)) {
+      throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
     }
     // A quote also takes a slot in its own window, which bounds what this
     // service asks of avnu's public API for every player at once. Taken only
@@ -1005,6 +1017,19 @@ function validateBackendConfig(config: BackendConfig): void {
     (swap.maxSlippageBps ?? 0) > 300
   ) {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
+  }
+  // D-126: the degen floor's own ceiling, where it is set, is at most 8% and
+  // never narrower than the ground floor's — a degen pair is the thin case, so
+  // a "degen" ceiling under the Exchange's own would be a misconfiguration
+  // rather than a tightening.
+  if (
+    swap.degenMaxSlippageBps !== undefined
+    && (!Number.isSafeInteger(swap.degenMaxSlippageBps)
+      || swap.degenMaxSlippageBps <= 0
+      || swap.degenMaxSlippageBps > SWAP_DEGEN_MAX_SLIPPAGE_BPS
+      || swap.degenMaxSlippageBps < (swap.maxSlippageBps ?? 0))
+  ) {
+    throw new Error(`Backend degen swap slippage ceiling must be from the swap ceiling to ${SWAP_DEGEN_MAX_SLIPPAGE_BPS} bps.`);
   }
   if (config.degen !== undefined) validateDegenConfig(config.degen);
   if (config.debugLogsEnabled !== undefined && typeof config.debugLogsEnabled !== 'boolean') {

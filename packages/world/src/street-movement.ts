@@ -162,16 +162,35 @@ export interface StreetMovementAdapter {
 
 export function createStreetMovementReporter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
+  seat?: () => number,
 ): StreetMovementReporter {
   let facing: Facing = 'down';
   let facingRevision = 0;
 
+  /**
+   * D-127: the bench seat the player sits on, or -1. Read at each publish, and
+   * only put on the payload while they are actually sitting, so a standing
+   * player's `player:moved` is exactly what it always was.
+   */
+  const seatNow = (): number => {
+    if (!seat) return -1;
+    try {
+      const value = seat();
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : -1;
+    } catch {
+      // A seat that cannot be read is no seat: the player is published standing.
+      return -1;
+    }
+  };
+
   const publish = (position: Position): void => {
     // The shell may have several synchronous listeners. Do not let one of
     // them rewrite the caller's position or the payload observed by another.
+    const sat = seatNow();
     out.emit('player:moved', Object.freeze({
       position: Object.freeze({ ...position }),
       facing,
+      ...(sat >= 0 ? { seat: sat } : {}),
     }));
   };
 
@@ -210,8 +229,9 @@ export function createStreetMovementReporter(
  */
 export function createStreetMovementAdapter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
+  seat?: () => number,
 ): StreetMovementAdapter {
-  const reporter = createStreetMovementReporter(out);
+  const reporter = createStreetMovementReporter(out, seat);
   let transitionRevision = 0;
   return {
     get facing() {

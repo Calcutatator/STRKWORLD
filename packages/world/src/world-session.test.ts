@@ -321,6 +321,7 @@ function createRecordingView(journal: Journal) {
     setPlayerMotion: (motion) =>
       record('setPlayerMotion', [{ vx: motion.vx, vy: motion.vy, sprinting: motion.sprinting }]),
     setPlayerAvatar: (sprite) => record('setPlayerAvatar', [sprite]),
+    setPlayerSeated: (seated) => record('setPlayerSeated', [seated]),
     setStreetVisible: (visible) => record('setStreetVisible', [visible]),
     setDoorsVisible: (visible) => record('setDoorsVisible', [visible]),
     setLabelsVisible: (visible) => record('setLabelsVisible', [visible]),

@@ -443,6 +443,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let arenaFrame: ArenaViewFrame | null = null;
   /** D-114: how long the local avatar has stood still on an arena tier. */
   let idleOnTier = 0;
+  /** D-127: the session says the local avatar is sitting on a bench. */
+  let benchSeated = false;
   let arenaPrompt: TextLabel | null = null;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -498,6 +500,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
     swingElapsed = null;
     arenaFrame = null;
     idleOnTier = 0;
+    // D-127: a seat belongs to the session that sat down on it.
+    benchSeated = false;
     if (arenaPrompt) arenaPrompt.object.visible = false;
     arenaGate = 'open';
     arenaRoom?.setGate('open');
@@ -715,12 +719,21 @@ export function createPresenter(options: PresenterOptions): Presenter {
             ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
             : null);
         },
+        setPlayerSeated(seated) {
+          if (!live()) return;
+          // D-127: sitting on a bench is told, not guessed. The arena's tiers
+          // keep their own idle rule; this is simply or-ed with it.
+          benchSeated = seated === true;
+        },
         setInteractionPrompt(prompt) {
           if (!live()) return;
           // D-123: no floating "E · …" any more: the chosen target glows,
           // and the words go to the key chip at the bottom of the screen
           // (interact-chip.ts), which the engine feeds.
-          focusAffordance(prompt?.id ?? null, prompt?.object);
+          // D-127: a target that asked for the chip alone (the benches) lights
+          // nothing — not even a shell that happens to exist under its id.
+          if (prompt?.cue === 'none') focusAffordance(null, null);
+          else focusAffordance(prompt?.id ?? null, prompt?.object);
         },
         setPlazaStats(stats) {
           if (!live()) return;
@@ -888,7 +901,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
         jump: pose,
         attack,
         guard,
-        seated: idleOnTier >= ARENA_SEAT_IDLE_MS,
+        seated: benchSeated || idleOnTier >= ARENA_SEAT_IDLE_MS,
       });
       if (streetVisible) {
         street.update(dt);
