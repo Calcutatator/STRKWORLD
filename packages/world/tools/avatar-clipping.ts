@@ -176,6 +176,32 @@ export function arenaPoses(): Pose[] {
       });
     }
   }
+  /*
+   * D-128, amended 2026-10-03: the block (Q) was never in this list, so the
+   * one pose that brings the shield arm up across the body was never checked
+   * for clipping. It is checked now, at rest and on the move, and the shield
+   * look is the one it matters for.
+   */
+  const BLOCK: AvatarMotion = Object.freeze({ moving: false, sprinting: false, guard: true, blocking: true });
+  const BLOCK_WALK: AvatarMotion = Object.freeze({ moving: true, sprinting: false, guard: true, blocking: true });
+  poses.push({ name: 'block', drive: (figure) => settle(figure, BLOCK) });
+  for (let i = 0; i < 4; i += 1) {
+    poses.push({
+      name: `block walk ${i}/4`,
+      drive: (figure) => {
+        settle(figure, BLOCK_WALK);
+        for (let t = 0; t < i * 4; t += 1) figure.update(1000 / 1.6 / 16, BLOCK_WALK);
+      },
+    });
+  }
+  // The ease out of a block, half way between the block and the stance.
+  poses.push({
+    name: 'block easing out',
+    drive: (figure) => {
+      settle(figure, BLOCK);
+      for (let t = 0; t < 4; t += 1) figure.update(25, GUARD);
+    },
+  });
   poses.push({
     name: 'seated',
     drive: (figure) => settle(figure, Object.freeze({ moving: false, sprinting: false, seated: true })),

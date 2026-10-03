@@ -14330,3 +14330,45 @@ RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
 
 ---
+### 2026-10-03 — The server placed the champion on the throne; the client never did
+The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
+and the avatar went on standing on the sand. Nothing was broken on the server:
+`arena-rules.ts` already emitted a `place` to `ARENA_BOX` and back to
+`ARENA_BOX_STAND`, and `presence.ts` already opened the throne's tile to the
+one session sitting on it. The gap was that **the World only ever moves itself
+for the ring's own teleports** — it reads the ring snapshot, it does not
+consume the server's `place` effects. So a seat the server had granted moved
+nothing a player could see. The fix is to mirror the snapshot's `seated` to the
+host (`ArenaSessionHost.setThroned`) and let the World place the avatar from
+that, never from the press: a deposed champion is then stood up without
+touching anything. Two details that matter. It is a *place*, not a leap, so
+D-087's straight-line step check is not involved and there is no jump — sitting
+down is not a vault. And the stand-up is an intent that shares the claim
+floor, so it has to be kept and re-sent from `update`; dropped, a player who
+asked to get up has to guess when to ask again.
+Two smaller traps in the same area. **A pose nothing checks will clip.** The
+block (Q) was never in `tools/avatar-clipping.ts`'s `arenaPoses`, so its inward
+arm turn had never been run against the 16 looks — it drove hands into coats,
+mantles and pauldrons, and it was also what put a shield across the face at
+-1.45 rad. The block is in the pose list now and the angles chosen are the
+highest that are clipping-free. **A seat needs a declared top.** Drawing a
+seated figure at the floor height of the tile puts every look *inside* the
+furniture; the throne now has `ARENA_THRONE_SEAT_TOP` and the figure's root is
+that less the look's own seated hip height, which is the only number that works
+for all 16 builds.
+*Verified:* the block's face clearance is asserted as geometry, not by eye —
+nothing on the shield arm may lie between the eyes and the camera (+Z, D-059)
+for any of the 16 looks — and the clipping check runs the block standing, on
+the walk at four phases of the gait, and easing out. The seat height is checked
+by putting each look's root at `seatedBaseHeight` and asserting its hips land
+on the seat top. The seat/stand round trip is driven through the real
+`world-session` host (tile, facing, no jump, held still, keys only asking,
+hold dropped on leaving the arena) and through the real session against a
+snapshot (a new champion standing the old one up, the kept stand-up re-sent
+past the intent floor, `destroy` putting the World back on its feet). Full
+suite (308 files, 6572 tests) and `npm run typecheck` pass. Renders are from
+the offline rasteriser, not a GPU: `renders/arena-block-polish.png`,
+`arena-box-label-states.png`, `arena-throne-seated.png`. Not verified: a real
+browser, and whether the sit-down wants a transition animation.
+
+---

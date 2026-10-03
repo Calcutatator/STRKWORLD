@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import type { Object3D } from 'three';
+import { Box3, Vector3, type Object3D } from 'three';
 import { ARENA_SWING_MS } from '@strkworld/shared';
 import { AVATAR_SPRITE_KEYS } from '../avatar-state.js';
 import {
@@ -13,13 +13,22 @@ import {
   ARENA_SEAT_IDLE_MS,
 } from '../arena-swing.js';
 import { arenaTileCentre } from '@strkworld/shared';
-import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js';
+import { ARENA_SURFACE, ARENA_THRONE_SEAT_TOP } from './arena-room.js';
+import {
+  BLOCK_SHIELD_ARM_ANGLE,
+  avatarSeatedHipHeight,
+  createAvatarFigure,
+  disposeAvatarFigureCache,
+  seatedBaseHeight,
+} from './avatar-figure.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
 import { arenaPoses, findAvatarClipping, formatClipping, summarizeClipping } from '../../tools/avatar-clipping.js';
 
 const CHECK_TIMEOUT_MS = 120_000;
 const IDLE: AvatarMotion = Object.freeze({ moving: false, sprinting: false });
 const GUARD: AvatarMotion = Object.freeze({ moving: false, sprinting: false, guard: true });
+const BLOCK: AvatarMotion = Object.freeze({ moving: false, sprinting: false, guard: true, blocking: true });
+const SEATED: AvatarMotion = Object.freeze({ moving: false, sprinting: false, seated: true });
 
 function node(figure: AvatarFigure, name: string): Object3D {
   const found = figure.object.getObjectByName(name);
@@ -168,6 +177,102 @@ describe('avatar figure: the arena poses (D-114)', () => {
     } finally {
       figure.dispose();
     }
+  });
+
+  /*
+   * D-128, amended 2026-10-03: the block's own pose.
+   *
+   * The shield arm is raised and never turned in, and it stops low enough
+   * that nothing it carries comes up over the face. "The face is visible" is
+   * checked as geometry, not by eye: nothing on the shield arm may stand in
+   * front of the eyes — in front of them along +Z, which is the way the
+   * figure faces and the way the camera looks (D-059) — within the eyes' own
+   * footprint. That is exactly what the lead saw go wrong.
+   */
+  describe('the block (D-128, amended 2026-10-03)', () => {
+    it('raises the shield arm to a guard, and a shield arm stops lower still', () => {
+      expect(BLOCK_SHIELD_ARM_ANGLE).toBeCloseTo(-0.45, 3);
+      expect(BLOCK_SHIELD_ARM_ANGLE).toBeGreaterThan(-1.45);
+      const plain = createAvatarFigure('avatar-11');
+      const shielded = createAvatarFigure('avatar-12');
+      try {
+        settle(plain, BLOCK, 160);
+        settle(shielded, BLOCK, 160);
+        const plainArm = node(plain, 'avatar-arm-left-pivot').rotation;
+        const shieldArm = node(shielded, 'avatar-arm-left-pivot').rotation;
+        // Raised, but nothing like the horizontal -1.45 it used to reach.
+        expect(plainArm.x).toBeCloseTo(-0.7, 2);
+        expect(shieldArm.x).toBeCloseTo(BLOCK_SHIELD_ARM_ANGLE, 2);
+        // And never turned in across the body: the stance's spread is kept.
+        const resting = createAvatarFigure('avatar-11');
+        try {
+          settle(resting, GUARD, 160);
+          expect(plainArm.z).toBeCloseTo(node(resting, 'avatar-arm-left-pivot').rotation.z, 3);
+        } finally {
+          resting.dispose();
+        }
+      } finally {
+        plain.dispose();
+        shielded.dispose();
+      }
+    });
+
+    it.each(AVATAR_SPRITE_KEYS)('%s: the shield arm never stands in front of the face', (key) => {
+      const figure = createAvatarFigure(key);
+      try {
+        settle(figure, BLOCK, 160);
+        figure.object.updateMatrixWorld(true);
+        const eyes = new Box3().setFromObject(node(figure, 'avatar-eyes'), true);
+        const arm = new Box3().setFromObject(node(figure, 'avatar-arm-left-pivot'), true);
+        const overlapsEyes = arm.max.x > eyes.min.x && arm.min.x < eyes.max.x
+          && arm.max.y > eyes.min.y && arm.min.y < eyes.max.y;
+        // Either the arm is nowhere near the eyes' footprint, or it is behind
+        // them — never between them and the camera.
+        expect(overlapsEyes && arm.max.z > eyes.min.z).toBe(false);
+      } finally {
+        figure.dispose();
+      }
+    });
+
+    it.each(AVATAR_SPRITE_KEYS)(
+      '%s: the block is clipping-free, standing and walking',
+      (key) => {
+        const poses = arenaPoses().filter((pose) => pose.name.startsWith('block'));
+        expect(poses.length).toBeGreaterThan(4);
+        expect(summarizeClipping(findAvatarClipping(key, poses)).map(formatClipping)).toEqual([]);
+      },
+      CHECK_TIMEOUT_MS,
+    );
+  });
+
+  /*
+   * D-128, amended 2026-10-03: the throne has a seat with a known top, and a
+   * seated figure's hips rest on it. Before this, every look sat at the
+   * podium's own height — inside the chair.
+   */
+  describe('sitting on a seat of a known height', () => {
+    it.each(AVATAR_SPRITE_KEYS)('%s: the hips land on the seat top, whatever the build', (key) => {
+      const seatTop = ARENA_THRONE_SEAT_TOP;
+      const figure = createAvatarFigure(key);
+      try {
+        settle(figure, SEATED, 200);
+        figure.object.position.y = seatedBaseHeight(seatTop, key);
+        figure.object.updateMatrixWorld(true);
+        const hips = node(figure, 'avatar-hips').getWorldPosition(new Vector3());
+        expect(hips.y).toBeCloseTo(seatTop, 3);
+        // And the figure is on the throne, not in it: nothing of it reaches
+        // the podium the chair stands on.
+        expect(seatedBaseHeight(seatTop, key)).toBeGreaterThan(ARENA_SURFACE.podium - 0.3);
+        expect(avatarSeatedHipHeight(key)).toBeGreaterThan(0);
+      } finally {
+        figure.dispose();
+      }
+    });
+
+    it('the seat top stands clear of the podium the box is built on', () => {
+      expect(ARENA_THRONE_SEAT_TOP).toBeGreaterThan(ARENA_SURFACE.podium);
+      expect(ARENA_THRONE_SEAT_TOP - ARENA_SURFACE.podium).toBeLessThan(0.6);
+    });
   });
 
   it.each(AVATAR_SPRITE_KEYS)(

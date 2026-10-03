@@ -55,6 +55,18 @@ export interface ArenaSessionHost {
   position(): { readonly x: number; readonly y: number; readonly facing: Facing };
   /** Snap the local player to a tile with the jump choreography (a cut under reduced motion). */
   leapTo(tile: { readonly x: number; readonly y: number }, facing: Facing): void;
+  /**
+   * D-128, amended 2026-10-03: the server has seated this client on the
+   * emperor's throne, or put them back down beside it. The World places the
+   * avatar on the box's own tile (or on `ARENA_BOX_STAND`), facing south over
+   * the sand, and while it is seated nothing moves it: the camera follows it
+   * up onto the podium, and a movement key asks the server to stand up.
+   *
+   * It is one call rather than a `leapTo` plus a flag because sitting down is
+   * one transaction: the place and the hold must never disagree, or the
+   * player walks away from a seat the server still says they are in.
+   */
+  setThroned?(seated: boolean): void;
   setPrompt(text: string | null): void;
   playLocalSwing(): void;
   setOutfitLocked(locked: boolean): void;
@@ -143,6 +155,16 @@ export interface ArenaSession {
    * focus and on the World owning the keys; the session gates on the ring.
    */
   onBlock?(down: boolean): boolean;
+  /**
+   * D-128, amended 2026-10-03: ask the server to take this client off the
+   * throne — a movement key, Space, or the box's own press of E. True when the
+   * session took the request; the avatar only leaves the seat once the server
+   * says it has. A request inside the intent floor is kept and re-sent on the
+   * next `update`, so a stand-up is never silently dropped.
+   */
+  leaveThrone?(): boolean;
+  /** D-128, amended: whether the server currently has this client on the throne. */
+  onThrone?(): boolean;
   frame(): ArenaViewFrame | null;
   destroy(): void;
 }

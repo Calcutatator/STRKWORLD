@@ -209,6 +209,13 @@ export function createArenaSession(
   /** D-128: when the last block start went, and whether a release is owed. */
   let lastBlockAt = Number.NEGATIVE_INFINITY;
   let blockSent = false;
+  /**
+   * D-128, amended 2026-10-03: whether the server has this client on the
+   * throne, as the host was last told, and whether a stand-up is owed because
+   * the intent floor refused the last one.
+   */
+  let onThrone = false;
+  let standWanted = false;
   let predictedAt = Number.NEGATIVE_INFINITY;
   let prompt: string | null = null;
   let look: LookStep = null;
@@ -302,6 +309,21 @@ export function createArenaSession(
 
   const selfIsChallenger = (): boolean => frame?.selfIsChallenger === true;
 
+  /**
+   * D-128, amended 2026-10-03: the throne follows the server's `seated`, never
+   * a press. The host seats the avatar on the box's own tile when it goes up
+   * and puts it back on `ARENA_BOX_STAND` when it comes down — including when
+   * the server takes the seat away (a new champion, a claim, a drop), so the
+   * fighter is never left standing on a throne they no longer hold.
+   */
+  const syncThrone = (): void => {
+    const seated = frame?.selfOnThrone === true;
+    if (seated === onThrone) return;
+    onThrone = seated;
+    if (seated) standWanted = false;
+    safely(() => host.setThroned?.(seated));
+  };
+
   const apply = (value: unknown): void => {
     if (destroyed) return;
     let next: ArenaRingSnapshot | null = null;
@@ -312,6 +334,7 @@ export function createArenaSession(
     }
     ring = next;
     frame = next === null ? null : arenaViewFrame(next, selfId());
+    syncThrone();
     if (next !== null && frame?.selfIsChallenger) {
       if (fighting !== next.round) {
         // A new round as challenger: whatever came before is over.
@@ -380,18 +403,21 @@ export function createArenaSession(
    * D-128: the emperor's box. The champion sits or stands; everyone else gets
    * the CHAMPION ONLY notice, which takes the press and sends nothing.
    */
-  const boxTarget = (label: string, use: boolean): ArenaGateTarget => Object.freeze({
+  const boxTarget = (label: string, use: 'sit' | 'stand' | false): ArenaGateTarget => Object.freeze({
     id: ARENA_BOX_TARGET_ID,
     label,
     rect: ARENA_BOX_RECT,
     activate: () => {
       if (!use || destroyed || ring === null || inputSuspended()) return false;
       if (typeof channel.sit !== 'function') return false;
+      // Standing up is kept and re-sent if the floor refuses it; sitting down
+      // is a plain intent, because the player is still standing either way.
+      if (use === 'stand') return requestStand() || true;
       return intent(() => channel.sit?.());
     },
   });
-  const SIT_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_SIT_LABEL, true)]);
-  const STAND_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_STAND_LABEL, true)]);
+  const SIT_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_SIT_LABEL, 'sit')]);
+  const STAND_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_STAND_LABEL, 'stand')]);
   const CLOSED_BOX_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_BOX_CLOSED_LABEL, false)]);
 
   const NO_TARGETS: readonly ArenaGateTarget[] = Object.freeze([]);
@@ -443,10 +469,32 @@ export function createArenaSession(
   };
 
   const intent = (send: () => void): boolean => {
+    sendIntent(send);
+    // The press is always taken: a refusal inside the floor is silent, as
+    // everywhere else here.
+    return true;
+  };
+
+  /** Send one intent if the client floor allows it. Returns whether it went. */
+  const sendIntent = (send: () => void): boolean => {
     const t = now();
-    if (t - lastIntentAt < ARENA_INTENT_CLIENT_INTERVAL_MS) return true;
+    if (t - lastIntentAt < ARENA_INTENT_CLIENT_INTERVAL_MS) return false;
     lastIntentAt = t;
     safely(send);
+    return true;
+  };
+
+  /**
+   * D-128, amended 2026-10-03: ask to come off the throne. The intent floor is
+   * shared with claim, so a stand-up straight after sitting down can be
+   * refused; it is kept and re-sent from `update` rather than dropped, because
+   * a player who has asked to get up must not have to guess when to ask again.
+   */
+  const requestStand = (): boolean => {
+    if (destroyed || ring === null) return false;
+    if (frame?.selfOnThrone !== true || typeof channel.sit !== 'function') return false;
+    standWanted = true;
+    if (sendIntent(() => channel.sit?.())) standWanted = false;
     return true;
   };
 
@@ -487,6 +535,11 @@ export function createArenaSession(
   return Object.freeze({
     update(_deltaMs: number): void {
       if (destroyed) return;
+      // D-128, amended: a stand-up the floor refused goes as soon as it may.
+      if (standWanted) {
+        if (frame?.selfOnThrone !== true) standWanted = false;
+        else if (sendIntent(() => channel.sit?.())) standWanted = false;
+      }
       if (look !== null && now() >= look.at) {
         const step = look;
         look = null;
@@ -534,6 +587,12 @@ export function createArenaSession(
     onBlock(down: boolean): boolean {
       return setBlock(down === true);
     },
+    leaveThrone(): boolean {
+      return requestStand();
+    },
+    onThrone(): boolean {
+      return !destroyed && frame?.selfOnThrone === true;
+    },
     frame(): ArenaViewFrame | null {
       return destroyed ? null : frame;
     },
@@ -543,6 +602,13 @@ export function createArenaSession(
       // A guard this client raised comes down before anything else: the
       // session is going away, and the server must not hold it up for ever.
       setBlock(false);
+      // D-128, amended: and the World stops holding the avatar on the throne,
+      // so a torn-down session never leaves it frozen on the podium.
+      standWanted = false;
+      if (onThrone) {
+        onThrone = false;
+        safely(() => host.setThroned?.(false));
+      }
       safely(() => unsubscribe?.());
       safely(() => unsubscribeStrikes?.());
       safely(() => unsubscribeBlocks?.());

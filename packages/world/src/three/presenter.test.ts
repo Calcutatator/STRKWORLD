@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Color, Group, InstancedMesh, Mesh, SRGBColorSpace, Vector3, type Material } from 'three';
-import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
+import { ARENA_BOX, SANDBOX_AREA, SANDBOX_BURST_HEIGHT, arenaTileCentre, type AvatarSpriteKey } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
   EXCHANGE_DEGEN_LEVEL,
@@ -16,6 +16,8 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
+import { ARENA_SURFACE, ARENA_THRONE_SEAT_TOP } from './arena-room.js';
+import { seatedBaseHeight } from './avatar-figure.js';
 import { AFFORDANCE_EMBER, affordanceClock } from './affordance.js';
 import { BoxGeometry, MeshBasicMaterial, ShaderMaterial } from 'three';
 import { createRemotePeerSource } from '../remote-peer.js';
@@ -968,6 +970,35 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
     world.view.syncArena({ phase: 'fighting', gate: 'busy', dummy: null, challengerId: null, challengerSwings: 0, selfIsChallenger: false } as never);
     expect(shell.usable('arena:gate')).toBe(0);
     expect(shell.glow('arena:gate')).toBe(0);
+    world.presenter.dispose();
+  });
+
+  /*
+   * D-128, amended 2026-10-03: the local champion the ring has seated stands
+   * on the throne's seat, at their own look's seated hip height — not on the
+   * podium under the chair, which put every build inside it.
+   */
+  it('stands the seated champion on the throne\'s seat, and in the seated pose', () => {
+    const world = setup();
+    world.view.setStreetVisible(false);
+    world.view.showRoom('arena');
+    const box = arenaTileCentre(ARENA_BOX);
+    world.view.setPlayerPosition(box, true);
+    world.view.setPlayerAvatar('avatar-12');
+    const ring = {
+      phase: 'idle', gate: 'open', dummy: null, challengerId: null, challengerSwings: 0,
+      selfIsChallenger: false, challengerGuarding: false, challengerBlocks: 0,
+      championId: 'aaaa', throneId: 'aaaa', selfIsChampion: true, selfOnThrone: true,
+    } as never;
+    world.view.syncArena(ring);
+    // The height eases like a kerb; run it out.
+    for (let t = 0; t < 60; t += 1) world.presenter.update(16);
+    expect(world.avatar.object.position.y).toBeCloseTo(seatedBaseHeight(ARENA_THRONE_SEAT_TOP, 'avatar-12'), 2);
+    expect(world.avatar.update.mock.calls.at(-1)?.[1]).toMatchObject({ seated: true });
+    // Off the throne, back on the podium the box stands on.
+    world.view.syncArena({ ...(ring as object), throneId: null, selfOnThrone: false } as never);
+    for (let t = 0; t < 60; t += 1) world.presenter.update(16);
+    expect(world.avatar.object.position.y).toBeCloseTo(ARENA_SURFACE.podium, 2);
     world.presenter.dispose();
   });
 

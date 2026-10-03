@@ -11,7 +11,7 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from '../remote-peer.js';
-import { avatarFigureHeight } from './avatar-figure.js';
+import { avatarFigureHeight, seatedBaseHeight } from './avatar-figure.js';
 import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coords.js';
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
@@ -107,6 +107,14 @@ export interface RemoteAvatarLayer3DOptions {
    * standing still on one for `ARENA_SEAT_IDLE_MS` sits; absent, nobody sits.
    */
   readonly seatAt?: (xPx: number, yPx: number) => boolean;
+  /**
+   * D-128, amended 2026-10-03: the top of the emperor's throne's seat, world
+   * units. The peer `setThroned` names stands at that height less their own
+   * seated hip height, so every look sits on the throne rather than inside
+   * it. Absent, a throned peer stands on whatever `surfaceHeight` says, which
+   * is the podium the box is built on.
+   */
+  readonly throneSeatTop?: number;
 }
 
 export interface RemoteAvatarLayer3D {
@@ -220,6 +228,7 @@ export function createRemoteAvatarLayer3D({
   reducedMotion,
   jumpShadows = createJumpShadow,
   seatAt,
+  throneSeatTop,
 }: RemoteAvatarLayer3DOptions): RemoteAvatarLayer3D {
   const group = new Group();
   group.name = 'remote-avatars';
@@ -289,6 +298,11 @@ export function createRemoteAvatarLayer3D({
    * stack never sinks the feet into it.
    */
   const surfaceGoal = (avatar: RemoteAvatar): number => {
+    // D-128, amended: the throne is a seat, not a floor; the server put them
+    // on it, so they sit on its top whatever the tile under it is.
+    if (throned !== null && throned === avatar.id && throneSeatTop !== undefined) {
+      return seatedBaseHeight(throneSeatTop, avatar.figure.look);
+    }
     if (!surfaceHeight) return 0;
     const underPeer = sampleSurface(surfaceHeight, avatar.targetX, avatar.targetY);
     if (avatar.x === avatar.targetX && avatar.y === avatar.targetY) return underPeer;

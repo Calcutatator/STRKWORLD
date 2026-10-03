@@ -19,10 +19,10 @@ import { isSandboxTile } from '../sandbox-channel.js';
 import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights } from '../sandbox.js';
 import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
 import { buildFootball, type FootballView } from './football-view.js';
-import { avatarFigureHeight } from './avatar-figure.js';
+import { avatarFigureHeight, seatedBaseHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
-import { arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
+import { ARENA_THRONE_SEAT_TOP, arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
 import { createArenaFx, type ArenaFx, type RemoteSwingPort } from './arena-fx.js';
 import type { ArenaViewFrame } from '../arena-channel.js';
 // D-114: one swing timeline and one seat rule, shared with the remote layer (C's arena-swing.ts).
@@ -622,6 +622,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
           surfaceHeight: remoteHeight,
           ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
           seatAt: arenaSeatAt,
+          // D-128, amended 2026-10-03: a peer the ring says is on the throne
+          // sits on the seat's own top, not on the podium under it.
+          throneSeatTop: ARENA_THRONE_SEAT_TOP,
         });
         remote = layer;
         root.add(layer.group);
@@ -891,10 +894,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
       }
       // Step up and down kerbs quickly rather than popping 8 cm in one frame.
       const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
+      /*
+       * D-128, amended 2026-10-03: a champion the ring has seated stands on
+       * the throne's own seat rather than on the podium the box sits on, and
+       * the drop from the seat top to the feet is this look's seated hip
+       * height — so every build sits *on* the throne instead of inside it.
+       * It eases like any kerb, so taking the seat is not a pop.
+       */
+      const inArena = !streetVisible && visibleRoom === 'arena';
+      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       // Indoors, the arena's stairs and tiers ease the same way (D-114).
       const kerb = streetVisible
         ? !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0
-        : roomFeet();
+        : onThrone ? seatedBaseHeight(ARENA_THRONE_SEAT_TOP, avatar.look) : roomFeet();
       feet = pendingSnap ? kerb : feet + (kerb - feet) * (1 - Math.exp(-dt / 45));
       // D-097: the jump rides on top of whatever the feet stand on. It never
       // moves the avatar across the ground: the session does that, as ever.
@@ -920,7 +932,6 @@ export function createPresenter(options: PresenterOptions): Presenter {
         attack = attackPoseAt(swingElapsed);
         if (attack === null) swingElapsed = null;
       }
-      const inArena = !streetVisible && visibleRoom === 'arena';
       const onTier = inArena && arenaSeatAt(ground.x * PIXELS_PER_UNIT, ground.z * PIXELS_PER_UNIT);
       idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
       const guard = inArena && arenaFrame?.selfIsChallenger === true &&
@@ -929,7 +940,6 @@ export function createPresenter(options: PresenterOptions): Presenter {
       // local prediction; and the champion sits the moment the server seats
       // them, without the tiers' idle wait.
       const blocking = guard && arenaFrame?.challengerGuarding === true;
-      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       avatar.update(dt, {
         moving,
         sprinting: moving && motion.sprinting,

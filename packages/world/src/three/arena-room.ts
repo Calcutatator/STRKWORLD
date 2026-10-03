@@ -104,6 +104,15 @@ export const ARENA_SURFACE = Object.freeze({
   arcade: 3.6,
 });
 
+/**
+ * D-128, amended 2026-10-03: the top of the emperor's throne's seat, world
+ * units, above the room's floor — the podium the box stands on plus the
+ * chair's own seat slab. A champion the server seats is drawn with their hips
+ * on this surface (`seatedBaseHeight`), so every look sits *on* the throne
+ * rather than inside it.
+ */
+export const ARENA_THRONE_SEAT_TOP = ARENA_SURFACE.podium + 0.42;
+
 export const ARENA_RING_SIGN_TEXT = 'THE RING';
 /** The gate lamp: green while the ring is free, red while a fight holds it. */
 export const ARENA_GATE_LAMP = Object.freeze({ open: 0x5cff7a, busy: 0xff4a3a });
@@ -801,11 +810,34 @@ function emperorsBox(bin: GeometryBin): void {
   bin.add(key, boxGeometry(x, floor + 1.55, z, x + 1, floor + 1.68, z + 1), GOLD);
   bin.add(key, prismZ([[x, floor + 1.68], [x + 1, floor + 1.68], [x + 0.5, floor + 1.98]], z, z + 1), PURPLE);
   // The drape on the parapet facing the sand (south, to the camera), and the
-  // closed chair behind it.
+  // throne behind it.
   const face: Face = { normal: 'z+', plane: z + 1 };
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0, x + 0.95, floor + 0.32, 0.03), shade(PURPLE, 0.05));
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0.03, x + 0.95, floor - 0.54, 0.035), GOLD);
-  bin.add(key, boxGeometry(x + 0.3, floor, z + 0.25, x + 0.7, floor + 0.85, z + 0.55), shade(PURPLE, -0.1));
+  throne(bin, key, x, z, floor);
+}
+
+/**
+ * D-128, amended 2026-10-03: the throne itself. It was a closed block, so
+ * there was nothing to sit on; now it is a chair — a seat slab whose top is
+ * `ARENA_THRONE_SEAT_TOP`, a back rising behind it and an arm each side — and
+ * the champion's figure is placed with their hips on that slab. It stands at
+ * the back (north) of the tile, facing south over the sand, so a seated
+ * figure's thighs reach out over the tile rather than through the parapet.
+ */
+function throne(bin: GeometryBin, key: string, x: number, z: number, floor: number): void {
+  const top = ARENA_THRONE_SEAT_TOP;
+  // The seat, and the plinth under it.
+  bin.add(key, boxGeometry(x + 0.22, floor, z + 0.3, x + 0.78, top - 0.06, z + 0.74), shade(PURPLE, -0.16));
+  bin.add(key, boxGeometry(x + 0.18, top - 0.06, z + 0.26, x + 0.82, top, z + 0.78), shade(PURPLE, 0.04));
+  // The back, against the north side of the tile, with a gilt cresting.
+  bin.add(key, boxGeometry(x + 0.2, top, z + 0.16, x + 0.8, floor + 1.18, z + 0.28), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.18, floor + 1.18, z + 0.15, x + 0.82, floor + 1.26, z + 0.29), GOLD);
+  // An arm each side, at the height a seated figure's elbow finds.
+  for (const side of [0, 1] as const) {
+    const x0 = side === 0 ? x + 0.18 : x + 0.72;
+    bin.add(key, boxGeometry(x0, top, z + 0.26, x0 + 0.1, top + 0.22, z + 0.74), shade(PURPLE, -0.04));
+  }
 }
 
 // ---------------------------------------------------------------------------

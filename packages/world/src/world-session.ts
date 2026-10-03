@@ -10,6 +10,10 @@ import type {
   WorldEvents,
 } from '@strkworld/shared';
 import {
+  ARENA_BOX,
+  ARENA_BOX_SEAT_FACING,
+  ARENA_BOX_STAND,
+  ARENA_BOX_STAND_FACING,
   ARENA_BUILDING,
   ARENA_SPAWN_FACING,
   SANDBOX_STEP_HEIGHT,
@@ -60,6 +64,7 @@ import {
 } from './door-trigger.js';
 import {
   ARENA_BOX_STATION,
+  arenaBoxLabel,
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
@@ -563,6 +568,15 @@ class Session implements WorldSession {
   private sitting: { readonly seat: WorldSeat; readonly from: { x: number; y: number }; readonly release: () => void } | null = null;
   /** D-127: a floor's own benches, built once per floor. */
   private readonly roomBenchCache = new Map<string, readonly WorldBench[]>();
+  /**
+   * D-128, amended 2026-10-03: whether the server has this client on the
+   * emperor's throne. While it is true the avatar stands on the box's own
+   * tile in the seated pose and nothing moves it — a movement key or Space
+   * asks the ring to stand them up instead.
+   */
+  private onThrone = false;
+  /** D-128, amended: the box label last handed to the view, so it is re-rendered only on a change. */
+  private boxLabelShown: string | null = null;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -691,6 +705,10 @@ class Session implements WorldSession {
     // D-127: any movement key stands the player off a bench, before anything
     // reads where they are this frame.
     if (this.sitting && this.standUpRequested()) this.standUp();
+    // D-128, amended 2026-10-03: a movement key asks the ring to take this
+    // client off the throne. The seat is the server's, so nothing moves until
+    // it says so — the request is all the key does.
+    if (this.onThrone && this.standUpRequested()) this.leaveThrone();
     if (this.cleanedUp) return;
     this.jumpState.advance(delta);
     const cameraYaw = Number.isFinite(frame?.cameraYaw) ? (frame!.cameraYaw as number) : 0;
@@ -701,7 +719,9 @@ class Session implements WorldSession {
       return;
     }
     if (room?.state.inRoom) {
-      if (this.sitting) this.view.setPlayerMotion(IDLE_MOTION);
+      // D-128, amended: a champion on the throne is as still as a sitter on a
+      // bench; the seat is a fixture and the server holds the position.
+      if (this.sitting || this.onThrone) this.view.setPlayerMotion(IDLE_MOTION);
       else this.moveRoomPlayer(delta, cameraYaw);
       this.movement.interiorUpdate(() => this.reportRoomTile());
       if (!this.cleanedUp) this.presentArena(delta);
@@ -1410,7 +1430,38 @@ class Session implements WorldSession {
     const controller = this.activeRoomController();
     const map = this.activeRoomMap();
     if (!controller || !map || !this.activeRoom) return;
-    this.view.renderRoom(this.activeRoom, fixedRoomStationPresentations(map, controller.state));
+    const presentations = fixedRoomStationPresentations(map, controller.state);
+    this.view.renderRoom(this.activeRoom, this.withBoxLabel(presentations));
+  }
+
+  /**
+   * D-128, amended 2026-10-03: the emperor's box's floating label is the ring's
+   * champion state, not a fixed CLOSED. The room's own definition carries the
+   * no-champion text, so a World without a ring channel still reads sensibly;
+   * with one, the label follows `champion` and `seated`, which every member of
+   * the arena holds — so a spectator reads exactly what the champion does.
+   * No player is named on it.
+   */
+  private withBoxLabel(
+    presentations: readonly FixedRoomStationPresentation[],
+  ): readonly FixedRoomStationPresentation[] {
+    if (this.activeRoom !== ARENA_BUILDING) return presentations;
+    const frame = this.arenaFrame();
+    if (frame === null) return presentations;
+    const label = arenaBoxLabel({ champion: frame.championId, seated: frame.throneId !== null });
+    this.boxLabelShown = label;
+    return presentations.map((presentation) => (
+      presentation.station === ARENA_BOX_STATION ? { ...presentation, label } : presentation
+    ));
+  }
+
+  /** The ring frame, or null: a failing session draws no ring and no label of its own. */
+  private arenaFrame(): ArenaViewFrame | null {
+    try {
+      return this.arenaSession?.frame() ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // -- per frame ---------------------------------------------------------------
@@ -1853,6 +1904,11 @@ class Session implements WorldSession {
         this.standUp();
         return;
       }
+      // D-128, amended: and Space on the throne asks to leave it, nothing more.
+      if (this.onThrone) {
+        this.leaveThrone();
+        return;
+      }
       if (!this.jumpState.tryStart()) return;
       this.view.playerJump?.();
       if (this.cleanedUp) return;
@@ -1952,8 +2008,15 @@ class Session implements WorldSession {
     return this.activeRoomController()?.state.controlOwner === 'world';
   }
 
-  /** D-114: a ring tile the arena session opens for the local fighter. Never the dummy. */
+  /**
+   * D-114: a ring tile the arena session opens for the local fighter. Never
+   * the dummy. D-128, amended: and the emperor's box's own tile while the
+   * server has this client on the throne — the same one extra tile the lobby
+   * opens (`ARENA_THRONE_WALKABLE`), so the client's collision and the room's
+   * agree about where a seated champion may be.
+   */
   private ringTileOpen(x: number, y: number): boolean {
+    if (this.onThrone && x === ARENA_BOX.x && y === ARENA_BOX.y) return true;
     if (arenaTileAt(x, y) !== 'ring') return false;
     try {
       return this.arenaSession?.isRingTileWalkable(x, y) === true;
@@ -1982,6 +2045,12 @@ class Session implements WorldSession {
     }
     if (frame || this.arenaShown) this.view.syncArena?.(frame);
     this.arenaShown = frame !== null;
+    // D-128, amended: the box's label is ring state, so a crowning or a seat
+    // taken re-renders the room's stations — and only then.
+    if (frame !== null) {
+      const label = arenaBoxLabel({ champion: frame.championId, seated: frame.throneId !== null });
+      if (label !== this.boxLabelShown) this.renderRoom();
+    }
   }
 
   /** Leaving the arena: no ring frame and no prompt are left on the view. */
@@ -1989,6 +2058,10 @@ class Session implements WorldSession {
     if (this.arenaShown) this.view.syncArena?.(null);
     this.arenaShown = false;
     this.view.setArenaPrompt?.(null);
+    // D-128, amended: out of the arena there is no throne to hold. The server
+    // has already cleared the champion; the hold must not outlive the room.
+    this.onThrone = false;
+    this.boxLabelShown = null;
   }
 
   private prefersReducedMotion(): boolean {
@@ -2006,6 +2079,7 @@ class Session implements WorldSession {
       // `arenaTileCentre` and the lobby's held positions.
       position: () => Object.freeze({ x: this.position.x, y: this.position.y, facing: this.areaFacing }),
       leapTo: (tile: { readonly x: number; readonly y: number }, facing: Facing) => this.leapTo(tile, facing),
+      setThroned: (seated: boolean) => this.setThroned(seated === true),
       setPrompt: (text: string | null) => {
         if (this.cleanedUp) return;
         this.view.setArenaPrompt?.(this.area === ARENA_BUILDING ? text : null);
@@ -2033,6 +2107,15 @@ class Session implements WorldSession {
    * new place. Arena-local tile; ignored outside the arena or off its grid.
    */
   private leapTo(tile: { readonly x: number; readonly y: number }, facing: Facing): void {
+    this.placeInArena(tile, facing, true);
+  }
+
+  /**
+   * Stand the local player on an arena-local tile, facing `facing`, and
+   * publish the new place. `leap` plays the jump the ring's teleports use; the
+   * throne is taken without one, because sitting down is not a vault.
+   */
+  private placeInArena(tile: { readonly x: number; readonly y: number }, facing: Facing, leap: boolean): void {
     if (this.cleanedUp || this.area !== ARENA_BUILDING) return;
     if (!tile || !Number.isInteger(tile.x) || !Number.isInteger(tile.y)) return;
     if (arenaTileAt(tile.x, tile.y) === 'void') return;
@@ -2040,12 +2123,52 @@ class Session implements WorldSession {
     this.position = { x: target.x, y: target.y };
     this.view.setPlayerPosition(this.position, false);
     this.view.setPlayerFacing?.(facing);
-    if (!this.prefersReducedMotion()) this.view.playerJump?.();
+    if (leap && !this.prefersReducedMotion()) this.view.playerJump?.();
     if (this.cleanedUp) return;
     this.areaFacing = facing;
     this.publishAreaPosition();
     if (this.cleanedUp) return;
     this.reportRoomTile();
+  }
+
+  /**
+   * D-128, amended 2026-10-03: the ring says this client is on the emperor's
+   * throne, or is no longer. Taking it puts the avatar on the box's own tile,
+   * facing south over the sand (the seated pose follows from the same ring
+   * state, in the presenter); leaving it puts them back on `ARENA_BOX_STAND`,
+   * the sand beside the box, which is where the server puts them too — the
+   * two never disagree, because both read the same tiles from `@strkworld/shared`.
+   *
+   * Only the server's state drives this. Nothing here decides who may sit.
+   */
+  private setThroned(seated: boolean): void {
+    if (this.cleanedUp) return;
+    // There is no throne outside the arena, so a seat taken there is not a
+    // hold to carry: it is nothing at all.
+    if (seated && this.area !== ARENA_BUILDING) return;
+    if (seated === this.onThrone) return;
+    this.onThrone = seated;
+    // Letting go outside the arena drops the hold and places nobody.
+    if (this.area !== ARENA_BUILDING) return;
+    // D-127's bench and the throne are one seat at a time: a player cannot sit
+    // on both, and the arena has no benches, but a stale hold must not survive.
+    if (seated && this.sitting) this.clearSeat();
+    this.placeInArena(
+      seated ? ARENA_BOX : ARENA_BOX_STAND,
+      seated ? ARENA_BOX_SEAT_FACING : ARENA_BOX_STAND_FACING,
+      false,
+    );
+  }
+
+  /** D-128, amended: ask the ring to take this client off the throne. */
+  private leaveThrone(): void {
+    if (this.cleanedUp) return;
+    try {
+      this.arenaSession?.leaveThrone?.();
+    } catch {
+      // A failing session leaves the seat where the server has it; the next
+      // key press asks again.
+    }
   }
 
   /** D-114: into the paired fighting look for the ring if in a cosy one; back to it after. */

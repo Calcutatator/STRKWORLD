@@ -16,7 +16,7 @@ import {
   isArenaFloorKind,
   type AvatarSpriteKey,
 } from '@strkworld/shared';
-import { ARENA_ROOM_DEFINITION, createFixedRoom, fixedRoomStationPresentations } from '../fixed-room.js';
+import { ARENA_BOX_LABELS, ARENA_ROOM_DEFINITION, createFixedRoom, fixedRoomStationPresentations } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import {
   ARENA_FADE_ROW,
@@ -207,7 +207,9 @@ describe('the arena in 3D (D-114)', () => {
       'south-vista:water',
     ]);
     // The ring's sign and the emperor's box label.
-    expect(labels.map((label) => label.userData['text'])).toEqual(['THE RING', "EMPEROR'S BOX\nCLOSED"]);
+    // D-128, amended 2026-10-03: the box's label is the champion state, and
+    // with nobody crowned it says how to earn it.
+    expect(labels.map((label) => label.userData['text'])).toEqual(['THE RING', ARENA_BOX_LABELS.none]);
     const calls = names.length + labels.length;
     expect(calls).toBe(21);
     expect(calls).toBeLessThanOrEqual(24);
@@ -471,13 +473,17 @@ describe('the arena in 3D (D-114)', () => {
       building: 'arena' as const,
       controlOwner: 'world' as const,
       highlightedStation: 'arena:box' as const,
-      stations: [{ station: 'arena:box' as const, label: "EMPEROR'S BOX\nCLOSED", status: 'locked' as const }],
+      stations: [{ station: 'arena:box' as const, label: ARENA_BOX_LABELS.none, status: 'locked' as const }],
     };
     room.setStations(fixedRoomStationPresentations(map, state));
     expect(setText).not.toHaveBeenCalled();
-    // A Shell that renamed it only relabels it; the room never opens anything.
-    room.setStations(fixedRoomStationPresentations(map, { ...state, stations: [{ ...state.stations[0]!, label: 'CLOSED' }] }));
-    expect(setText).toHaveBeenCalledWith('CLOSED');
+    // D-128, amended: the three champion states relabel it, and nothing else
+    // about it changes — the room still never opens the station.
+    for (const label of [ARENA_BOX_LABELS.champion, ARENA_BOX_LABELS.seated, ARENA_BOX_LABELS.none]) {
+      room.setStations(fixedRoomStationPresentations(map, { ...state, stations: [{ ...state.stations[0]!, label }] }));
+      expect(setText).toHaveBeenLastCalledWith(label);
+    }
+    expect(setText).toHaveBeenCalledTimes(3);
     room.dispose();
   });
 });
