@@ -150,6 +150,13 @@ export interface StreetView {
   readonly doors: Group;
   /** Facade signs: the `setLabelsVisible` target. */
   readonly labels: Group;
+  /**
+   * D-135: moving bodies the street owns rather than the avatar layer — today
+   * only the pitch's dummies. Kept out of `ground` on purpose: that group is
+   * the static scene, which must stand clear of every walkable tile, and these
+   * walk about on the field exactly as a player does.
+   */
+  readonly figures: Group;
   readonly occluders: readonly Occluder[];
   /** The Privacy Plaza's live parts (D-076), or null on a map without it. */
   readonly plaza?: PlazaView | null;
@@ -159,10 +166,26 @@ export interface StreetView {
   dispose(): void;
 }
 
+/** One of the match's four places, as the pitch draws it (D-135). */
+export interface PitchDummyPlace {
+  /** `dummy` is the only kind drawn: a player is their own avatar. */
+  readonly kind: 'empty' | 'player' | 'dummy';
+  /** A dummy's centre, in World pixels. */
+  readonly x: number;
+  readonly y: number;
+}
+
 /** What changes on the football pitch itself (D-078): the scoreboard. The ball is football-view.ts's. */
 export interface PitchView {
-  /** Redraw the scoreboard: "WEST 0 – 0 EAST". */
-  setScore(west: number, east: number): void;
+  /** Redraw the scoreboard: "STARKS 0 – 0 SNARKS" (D-135). */
+  setScore(starks: number, snarks: number): void;
+  /**
+   * D-135: stand the match's dummies where the server says, in their team's
+   * colours, and hide the places that hold a real player or nobody. Always
+   * `PITCH_SLOTS` long, in `PITCH_QUARTERS` order; an empty list hides them
+   * all.
+   */
+  setDummies(slots: readonly PitchDummyPlace[]): void;
 }
 
 /** What the session changes on the Privacy Plaza (D-076): its figures. */

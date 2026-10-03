@@ -1,5 +1,19 @@
-import { Box3, BoxGeometry, Matrix4, Mesh, Quaternion, Vector3, type Group, type Material, type Object3D } from 'three';
-import { FOOTBALL_POST_RADIUS, PITCH_AREA, PITCH_FIELD, PITCH_GOAL, type FootballSide } from '@strkworld/shared';
+import { Box3, BoxGeometry, Group, Matrix4, Mesh, Quaternion, Vector3, type Material, type Object3D } from 'three';
+import {
+  FOOTBALL_POST_RADIUS,
+  FOOTBALL_SIDE_GOAL,
+  PITCH_AREA,
+  PITCH_FIELD,
+  PITCH_GATES,
+  PITCH_GOAL,
+  PITCH_PEN,
+  PITCH_SLOTS,
+  PITCH_TILE_SIZE,
+  isPitchGateTile,
+  pitchSlotSide,
+  type FootballSide,
+  type TileRect,
+} from '@strkworld/shared';
 import {
   PITCH_CENTRE_SPOT,
   PITCH_FIXTURES,
@@ -30,7 +44,8 @@ import {
   unlitMaterial,
   type Paint,
 } from './palette.js';
-import type { LabelFactory, Occluder, OccluderBounds, PitchView, TextLabel } from './types.js';
+import { trainingDummyGeometry } from './training-dummy.js';
+import type { LabelFactory, Occluder, OccluderBounds, PitchDummyPlace, PitchView, TextLabel } from './types.js';
 
 /**
  * The football pitch in 3D (D-078): a mown field with its white markings on
@@ -60,6 +75,12 @@ export interface PitchOccluder extends Occluder {
 export interface PitchParts {
   /** `street:ground`: the field, the paving and every volume. */
   readonly ground: Group;
+  /**
+   * D-135: `street:figures` — the moving bodies the street owns, which is
+   * where the match's dummies go. Never `ground`: that group is the static
+   * scene, held clear of every walkable tile, and a dummy walks the field.
+   */
+  readonly figures: Group;
   /** `street:labels`: the scoreboard and the gate sign. */
   readonly labels: Group;
   /** The street disposes these with its own signs. */
@@ -85,6 +106,15 @@ const GOAL_BACK_HEIGHT = 1.1;
 const POST_TUBE = 0.08;
 const NET_STEP = 0.3;
 const NET_STRAND = 0.018;
+/**
+ * D-135: the pitch's own fence round the pen, and its two gates. Chest-high,
+ * so it reads as an enclosure from the stands without standing in front of
+ * the play; the gates' posts rise above it so a gate is a gate from across
+ * the square.
+ */
+const PEN_FENCE_HEIGHT = 1.25;
+const PEN_GATE_POST_TOP = 2.3;
+
 /** The street-side fence, its gate posts and the lintel over the gate. */
 const FENCE_HEIGHT = 1.5;
 const GATE_POST_TOP = 3.7;
@@ -112,7 +142,7 @@ export function buildPitch(map: DistrictMap, labels: LabelFactory, res: Resource
     for (const piece of fixtures) {
       switch (piece.kind) {
         case 'goal':
-          goal(piece.side ?? 'west', bin);
+          goal(piece.side ?? 'starks', bin);
           break;
         case 'stand':
           stand(piece, bin);
@@ -128,6 +158,7 @@ export function buildPitch(map: DistrictMap, labels: LabelFactory, res: Resource
     const hasGate = gatePosts(map) !== null;
     streetFence(map, bin);
     perimeterFence(bin);
+    penFence(bin);
 
     const groundMaterial = res.material(standardMaterial({ roughness: 0.95 }));
     const decorMaterial = res.material(standardMaterial({ roughness: 0.78 }));
@@ -180,15 +211,70 @@ export function buildPitch(map: DistrictMap, labels: LabelFactory, res: Resource
     parts.occluders.push(gateOccluder(gateMesh, posts, faded));
   }
 
-  let shown = { west: 0, east: 0 };
+  // D-135: the match's dummies, one figure per place, in their team's colours.
+  const dummies = buildPitchDummies(res, parts);
+
+  let shown = { starks: 0, snarks: 0 };
   return Object.freeze({
-    setScore(west: number, east: number): void {
-      const next = { west: wholeScore(west), east: wholeScore(east) };
-      if (next.west === shown.west && next.east === shown.east) return;
+    setScore(starks: number, snarks: number): void {
+      const next = { starks: wholeScore(starks), snarks: wholeScore(snarks) };
+      if (next.starks === shown.starks && next.snarks === shown.snarks) return;
       shown = next;
-      scoreboard?.setText(pitchScoreText(next.west, next.east));
+      scoreboard?.setText(pitchScoreText(next.starks, next.snarks));
+    },
+    setDummies(slots: readonly PitchDummyPlace[]): void {
+      dummies.set(slots);
     },
   });
+}
+
+/**
+ * D-135: the four places' dummy figures, built once and moved as the match
+ * says. One mesh each — they slide every tick, so they cannot join the merged
+ * static geometry — in the team colour of the place they stand in
+ * (`pitchSlotSide`), hidden until the match puts a dummy there.
+ *
+ * The figure is the ring's training dummy (`training-dummy.ts`), which is
+ * exactly what the lead asked for: a dummy that drops in to make up the
+ * numbers, and visibly is one.
+ */
+/** A packed RGB colour, each channel scaled by `factor`: the figure's shaded head. */
+function darken(colour: number, factor: number): number {
+  const channel = (shift: number): number =>
+    Math.max(0, Math.min(255, Math.round(((colour >> shift) & 0xff) * factor)));
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+function buildPitchDummies(res: ResourceBag, parts: PitchParts): { set(slots: readonly PitchDummyPlace[]): void } {
+  const group = new Group();
+  group.name = 'pitch:dummies';
+  parts.figures.add(group);
+  const figures: Mesh[] = [];
+  for (let index = 0; index < PITCH_SLOTS; index += 1) {
+    const side = pitchSlotSide(index);
+    const team = side === 'starks' ? PITCH_THEME.starks : PITCH_THEME.snarks;
+    const geometry = res.geometry(trainingDummyGeometry({ sack: team, sackDark: darken(team, 0.78) }));
+    const mesh = new Mesh(geometry, res.material(standardMaterial({ vertexColors: true, roughness: 0.9 })));
+    mesh.name = `pitch:dummy-${index}`;
+    mesh.castShadow = true;
+    mesh.visible = false;
+    // Facing the goal it attacks: the Starks east (+X), the Snarks west.
+    mesh.rotation.y = side === 'starks' ? Math.PI / 2 : -Math.PI / 2;
+    group.add(mesh);
+    figures.push(mesh);
+  }
+  return {
+    set(slots: readonly PitchDummyPlace[]): void {
+      figures.forEach((mesh, index) => {
+        const slot = slots[index];
+        const dummy = slot !== undefined && slot.kind === 'dummy' &&
+          Number.isFinite(slot.x) && Number.isFinite(slot.y);
+        mesh.visible = dummy;
+        if (!dummy) return;
+        mesh.position.set(slot!.x / PITCH_TILE_SIZE, 0, slot!.y / PITCH_TILE_SIZE);
+      });
+    },
+  };
 }
 
 function wholeScore(value: number): number {
@@ -399,9 +485,10 @@ function boards(bin: GeometryBin): void {
  * strung on the back, both sides and the top. Seen side-on by the camera.
  */
 function goal(side: FootballSide, bin: GeometryBin): void {
-  const line = side === 'west' ? PITCH_FIELD.x : PITCH_FIELD.x + PITCH_FIELD.width;
+  const west = FOOTBALL_SIDE_GOAL[side] === 'west';
+  const line = west ? PITCH_FIELD.x : PITCH_FIELD.x + PITCH_FIELD.width;
   // `out` points away from the field, into the goal; `inward` back toward it.
-  const out = side === 'west' ? -1 : 1;
+  const out = west ? -1 : 1;
   const inward = -out;
   const postX = line + out * FOOTBALL_POST_RADIUS;
   const backX = line + out * (PITCH_GOAL.depth - 0.06);
@@ -452,9 +539,9 @@ function goal(side: FootballSide, bin: GeometryBin): void {
 // The stands
 // ---------------------------------------------------------------------------
 
-/** Seat colour: West's blue on the west half, East's red on the east half. */
+/** Seat colour: the Starks' blue over their half, the Snarks' red over theirs (D-135). */
 function seatColour(x: number, seed: number): Paint {
-  return jitterColor(x < PITCH_HALFWAY_X ? PITCH_THEME.west : PITCH_THEME.east, seed, 0.03);
+  return jitterColor(x < PITCH_HALFWAY_X ? PITCH_THEME.starks : PITCH_THEME.snarks, seed, 0.03);
 }
 
 /**
@@ -576,6 +663,88 @@ function gatePosts(map: DistrictMap): { north: number; south: number } | null {
 }
 
 /**
+ * D-135: the pitch's own fence — a closed ring of chest-high railing round
+ * the pen, with one gate in the middle of its north run and another in its
+ * south. Every piece stands on a `railing` tile, which `paintPitch` marks
+ * solid, so the fence is the keep-out the lobby also enforces rather than
+ * decoration over walkable ground.
+ *
+ * The runs are drawn tile by tile: posts at tile centres and rails spanning
+ * whole tiles, so neighbouring bays join into one continuous rail. The four
+ * corners get a bay on both axes, which reads as a corner post.
+ */
+function penFence(bin: GeometryBin): void {
+  const x1 = PITCH_PEN.x + PITCH_PEN.width;
+  const z1 = PITCH_PEN.y + PITCH_PEN.height;
+  // The north and south runs, along X; the gates are drawn in place of their bays.
+  for (const z of [PITCH_PEN.y, z1 - 1]) {
+    for (let x = PITCH_PEN.x; x < x1; x++) {
+      if (!isPitchGateTile(x, z)) penBay(x, z, 'x', bin);
+    }
+  }
+  // The west and east runs, along Z, corners included.
+  for (const x of [PITCH_PEN.x, x1 - 1]) {
+    for (let z = PITCH_PEN.y; z < z1; z++) penBay(x, z, 'z', bin);
+  }
+  for (const gate of PITCH_GATES) penGate(gate.tiles, bin);
+}
+
+/**
+ * One tile of the pen's railing, running along `axis`: a kerb, a post at the
+ * tile's centre, two rails over the whole tile and the mesh between them.
+ */
+function penBay(x: number, z: number, axis: 'x' | 'z', bin: GeometryBin): void {
+  const along = axis === 'x';
+  /** The line the fence stands on, across the run. */
+  const line = (along ? z : x) + 0.5;
+  const start = along ? x : z;
+  /** A box in run coordinates: `a` along the run, `c` across it. */
+  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, paint: Paint): void => {
+    if (along) bin.add(DECOR, boxGeometry(a0, y0, c0, a1, y1, c1), paint);
+    else bin.add(DECOR, boxGeometry(c0, y0, a0, c1, y1, a1), paint);
+  };
+  box(start, start + 1, line - 0.22, line + 0.22, 0, 0.12, PITCH_THEME.kerb);
+  const post = start + 0.5;
+  box(post - 0.06, post + 0.06, line - 0.06, line + 0.06, 0.12, PEN_FENCE_HEIGHT, PITCH_THEME.steel);
+  for (const y of [0.34, PEN_FENCE_HEIGHT - 0.07]) {
+    box(start, start + 1, line - 0.025, line + 0.025, y, y + 0.055, PITCH_THEME.steel);
+  }
+  // The mesh verticals, clear of the post at the tile's middle.
+  for (const k of [0.2, 0.35, 0.65, 0.8]) {
+    const a = start + k;
+    box(a - 0.012, a + 0.012, line - 0.016, line + 0.016, 0.12, PEN_FENCE_HEIGHT - 0.07, PITCH_THEME.mesh);
+  }
+}
+
+/**
+ * One of the pitch's two gates: a closed leaf between two posts that stand
+ * taller than the railing, its top rail in the goals' white so the way in is
+ * legible from the stands. Solid like the rest of the fence — the way through
+ * it is a press of E (D-117), not a walk.
+ */
+function penGate(tiles: TileRect, bin: GeometryBin): void {
+  const line = tiles.y + 0.5;
+  const x0 = tiles.x;
+  const x1 = tiles.x + tiles.width;
+  // The kerb runs straight through, so the gate sits on the fence's own line.
+  bin.add(DECOR, boxGeometry(x0, 0, line - 0.22, x1, 0.12, line + 0.22), PITCH_THEME.kerb);
+  for (const x of [x0, x1]) {
+    bin.add(DECOR, boxGeometry(x - 0.09, 0.12, line - 0.09, x + 0.09, PEN_GATE_POST_TOP, line + 0.09), PITCH_THEME.steel);
+    bin.add(DECOR, boxGeometry(x - 0.13, PEN_GATE_POST_TOP, line - 0.13, x + 0.13, PEN_GATE_POST_TOP + 0.08, line + 0.13), PITCH_THEME.boardTop);
+  }
+  // The leaf: two rails, a white top rail and the bars between.
+  for (const y of [0.3, PEN_FENCE_HEIGHT - 0.1]) {
+    bin.add(DECOR, boxGeometry(x0, y, line - 0.03, x1, y + 0.06, line + 0.03), PITCH_THEME.steel);
+  }
+  bin.add(DECOR, boxGeometry(x0, PEN_FENCE_HEIGHT - 0.04, line - 0.045, x1, PEN_FENCE_HEIGHT + 0.03, line + 0.045), PITCH_THEME.goal);
+  const bars = Math.max(2, Math.round((x1 - x0) / 0.22));
+  for (let k = 1; k < bars; k++) {
+    const bx = x0 + (k * (x1 - x0)) / bars;
+    bin.add(DECOR, boxGeometry(bx - 0.018, 0.12, line - 0.022, bx + 0.018, PEN_FENCE_HEIGHT - 0.04, line + 0.022), PITCH_THEME.mesh);
+  }
+}
+
+/**
  * The square's street side: a green steel fence on every railing tile, a
  * post at each tile and bars between, and at the gate two tall posts carrying
  * a lintel with the gate's board. What rises above the fence at the gate is
@@ -603,7 +772,7 @@ function streetFence(map: DistrictMap, bin: GeometryBin): void {
     bin.add(GATE, boxGeometry(cx - 0.26, GATE_POST_TOP, z + 0.24, cx + 0.26, GATE_POST_TOP + 0.08, z + 0.76), PITCH_THEME.boardTop);
   }
   bin.add(GATE, boxGeometry(cx - 0.2, LINTEL_BOTTOM, posts.north + 0.3, cx + 0.2, LINTEL_TOP, posts.south + 0.7), PITCH_THEME.steel);
-  bin.add(GATE, boxGeometry(cx - 0.21, LINTEL_BOTTOM + 0.06, posts.north + 0.3, cx + 0.21, LINTEL_BOTTOM + 0.1, posts.south + 0.7), PITCH_THEME.east);
+  bin.add(GATE, boxGeometry(cx - 0.21, LINTEL_BOTTOM + 0.06, posts.north + 0.3, cx + 0.21, LINTEL_BOTTOM + 0.1, posts.south + 0.7), PITCH_THEME.snarks);
   // The board's two hangers, above head height.
   const hanger = PITCH_THEME.gate.width / 2 - 0.4;
   const zc = (posts.north + posts.south + 1) / 2;

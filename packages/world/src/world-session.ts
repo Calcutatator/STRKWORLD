@@ -124,6 +124,8 @@ import {
   type FootballFrame,
   type FootballMoment,
 } from './football-channel.js';
+import { normalizePitchFrame, pitchGateTargets, type PitchChannel } from './pitch-channel.js';
+import type { PitchMatchSnapshot } from '@strkworld/shared';
 import { withinKickRange } from './map/pitch.js';
 import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
 import type { RemotePeerSource, RemotePeerSnapshot } from './remote-peer.js';
@@ -230,6 +232,11 @@ export interface WorldSessionView {
   setKickPrompt?(visible: boolean): void;
   /** A goal or full time: the pitch celebrates it. */
   footballMoment?(moment: FootballMoment): void;
+  /**
+   * D-135: the gated match's four places, so the pitch stands its dummies
+   * where the server says. Null hides them all.
+   */
+  setPitchMatch?(match: PitchMatchSnapshot | null): void;
   // The jump (D-097). Optional: a view without it simply does not jump.
   /** The local avatar takes off: play one cosmetic jump from where it stands. */
   playerJump?(): void;
@@ -305,6 +312,11 @@ export interface WorldSessionOptions {
    * walk round and watch from, with no ring to claim.
    */
   readonly arena?: ArenaChannel;
+  /**
+   * D-135: the gated pitch's match; absent means both gates stay shut and the
+   * pitch is a fenced enclosure to watch from.
+   */
+  readonly pitch?: PitchChannel;
   /** `prefers-reduced-motion`: arena leaps become cuts (D-114). Absent reads as false. */
   readonly reducedMotion?: () => boolean;
   /**
@@ -508,6 +520,11 @@ class Session implements WorldSession {
   private aim: SandboxAim | null = null;
   private plaza?: PlazaController;
   private readonly football?: FootballChannel;
+  private readonly pitch?: PitchChannel;
+  /** D-135: removes the pitch gates' station from the interaction system. */
+  private stopPitchSource?: () => void;
+  /** D-135: the last match handed to the view, so an unchanged one costs nothing. */
+  private pitchShown: PitchMatchSnapshot | null = null;
   private stopFootballMoments?: () => void;
   /** Whether "E · KICK" shows: exactly when a kick would reach the ball. */
   private kickPrompt = false;
@@ -571,6 +588,7 @@ class Session implements WorldSession {
     this.onTileChanged = options.onTileChanged;
     this.sandbox = options.sandbox;
     this.football = options.football;
+    this.pitch = options.pitch;
     this.arenaChannel = options.arena;
     this.reducedMotion = options.reducedMotion;
     this.peers = options.peers;
@@ -601,6 +619,7 @@ class Session implements WorldSession {
       this.createSandbox();
       this.createPlaza();
       this.createFootball();
+      this.createPitchGates();
       this.createJump();
       this.createInteractionSources();
       this.createSeats();
@@ -719,7 +738,10 @@ class Session implements WorldSession {
       this.reportTile();
     });
     // A door may just have taken the player inside, where there is no ball.
-    if (!this.cleanedUp && this.area === 'street') this.presentFootball();
+    if (!this.cleanedUp && this.area === 'street') {
+      this.presentFootball();
+      this.presentPitchMatch();
+    }
     this.refreshInteractions();
   }
 
@@ -821,6 +843,10 @@ class Session implements WorldSession {
     const arenaSession = this.arenaSession;
     this.arenaSession = undefined;
     if (arenaSession) attempt(() => arenaSession.destroy());
+    // D-135: the pitch gates' station.
+    const stopPitchSource = this.stopPitchSource;
+    this.stopPitchSource = undefined;
+    if (stopPitchSource) attempt(stopPitchSource);
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
     attempt(() => inputGate.resume());
@@ -2084,12 +2110,41 @@ class Session implements WorldSession {
     // D-117: E kicks while "E · KICK" shows, when no station is in reach.
     this.interactionSystem.addAction({
       id: 'football:kick',
+      // D-135: a gate is a station, so it already beats every action. This
+      // only matters inside the fence, where the ball and the gate's inside
+      // tile are both in reach: the station wins, which is what the chip says.
       run: () => {
         if (this.cleanedUp || this.area !== 'street') return false;
         // The prompt shows exactly when a kick would reach the ball.
         if (!this.kickPrompt) return false;
         channel.kick();
         return true;
+      },
+    });
+  }
+
+  /**
+   * D-135: the pitch's two gates, as one station on the shared press-E system.
+   * The chip reads ENTER PITCH on the approach, LEAVE PITCH from inside for
+   * someone playing, and IN PLAY while every place is taken — the match the
+   * Shell's channel carries is the only thing that decides which.
+   */
+  private createPitchGates(): void {
+    const channel = this.pitch;
+    if (!channel) return;
+    this.stopPitchSource = this.interactionSystem.register({
+      targets: () => {
+        if (this.cleanedUp || this.area !== 'street') return [];
+        let match = null;
+        let playing = false;
+        try {
+          match = normalizePitchFrame(channel.match());
+          playing = typeof channel.selfSlot === 'function' && channel.selfSlot() >= 0;
+        } catch {
+          // A failing channel offers no gate; the street carries on.
+          return [];
+        }
+        return pitchGateTargets(match, this.position, playing, () => channel.gate(), TILE_SIZE);
       },
     });
   }
@@ -2108,6 +2163,25 @@ class Session implements WorldSession {
     if (frame || this.ballShown) this.view.setFootball?.(frame);
     this.ballShown = frame !== null;
     this.setKickPrompt(frame !== null && frame.phase === 'live' && withinKickRange(this.position, frame, TILE_SIZE));
+  }
+
+  /**
+   * D-135: hand the view the match's places each frame, so its dummies stand
+   * and slide where the server put them. Only a change is sent on.
+   */
+  private presentPitchMatch(): void {
+    const channel = this.pitch;
+    if (!channel) return;
+    let match: PitchMatchSnapshot | null = null;
+    try {
+      match = normalizePitchFrame(channel.match());
+    } catch {
+      // A failing channel draws no dummies; the street carries on.
+      match = null;
+    }
+    if (match === this.pitchShown) return;
+    this.pitchShown = match;
+    this.view.setPitchMatch?.(match);
   }
 
   private setKickPrompt(visible: boolean): void {

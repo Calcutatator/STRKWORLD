@@ -98,7 +98,7 @@ function fakeChannel(initial: FootballFrame | null) {
 }
 
 const ball = (x: number, y: number, phase: FootballFrame['phase'] = 'live'): FootballFrame =>
-  Object.freeze({ x, y, vx: 0, vy: 0, west: 0, east: 0, phase });
+  Object.freeze({ x, y, vx: 0, vy: 0, starks: 0, snarks: 0, phase });
 
 function setup(frame: FootballFrame | null = ball(SPOT.x, SPOT.y)) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
@@ -181,7 +181,7 @@ describe('the football in the session (D-078)', () => {
     const world = setup();
     world.standAt(SPOT.x - 20, SPOT.y);
     expect(world.of('setKickPrompt')).toEqual([[true]]);
-    for (const bad of [null, { ...ball(SPOT.x, SPOT.y), x: Number.NaN }, { ...ball(SPOT.x, SPOT.y), west: 9 }, { ...ball(SPOT.x, SPOT.y), phase: 'extra-time' }, 'ball']) {
+    for (const bad of [null, { ...ball(SPOT.x, SPOT.y), x: Number.NaN }, { ...ball(SPOT.x, SPOT.y), starks: 9 }, { ...ball(SPOT.x, SPOT.y), phase: 'extra-time' }, 'ball']) {
       world.football.set(bad);
       world.standAt(SPOT.x - 20, SPOT.y);
       expect(world.of('setFootball').at(-1)).toEqual([null]);
@@ -205,15 +205,15 @@ describe('the football in the session (D-078)', () => {
 
   it('hands the view each goal and full time, validated, and drops anything else', () => {
     const world = setup();
-    world.football.moment({ kind: 'goal', side: 'west' });
+    world.football.moment({ kind: 'goal', side: 'starks' });
     world.football.moment({ kind: 'goal', side: 'north' });
-    world.football.moment({ kind: 'full-time', winner: 'east', west: 2, east: 5 });
-    world.football.moment({ kind: 'full-time', winner: 'west', west: 2, east: 5 });
-    world.football.moment({ kind: 'goal', side: 'east', scorer: 'someone' });
+    world.football.moment({ kind: 'full-time', winner: 'snarks', starks: 2, snarks: 3 });
+    world.football.moment({ kind: 'full-time', winner: 'starks', starks: 2, snarks: 3 });
+    world.football.moment({ kind: 'goal', side: 'snarks', scorer: 'someone' });
     expect(world.of('footballMoment')).toEqual([
-      [{ kind: 'goal', side: 'west' }],
-      [{ kind: 'full-time', winner: 'east', west: 2, east: 5 }],
-      [{ kind: 'goal', side: 'east' }],
+      [{ kind: 'goal', side: 'starks' }],
+      [{ kind: 'full-time', winner: 'snarks', starks: 2, snarks: 3 }],
+      [{ kind: 'goal', side: 'snarks' }],
     ]);
     expect(JSON.stringify(world.of('footballMoment'))).not.toContain('someone');
   });
@@ -226,22 +226,22 @@ describe('the football in the session (D-078)', () => {
     world.session.destroy();
     expect(world.football.listening()).toBe(0);
     expect(world.keyboard.count('keydown-E')).toBe(0);
-    world.football.moment({ kind: 'goal', side: 'west' });
+    world.football.moment({ kind: 'goal', side: 'starks' });
     expect(world.of('footballMoment')).toEqual([]);
   });
 });
 
 describe('the football channel\'s frames and moments (D-078)', () => {
   it('accepts a ball on the pitch and freezes it, and refuses a ball off it', () => {
-    const good = normalizeFootballFrame({ x: SPOT.x, y: SPOT.y, vx: 100, vy: -40, west: 3, east: 5, phase: 'goal', extra: 1 });
-    expect(good).toEqual({ x: SPOT.x, y: SPOT.y, vx: 100, vy: -40, west: 3, east: 5, phase: 'goal' });
+    const good = normalizeFootballFrame({ x: SPOT.x, y: SPOT.y, vx: 100, vy: -40, starks: 1, snarks: 3, phase: 'goal', extra: 1 });
+    expect(good).toEqual({ x: SPOT.x, y: SPOT.y, vx: 100, vy: -40, starks: 1, snarks: 3, phase: 'goal' });
     expect(Object.isFrozen(good)).toBe(true);
     const bad = [
       { ...ball(SPOT.x, SPOT.y), x: 40 * T },
       { ...ball(SPOT.x, SPOT.y), y: -2 * T },
       { ...ball(SPOT.x, SPOT.y), vx: 5_000 },
-      { ...ball(SPOT.x, SPOT.y), east: -1 },
-      { ...ball(SPOT.x, SPOT.y), west: 1.5 },
+      { ...ball(SPOT.x, SPOT.y), snarks: -1 },
+      { ...ball(SPOT.x, SPOT.y), starks: 1.5 },
       { ...ball(SPOT.x, SPOT.y), phase: 1 },
       { ...ball(SPOT.x, SPOT.y), x: String(SPOT.x) },
       Object.defineProperty({ ...ball(SPOT.x, SPOT.y) }, 'x', { get: () => { throw new Error('trap'); } }),
@@ -252,10 +252,10 @@ describe('the football channel\'s frames and moments (D-078)', () => {
   });
 
   it('believes a full-time moment only when its winner is ahead', () => {
-    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'west', west: 5, east: 3 })).toEqual({ kind: 'full-time', winner: 'west', west: 5, east: 3 });
-    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'west', west: 3, east: 5 })).toBeNull();
-    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'east', west: 4, east: 4 })).toBeNull();
-    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'east', west: 1, east: 9 })).toBeNull();
+    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'starks', starks: 3, snarks: 1 })).toEqual({ kind: 'full-time', winner: 'starks', starks: 3, snarks: 1 });
+    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'starks', starks: 1, snarks: 3 })).toBeNull();
+    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'snarks', starks: 4, snarks: 4 })).toBeNull();
+    expect(normalizeFootballMoment({ kind: 'full-time', winner: 'snarks', starks: 1, snarks: 9 })).toBeNull();
     expect(normalizeFootballMoment({ kind: 'kick-off' })).toBeNull();
     expect(normalizeFootballMoment(null)).toBeNull();
   });

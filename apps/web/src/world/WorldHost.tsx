@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
-import type { ArenaChannel, FootballChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
+import type { ArenaChannel, FootballChannel, PitchChannel, RemotePeerSource, SandboxChannel } from '@strkworld/world';
 import { worldLeaseManager } from './world-acquisition.js';
 
 /**
@@ -21,6 +21,7 @@ export function WorldHost({
   sandbox,
   football,
   arena,
+  pitch,
   vaultOpen = false,
   placementStand = false,
 }: {
@@ -33,6 +34,8 @@ export function WorldHost({
   football?: FootballChannel;
   /** The gladiator pit's ring (D-114); optional in test compositions. */
   arena?: ArenaChannel;
+  /** The gated pitch's match (D-135); optional in test compositions. */
+  pitch?: PitchChannel;
   /**
    * Whether the Vault's street door opens (D-077): the Shell's answer from
    * the register and this build's policy, never the World's to decide.
@@ -47,8 +50,8 @@ export function WorldHost({
 }) {
   const parent = useRef<HTMLDivElement>(null);
   const leaseKey = useMemo(
-    () => ({ out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand }),
-    [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand],
+    () => ({ out, shellIn, remotePeers, sandbox, football, arena, pitch, vaultOpen, placementStand }),
+    [out, shellIn, remotePeers, sandbox, football, arena, pitch, vaultOpen, placementStand],
   );
 
   useEffect(() => {
@@ -65,12 +68,13 @@ export function WorldHost({
         ...(sandbox ? { sandbox } : {}),
         ...(football ? { football } : {}),
         ...(arena ? { arena } : {}),
+        ...(pitch ? { pitch } : {}),
         ...(vaultOpen ? { vaultOpen } : {}),
         ...(placementStand ? { placementStand } : {}),
       });
       return runtime.releaseWorld;
     }, leaseKey);
-  }, [out, shellIn, remotePeers, sandbox, football, arena, vaultOpen, placementStand, leaseKey]);
+  }, [out, shellIn, remotePeers, sandbox, football, arena, pitch, vaultOpen, placementStand, leaseKey]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

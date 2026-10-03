@@ -229,8 +229,8 @@ export function createBallPresenter(): BallPresenter {
         y: ball.y,
         vx: ball.vx,
         vy: ball.vy,
-        west: snapshot.west,
-        east: snapshot.east,
+        starks: snapshot.starks,
+        snarks: snapshot.snarks,
         phase: snapshot.phase,
       });
     },

@@ -79,6 +79,15 @@
  * different kick. A newer position still waiting on the move floor goes
  * first, so the room judges the kick from where the player stands now.
  *
+ * ## The pitch's match (D-135)
+ *
+ * `pitchMatch()` is a frozen snapshot of the gated pitch's match — phase,
+ * round, the four slots, the score, the countdown and the winner — validated
+ * through the shared `normalizePitchMatch`, or null unless this client is live
+ * on the street near the pitch (the room sends the match to those clients
+ * only). `onPitchMatch` delivers it whenever it changes. `pitchGate()` sends
+ * the one payload-less gate verb, held to `PITCH_CLIENT_GATE_INTERVAL_MS`.
+ *
  * ## The arena ring (D-114)
  *
  * `arena()` is a frozen snapshot of the arena ring — phase, round, the two
@@ -105,12 +114,17 @@ import {
   ARENA_PHASES,
   ARENA_SIDES,
   ARENA_SLOT_KINDS,
+  FOOTBALL_SIDES,
   FOOTBALL_WIN_SCORE,
   NO_SEAT,
   streetSeatAt,
   normalizeArenaRing,
+  normalizePitchMatch,
   type ArenaRingSnapshot,
+  type PitchMatchSnapshot,
   PITCH_AREA,
+  PITCH_MATCH_PHASES,
+  PITCH_SLOT_KINDS,
   PRESENCE_AREAS,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
@@ -132,6 +146,7 @@ import {
   JUMP_CLIENT_INTERVAL_MS,
   MESSAGE,
   MIN_CLIENT_SEND_INTERVAL_MS,
+  PITCH_CLIENT_GATE_INTERVAL_MS,
   SANDBOX_CLIENT_ACTION_INTERVAL_MS,
   SERVER_MESSAGE,
   type LobbySprite,
@@ -146,7 +161,7 @@ import {
   normalizeSandboxTile,
 } from './policy';
 import { isSandboxTile, sandboxTileKey } from './sandbox-rules';
-import type { LobbyState, PresenceEntry } from './state';
+import { PITCH_MATCH_KEY, type LobbyState, type PresenceEntry } from './state';
 
 export type { LobbySprite } from './config';
 
@@ -259,6 +274,8 @@ type ResyncListener = (position: Position) => void;
 type FootballListener = (snapshot: FootballSnapshot | null) => void;
 type GoalListener = (goal: FootballGoal) => void;
 type ArenaListener = (ring: ArenaRingSnapshot | null) => void;
+
+type PitchListener = (match: PitchMatchSnapshot | null) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -340,6 +357,7 @@ export class LobbyClient {
   readonly #goalListeners = new Map<GoalListener, symbol>();
   readonly #footballDeliveries: FootballDelivery[] = [];
   readonly #goalDeliveries: GoalDelivery[] = [];
+  readonly #pitchListeners = new Map<PitchListener, symbol>();
   readonly #arenaListeners = new Map<ArenaListener, symbol>();
   readonly #arenaDeliveries: ArenaDelivery[] = [];
 
@@ -402,6 +420,13 @@ export class LobbyClient {
   #lastJumpAt: number | null = null;
   /** A kick waiting only for a newer position to go first. */
   #kickHandle: ReturnType<typeof setTimeout> | null = null;
+
+  /** D-135: the last value `pitchMatch()` returned, reused while nothing changes. */
+  #pitchView: PitchMatchSnapshot | null = null;
+  /** The last match delivered to pitch listeners, for change detection. */
+  #pitchPublished: PitchMatchSnapshot | null = null;
+  /** When this client's last pitch-gate press went out. */
+  #lastPitchGateAt: number | null = null;
 
   /** D-114: the last value `arena()` returned, reused while nothing changes. */
   #arenaView: ArenaRingSnapshot | null = null;
@@ -968,6 +993,58 @@ export class LobbyClient {
     room.send(MESSAGE.jump);
     if (this.#room !== room || this.#status !== 'connected') return false;
     this.#lastJumpAt = now;
+    return true;
+  }
+
+  /**
+   * D-135: the pitch's match, or null unless this client is live on the street
+   * near the pitch and the entry reads as a valid match. Frozen, and the same
+   * object while nothing changes.
+   */
+  pitchMatch(): PitchMatchSnapshot | null {
+    const next = this.#readPitch();
+    if (samePitchMatch(this.#pitchView, next)) return this.#pitchView;
+    this.#pitchView = next;
+    return next;
+  }
+
+  /**
+   * Subscribe to the pitch's match. Returns an unsubscribe function.
+   *
+   * Fires once immediately with the current match, then whenever it changes
+   * (null on walking away from the pitch or off the street). A throwing
+   * subscriber is reported and never stops the others.
+   */
+  onPitchMatch(listener: PitchListener): () => void {
+    const owner = Symbol('pitch listener');
+    this.#pitchListeners.set(listener, owner);
+    this.#notifyPitch(listener, this.pitchMatch());
+    return () => {
+      if (this.#pitchListeners.get(listener) === owner) this.#pitchListeners.delete(listener);
+    };
+  }
+
+  /**
+   * D-135: press E at a pitch gate. No payload: the room judges the press from
+   * where it holds this client — outside a gate it takes a slot in the match
+   * and stands them inside the fence, inside it gives the slot up. Returns
+   * whether the press was sent; false unless live on the street, or inside the
+   * gate's own floor.
+   */
+  pitchGate(): boolean {
+    if (!this.#onStreet() || this.#room === null) return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastPitchGateAt;
+    if (last !== null && now - last < PITCH_CLIENT_GATE_INTERVAL_MS) return false;
+    // The room judges the press from where it holds this client, so a newer
+    // position still waiting on the move floor goes first.
+    this.#pump(now);
+    if (!this.#onStreet() || this.#room === null) return false;
+    const room = this.#room;
+    room.send(MESSAGE.pitchGate);
+    if (this.#room !== room || this.#status !== 'connected') return false;
+    this.#lastPitchGateAt = now;
     return true;
   }
 
@@ -1609,12 +1686,49 @@ export class LobbyClient {
     }
   }
 
-  /** Publish everything read from room state: peers, the sandbox, the ball, then the arena ring. */
+  /**
+   * Publish everything read from room state: peers, the sandbox, the ball, the
+   * pitch's match, then the arena ring.
+   */
   #emitRoomState(): void {
     this.#emitPeers();
     this.#emitSandbox();
     this.#emitFootball();
+    this.#emitPitch();
     this.#emitArena();
+  }
+
+  /** Deliver the current pitch match if it differs from the last one delivered (D-135). */
+  #emitPitch(): void {
+    const match = this.pitchMatch();
+    if (samePitchMatch(match, this.#pitchPublished)) return;
+    this.#pitchPublished = match;
+    for (const [listener, owner] of [...this.#pitchListeners]) {
+      if (this.#pitchListeners.get(listener) !== owner) continue;
+      this.#notifyPitch(listener, match);
+    }
+  }
+
+  #notifyPitch(listener: PitchListener, match: PitchMatchSnapshot | null): void {
+    try {
+      listener(match);
+    } catch {
+      console.error('lobby client: pitch subscriber threw');
+    }
+  }
+
+  /** The pitch's match from room state, validated; null unless live on the street. */
+  #readPitch(): PitchMatchSnapshot | null {
+    const room = this.#room;
+    if (room === null || !this.#onStreet()) return null;
+    let entry: unknown;
+    try {
+      const map = (room.state as { pitch?: { get?: (key: string) => unknown } } | undefined)?.pitch;
+      entry = typeof map?.get === 'function' ? map.get(PITCH_MATCH_KEY) : undefined;
+    } catch {
+      return null;
+    }
+    return readPitchEntry(entry);
   }
 
   /** Deliver the current arena ring if it differs from the last one delivered (D-114). */
@@ -2267,8 +2381,8 @@ const BALL_BOUNDS = Object.freeze({
 function readFootballEntry(value: unknown): FootballSnapshot | null {
   if (value === null || typeof value !== 'object') return null;
   try {
-    const record = value as Partial<Record<'tick' | 'x' | 'y' | 'vx' | 'vy' | 'west' | 'east' | 'phase', unknown>>;
-    const { tick, west, east, phase } = record;
+    const record = value as Partial<Record<'tick' | 'x' | 'y' | 'vx' | 'vy' | 'starks' | 'snarks' | 'phase', unknown>>;
+    const { tick, starks, snarks, phase } = record;
     if (typeof tick !== 'number' || !Number.isSafeInteger(tick) || tick < 0 || tick > 0xffffffff) return null;
     // Whole 64ths of a pixel on the wire (FOOTBALL_WIRE_SCALE), World pixels here.
     const parts = [record.x, record.y, record.vx, record.vy];
@@ -2278,10 +2392,10 @@ function readFootballEntry(value: unknown): FootballSnapshot | null {
     if (Math.hypot(vx, vy) > FOOTBALL_MAX_SPEED * 1.01) return null;
     const score = (part: unknown): part is number =>
       typeof part === 'number' && Number.isInteger(part) && part >= 0 && part <= FOOTBALL_WIN_SCORE;
-    if (!score(west) || !score(east)) return null;
+    if (!score(starks) || !score(snarks)) return null;
     const named = typeof phase === 'number' && Number.isInteger(phase) ? FOOTBALL_PHASES[phase] : undefined;
     if (named === undefined) return null;
-    return Object.freeze({ tick, x, y, vx, vy, west, east, phase: named });
+    return Object.freeze({ tick, x, y, vx, vy, starks, snarks, phase: named });
   } catch {
     return null;
   }
@@ -2291,7 +2405,7 @@ function readFootballEntry(value: unknown): FootballSnapshot | null {
 function normalizeGoal(payload: unknown): FootballGoal | null {
   if (payload === null || typeof payload !== 'object') return null;
   const side = ownDataField(payload, 'side');
-  return side === 'west' || side === 'east' ? Object.freeze({ side }) : null;
+  return side === 'starks' || side === 'snarks' ? Object.freeze({ side }) : null;
 }
 
 function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): boolean {
@@ -2303,8 +2417,8 @@ function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): b
     a.y === b.y &&
     a.vx === b.vx &&
     a.vy === b.vy &&
-    a.west === b.west &&
-    a.east === b.east &&
+    a.starks === b.starks &&
+    a.snarks === b.snarks &&
     a.phase === b.phase
   );
 }
@@ -2314,6 +2428,75 @@ function sameFootball(a: FootballSnapshot | null, b: FootballSnapshot | null): b
  * to names, an empty presence id to null, a zero result to none, then
  * `normalizeArenaRing`. Null for anything malformed.
  */
+/**
+ * D-135: a pitch match read out of the room's schema entry, validated through
+ * the shared normalizer. Codes become names, `''` becomes no presence id, and
+ * anything malformed is null — the same discipline as `readArenaEntry`.
+ */
+function readPitchEntry(value: unknown): PitchMatchSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  try {
+    const record = value as Partial<
+      Record<'phase' | 'round' | 'slots' | 'starks' | 'snarks' | 'secondsLeft' | 'winner', unknown>
+    >;
+    const raw = record.slots;
+    // An ArraySchema is array-like; anything that is not is malformed.
+    const list: unknown[] =
+      Array.isArray(raw) ? [...raw] : typeof (raw as { toArray?: unknown })?.toArray === 'function'
+        ? [...((raw as { toArray(): unknown[] }).toArray())]
+        : [];
+    const slots = list.map((entry) => {
+      if (entry === null || typeof entry !== 'object') return null;
+      const fields = entry as Partial<Record<'kind' | 'gameId' | 'x' | 'y', unknown>>;
+      const kind = typeof fields.kind === 'number' ? PITCH_SLOT_KINDS[fields.kind] : undefined;
+      const gameId = fields.gameId;
+      if (typeof gameId !== 'string') return null;
+      if (kind !== 'player' && gameId !== '') return null;
+      return { kind, gameId: kind === 'player' ? gameId : null, x: fields.x, y: fields.y };
+    });
+    const phase = typeof record.phase === 'number' ? PITCH_MATCH_PHASES[record.phase] : undefined;
+    const code = record.winner;
+    if (typeof code !== 'number' || !Number.isInteger(code)) return null;
+    const winner = code === 0 ? null : FOOTBALL_SIDES[code - 1];
+    if (winner === undefined) return null;
+    return normalizePitchMatch(
+      {
+        phase,
+        round: record.round,
+        slots,
+        starks: record.starks,
+        snarks: record.snarks,
+        secondsLeft: record.secondsLeft,
+        winner,
+      },
+      FOOTBALL_WIN_SCORE,
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Whether two pitch matches say the same thing. */
+function samePitchMatch(a: PitchMatchSnapshot | null, b: PitchMatchSnapshot | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (
+    a.phase !== b.phase ||
+    a.round !== b.round ||
+    a.starks !== b.starks ||
+    a.snarks !== b.snarks ||
+    a.secondsLeft !== b.secondsLeft ||
+    a.winner !== b.winner ||
+    a.slots.length !== b.slots.length
+  ) {
+    return false;
+  }
+  return a.slots.every((slot, index) => {
+    const other = b.slots[index]!;
+    return slot.kind === other.kind && slot.gameId === other.gameId && slot.x === other.x && slot.y === other.y;
+  });
+}
+
 function readArenaEntry(value: unknown): ArenaRingSnapshot | null {
   if (value === null || typeof value !== 'object') return null;
   try {

@@ -7,6 +7,7 @@ import {
   SANDBOX_AREA,
   SANDBOX_ENTRANCE,
   STREET_ORIGIN_X,
+  isPitchFenceTile,
 } from '@strkworld/shared';
 import {
   createStreetMap,
@@ -78,11 +79,12 @@ describe('the street is walkable', () => {
     }
     expect(map.tiles[roadRow]![PITCH_GATE.x]).toBe('road');
     expect(map.tiles[roadRow]![SANDBOX_AREA.x - 1]).toBe('road');
-    // Inside each square the same row stays walkable, but for the goals' nets
-    // at the pitch's two ends (D-078).
+    // Inside the sandbox square the row stays walkable; at the pitch it is
+    // stopped by the fence (D-135) and the goals' nets behind it (D-078).
     for (let x = 0; x < map.width; x++) {
       const inGoal = x === PITCH_FIELD.x - 1 || x === PITCH_FIELD.x + PITCH_FIELD.width;
-      expect(isSolidAt(map, x, roadRow), `row ${roadRow}, ${x}`).toBe(inGoal);
+      const fence = isPitchFenceTile(x, roadRow);
+      expect(isSolidAt(map, x, roadRow), `row ${roadRow}, ${x}`).toBe(inGoal || fence);
     }
     expect(westRoadColumn(map)).toBe(PITCH_GATE.x);
   });

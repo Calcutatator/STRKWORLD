@@ -348,6 +348,7 @@ function createRecordingView(journal: Journal) {
     setFootball: (frame) => record('setFootball', [frame]),
     setKickPrompt: (visible) => record('setKickPrompt', [visible]),
     footballMoment: (moment) => record('footballMoment', [moment]),
+    setPitchMatch: (match) => record('setPitchMatch', [match]),
     playerJump: () => record('playerJump', []),
     syncArena: (frame) => record('syncArena', [frame]),
     setArenaPrompt: (text) => record('setArenaPrompt', [text]),
@@ -1908,8 +1909,9 @@ describe('WorldSession movement (D-059)', () => {
       world.keyboard.release();
     };
 
-    // North-west corner, through open grass west of the Bank.
-    place(session, streetTileCentre({ x: 1, y: STREET.spawn.y }));
+    // North-west corner, over the pitch square's walkway north of its fence
+    // (D-135): the fence itself is solid, so the corner is reached round it.
+    place(session, streetTileCentre({ x: 1, y: 3 }));
     walk({ up: true });
     walk({ left: true });
     walk({ up: true, left: true });

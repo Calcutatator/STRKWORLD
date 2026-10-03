@@ -131,11 +131,11 @@ describe('presence areas over the wire (D-087)', () => {
     // Studio's coordinates; and one between them, whom both see, within the
     // interest radius of the roof's and the Studio's players too.
     const below = await joined({ x: roof(3, 3).x, y: roof(3, 3).y + 3 * T });
-    const pitch = await joined(studio(6, 5));
+    const pitch = await joined(studio(6, 1));
     const passer: Mover = { client: await joined({ x: 848, y: 304 }), home: { x: 848, y: 304 }, steps: 0 };
     const climber1 = await joined({ x: roof(3, 3).x, y: roof(3, 3).y + 4 * T });
     const climber2 = await joined({ x: roof(3, 3).x, y: roof(3, 3).y + 4 * T });
-    const dresser1 = await joined(studio(6, 6));
+    const dresser1 = await joined(studio(6, 2));
     const dresser2 = await joined(studio(6, 6), 'avatar-7');
     climber1.suspend();
     climber2.suspend();
@@ -191,11 +191,13 @@ describe('presence areas over the wire (D-087)', () => {
     // A street player standing on the bunker's World pixels (it is drawn
     // over the hidden street), a street mover beside it, and a Studio
     // player on the same pixels (the Studio is drawn at the same origin).
-    const street = await joined(bunker(2, 8));
-    const passer: Mover = { client: await joined(bunker(4, 8)), home: bunker(4, 8), steps: 0 };
-    const dresser = await joined(bunker(2, 8));
-    const down1 = await joined(bunker(3, 8));
-    const down2 = await joined(bunker(3, 8));
+    // D-135: on the bunker's north corridor, whose street row is outside the
+    // pitch's fence — a street player inside that fence cannot move at all.
+    const street = await joined(bunker(4, 2));
+    const passer: Mover = { client: await joined(bunker(5, 2)), home: bunker(5, 2), steps: 0 };
+    const dresser = await joined(bunker(6, 2));
+    const down1 = await joined(bunker(7, 2));
+    const down2 = await joined(bunker(8, 2));
     dresser.enterArea('studio', studio(2, 8), 'avatar-2');
     down1.suspend();
     down1.enterArea('bunker', bunker(2, 8), 'avatar-2');
@@ -224,16 +226,16 @@ describe('presence areas over the wire (D-087)', () => {
     expect(dresser.peers()).toEqual([]);
 
     // Up the stair: down2 is the street's again, and gone from the bunker.
-    down2.enterArea('street', bunker(4, 9), 'avatar-5');
+    down2.enterArea('street', bunker(4, 2), 'avatar-5');
     await sees(street, [passer.client.gameId, down2.gameId]);
     await sees(down1, []);
     expect(down2.area).toBe('street');
   }, WIRE_TIMEOUT_MS);
 
   it('never shows the area left in the area entered, and comes back to the street', async () => {
-    const walker = await joined(studio(6, 5));
-    const dresser = await joined(studio(6, 6));
-    const resident = await joined(studio(6, 6));
+    const walker = await joined(studio(6, 1));
+    const dresser = await joined(studio(6, 2));
+    const resident = await joined(studio(6, 2));
     resident.enterArea('studio', studio(10, 4), 'avatar-2');
     await sees(dresser, [walker.gameId]);
 
@@ -248,7 +250,7 @@ describe('presence areas over the wire (D-087)', () => {
     await sees(walker, []);
 
     seen.length = 0;
-    dresser.enterArea('street', studio(6, 6), 'avatar-4');
+    dresser.enterArea('street', studio(6, 2), 'avatar-4');
     await sees(dresser, [walker.gameId]);
     expect(seen.every((snapshot) => !snapshot.includes(resident.gameId as string))).toBe(true);
     await sees(walker, [dresser.gameId]);
@@ -282,7 +284,7 @@ describe('presence areas over the wire (D-087)', () => {
   }, WIRE_TIMEOUT_MS);
 
   it('sends the area verb with a placement and a sprite and nothing else', async () => {
-    const client = await joined(studio(6, 5));
+    const client = await joined(studio(6, 1));
     const send = vi.spyOn(SdkRoom.prototype, 'send');
     client.enterArea('studio', { x: studio(9, 1).x, y: studio(9, 1).y, facing: 'up', extra: 'dropped' } as never, 'avatar-3');
     const call = send.mock.calls.find(([type]) => type === MESSAGE.area);
@@ -301,9 +303,9 @@ describe('presence areas over the wire (D-087)', () => {
   }, WIRE_TIMEOUT_MS);
 
   it('fails closed when the room refuses a switch: the avatar is seen by no one', async () => {
-    const watcher = await joined(studio(6, 5));
-    const witness: Mover = { client: await joined(studio(7, 5)), home: studio(7, 5), steps: 0 };
-    const stray = await joined(studio(6, 6));
+    const watcher = await joined(studio(6, 1));
+    const witness: Mover = { client: await joined(studio(7, 1)), home: studio(7, 1), steps: 0 };
+    const stray = await joined(studio(6, 2));
     await sees(watcher, [stray.gameId, witness.client.gameId]);
     const room = await roomOf(watcher);
     // Off the Studio's floor: the room suspends the session.
@@ -323,7 +325,7 @@ describe('presence areas over the wire (D-087)', () => {
   it('refuses to switch a client that is not on the air, or to a name that is not an area', async () => {
     const idle = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
     expect(() => idle.enterArea('roof', roof(2, 2))).toThrow(/connected or suspended/);
-    const client = await joined(studio(6, 5));
+    const client = await joined(studio(6, 1));
     expect(() => client.enterArea('vault' as never, roof(2, 2))).toThrow(/area is invalid/);
     expect(() => client.enterArea('roof', { x: Number.NaN, y: 0 })).toThrow(/placement is invalid/);
     expect(client.area).toBe('street');

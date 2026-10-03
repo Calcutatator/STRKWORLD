@@ -205,6 +205,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         ...(config.remotePeers ? { peers: config.remotePeers } : {}),
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
+        ...(config.pitch ? { pitch: config.pitch } : {}),
         reducedMotion: () => prefersReducedMotion(win),
         // The creation value, never `config.vaultOpen`: the presenter drew
         // the street and rooms from it, and a session must walk the same map.

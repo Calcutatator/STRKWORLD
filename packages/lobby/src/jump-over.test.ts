@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FOOTBALL_TICK_MS, JUMP_PASS_WINDOW_MS } from '@strkworld/shared';
+import { FOOTBALL_TICK_MS, JUMP_PASS_WINDOW_MS, PITCH_GATES, pitchTileCentre } from '@strkworld/shared';
 import { JUMP_MIN_INTERVAL_MS } from './config';
 import {
   FOOTBALL_CENTRE,
@@ -24,9 +24,13 @@ const WALK = 160;
 /** How far a walking client moves between two moves sent on the ball's tick. */
 const STRIDE = (WALK * FOOTBALL_TICK_MS) / 1000;
 
-/** A registry with the ball at rest on the centre spot, and a clock to step it with. */
+/**
+ * A registry with the ball at rest on the centre spot, and a clock to step it
+ * with. D-135: the dummies are off, so a lone runner's match stays open and
+ * the ball is free for them to dribble, which is what this is about.
+ */
 function pitch() {
-  const registry = new LobbyPresence();
+  const registry = new LobbyPresence({ pitchDummyFill: false });
   let now = 10_000;
   const step = (ms: number): void => {
     const until = now + ms;
@@ -35,7 +39,27 @@ function pitch() {
       registry.footballTick(now);
     }
   };
-  return { registry, step, now: () => now };
+  const APPROACH = pitchTileCentre({ x: PITCH_GATES[0]!.approach.x, y: PITCH_GATES[0]!.approach.y });
+  /**
+   * D-135: put a session on the pitch the way a player gets there — outside
+   * the north gate, in by a press of E, then walked to where the test wants
+   * it. `rejoin` is the same for a session that has been admitted already and
+   * is coming back from a suspend.
+   */
+  const enter = (key: string, x: number, y: number, rejoin = false): void => {
+    if (rejoin) {
+      expect(registry.resume(key, { x: APPROACH.x, y: APPROACH.y, facing: 'down' }, now)).toBe(true);
+    } else {
+      expect(registry.admit(key, { x: APPROACH.x, y: APPROACH.y, facing: 'down' }).ok).toBe(true);
+    }
+    // Clear of the gate's intent floor, so a second press after a suspend lands.
+    now += 1_000;
+    expect(registry.pitchGate(key, now)).toBe('entered');
+    now += 100;
+    expect(registry.move(key, { x, y, facing: 'right' }, now)).toBe('applied');
+    now += 100;
+  };
+  return { registry, step, enter, now: () => now };
 }
 
 /**
@@ -45,11 +69,10 @@ function pitch() {
  * key press and the move that carries it over the ball comes after.
  */
 function runThroughTheBall(options: { readonly jump: boolean; readonly ticks?: number }) {
-  const { registry, step, now } = pitch();
+  const { registry, step, enter, now } = pitch();
   const y = FOOTBALL_CENTRE.y;
   let x = FOOTBALL_CENTRE.x - 3 * STRIDE - 24;
-  const outcome = registry.admit('runner', { x, y, facing: 'right' });
-  if (!outcome.ok) throw new Error(outcome.reason);
+  enter('runner', x, y);
   registry.keepFootballRunning(now());
   if (options.jump) expect(registry.jump('runner', now())).toBe('applied');
   const ticks = options.ticks ?? 10;
@@ -72,8 +95,8 @@ describe('jumping over the football (D-130)', () => {
     expect(run.ball.vy).toBe(0);
     // Nothing else about play moved either: no kick, no goal.
     expect(run.ball.phase).toBe('live');
-    expect(run.ball.west).toBe(0);
-    expect(run.ball.east).toBe(0);
+    expect(run.ball.starks).toBe(0);
+    expect(run.ball.snarks).toBe(0);
   });
 
   it('dribbles it away on the very same run without a jump', () => {
@@ -86,9 +109,8 @@ describe('jumping over the football (D-130)', () => {
   it('holds the pass to the window the room opened: one tick later and the ball comes off them again', () => {
     /** The ball after a step `tickAt` ms past the jump, with the jumper on its centre. */
     const onTheBall = (tickAt: number): number => {
-      const { registry, step, now } = pitch();
-      const start = { x: FOOTBALL_CENTRE.x - 40, y: FOOTBALL_CENTRE.y };
-      expect(registry.admit('a', { ...start, facing: 'right' }).ok).toBe(true);
+      const { registry, step, enter, now } = pitch();
+      enter('a', FOOTBALL_CENTRE.x - 40, FOOTBALL_CENTRE.y);
       registry.keepFootballRunning(now());
       expect(registry.jump('a', now())).toBe('applied');
       step(tickAt - FOOTBALL_TICK_MS);
@@ -105,8 +127,8 @@ describe('jumping over the football (D-130)', () => {
   });
 
   it('never opens on a jump the room refused, so the floor still bounds how long anyone is in the air', () => {
-    const { registry, step, now } = pitch();
-    expect(registry.admit('a', { x: FOOTBALL_CENTRE.x - 40, y: FOOTBALL_CENTRE.y, facing: 'right' }).ok).toBe(true);
+    const { registry, step, enter, now } = pitch();
+    enter('a', FOOTBALL_CENTRE.x - 40, FOOTBALL_CENTRE.y);
     registry.keepFootballRunning(now());
     expect(registry.jump('a', now())).toBe('applied');
     // The floor is the whole air time, so no second jump can extend the window.
@@ -118,14 +140,15 @@ describe('jumping over the football (D-130)', () => {
   });
 
   it('is forgotten when the jumper leaves the street, so they come back as a body', () => {
-    const { registry, step, now } = pitch();
-    expect(registry.admit('a', { x: FOOTBALL_CENTRE.x - 40, y: FOOTBALL_CENTRE.y, facing: 'right' }).ok).toBe(true);
+    const { registry, step, enter, now } = pitch();
+    enter('a', FOOTBALL_CENTRE.x - 40, FOOTBALL_CENTRE.y);
     registry.keepFootballRunning(now());
     expect(registry.jump('a', now())).toBe('applied');
     expect(registry.suspend('a', now())).toBe(true);
-    expect(registry.resume('a', { x: FOOTBALL_CENTRE.x - 40, y: FOOTBALL_CENTRE.y, facing: 'right' }, now())).toBe(true);
+    // D-135: stepping out of the world gives the slot up, so coming back means
+    // pressing E at the gate again — and the airborne window is gone with it.
+    enter('a', FOOTBALL_CENTRE.x, FOOTBALL_CENTRE.y, true);
     registry.keepFootballRunning(now());
-    registry.move('a', { x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, facing: 'right' }, now() + 60);
     step(FOOTBALL_TICK_MS);
     expect(registry.footballSnapshot().x).not.toBe(FOOTBALL_CENTRE.x);
   });

@@ -28,8 +28,10 @@ import type { Client } from '@colyseus/core';
 import { Encoder, Metadata, Reflection, StateView } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
 import {
+  PITCH_GATES,
   SANDBOX_AREA,
   arenaTileCentre,
+  pitchTileCentre,
   type ArenaSlot,
   type FootballSnapshot,
   type GameId,
@@ -52,6 +54,8 @@ import {
   ArenaSlotEntry,
   FootballEntry,
   LobbyState,
+  PitchMatchEntry,
+  PitchSlotEntry,
   PositionSchema,
   PresenceEntry,
   SandboxColumnEntry,
@@ -95,8 +99,8 @@ const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
   y: true,
   vx: true,
   vy: true,
-  west: true,
-  east: true,
+  starks: true,
+  snarks: true,
   phase: true,
 };
 
@@ -172,8 +176,8 @@ describe('the schema is the enforcement point', () => {
     );
   });
 
-  it('has four fields at the root: interest-filtered presence, the shared sandbox, the shared ball and the view-filtered arena ring', () => {
-    expect(fieldNames(LobbyState)).toEqual(['arena', 'football', 'peers', 'sandbox']);
+  it('has five fields at the root: interest-filtered presence, the shared sandbox, the shared ball, the view-filtered arena ring and the view-filtered pitch match', () => {
+    expect(fieldNames(LobbyState)).toEqual(['arena', 'football', 'peers', 'pitch', 'sandbox']);
     const fields = Metadata.getFields(LobbyState) as Record<string, unknown>;
     expect(fields['peers']).toEqual({ map: PresenceEntry, view: true });
     // D-060: everyone shares one sandbox, so it is deliberately not a view.
@@ -182,6 +186,32 @@ describe('the schema is the enforcement point', () => {
     expect(fields['football']).toBe(FootballEntry);
     // D-114: the ring is a view, like peers: only arena members are sent it.
     expect(fields['arena']).toEqual({ map: ArenaRingEntry, view: true });
+    // D-135: and the pitch match, sent only to street players near the pitch.
+    expect(fields['pitch']).toEqual({ map: PitchMatchEntry, view: true });
+  });
+
+  it('carries exactly the frozen PitchMatchSnapshot shape, in bytes, one 16-bit round and a presence id per slot (D-135)', () => {
+    const match = Metadata.getFields(PitchMatchEntry) as Record<string, unknown>;
+    expect(Object.keys(match).sort()).toEqual(
+      ['phase', 'round', 'secondsLeft', 'slots', 'snarks', 'starks', 'winner'],
+    );
+    expect(match).toEqual({
+      phase: 'uint8',
+      round: 'uint16',
+      slots: { array: PitchSlotEntry },
+      starks: 'uint8',
+      snarks: 'uint8',
+      secondsLeft: 'uint8',
+      winner: 'uint8',
+    });
+    // A slot names a player only by the presence id street peers already hold,
+    // and a dummy's place is two whole-pixel coordinates. Nothing else fits.
+    expect(Metadata.getFields(PitchSlotEntry)).toEqual({
+      kind: 'uint8',
+      gameId: 'string',
+      x: 'int16',
+      y: 'int16',
+    });
   });
 
   it('carries exactly the frozen ArenaRingSnapshot shape, in bytes, one 16-bit round and a presence id per slot (D-114)', () => {
@@ -226,8 +256,8 @@ describe('the schema is the enforcement point', () => {
       y: 'int32',
       vx: 'int32',
       vy: 'int32',
-      west: 'uint8',
-      east: 'uint8',
+      starks: 'uint8',
+      snarks: 'uint8',
       phase: 'uint8',
     });
   });
@@ -786,12 +816,20 @@ describe('the football is anonymous (D-078)', () => {
   }
 
   it('names no player in the ball, the score or the phase, whoever kicks and pushes it', () => {
-    const registry = new LobbyPresence({ minUpdateIntervalMs: 0 });
+    // D-135: the pitch is fenced, so the three wanderers go in by its north
+    // gate; with the dummies off the match stays open and they kick freely.
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 0, pitchDummyFill: false });
     const encoder = new Encoder(registry.state);
     const observer = observe(encoder);
     const random = mulberry32(78);
     const centre = { x: 14 * 32, y: 15 * 32 };
-    const ids = ['a', 'b', 'c'].map((key, n) => join(registry, key, centre.x - 30 + n * 20, centre.y + 10));
+    const approach = pitchTileCentre({ x: PITCH_GATES[0]!.approach.x, y: PITCH_GATES[0]!.approach.y });
+    const ids = ['a', 'b', 'c'].map((key, n) => {
+      const id = join(registry, key, approach.x, approach.y);
+      expect(registry.pitchGate(key, 100 * (n + 1))).toBe('entered');
+      expect(registry.move(key, { x: centre.x - 30 + n * 20, y: centre.y + 10, facing: 'right' }, 500)).toBe('applied');
+      return id;
+    });
     let now = 1000;
     registry.keepFootballRunning(now);
     const attempts = vocabulary.smuggleAttempts;

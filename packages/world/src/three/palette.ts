@@ -594,8 +594,9 @@ export const PITCH_THEME = Object.freeze({
   mesh: 0x6f8578,
   goal: 0xf7f5ef,
   net: 0xdcdcd4,
-  west: SANDBOX_THEME.blocks[5]!,
-  east: SANDBOX_THEME.blocks[0]!,
+  // D-135: the two teams' colours, the Starks' blue and the Snarks' red.
+  starks: SANDBOX_THEME.blocks[5]!,
+  snarks: SANDBOX_THEME.blocks[0]!,
   pole: 0x49525a,
   lamp: 0xfff1cf,
   ballLight: 0xf7f5ee,

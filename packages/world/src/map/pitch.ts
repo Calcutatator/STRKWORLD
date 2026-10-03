@@ -1,9 +1,15 @@
 import {
   FOOTBALL_KICK_RANGE,
+  FOOTBALL_SIDE_GOAL,
+  FOOTBALL_TEAM_NAMES,
   PITCH_AREA,
   PITCH_FIELD,
+  PITCH_GATES,
   PITCH_GOAL,
+  PITCH_PEN,
+  PITCH_PEN_INTERIOR,
   SANDBOX_ENTRANCE,
+  isPitchFenceTile,
   type FootballSide,
   type TileRect,
 } from '@strkworld/shared';
@@ -57,11 +63,12 @@ const fixture = (value: PitchFixture): PitchFixture => Object.freeze({ ...value 
 /**
  * Each goal's footing: the column of net behind its goal line, with a tile
  * either side of the mouth where the posts stand, so a post is solid from
- * behind as the net is.
+ * behind as the net is. Which end a team keeps comes from
+ * `FOOTBALL_SIDE_GOAL` (D-135) and is never guessed from the name.
  */
 function goalFooting(side: FootballSide): PitchFixture {
   const half = PITCH_GOAL.width / 2;
-  const x = side === 'west' ? PITCH_FIELD.x - PITCH_GOAL.depth : PITCH_FIELD.x + PITCH_FIELD.width;
+  const x = FOOTBALL_SIDE_GOAL[side] === 'west' ? PITCH_FIELD.x - PITCH_GOAL.depth : PITCH_FIELD.x + PITCH_FIELD.width;
   return fixture({ kind: 'goal', side, x, y: PITCH_MIDDLE_Z - half - 1, width: PITCH_GOAL.depth, height: PITCH_GOAL.width + 2 });
 }
 
@@ -79,12 +86,31 @@ export const PITCH_FIXTURES: readonly PitchFixture[] = Object.freeze([
   fixture({ kind: 'floodlight', x: 26, y: 1, width: 1, height: 1 }),
   fixture({ kind: 'floodlight', x: 1, y: 26, width: 1, height: 1 }),
   fixture({ kind: 'floodlight', x: 26, y: 26, width: 1, height: 1 }),
-  goalFooting('west'),
-  goalFooting('east'),
+  goalFooting('starks'),
+  goalFooting('snarks'),
 ]);
 
-/** The board over the gate, facing the street as you walk in. */
+/** The board over the square's street gate, facing the street as you walk in. */
 export const PITCH_GATE_TEXT = 'FOOTBALL';
+
+/** D-135: the chip's words at a gate you may go in by. */
+export const PITCH_ENTER_PROMPT = 'ENTER PITCH';
+
+/** D-135: the chip's words at a gate you may come back out of. */
+export const PITCH_LEAVE_PROMPT = 'LEAVE PITCH';
+
+/** D-135: what a locked gate says — four real players are on, or a winner's banner is up. */
+export const PITCH_LOCKED_TEXT = 'IN PLAY';
+
+/** D-135: the "first to 3" line under the scoreboard, from the winning score. */
+export function pitchTargetText(winScore: number): string {
+  return `FIRST TO ${wholeScore(winScore)}`;
+}
+
+/** D-135: the winner's banner, "STARKS WIN". */
+export function pitchBannerText(side: FootballSide): string {
+  return `${FOOTBALL_TEAM_NAMES[side]} WIN`;
+}
 
 /** The prompt over the ball while the player is close enough to kick it. */
 export const PITCH_KICK_PROMPT = 'E · KICK';
@@ -95,27 +121,39 @@ export const PITCH_GOAL_TEXT = 'GOAL!';
 /** Shown over the pitch when a side reaches the winning score. */
 export const PITCH_FULL_TIME_TEXT = 'FULL TIME';
 
-/** The scoreboard's line, "WEST 0 – 0 EAST". Scores that are not whole numbers read 0. */
-export function pitchScoreText(west: number, east: number): string {
-  return `WEST ${wholeScore(west)} – ${wholeScore(east)} EAST`;
+/** The scoreboard's line, "STARKS 0 – 0 SNARKS". Scores that are not whole numbers read 0. */
+export function pitchScoreText(starks: number, snarks: number): string {
+  return `${FOOTBALL_TEAM_NAMES.starks} ${wholeScore(starks)} – ${wholeScore(snarks)} ${FOOTBALL_TEAM_NAMES.snarks}`;
 }
 
-/** The FULL TIME moment's second line, "WEST WIN 5 – 3": the side that won, and the score. */
-export function pitchWinnerText(west: number, east: number): string {
-  const [w, e] = [wholeScore(west), wholeScore(east)];
-  if (w === e) return pitchScoreText(w, e);
-  return `${w > e ? 'WEST' : 'EAST'} WIN ${Math.max(w, e)} – ${Math.min(w, e)}`;
+/** The FULL TIME moment's second line, "STARKS WIN 3 – 1": the side that won, and the score. */
+export function pitchWinnerText(starks: number, snarks: number): string {
+  const [a, b] = [wholeScore(starks), wholeScore(snarks)];
+  if (a === b) return pitchScoreText(a, b);
+  return `${a > b ? FOOTBALL_TEAM_NAMES.starks : FOOTBALL_TEAM_NAMES.snarks} WIN ${Math.max(a, b)} – ${Math.min(a, b)}`;
 }
 
 function wholeScore(value: number): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
-/** Pave the square, lay the field, mark every fixture solid and fence the street side, in an existing grid. */
+/**
+ * Pave the square, lay the field, mark every fixture solid, fence the pitch
+ * itself (D-135) and fence the street side, in an existing grid.
+ */
 export function paintPitch(tiles: TileKind[][]): void {
   fillTiles(tiles, PITCH_AREA, 'walkway');
   fillTiles(tiles, PITCH_FIELD, 'turf');
   for (const piece of PITCH_FIXTURES) fillTiles(tiles, piece, 'footing');
+  // D-135: the pitch's own fence, a solid ring round the field and both goals
+  // with its two gates closed in it. `railing` is solid, so the only way in or
+  // out is a press of E at a gate — the arena ring's rule. The main stand and
+  // the south bleachers are both outside it, so the benches stay reachable.
+  for (let row = PITCH_PEN.y; row < PITCH_PEN.y + PITCH_PEN.height; row++) {
+    for (let col = PITCH_PEN.x; col < PITCH_PEN.x + PITCH_PEN.width; col++) {
+      if (isPitchFenceTile(col, row)) fillTiles(tiles, { x: col, y: row, width: 1, height: 1 }, 'railing');
+    }
+  }
   // The fence stands one tile east of the square, open at the gate: the
   // road and both pavements already run through it there.
   const fence = { x: PITCH_GATE.x, y: PITCH_AREA.y, width: 1, height: PITCH_AREA.height };
@@ -128,6 +166,14 @@ export function paintPitch(tiles: TileKind[][]): void {
 export function inPitchRect(rect: TileRect, x: number, y: number): boolean {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
+
+/** Whether a street tile lies inside the pitch's fence: the field, both goals and the walkway round them. */
+export function isInPitchPen(x: number, y: number): boolean {
+  return Number.isInteger(x) && Number.isInteger(y) && inPitchRect(PITCH_PEN_INTERIOR, x, y);
+}
+
+/** The pitch's two gates, as the World draws and prompts them (D-135). */
+export const PITCH_PEN_GATES = PITCH_GATES;
 
 /** Whether a street tile lies in the pitch square. */
 export function isPitchTile(x: number, y: number): boolean {

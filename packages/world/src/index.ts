@@ -237,11 +237,24 @@ export type { FootballChannel, FootballFrame, FootballMoment } from './football-
 // The gladiator pit's arena (D-114): the Shell supplies the channel, as for
 // the football, and the World never imports the lobby.
 export type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
+
+// The gated pitch's match (D-135): the Shell supplies the channel, as for the
+// ball, and the two gates are stations on the shared press-E system (D-117).
+export {
+  PITCH_GATE_TARGET_ID,
+  isPitchLocked,
+  normalizePitchFrame,
+  pitchGateTargets,
+} from './pitch-channel.js';
+export type { PitchChannel } from './pitch-channel.js';
 export {
   PITCH_FIXTURES,
   PITCH_FULL_TIME_TEXT,
   PITCH_GATE,
   PITCH_GATE_TEXT,
+  PITCH_ENTER_PROMPT,
+  PITCH_LEAVE_PROMPT,
+  PITCH_LOCKED_TEXT,
   PITCH_GOAL_TEXT,
   PITCH_KICK_PROMPT,
   pitchScoreText,

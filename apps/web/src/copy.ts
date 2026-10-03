@@ -973,6 +973,31 @@ export const COPY = freezeCopy({
     countdownLive: 'Fight starts in',
   },
 
+  /** D-135: the gated pitch's HUD — the scoreboard, the countdown and the result. */
+  pitch: {
+    label: 'Football match',
+    /** Both teams, as every scoreboard and banner writes them. */
+    starks: 'STARKS',
+    snarks: 'SNARKS',
+    /** Under the score: the match is best of five, so three goals win it. */
+    target: 'FIRST TO',
+    /** The slim bar while the pitch is filling up. */
+    waiting: 'WAITING FOR PLAYERS',
+    /** Followed by how many of the four places are taken, e.g. "2 of 4 in". */
+    filled: 'of 4 in',
+    /** Shown the moment a countdown reaches zero. */
+    kickOff: 'KICK OFF!',
+    /** The winner's banner: the team's name, then this. */
+    win: 'WIN',
+    goal: 'GOAL!',
+    /** The chip at a gate, and what it reads while a match is on. */
+    enter: 'ENTER PITCH',
+    leave: 'LEAVE PITCH',
+    locked: 'IN PLAY',
+    /** Read out by the live region as a countdown runs. */
+    countdownLive: 'Kick off in',
+  },
+
   presence: {
     connecting: 'Connecting to multiplayer…',
     connected: 'Multiplayer connected',
@@ -1043,7 +1068,7 @@ export const COPY = freezeCopy({
       "At the street's west end, beside the football pitch, a square with no money in it. Press E at the monument for the pool's live figures, or at the table to play Where's the note?",
     pitchTitle: 'The football pitch',
     pitch:
-      'The road begins at a football pitch with one ball for everyone there. Walk into the ball to dribble it, or press E when E · KICK shows to kick it away from you. West shoots east and East shoots west; the first side to 5 wins, and the score starts again from 0–0.',
+      'The road begins at a fenced football pitch. Press E at the gate on either touchline to go on; the first four in play 2v2, STARKS against SNARKS, and the gate reads IN PLAY once all four places are taken. Walk into the ball to dribble it, or press E when E · KICK shows to kick it away from you. STARKS shoot east and SNARKS shoot west; the first team to 3 goals wins, then everyone comes back out and the pitch reopens. Watch from the stands until then.',
     dismiss: 'Got it',
     stationHint: 'Walk up to a lit counter and press E to open it; grey ones are not open yet. Menu Mode opens the full menu.',
   },

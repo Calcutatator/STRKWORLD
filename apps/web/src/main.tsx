@@ -13,6 +13,7 @@ import { LobbyClient } from '@strkworld/lobby/client';
 import { createSandboxController } from './sandbox/sandbox-controller.js';
 import { createFootballController } from './football/football-controller.js';
 import { createArenaController } from './arena/arena-controller.js';
+import { createPitchController } from './pitch/pitch-controller.js';
 import { createArenaAuthority } from '@strkworld/lobby/arena';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet, withLeaderboardProbe } from './production/config.js';
@@ -72,13 +73,18 @@ const stopFootballWorld = football.listen(worldOut);
 // the arena HUD.
 const arena = createArenaController({ solo: () => createArenaAuthority() });
 const stopArenaWorld = arena.listen(worldOut);
+// D-135: the gated pitch's match. The room is its only authority — a 2v2 needs
+// one, and solo play already has the open pitch (D-078) — so this has no solo
+// half: offline its channel simply holds no match and the HUD draws nothing.
+const pitch = createPitchController();
 const createPresence = (): PresenceController => {
   const next = createPresenceController({
     endpoint: lobbyEndpoint(),
-    factory: (options) => arena.adopt(football.adopt(sandbox.adopt(new LobbyClient(options)))),
+    factory: (options) => pitch.adopt(arena.adopt(football.adopt(sandbox.adopt(new LobbyClient(options))))),
     sandbox: sandbox.channel,
     football: football.channel,
     arena: arena.channel,
+    pitch: pitch.channel,
   });
   activePresence = next;
   return next;
@@ -94,6 +100,7 @@ const presenceLifecycle = {
     football.destroy();
     stopArenaWorld();
     arena.destroy();
+    pitch.destroy();
     await activePresence?.destroy();
   },
 };

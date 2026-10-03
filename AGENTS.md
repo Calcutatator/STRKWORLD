@@ -14320,3 +14320,42 @@ RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
 
 ---
+
+### 2026-10-03 — A D-number taken from `origin/main` can be taken again while you work
+
+D-135's entry was written as D-129, renumbered to D-134 when a fetch showed
+D-129 had become the Colosseum, and renumbered again to D-135 when the fetch
+immediately before committing showed D-134 had become the Garden. With a dozen
+branches open, the number you reserved at the start of a long change is not
+yours at the end of it.
+
+*How to avoid it:* take the number from a fetch **immediately before you
+commit**, not when you start, and keep the whole change greppable for it so the
+renumber is one `grep -rl | xargs perl -pi -e` (here it was 84 references across
+29 files, then 140 across 35). Re-fetch and re-check even if you already
+renumbered once.
+
+*Verified:* `git show origin/main:docs/DECISIONS.md | grep -o "^## D-[0-9]*"`
+before each renumber; D-129 is the Colosseum and D-134 the Garden on
+`origin/main` today, and neither existed in this branch's base.
+
+---
+
+### 2026-10-03 — The static-scene rule treats a moving figure as a walkable-tile intrusion
+
+`street-builder.test.ts` asserts no volume in `street:ground` stands on a
+walkable tile between knee and head height. D-135's pitch dummies are figures
+that walk the field, so parenting them to `ground` failed that test — and
+correctly so: the rule is about authored scene geometry, which is why avatars
+have never been in that group either. Hiding them (`visible = false`) does not
+help; the test traverses geometry, not visibility.
+
+*How to avoid it:* anything that moves over walkable ground belongs outside
+`street:ground`. D-135 added `street:figures` for exactly this, hidden and shown
+with the street like the ball.
+
+*Verified:* reproduced red — with the dummies in `ground` the test reports four
+intrusions at the world origin; moving them to `street:figures` turns it green,
+and `pitch-builder.test.ts` pins that they are not in `ground`.
+
+---

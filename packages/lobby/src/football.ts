@@ -126,6 +126,19 @@ export class LobbyFootball {
     return 'applied';
   }
 
+  /**
+   * D-135: a kick the room itself makes — one of the pitch's dummies. No
+   * per-session floor, because the match paces the dummies
+   * (`PITCH_DUMMY_KICK_INTERVAL_MS`), and no facing, because a dummy lines
+   * itself up behind the ball and so never stands on its centre. Returns
+   * whether the rules took it.
+   */
+  kickFrom(at: { readonly x: number; readonly y: number }): boolean {
+    if (!this.#authority.kick(at)) return false;
+    this.#copy();
+    return true;
+  }
+
   /** Forget a connection's floor and movement: it left. */
   forget(key: string): void {
     this.#throttle.forget(key);
@@ -135,6 +148,15 @@ export class LobbyFootball {
   /** Forget a connection's movement only: it left the street, and keeps its floor. */
   lose(key: string): void {
     this.#authority.forget(key);
+  }
+
+  /**
+   * D-135: back to a kick-off, 0–0, live — what the pitch's match authority
+   * does at the start and the close of a match.
+   */
+  reset(): void {
+    this.#authority.reset();
+    this.#copy();
   }
 
   /**
@@ -158,8 +180,8 @@ export class LobbyFootball {
       last.y === next.y &&
       last.vx === next.vx &&
       last.vy === next.vy &&
-      last.west === next.west &&
-      last.east === next.east &&
+      last.starks === next.starks &&
+      last.snarks === next.snarks &&
       last.phase === next.phase &&
       (last.tick === next.tick || (next.vx === 0 && next.vy === 0))
     ) {
@@ -171,8 +193,8 @@ export class LobbyFootball {
     if (last === null || last.y !== next.y) entry.y = next.y;
     if (last === null || last.vx !== next.vx) entry.vx = next.vx;
     if (last === null || last.vy !== next.vy) entry.vy = next.vy;
-    if (last === null || last.west !== next.west) entry.west = next.west;
-    if (last === null || last.east !== next.east) entry.east = next.east;
+    if (last === null || last.starks !== next.starks) entry.starks = next.starks;
+    if (last === null || last.snarks !== next.snarks) entry.snarks = next.snarks;
     if (last === null || last.phase !== next.phase) entry.phase = FOOTBALL_PHASE_CODES[next.phase];
     this.#written = next;
   }

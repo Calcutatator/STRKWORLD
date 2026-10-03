@@ -273,7 +273,7 @@ describe('the posts', () => {
   it('lets a ball that clips the inside of a post go in off it, and one that clips its outside stay out', () => {
     // Inside: aimed a little inside the post, it glances into the goal.
     const inside = roll(ball(X1 - 3 * T, postY + R * 0.9, FOOTBALL_KICK_SPEED, 0), 20);
-    expect(inside.scored).toEqual(['west']);
+    expect(inside.scored).toEqual(['starks']);
     // Outside: a little outside it, it glances off onto the goal line's board and stays out.
     const outside = roll(ball(X1 - 3 * T, postY - R * 0.9, FOOTBALL_KICK_SPEED, 0), 20);
     expect(outside.scored).toEqual([]);
@@ -296,16 +296,16 @@ describe('the posts', () => {
 });
 
 describe('goals', () => {
-  it('scores for West into the east goal and for East into the west goal', () => {
-    expect(roll(ball(X1 - 3 * T, MID, FOOTBALL_KICK_SPEED, 0), 20).scored).toEqual(['west']);
-    expect(roll(ball(X0 + 3 * T, MID, -FOOTBALL_KICK_SPEED, 0), 20).scored).toEqual(['east']);
+  it('scores for the Starks into the east goal and for the Snarks into the west goal', () => {
+    expect(roll(ball(X1 - 3 * T, MID, FOOTBALL_KICK_SPEED, 0), 20).scored).toEqual(['starks']);
+    expect(roll(ball(X0 + 3 * T, MID, -FOOTBALL_KICK_SPEED, 0), 20).scored).toEqual(['snarks']);
   });
 
   it('counts only a ball wholly over the line, between the posts', () => {
-    expect(goalScoredBy(ball(X1 + R + 0.01, MID))).toBe('west');
+    expect(goalScoredBy(ball(X1 + R + 0.01, MID))).toBe('starks');
     expect(goalScoredBy(ball(X1 + R, MID))).toBeNull();
     expect(goalScoredBy(ball(X1, MID))).toBeNull();
-    expect(goalScoredBy(ball(X0 - R - 0.01, MID + HALF_MOUTH - R))).toBe('east');
+    expect(goalScoredBy(ball(X0 - R - 0.01, MID + HALF_MOUTH - R))).toBe('snarks');
     expect(goalScoredBy(ball(X0 - R, MID))).toBeNull();
     // Level with a post or beyond it is not between the posts.
     expect(goalScoredBy(ball(X1 + R + 1, MID - HALF_MOUTH))).toBeNull();
@@ -318,7 +318,7 @@ describe('goals', () => {
     // back toward the field, all inside one 40 ms step.
     const start = ball(X1 - R - 1, MID, FOOTBALL_MAX_SPEED, 0);
     const { ball: after, scored } = stepBall(start, FOOTBALL_TICK_MS);
-    expect(scored).toBe('west');
+    expect(scored).toBe('starks');
     expect(after.x).toBeLessThanOrEqual(X1 + DEPTH - R);
   });
 
@@ -416,25 +416,25 @@ describe('dribbling', () => {
 });
 
 describe('the match (D-078)', () => {
-  /** A ball already on its way into `side`'s target: West's into the east goal. */
+  /** A ball already on its way into `side`'s target: the Starks' into the east goal. */
   const shotFor = (side: FootballSide): BallState =>
-    side === 'west' ? ball(X1 - 2 * T, MID, FOOTBALL_KICK_SPEED, 0) : ball(X0 + 2 * T, MID, -FOOTBALL_KICK_SPEED, 0);
+    side === 'starks' ? ball(X1 - 2 * T, MID, FOOTBALL_KICK_SPEED, 0) : ball(X0 + 2 * T, MID, -FOOTBALL_KICK_SPEED, 0);
 
   it('counts a goal once, celebrates it, then kicks off from the centre spot at rest', () => {
-    const { authority, run } = match(shotFor('west'));
+    const { authority, run } = match(shotFor('starks'));
     const events = run(400);
-    expect(events).toEqual([{ kind: 'goal', side: 'west' }]);
-    expect(authority.snapshot()).toMatchObject({ west: 1, east: 0, phase: 'goal' });
+    expect(events).toEqual([{ kind: 'goal', side: 'starks' }]);
+    expect(authority.snapshot()).toMatchObject({ starks: 1, snarks: 0, phase: 'goal' });
     // The ball stays dead in the net for the celebration, and nothing is counted twice.
     // The goal went in during the first 400 ms, so its celebration runs past 2.5 s.
     expect(run(FOOTBALL_GOAL_MS - 600)).toEqual([]);
-    expect(authority.snapshot()).toMatchObject({ west: 1, east: 0, phase: 'goal' });
+    expect(authority.snapshot()).toMatchObject({ starks: 1, snarks: 0, phase: 'goal' });
     expect(run(800)).toEqual([{ kind: 'kick-off' }]);
-    expect(authority.snapshot()).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0, west: 1, east: 0, phase: 'live' });
+    expect(authority.snapshot()).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0, starks: 1, snarks: 0, phase: 'live' });
   });
 
   it('plays to FOOTBALL_WIN_SCORE, holds a FULL TIME moment naming the winner, then starts again from 0-0', () => {
-    const authority = createFootballAuthority({ ball: shotFor('east') });
+    const authority = createFootballAuthority({ ball: shotFor('snarks') });
     let clock = 0;
     authority.resume(clock);
     const events: FootballEvent[] = [];
@@ -447,7 +447,7 @@ describe('the match (D-078)', () => {
     };
     for (let goal = 1; goal <= FOOTBALL_WIN_SCORE; goal++) {
       run(400);
-      expect(authority.snapshot().east).toBe(goal);
+      expect(authority.snapshot().snarks).toBe(goal);
       run(FOOTBALL_GOAL_MS);
       if (goal < FOOTBALL_WIN_SCORE) {
         expect(authority.snapshot().phase).toBe('live');
@@ -457,20 +457,21 @@ describe('the match (D-078)', () => {
         run(1800);
       }
     }
-    expect(authority.snapshot()).toMatchObject({ east: FOOTBALL_WIN_SCORE, west: 0, phase: 'full-time' });
-    expect(events.filter((event) => event.kind === 'full-time')).toEqual([{ kind: 'full-time', winner: 'east' }]);
+    expect(authority.snapshot()).toMatchObject({ snarks: FOOTBALL_WIN_SCORE, starks: 0, phase: 'full-time' });
+    expect(events.filter((event) => event.kind === 'full-time')).toEqual([{ kind: 'full-time', winner: 'snarks' }]);
     run(FOOTBALL_FULL_TIME_MS);
-    expect(authority.snapshot()).toMatchObject({ west: 0, east: 0, phase: 'live', x: FOOTBALL_CENTRE.x, vx: 0 });
+    expect(authority.snapshot()).toMatchObject({ starks: 0, snarks: 0, phase: 'live', x: FOOTBALL_CENTRE.x, vx: 0 });
     expect(events.map((event) => event.kind).filter((kind) => kind !== 'kick-off')).toEqual([
-      'goal', 'goal', 'goal', 'goal', 'goal', 'full-time',
+      ...Array.from({ length: FOOTBALL_WIN_SCORE }, () => 'goal'),
+      'full-time',
     ]);
   });
 
   it('names no player anywhere: a snapshot holds the ball, the score and the phase', () => {
-    const { authority, run } = match(shotFor('west'));
+    const { authority, run } = match(shotFor('starks'));
     run(400, [{ key: 'secret-session', x: 1, y: 1, at: 0 }]);
     const snapshot = authority.snapshot();
-    expect(Object.keys(snapshot).sort()).toEqual(['east', 'phase', 'tick', 'vx', 'vy', 'west', 'x', 'y']);
+    expect(Object.keys(snapshot).sort()).toEqual(['phase', 'snarks', 'starks', 'tick', 'vx', 'vy', 'x', 'y']);
     expect(JSON.stringify(snapshot)).not.toContain('secret');
     expect(Object.isFrozen(snapshot)).toBe(true);
   });
