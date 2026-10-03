@@ -60,14 +60,17 @@ describe('the south vista (D-124)', () => {
     expect(() => vista.update(1000)).not.toThrow();
   });
 
-  it('costs eight draw calls at most, and fewer on a phone: six merged meshes, five without the boats', () => {
+  it('costs eight draw calls at most, and fewer on a phone: seven merged meshes, six without the boats', () => {
     const high = createSouthVista({ quality: 'high' });
     const low = createSouthVista({ quality: 'low' });
-    // The whole vista's budget, the figure the roof branch inherits.
+    // The whole vista's budget, the figure the roof branch inherits. The
+    // seventh is the skyline's two landmarks (D-133, 2026-10-03), merged
+    // together into one mesh: two towers for one draw call.
     expect(MESHES(high.group).length).toBeLessThanOrEqual(8);
-    expect(MESHES(high.group).length).toBe(6);
-    // 'low' drops the boats, which are the only thing that moves.
-    expect(MESHES(low.group).length).toBe(5);
+    expect(MESHES(high.group).length).toBe(7);
+    // 'low' drops the boats, which are the only thing that moves. The
+    // landmarks stay: they are the thing the ride is pointed at.
+    expect(MESHES(low.group).length).toBe(6);
     expect(MESHES(low.group).some((mesh) => mesh instanceof InstancedMesh)).toBe(false);
     expect(MESHES(high.group).filter((mesh) => mesh instanceof InstancedMesh)).toHaveLength(1);
     // One mesh per bin, and every one merged: no bin becomes a pile of meshes.
@@ -76,9 +79,11 @@ describe('the south vista (D-124)', () => {
       'south-vista:city',
       'south-vista:ferries',
       'south-vista:glass',
+      'south-vista:landmarks',
       'south-vista:station',
       'south-vista:water',
     ]);
+    expect(MESHES(low.group).map((mesh) => mesh.name)).toContain('south-vista:landmarks');
     // Low quality is cheaper in triangles too, not just in meshes.
     const triangles = (root: typeof high.group): number =>
       MESHES(root).reduce((total, mesh) => {
@@ -124,8 +129,20 @@ describe('the south vista (D-124)', () => {
         }
       }
       expect(off.slice(0, 5), quality).toEqual([]);
-      // And it sits on the water, not over the district: nothing towers.
-      expect(box.max.y, quality).toBeLessThan(32);
+      // And it sits on the water, not over the district: nothing towers —
+      // bar the two landmarks on the skyline, which are meant to (D-133,
+      // 2026-10-03). Measured without them, the rest is as low as it was.
+      const landmarks = MESHES(vista.group).find((mesh) => mesh.name === 'south-vista:landmarks')!;
+      const rest = new Box3();
+      for (const mesh of MESHES(vista.group)) {
+        if (mesh === landmarks) continue;
+        rest.union(new Box3().setFromObject(mesh));
+      }
+      expect(rest.max.y, quality).toBeLessThan(32);
+      // The towers stand clear of the city, and stop well under the sky.
+      const skyline = new Box3().setFromObject(landmarks);
+      expect(skyline.max.y, quality).toBeGreaterThan(40);
+      expect(skyline.max.y, quality).toBeLessThan(80);
       vista.dispose();
     }
   });
@@ -206,7 +223,7 @@ describe('the south vista (D-124)', () => {
     // The roof is the building's top in the street scene, not a room of its
     // own (presenter.ts), so mounting it here is what puts it under the swing.
     expect(vista, 'the street mounts the vista in its ground group').toBeDefined();
-    expect(MESHES(vista!)).toHaveLength(6);
+    expect(MESHES(vista!)).toHaveLength(7);
     // Hiding the street indoors hides the vista with it.
     expect(vista!.parent).toBe(view.ground);
     // Scenery only: it casts and receives nothing, and the shadow camera is

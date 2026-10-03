@@ -204,13 +204,16 @@ describe('the arena in 3D (D-114)', () => {
       'south-vista:city',
       'south-vista:ferries',
       'south-vista:glass',
+      // D-133 (2026-10-03): the skyline's two landmarks, merged into one call.
+      'south-vista:landmarks',
       'south-vista:station',
       'south-vista:water',
     ]);
     // The ring's sign and the emperor's box label.
     expect(labels.map((label) => label.userData['text'])).toEqual(['THE RING', "EMPEROR'S BOX\nCLOSED"]);
     const calls = names.length + labels.length;
-    expect(calls).toBe(21);
+    // 22 since D-133 (2026-10-03) put the skyline's landmarks in the vista.
+    expect(calls).toBe(22);
     expect(calls).toBeLessThanOrEqual(24);
     room.dispose();
   });

@@ -1,6 +1,6 @@
 import type { Facing, GameId, RoofSwingSnapshot } from '@strkworld/shared';
 import type { InteractionTarget } from './interaction.js';
-import type { SwingCameraShot } from './roof-swing.js';
+import type { SwingCameraShot, SwingLookInput } from './roof-swing.js';
 
 /**
  * D-133: the Exchange roof's lookout swing, as the World sees it.
@@ -41,6 +41,12 @@ export interface RoofSwingSessionHost {
   swingObject?(): unknown;
   /** True while a panel or Shell claim owns the keyboard. The session then sends nothing. */
   inputSuspended?(): boolean;
+  /**
+   * D-133 (2026-10-03): what the player is doing with the look controls this
+   * frame — the left and right keys, and a horizontal drag on a touch screen.
+   * Read only while this client is the rider. Absent: the head stays still.
+   */
+  lookInput?(): SwingLookInput | null;
   /** The press-E system's yield, held for the whole ride so nothing else takes E. */
   suspendInteractions?(reason: string): () => void;
   /** Movement's gate: held for the ride, so no key moves the rider off the seat. */
@@ -62,6 +68,13 @@ export interface RoofSwingViewFrame {
   readonly selfRiding: boolean;
   /** The rider's camera this frame, or null when this client is not riding. */
   readonly shot: SwingCameraShot | null;
+  /**
+   * D-133 (2026-10-03): how far this client's rider has turned their head,
+   * radians, positive to their left. 0 for a spectator's view of someone
+   * else's ride: the head's turn is local, since the only thing the lobby
+   * carries about the swing is whose ride it is and how long is left.
+   */
+  readonly headYaw: number;
 }
 
 export interface RoofSwingSession {

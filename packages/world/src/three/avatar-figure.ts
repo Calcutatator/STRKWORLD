@@ -160,6 +160,12 @@ const BLOCK_LEAN = 0.12;
 const BLOCK_TWIST = 0.14;
 /** The hips sink this far, world units, on top of the stance's own settle. */
 const BLOCK_CROUCH = 0.07;
+/**
+ * D-133: how far the head may turn from straight ahead, radians. A little
+ * past the swing's own ±75° look limit, so the figure clamps nothing the ride
+ * asks for and still refuses a wrung neck from anywhere else.
+ */
+const HEAD_YAW_LIMIT = (85 * Math.PI) / 180;
 /** Seated on a tier: thighs out ahead (a robe's less), the body lowered onto the seat, hands on the knees. */
 const SEAT_LEG = -0.7;
 const SEAT_DROP = 0.12;
@@ -1973,6 +1979,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   /** D-128: the block's weight, eased the same way. */
   let blockWeight = 0;
   let attack: AttackPose | null = null;
+  /** D-133: how far the head is turned from straight ahead, radians, left positive. */
+  let headYaw = 0;
   /** D-114: this look's swing, set by applyLook. */
   let guardArm = GUARD_ARM_RIGHT;
   let windupArm = SWING_WINDUP_ARM;
@@ -2051,7 +2059,9 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     // The head counters the lean and twist so the face keeps looking ahead.
     // Only partly, so its chin never dips into the shirt at a sprint.
     headPivot.rotation.x = -lean * HEAD_COUNTER_LEAN;
-    headPivot.rotation.y = TORSO_TWIST * 0.5 * walkWeight * swing;
+    // D-133: and then it turns where the player is looking, on top of the
+    // gait's own small counter-twist.
+    headPivot.rotation.y = TORSO_TWIST * 0.5 * walkWeight * swing + headYaw;
     eyes.scale.y = blinkClock < BLINK_SECONDS ? 0.15 : 1;
     // D-097: in the air the legs tuck forward and the arms lift out. Applied
     // after the hips are placed, so the feet rise off the ground with the
@@ -2188,6 +2198,12 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
         applyBodyScale();
       }
       jumpTuck = tuck;
+      // D-133: the head's turn arrives already smoothed, and is clamped here
+      // so no caller can wring the neck round.
+      const look = motion?.headYaw;
+      headYaw = typeof look === 'number' && Number.isFinite(look)
+        ? Math.max(-HEAD_YAW_LIMIT, Math.min(HEAD_YAW_LIMIT, look))
+        : 0;
       // D-114: the stance eases like the gait; a seat is never taken mid-swing or on the move.
       const guard = motion?.guard === true;
       const pose = motion?.attack;

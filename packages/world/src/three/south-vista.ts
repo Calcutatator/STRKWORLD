@@ -32,6 +32,7 @@ import {
 } from './palette.js';
 import { SKY_HORIZON } from './sky.js';
 import { onRockTop, rockSpanAtZ } from './sky-island.js';
+import { laySouthLandmarks } from './south-landmarks.js';
 
 /**
  * The south vista (D-124): the water the district stands on, and the city
@@ -158,15 +159,23 @@ function bankSpan(x: number): number | null {
  */
 const HAZE_FROM = 92;
 const HAZE_TO = 222;
-/** Never quite the sky: the far city stays a band, as it does over real water. */
-const HAZE_MAX = 0.9;
 /**
- * The sky's own horizon (D-113's Horizon, shared with the title screen), cooled
- * a third of the way towards grey. Taken from the sky rather than restated, so
- * the two cannot drift; off it rather than equal to it, so the far city keeps a
- * silhouette instead of dissolving into the dome behind it.
+ * Never quite the sky: the far city stays a band, as it does over real water.
+ *
+ * Lower than it was (D-133, 2026-10-03). At 0.9 the far bank was nine tenths
+ * haze, so whatever colour it was painted it arrived grey; at 0.74 the city
+ * keeps enough of its own stone and brick to read as a place.
  */
-const HAZE_COLOUR = mixColor(SKY_HORIZON, 0xccd2d8, 0.34);
+const HAZE_MAX = 0.74;
+/**
+ * The sky's own horizon (D-113's Horizon, shared with the title screen), with
+ * only a touch of grey in it. Taken from the sky rather than restated, so the
+ * two cannot drift; off it rather than equal to it, so the far city keeps a
+ * silhouette instead of dissolving into the dome behind it. It used to be a
+ * third of the way to a cool grey, which is what turned the whole view the
+ * colour of weather (D-133, 2026-10-03).
+ */
+const HAZE_COLOUR = mixColor(SKY_HORIZON, 0xb9c3cc, 0.14);
 
 /** Ground-level air is thicker; it lifts the base of a far building before its top. */
 const HAZE_GROUND_LIFT = 0.16;
@@ -194,38 +203,49 @@ const air =
 // ---------------------------------------------------------------------------
 
 const VISTA = Object.freeze({
-  /** The river, from the near bank's shadow out to the glare. */
-  waterNear: 0x5a7380,
-  waterFar: 0x8098a3,
-  glare: 0xc3ced0,
-  /** Quays, piers and the station's stone. */
-  quay: 0x9a9286,
-  quayDark: 0x7b746a,
-  /** The far bank's own ground, greyer than a street apron so it reads as dockside. */
-  bankGround: 0x948d82,
-  pier: 0x8a7a63,
-  pile: 0x5f5244,
+  /**
+   * The river, from the near bank's shadow out to the glare.
+   *
+   * Colour, not grey (D-133, 2026-10-03). Everything here used to be a
+   * desaturated stand-in for distance, and with the engine's ACES tone
+   * mapping over the top the whole view read as one grey band. The haze does
+   * the distance now (it is warmer and lighter than it was); the materials
+   * are allowed to be the colours they actually are.
+   */
+  waterNear: 0x3c7f9b,
+  waterFar: 0x5fa3bc,
+  glare: 0xe6cfa6,
+  /** Quays, piers and the station's stone: warm, as stone in a low sun is. */
+  quay: 0xb6a284,
+  quayDark: 0x8d7a60,
+  /** The far bank's own ground: a dockside apron, warmer than a pavement. */
+  bankGround: 0xa89573,
+  pier: 0x9a7f5c,
+  pile: 0x6b5540,
   /** The train shed: standing-seam metal, its ribs a shade lighter. */
-  shedMetal: 0x878d93,
-  shedRib: 0x9ba1a7,
-  shedBand: 0x666c73,
+  shedMetal: 0x8e9aa2,
+  shedRib: 0xa7b2b8,
+  shedBand: 0x5f6d78,
   /** Its glazing, and the arched gable ends. */
-  glass: 0xc3d5dd,
-  glassWarm: 0xdcd6c4,
+  glass: 0xbfdfe8,
+  glassWarm: 0xf0dcb0,
   /** The station's brick front and the towers over the shed. */
-  brick: 0xa8765c,
-  brickDark: 0x8b6049,
-  slate: 0x5b6169,
+  brick: 0xb86a4c,
+  brickDark: 0x96503a,
+  slate: 0x4f5f6b,
+  /** Trees along the far bank, where the dockside gives way to grass. */
+  tree: Object.freeze([0x4f7a3c, 0x5d8a42, 0x3f6a36, 0x6b8f45]),
+  trunk: 0x6b4a33,
   /** The city behind: the backdrop town's pastels, and the moderns' cooler greys. */
-  modern: Object.freeze([0x9fa8ae, 0xb0b2ad, 0x97a2a8, 0xa9a69c]),
-  spire: 0x7d7467,
+  modern: Object.freeze([0x9db0ba, 0xbcb09c, 0x8fa6b4, 0xb6a07f]),
+  spire: 0x8d7a5e,
   /**
    * What the air does to the town's pastels before the haze even starts. The
    * backdrop's palette is the near rows' palette, and at this range its pinks
    * and greens read as confetti; washed towards a warm grey the city becomes
    * the one thing it should be, a textured band.
    */
-  cityWash: 0xa39d93,
+  cityWash: 0xc0a179,
   /** Hulls. */
   hull: Object.freeze([0x3f4a52, 0x56423a, 0x45504a]),
   deck: 0xb9b2a4,
@@ -235,7 +255,7 @@ const VISTA = Object.freeze({
 /** A town pastel as the far bank wears it: washed towards warm grey. */
 function townStone(seed: number, channel: number): Color {
   const pastel = pick(PALETTE.backdrop, hash01(seed, 5, channel));
-  return jitterColor(mixColor(pastel, VISTA.cityWash, 0.46), hash01(seed, 6, channel), 0.035);
+  return jitterColor(mixColor(pastel, VISTA.cityWash, 0.3), hash01(seed, 6, channel), 0.05);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +297,12 @@ export function createSouthVista(options?: SouthVistaOptions): SouthVista {
     layBanks(bin, low);
     layStation(bin, low);
     layCity(bin, low);
+    // D-133 (2026-10-03): the two towers on the skyline the swing looks at.
+    laySouthLandmarks(bin, 'landmark', air, {
+      centreX: STATION_CENTRE_X,
+      groundY: FAR_BANK_Y,
+      quality: low ? 'low' : 'high',
+    });
     if (!low) layFerryHull(bin);
 
     // One material per bin. All four opt out of the engine's fog: the vista
@@ -295,6 +321,7 @@ export function createSouthVista(options?: SouthVistaOptions): SouthVista {
     flushBin(bin, 'station', land, res, group, { name: 'south-vista:station' });
     flushBin(bin, 'glass', glazing, res, group, { name: 'south-vista:glass' });
     flushBin(bin, 'city', land, res, group, { name: 'south-vista:city' });
+    flushBin(bin, 'landmark', land, res, group, { name: 'south-vista:landmarks' });
     if (surface) water = ripples(surface.geometry, still);
 
     if (!low) {
@@ -452,6 +479,36 @@ function layBanks(bin: GeometryBin, low: boolean): void {
       return hazed(mixColor(VISTA.bankGround, PALETTE.grassCool, green), vz, FAR_BANK_Y);
     });
   }
+  // Trees along the far bank where the dockside gives way to grass: the one
+  // green in the view, and the thing that tells the eye how far away it is.
+  const trees = low ? 14 : 34;
+  for (let i = 0; i < trees; i += 1) {
+    const seed = i * 11 + 3;
+    const tx = STATION_CENTRE_X - 150 + (i * 300) / trees + hash01(seed, 0, 381) * 7;
+    const tz = CITY_Z0 - 10 + hash01(seed, 1, 381) * 7;
+    if (!onRockTop(tx, tz, CITY_SETBACK)) continue;
+    const height = 3.4 + hash01(seed, 2, 381) * 2.6;
+    const spread = 1.3 + hash01(seed, 3, 381) * 0.9;
+    const leaf = pick(VISTA.tree, hash01(seed, 4, 381));
+    bin.add('banks', boxGeometry(tx - 0.18, FAR_BANK_Y, tz - 0.18, tx + 0.18, FAR_BANK_Y + height * 0.42, tz + 0.18), air(VISTA.trunk));
+    bin.add('banks', coneGeometry(tx, FAR_BANK_Y + height * 0.3, tz, spread, height * 0.78, 5), air(leaf));
+    bin.add('banks', coneGeometry(tx, FAR_BANK_Y + height * 0.62, tz, spread * 0.66, height * 0.55, 5), air(shade(leaf, 0.06)));
+  }
+
+  // And a row along the quayside promenade in front of the station, which is
+  // the band of the frame the swing looks straight at.
+  const promenade = low ? 16 : 40;
+  for (let i = 0; i < promenade; i += 1) {
+    const seed = i * 13 + 7;
+    const tx = STATION_CENTRE_X - 150 + (i * 300) / promenade + hash01(seed, 0, 382) * 4;
+    const tz = FAR_QUAY_Z + 1.4 + hash01(seed, 1, 382) * 1.2;
+    if (!onRockTop(tx, tz, 2)) continue;
+    const height = 3 + hash01(seed, 2, 382) * 1.8;
+    const leaf = pick(VISTA.tree, hash01(seed, 3, 382));
+    bin.add('banks', boxGeometry(tx - 0.16, FAR_BANK_Y, tz - 0.16, tx + 0.16, FAR_BANK_Y + height * 0.45, tz + 0.16), air(VISTA.trunk));
+    bin.add('banks', coneGeometry(tx, FAR_BANK_Y + height * 0.34, tz, 1.15, height * 0.8, 5), air(leaf));
+  }
+
   // The quay's coping, proud of the wall it caps.
   bin.add('banks', boxGeometry(farWest, -0.1, FAR_QUAY_Z - 0.5, farEast, FAR_BANK_Y + 0.22, FAR_QUAY_Z + 0.4), air(VISTA.quay));
 

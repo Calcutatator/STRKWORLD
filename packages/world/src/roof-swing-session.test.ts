@@ -26,7 +26,7 @@ import {
   SWING_LABEL,
   createRoofSwingSession,
 } from './roof-swing-session';
-import { SWING_CAMERA_YAW } from './roof-swing';
+import { SWING_CAMERA_YAW, SWING_LOOK_MAX_YAW } from './roof-swing';
 
 const SELF = 'self' as GameId;
 const OTHER = 'other' as GameId;
@@ -42,6 +42,8 @@ const cooling = (round = 2): RoofSwingSnapshot =>
 
 /** A channel the test drives, recording every intent sent through it. */
 function harness(options: { reducedMotion?: boolean; selfId?: GameId | null } = {}) {
+  let look: { left?: boolean; right?: boolean; dragX?: number } | null = null;
+  let lookReads = 0;
   let swing: RoofSwingSnapshot | null = null;
   const listeners = new Set<(value: RoofSwingSnapshot | null) => void>();
   const sent: string[] = [];
@@ -76,6 +78,10 @@ function harness(options: { reducedMotion?: boolean; selfId?: GameId | null } = 
       held.push(`input:${reason}`);
       return () => held.splice(held.indexOf(`input:${reason}`), 1);
     },
+    lookInput: () => {
+      lookReads += 1;
+      return look;
+    },
   };
 
   const session = createRoofSwingSession(channel, host, { now: () => clock });
@@ -99,6 +105,13 @@ function harness(options: { reducedMotion?: boolean; selfId?: GameId | null } = 
     },
     suspendInput(on: boolean) {
       inputSuspended = on;
+    },
+    /** D-133 (2026-10-03): what the look keys are doing this frame. */
+    look(next: { left?: boolean; right?: boolean; dragX?: number } | null) {
+      look = next;
+    },
+    get lookReads() {
+      return lookReads;
     },
     listeners,
   };
@@ -353,5 +366,87 @@ describe('reduced motion, and shutting down (D-133)', () => {
     expect(() => session.update(16)).not.toThrow();
     expect(session.targets()).toEqual([]);
     expect(() => session.destroy()).not.toThrow();
+  });
+});
+
+
+describe('looking around while riding (D-133, 2026-10-03)', () => {
+  const turn = (h: ReturnType<typeof harness>, ms: number) => {
+    for (let t = 0; t < ms; t += 16) h.advance(16);
+  };
+
+  it('turns the rider\'s head from the look keys, and reports it on the frame', () => {
+    const h = harness();
+    h.push(riding(SELF));
+    expect(h.session.frame()?.headYaw).toBe(0);
+    h.look({ left: true });
+    turn(h, 1_500);
+    const frame = h.session.frame();
+    expect(frame?.headYaw).toBeGreaterThan(0.5);
+    expect(frame?.headYaw).toBeLessThanOrEqual(SWING_LOOK_MAX_YAW);
+    // The camera goes with it: the shot's yaw is the south shot plus the head.
+    expect(frame?.shot?.yaw).toBeCloseTo(SWING_CAMERA_YAW + (frame?.headYaw ?? 0), 9);
+  });
+
+  it('eases the head back to centre when the keys are let go', () => {
+    const h = harness();
+    h.push(riding(SELF));
+    h.look({ right: true });
+    turn(h, 1_500);
+    const turned = h.session.frame()?.headYaw ?? 0;
+    expect(turned).toBeLessThan(-0.5);
+    h.look(null);
+    turn(h, 2_000);
+    expect(Math.abs(h.session.frame()?.headYaw ?? 1)).toBeLessThan(0.02);
+  });
+
+  it('reads no look input at all while a panel owns the keyboard, and the head holds still', () => {
+    const h = harness();
+    h.push(riding(SELF));
+    h.look({ left: true });
+    turn(h, 800);
+    const before = h.session.frame()?.headYaw ?? 0;
+    expect(before).toBeGreaterThan(0);
+    const reads = h.lookReads;
+    h.suspendInput(true);
+    turn(h, 800);
+    // Nothing was asked for, and the head eased back rather than turning on.
+    expect(h.lookReads).toBe(reads);
+    expect(h.session.frame()?.headYaw ?? 0).toBeLessThan(before);
+  });
+
+  it('never turns a head for a spectator, or for nobody', () => {
+    const h = harness();
+    h.push(riding(OTHER));
+    h.look({ left: true });
+    turn(h, 1_500);
+    expect(h.session.frame()?.headYaw).toBe(0);
+    expect(h.session.frame()?.shot).toBeNull();
+    // And the look input is never even read when this client is not riding.
+    expect(h.lookReads).toBe(0);
+  });
+
+  it('starts and ends every ride looking straight ahead', () => {
+    const h = harness();
+    h.push(riding(SELF));
+    h.look({ left: true });
+    turn(h, 1_500);
+    expect(h.session.frame()?.headYaw).toBeGreaterThan(0);
+    // The ride ends: the head is centred, and the next one starts centred.
+    h.push(cooling());
+    expect(h.session.frame()?.headYaw).toBe(0);
+    h.push(riding(SELF, 3));
+    expect(h.session.frame()?.headYaw).toBe(0);
+  });
+
+  it('turns the head under reduced motion too, where the sway is nearly nothing', () => {
+    const h = harness({ reducedMotion: true });
+    h.push(riding(SELF));
+    h.look({ left: true });
+    turn(h, 1_000);
+    const frame = h.session.frame();
+    expect(frame?.headYaw).toBeGreaterThan(0.5);
+    expect(frame?.shot?.cut).toBe(true);
+    expect(frame?.shot?.yaw).toBeCloseTo(SWING_CAMERA_YAW + (frame?.headYaw ?? 0), 9);
   });
 });

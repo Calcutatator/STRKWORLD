@@ -20,6 +20,8 @@ import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights
 import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
 import { buildFootball, type FootballView } from './football-view.js';
 import { avatarFigureHeight } from './avatar-figure.js';
+import { seatedFit } from './avatar-seating.js';
+import { SWING_HANG } from './roof-swing.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
 import { arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
@@ -494,6 +496,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let swingSeat: { x: number; y: number; z: number } | null = null;
   /** The rider's camera this frame, or null. */
   let swingShot: CameraShot | null = null;
+  /** The pendulum's angle while this client rides: the avatar leans with the seat. */
+  let swingAngle = 0;
+  /** How far the rider has turned their head this frame (D-133, 2026-10-03). */
+  let swingLook = 0;
   let studioVisible = false;
   let remote: RemoteAvatarLayer3D | null = null;
   let sessionToken = 0;
@@ -540,6 +546,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
     swingFrame = null;
     swingSeat = null;
     swingShot = null;
+    swingAngle = 0;
+    swingLook = 0;
     street.swing?.setAngle(0);
     // The arena's frame, prompt and swing belong to the session that set them (D-114).
     swingElapsed = null;
@@ -591,14 +599,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const remoteRider = (
     gameId: GameId | null,
     seat: { readonly x: number; readonly y: number; readonly z: number } | null,
+    angle = 0,
   ): void => {
     const layer = remote as
       | (RemoteAvatarLayer3D & {
-        setRider?: (id: GameId | null, at: { readonly x: number; readonly y: number; readonly z: number } | null) => void;
+        setRider?: (
+          id: GameId | null,
+          at: { readonly x: number; readonly y: number; readonly z: number } | null,
+          angle?: number,
+        ) => void;
       })
       | null;
     try {
-      layer?.setRider?.(gameId, seat);
+      layer?.setRider?.(gameId, seat, angle);
     } catch {
       // A failing layer leaves the rider where the lobby holds them.
     }
@@ -849,23 +862,31 @@ export function createPresenter(options: PresenterOptions): Presenter {
           if (!frame || !swing) {
             swingSeat = null;
             swingShot = null;
+            swingAngle = 0;
+            swingLook = 0;
             swing?.setAngle(0);
             remoteRider(null, null);
             return;
           }
           swing.setAngle(frame.angle);
-          const seat = swing.riderAt(frame.angle);
-          // D-123: the seat stops inviting a press while someone is on it.
+          // The board's top face: each rider's own look says how far below
+          // its figure's origin its seated hips are (D-133, 2026-10-03).
+          const board = swing.riderAt(frame.angle, SWING_HANG);
           extraAffordances.get(swing.object as Object3D)?.setUsable(ROOF_SWING_TARGET_ID, !frame.busy);
           if (frame.selfRiding) {
+            const seat = swing.riderAt(frame.angle, SWING_HANG + seatedFit(avatar.look).hipDrop);
             swingSeat = { x: seat.x, y: seat.y, z: seat.z };
             swingShot = frame.shot;
+            swingAngle = frame.angle;
+            swingLook = frame.headYaw ?? 0;
             remoteRider(null, null);
             return;
           }
           swingSeat = null;
           swingShot = null;
-          remoteRider(frame.riderId, frame.busy ? seat : null);
+          swingAngle = 0;
+          swingLook = 0;
+          remoteRider(frame.riderId, frame.busy ? board : null, frame.angle);
         },
         syncArena(frame) {
           if (!live()) return;
@@ -999,8 +1020,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
         avatar.object.position.set(swingSeat.x, swingSeat.y, swingSeat.z);
         yaw = 0;
         targetYaw = 0;
-        avatar.object.rotation.y = 0;
+        // The rider leans with the pendulum rather than hanging upright
+        // beside it, so their hips stay on the board through the whole arc.
+        avatar.object.rotation.set(-swingAngle, 0, 0);
         jumpShadow.place(swingSeat.x, swingSeat.y, swingSeat.z, 0, jumpHeight);
+      } else if (avatar.object.rotation.x !== 0) {
+        avatar.object.rotation.x = 0;
       }
       // D-114: the arena swing, the fighter's battle stance, and sitting on a tier.
       let attack: AttackPose | null = null;
@@ -1026,8 +1051,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
         attack,
         guard,
         blocking,
-        // D-133: the swing's rider sits in it, as a spectator sits on a tier.
+        // D-133: the swing's rider sits in it, as a spectator sits on a tier,
+        // and turns their head where they are looking.
         seated: benchSeated || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        headYaw: swingSeat === null ? 0 : swingLook,
       });
       if (streetVisible) {
         street.update(dt);

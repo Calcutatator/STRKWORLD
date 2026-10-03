@@ -982,6 +982,10 @@ export const COPY = freezeCopy({
   swing: {
     label: 'Lookout swing',
     getOff: 'Esc to get off',
+    /** D-133 (2026-10-03): the left and right keys turn the rider's head. */
+    look: '\u25c0 \u25b6 look around',
+    /** The whole hint, as one line: what the rider can do, and the way out. */
+    hint: '\u25c0 \u25b6 look around \u00b7 Esc to get off',
   },
 
   presence: {

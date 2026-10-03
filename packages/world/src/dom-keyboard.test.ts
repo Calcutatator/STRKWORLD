@@ -317,3 +317,62 @@ describe('DOM World keyboard', () => {
     expect(keyboard.sprinting).toBe(false);
   });
 });
+
+describe('a horizontal drag on the canvas (D-133, 2026-10-03)', () => {
+  function dragSetup() {
+    const window = fakeHost();
+    const document = fakeHost();
+    const canvas = fakeHost();
+    const keyboard = createDomKeyboard({ window, document, canvas: canvas as never });
+    const down = (clientX: number) =>
+      canvas.dispatch('pointerdown', { button: 0, isPrimary: true, pointerId: 1, clientX, target: canvas });
+    const move = (clientX: number) => canvas.dispatch('pointermove', { pointerId: 1, clientX });
+    const up = () => window.dispatch('pointerup', { pointerId: 1 });
+    return { window, canvas, keyboard, down, move, up };
+  }
+
+  it('hands over the horizontal travel of a drag, once', () => {
+    const { keyboard, down, move } = dragSetup();
+    down(100);
+    move(140);
+    move(170);
+    expect(keyboard.takeDragX?.()).toBeCloseTo(70, 6);
+    // Taken is taken: the next frame starts from nothing.
+    expect(keyboard.takeDragX?.()).toBe(0);
+  });
+
+  it('ignores a tap that wobbles, and anything after the finger lifts', () => {
+    const { keyboard, down, move, up } = dragSetup();
+    down(100);
+    move(103);
+    expect(keyboard.takeDragX?.()).toBe(0);
+    down(200);
+    move(260);
+    up();
+    expect(keyboard.takeDragX?.()).toBeCloseTo(60, 6);
+    move(400);
+    expect(keyboard.takeDragX?.()).toBe(0);
+  });
+
+  it('reads nothing while disabled, and nothing survives a blur', () => {
+    const { window, keyboard, down, move } = dragSetup();
+    down(100);
+    move(200);
+    keyboard.enabled = false;
+    expect(keyboard.takeDragX?.()).toBe(0);
+    keyboard.enabled = true;
+    down(100);
+    move(200);
+    window.dispatch('blur');
+    expect(keyboard.takeDragX?.()).toBe(0);
+  });
+
+  it('still strikes on a press: the drag rides along with the pointer action', () => {
+    const { keyboard, canvas, down } = dragSetup();
+    const struck = vi.fn();
+    keyboard.on('pointerdown-primary', struck);
+    down(100);
+    expect(struck).toHaveBeenCalledTimes(1);
+    void canvas;
+  });
+});

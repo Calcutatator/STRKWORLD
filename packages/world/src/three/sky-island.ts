@@ -198,10 +198,18 @@ const ROCK = Object.freeze({
   boulderDark: 0x857c6e,
   shrub: 0x497740,
   shrubLight: 0x5c8c48,
-  /** The cloud sea, at golden hour: lit tops, warm shaded flanks. */
-  cloud: 0xfffefc,
-  cloudWarm: 0xfff2e4,
-  cloudShade: 0xf8ead9,
+  /**
+   * The cloud sea, at golden hour: lit tops, warm shaded flanks — and, since
+   * D-133 (2026-10-03), some actual colour in them. They were three shades of
+   * white, which under the engine's tone mapping is what a grey sky looks
+   * like; a low sun puts gold on the tops and rose in the shadows, and from
+   * the swing the far banks are half the frame.
+   */
+  cloud: 0xfff3dc,
+  cloudWarm: 0xffd9a8,
+  cloudShade: 0xeec8b8,
+  /** What the undersides of the far banks pick up from the sun on the horizon. */
+  cloudGlow: 0xf7a978,
   /** The falling water, from the lip's river colour down into spray. */
   waterLip: 0x7f9aa6,
   waterFall: 0xaecad3,
@@ -534,9 +542,13 @@ const CLOUD_REACH = 300;
  * golden hour. `up` runs -0.5 at a lump's underside to +0.5 at its top.
  */
 function cloudFace(x: number, z: number, up: number, strength: number): Color {
-  const base = mixColor(ROCK.cloudShade, ROCK.cloud, clamp01(up + 0.5) ** 0.8);
+  const lit = clamp01(up + 0.5) ** 0.8;
+  const base = mixColor(ROCK.cloudShade, ROCK.cloud, lit);
   const warm = clamp01((Math.hypot(x - ROCK_CENTRE.x, z - ROCK_CENTRE.z) - 120) / 180);
-  return mixColor(mixColor(base, ROCK.cloudWarm, warm * 0.5), HAZE_COLOUR, Math.min(0.7, islandHaze(x, z) * strength));
+  // D-133 (2026-10-03): the far banks catch the low sun on their tops and
+  // hold its colour underneath, so the horizon is a sunset rather than weather.
+  const golden = mixColor(mixColor(base, ROCK.cloudWarm, warm * 0.6), ROCK.cloudGlow, warm * (1 - lit) * 0.55);
+  return mixColor(golden, HAZE_COLOUR, Math.min(0.7, islandHaze(x, z) * strength));
 }
 
 /**
@@ -563,6 +575,11 @@ function layClouds(bin: GeometryBin, low: boolean): void {
   bank(low ? 16 : 44, (_t, seed) => CLOUD_REACH * (0.62 + hash01(seed, 1, 642) * 0.42), (t, seed) => -26 + t * 72 + hash01(seed, 7, 642) * 16, (seed) => 12 + hash01(seed, 3, 642) * 16, 1.3);
   // Under the rim, against the cliff.
   bank(low ? 14 : 40, (t) => ROCK_RADIUS * (0.45 + t * 0.55), (t, seed) => -26 - t * 52 - hash01(seed, 2, 643) * 20, (seed) => 7 + hash01(seed, 3, 643) * 9, 1);
+  // D-133 (2026-10-03): a high band, far out and well above the rim. From
+  // the swing it sits a sixth of the way up the sky, which is the half of
+  // the frame the river and the city do not fill — and the half that read as
+  // empty weather before there was anything in it.
+  bank(low ? 5 : 11, (_t, seed) => CLOUD_REACH * (0.78 + hash01(seed, 4, 645) * 0.3), (t, seed) => 86 + t * 56 + hash01(seed, 8, 645) * 22, (seed) => 20 + hash01(seed, 3, 645) * 18, 1.1);
   // The floor, far below and thin.
   bank(low ? 10 : 30, (t, seed) => ROCK_RADIUS * (0.12 + t * 1.5) * (0.55 + hash01(seed, 5, 644) * 0.6), (_t, seed) => -112 - hash01(seed, 6, 644) * 34, (seed) => 15 + hash01(seed, 3, 644) * 18, 1.2);
 }

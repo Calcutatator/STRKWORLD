@@ -192,3 +192,24 @@ describe('the lookout swing\'s HUD hint (D-133)', () => {
     }
   });
 });
+
+describe('the hint tells the rider they can look around (D-133, 2026-10-03)', () => {
+  it('reads "◀ ▶ look around · Esc to get off", in that order', () => {
+    const fake = fakeChannel(riding(SELF));
+    render(<SwingHud swing={fake.channel} />);
+    const region = host.querySelector('.swing-hud')!;
+    expect(region.textContent).toBe(`${COPY.swing.look}${COPY.swing.getOff}`);
+    expect(COPY.swing.hint).toBe('◀ ▶ look around · Esc to get off');
+    expect(COPY.swing.hint.startsWith(COPY.swing.look)).toBe(true);
+    expect(COPY.swing.hint.endsWith(COPY.swing.getOff)).toBe(true);
+    // The look half is not a button: the keys and the drag do the looking.
+    expect(host.querySelector('.swing-hud-look')?.tagName).toBe('SPAN');
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('still shows nobody else the hint, look and all', () => {
+    const fake = fakeChannel(riding(OTHER));
+    render(<SwingHud swing={fake.channel} />);
+    expect(host.querySelector('.swing-hud-look')).toBeNull();
+  });
+});

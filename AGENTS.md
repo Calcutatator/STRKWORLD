@@ -259,6 +259,67 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — A seat is not one height: the sixteen looks sit 0.07 to 0.25 above their own feet, and the rig hangs its thighs below the hips (D-133)
+
+The roof swing dropped every rider the same 1.78 below its pivot, so the look
+you happened to be wearing decided whether you sat on the board, in it or over
+it. Verified by measuring, not by eye: a figure is seated
+(`createAvatarFigure(key).update(…, { seated: true })`), its hip band's
+underside read off the posed geometry, and the sixteen come out between 0.071
+(a small build) and 0.249 (a large one) — a spread of 0.18, which at this
+figure's scale is the difference between hips on a plank and hips a hand's
+width over it. `three/avatar-seating.ts` measures it once per look and caches
+it; `tools/swing-fit.ts` checks the result across all sixteen, both outfits
+and three head poses.
+
+Two things that are not obvious until you measure them, and that any other
+seat in this world will meet:
+
+- **The thighs hang below the hips.** The legs turn about a pivot
+  `LEG_PIVOT_DROP` (0.1) below the hip band, so a seated figure's thigh boxes
+  reach about 0.14 *below* the plane its buttocks rest on. There is no seat
+  surface that both carries the hips and misses the legs: a plank under the
+  hips is always crossed by the thighs at its front edge. The seat was
+  therefore built as a **plank set back from the hanging axis** (front edge
+  0.06 ahead of it), with the thigh-over-the-front-edge contact named as an
+  exception in the check rather than pretended away.
+- **What is behind a seated figure is not its back.** A cloak reaches 0.60
+  behind the hips, a cat tail curls up to 0.38 high and 0.46 back, a quiver
+  and a sheath about 0.46. A single backrest bar anywhere a back would lean on
+  is speared by one of them. Two bars with a gap down the middle — which is
+  also the division between a two-seater's seats — clears the tail, and cloth
+  is allowed to drape.
+
+Also verified: the figure's head pivot (`avatar-head-pivot`) is free to carry
+a look-around yaw on top of the gait's own counter-twist, and a ±75° turn
+clips nothing in any of the sixteen.
+
+### 2026-10-03 — Grey is not one setting: a desaturated palette, a cool haze and ACES tone mapping compound into weather (D-133)
+
+"The view is just grey only." Diagnosed by reading the three things that paint
+it rather than by guessing at the fog:
+
+- The vista's palette was deliberately desaturated — water, quay, bank, shed
+  and city were all stand-ins for distance.
+- Its own baked haze took every far vertex up to **0.9** of the way to
+  `mix(SKY_HORIZON, 0xccd2d8, 0.34)` — a *cool* grey. At that strength the
+  colour underneath does not matter.
+- The engine tone maps with `ACESFilmicToneMapping` at exposure 1 (and the
+  offline render harness does the same, `color /= 0.6` and all), which pulls
+  the saturation out of pale colours. Anything already washed arrives grey.
+
+The engine's **fog was not the cause**: the vista's materials set
+`fog = false` and bake their own haze (D-124), and the ride already widens the
+range (`fogRange(elevation, true)`) past the far bank. Changing fog would have
+changed nothing visible from the seat.
+
+The fix was all three at once: warm the haze and cap it at 0.74, let the
+materials be the colours they are, and put something *in* the frame — trees,
+a sunset in the cloud sea (D-132's banks were three shades of white, which is
+exactly what a grey sky looks like after tone mapping), and two invented
+towers on the skyline. Each one alone reads as a tweak; together they are the
+difference between weather and a view.
+
 ### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
 
 The brief was "make jumping actually move the character model … jump over the
