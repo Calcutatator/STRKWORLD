@@ -31,14 +31,35 @@ export const probeSessionStorage: ViewerStorage = createViewerStorage(
 );
 
 /**
+ * Why this tab is or is not probing. D-069's debug channel writes this code, so
+ * a probe deploy that attaches no receipt says whether the parameter never
+ * arrived, was turned off, or was only ever remembered.
+ */
+export type LeaderboardProbeReason =
+  /** `?lb=1`: asked for by this page's URL, and now remembered for the tab. */
+  | 'url-on'
+  /** `?lb=0`: turned off by this page's URL, and forgotten. */
+  | 'url-off'
+  /** No `lb` parameter, and the tab remembers an earlier `?lb=1`. */
+  | 'remembered'
+  /** No `lb` parameter and nothing remembered: the ordinary visit. */
+  | 'not-asked';
+
+/** The tab's opt-in and the reason for it. */
+export interface LeaderboardProbe {
+  readonly on: boolean;
+  readonly reason: LeaderboardProbeReason;
+}
+
+/**
  * The runtime opt-in. `?lb=1` turns it on and remembers it for this tab,
  * `?lb=0` turns it off and forgets it, and anything else leaves the
  * remembered choice standing. Never throws.
  */
-export function readLeaderboardProbe(
+export function resolveLeaderboardProbe(
   search: string | undefined,
   storage: ViewerStorage = probeSessionStorage,
-): boolean {
+): LeaderboardProbe {
   let requested: string | null = null;
   try {
     requested = new URLSearchParams(search ?? '').get('lb');
@@ -47,22 +68,36 @@ export function readLeaderboardProbe(
   }
   if (requested === '1') {
     storage.write(LEADERBOARD_PROBE_KEY, 'on');
-    return true;
+    return Object.freeze({ on: true, reason: 'url-on' as const });
   }
   if (requested === '0') {
     storage.remove(LEADERBOARD_PROBE_KEY);
-    return false;
+    return Object.freeze({ on: false, reason: 'url-off' as const });
   }
-  return storage.read(LEADERBOARD_PROBE_KEY) === 'on';
+  return storage.read(LEADERBOARD_PROBE_KEY) === 'on'
+    ? Object.freeze({ on: true, reason: 'remembered' as const })
+    : Object.freeze({ on: false, reason: 'not-asked' as const });
 }
 
-let resolved: boolean | null = null;
+/** The opt-in alone, for the route policy, which needs no reason. */
+export function readLeaderboardProbe(
+  search: string | undefined,
+  storage: ViewerStorage = probeSessionStorage,
+): boolean {
+  return resolveLeaderboardProbe(search, storage).on;
+}
+
+let resolved: LeaderboardProbe | null = null;
 
 /**
- * Whether this tab is probing, resolved once per page load: the switch is a
- * property of the tab, and the route policy is read from many renders.
+ * This tab's decision and its reason, resolved once per page load: the switch
+ * is a property of the tab, and the route policy is read from many renders.
+ *
+ * Resolving once is what makes the probe survive the title screen, the connect
+ * step and the entry gate even if something later rewrites the URL — and the
+ * `sessionStorage` note makes it survive a reload too.
  */
-export function detectLeaderboardProbe(): boolean {
+export function leaderboardProbe(): LeaderboardProbe {
   if (resolved !== null) return resolved;
   let search: string | undefined;
   try {
@@ -70,8 +105,13 @@ export function detectLeaderboardProbe(): boolean {
   } catch {
     search = undefined;
   }
-  resolved = readLeaderboardProbe(search);
+  resolved = resolveLeaderboardProbe(search);
   return resolved;
+}
+
+/** Whether this tab is probing, resolved once per page load. */
+export function detectLeaderboardProbe(): boolean {
+  return leaderboardProbe().on;
 }
 
 /** Forget this page load's answer, so the next read looks again. Tests only. */

@@ -13993,3 +13993,122 @@ the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
 transaction was used.
 
 ---
+
+### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
+
+The D-123 shimmer is tuned as a single global level, and the amendment that
+made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
+dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
+that tuning badly. It is tall, near-black, lit by the sun, and standing alone
+on pale paving with nothing behind it, so the same additive energy lands on a
+big unbroken silhouette with maximum contrast against its surroundings — it
+reads as a lit beacon rather than as a hint, and the colour-matching rules make
+it worse, because a near-black station takes the pale warm fallback tint
+(`SHIMMER_TINT_WARM_HUE`) at lightness 0.72, which is the largest lift of any
+station in the game. The lead saw it as "the shimmer on the plaza pillar"
+specifically, 80% too strong, while the rest of the world was only 30% too
+strong.
+
+What this means for the next cue: a per-object strength knob is not a
+special case to be avoided, it is a requirement of any additive cue applied
+across both interiors and daylight. Keep the knob *relative* to the global
+level (a multiplier, not an absolute), so a later global change carries the
+exceptions with it, and bake it where the per-vertex data already is — the
+shell buffer's `aSweep` attribute had a free third component, so
+`SHIMMER_STATION_SCALES` costs no mesh, no material, no uniform and no
+per-frame work. The ember edge glow is a separate effect and must not read the
+multiplier: widening the gap between "usable" and "the one E would use" is the
+point.
+
+*Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
+70%, the monument at 0.2 and every other station at 1, the multiplier baked
+per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
+renders from the same harness and the same camera —
+`scratchpad/renders/shimmer-tune-plaza.png` and `shimmer-tune-bank.png`, with
+the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
+tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
+used.
+
+---
+
+## 6. Findings log
+
+### A hidden entrance is not a door, so none of the doors' machinery applies to it
+
+The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
+tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
+handles it before `DoorTrigger.update` is ever reached. So the Studio got none
+of what the doors get for free, and the gap had gone unnoticed in two places at
+once. It had no return tile — `createAvatarStudio` passed `map.spawn` as its
+`streetReturn`, so leaving the changing room teleported the player eleven rows
+up the path instead of outside the room (the lead's bug, D-125) — and it had no
+re-entry hold, which only looked harmless because the wrong return tile was too
+far away for a held key to carry anyone back in. Fixing the first on its own
+would have introduced the bounce PR #205 had already fixed for the doors.
+
+The lesson generalises past this entrance: when a feature is built *beside* a
+shared mechanism rather than *through* it, every invariant the mechanism
+carries has to be re-checked by hand, and a later amendment to the mechanism
+(the hold) will not reach it. Grepping for the trigger (`isAvatarStudioEntrance`,
+one call site) found the whole gap in one pass; grepping for the *concept*
+(`reset`, `returnTile`) did not, because the Studio names neither. The hold is
+now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
+trigger and the Studio's entrance as its two users, so the next amendment to it
+lands on both.
+
+*Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
+real keys end to end (walk in from the street entrance, walk out of the Studio
+exit, land on the tile outside the entrance facing away, with the street
+placement carrying it), the entrance held against a key still down after the
+exit and opening again once stepped off and back on, and an audit of every
+other room's exit (Bank, Vault, Exchange, Post Office, Bridge, bunker, arena:
+each lands on a walkable street tile off its own door and touching it, none of
+which needed changing). Each new assertion was also run against the unfixed
+code and seen to fail. Full suite (296 files, 6260 tests) and
+`npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
+
+---
+
+## 6. Findings log
+
+### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
+
+The private leaderboard's first mainnet probe had every variable set, the
+ledger address in the bundle, `?lb=1` in the tab and the placement stand on
+the lawn — and attached no receipt at all. `ownPolicy` in
+`packages/privacy/src/wallet-api/session.ts` re-reads the route policy into a
+frozen copy of its own, and that copy is what every connection's operations
+are built from. It listed `maxIntents`, `maxRelayFee`, `enabledRoutes`,
+`allowedTokens` and `swap`, and not `leaderboard`, so the ledger was dropped
+one step before `WalletApiPrivacyOperations` could see it. With no ledger that
+class builds no receipts object, which is byte-for-byte a build with the
+leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
+line, and no error anywhere.
+
+Two things make this class of bug worth writing down. First, the stand kept
+working, which argued the probe was fine: it reads
+`placementStandFrom(environment)`, a seam that never passes through the
+session's policy copy. When one of several seams for the same switch works,
+compare the seams rather than the switch. Second, the feature fails open by
+design, and open failure with no log is indistinguishable from off — so the
+fix ships with `packages/privacy/src/leaderboard-notice.ts`, a sink on D-069's
+channel that reports every decision as a reason code (`no-ledger`,
+`no-reads`, `unsupported-route`, `no-nonce`, `scan-failed`) and whose
+formatter admits each field from a fixed list, so `p`, a commitment, a shadow
+address, the account, a nonce and a transaction hash cannot be written even by
+a caller that offers them.
+
+*Verified:* reproduced red first — with `ownPolicy` restored,
+`apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
+policy's missing ledger. That file now drives the real production wiring (a
+tab with `?lb=1`, Railway's own variables, `parseProductionWalletConfig` and
+the real `createWalletSession`) to a receipt on shield, unshield and send;
+`apps/web/src/panels/placement-review.test.tsx` asserts the review line inside
+the `ConfirmGate` subtree on all seven fee-paying flows and its absence on all
+seven otherwise; the notices are checked against the real operations in
+`packages/privacy/src/wallet-api/leaderboard-operations.test.ts` and as the
+backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
+(298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
+was used; the live ledger's `leaf_count()` has not been re-read.
+
+---
