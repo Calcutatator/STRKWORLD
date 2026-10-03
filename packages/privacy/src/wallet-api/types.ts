@@ -409,6 +409,21 @@ export interface WalletRoutePolicy {
      * static list.
      */
     degen?: boolean;
+    /**
+     * D-126: the widest slippage a degen swap may use, in bps (1 to
+     * `SWAP_DEGEN_MAX_SLIPPAGE_BPS`), and the one a degen swap intent without
+     * its own `slippageBps` uses. Absent, the degen floor uses
+     * `SWAP_DEGEN_MAX_SLIPPAGE_BPS`. Read only when `degen` is true: it can
+     * never widen the ground floor.
+     */
+    degenSlippageBps?: number;
+    /**
+     * D-126: how far below Pragma's price a degen quote may sit before the
+     * oracle guard refuses it, in bps (1 to `SWAP_DEGEN_PRICE_BOUND_BPS`).
+     * Absent, the degen floor uses `SWAP_DEGEN_PRICE_BOUND_BPS`. Read only
+     * when `degen` is true; the Exchange keeps `SWAP_PRICE_BOUND_BPS`.
+     */
+    degenOracleBps?: number;
   };
   /**
    * The private placement's ledger (leaderboard phase 1). Present only when

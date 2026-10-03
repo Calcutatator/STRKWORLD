@@ -34,6 +34,16 @@ export const DEGEN_MIN_CACHE_TTL_MS = 60_000;
 export const DEGEN_MAX_CACHE_TTL_MS = 86_400_000;
 export const DEGEN_MAX_MIN_DAILY_VOLUME_USD = 1_000_000_000;
 
+/**
+ * D-126: the widest slippage a quote for a degen-listed token may ask for, 8%,
+ * and the default for `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS`. It mirrors
+ * the browser's `SWAP_DEGEN_MAX_SLIPPAGE_BPS` (the two are kept in step by
+ * hand; the packages do not share code). The ground floor's own ceiling,
+ * `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS`, is untouched by it: this one applies
+ * only to a pair the static swap allowlist does not name whole.
+ */
+export const SWAP_DEGEN_MAX_SLIPPAGE_BPS = 800;
+
 /** The most live tokens one snapshot lists after filtering. The curated core is always extra. */
 export const DEGEN_MAX_LIVE_TOKENS = 64;
 

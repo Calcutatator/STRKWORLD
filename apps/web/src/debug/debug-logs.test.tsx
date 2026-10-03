@@ -27,6 +27,7 @@ import {
   debugFailure,
   debugFootball,
   debugGate,
+  debugLeaderboard,
   debugPlazaShells,
   debugSandboxBurst,
   debugVault,
@@ -567,6 +568,48 @@ describe('what it captures', () => {
       ['info', 'bank.confirm', 'stage=fee-moved'],
     ]);
     expect(JSON.stringify(entries())).not.toContain(address);
+  });
+
+  it('records the private placement by reason code at most, and never the season value (D-122)', async () => {
+    const { entries, tick } = harness();
+    // The season partial commitment, a commitment, a shadow address and the
+    // account: none of them may reach a line, however a caller offers them.
+    const partial = '0x1b5eed51de';
+    const account = '0x04cafef00dbabe';
+    debugLeaderboard({ event: 'probe', on: true, reason: 'url-on', build: true });
+    debugLeaderboard({ event: 'probe', on: false, reason: 'not-asked', build: false });
+    debugLeaderboard({ event: 'receipt', attached: true });
+    debugLeaderboard({ event: 'receipt', attached: false, reason: 'no-ledger' });
+    debugLeaderboard({ event: 'receipt', attached: false, reason: 'scan-failed' });
+    debugLeaderboard({ event: 'receipt', attached: false, reason: 'unsupported-route' });
+    debugLeaderboard({ event: 'tick', feature: 'vault' });
+    debugLeaderboard({ event: 'tick', feature: 'swap' });
+    // Refused: a reason that is not a code, a feature that is not a counter, an
+    // event nobody declared, and a getter.
+    debugLeaderboard({ event: 'probe', on: true, reason: partial, build: true });
+    debugLeaderboard({ event: 'receipt', attached: false, reason: partial });
+    // Admitted, but written from the fixed list alone: the extra field is
+    // simply never read, so the line is the plain one.
+    debugLeaderboard({ event: 'receipt', attached: true, commitment: partial } as never);
+    debugLeaderboard({ event: 'tick', feature: partial });
+    debugLeaderboard({ event: 'check-in', account } as never);
+    debugLeaderboard(Object.defineProperty({ event: 'tick' }, 'feature', { get: () => 'vault' }) as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('leaderboard.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'leaderboard.probe', 'on=true reason=url-on build=on'],
+      ['info', 'leaderboard.probe', 'on=false reason=not-asked build=off'],
+      ['info', 'leaderboard.receipt', 'attached=true'],
+      ['info', 'leaderboard.receipt', 'attached=false reason=no-ledger'],
+      ['warn', 'leaderboard.receipt', 'attached=false reason=scan-failed'],
+      ['warn', 'leaderboard.receipt', 'attached=false reason=unsupported-route'],
+      ['info', 'leaderboard.tick', 'feature=vault'],
+      ['info', 'leaderboard.tick', 'feature=swap'],
+      ['info', 'leaderboard.receipt', 'attached=true'],
+    ]);
+    const surface = JSON.stringify(entries());
+    expect(surface).not.toContain(partial);
+    expect(surface).not.toContain(partial.slice(2));
+    expect(surface).not.toContain(account);
   });
 
   it('records the football by side at most: a kick, a goal\'s side and full time\'s winner (D-078)', async () => {

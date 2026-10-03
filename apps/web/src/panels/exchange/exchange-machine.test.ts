@@ -657,6 +657,116 @@ describe('Exchange quotes on the shadow-account swap (D-084)', () => {
   });
 });
 
+/**
+ * D-126: the oracle guard, as the counter shows it. The live bug: a 3.96%
+ * LORDS quote was refused before the wallet was asked, and the panel said
+ * nothing, so the Review press read as doing nothing. The ground floor now
+ * says why in plain words; the degen floor runs under its own wider limits and
+ * carries a small warning line instead.
+ */
+describe('the swap\'s oracle guard (D-126)', () => {
+  /** A counter whose fixture quote sits `shortfallBps` below the oracle price. */
+  const guarded = (
+    shortfallBps: number,
+    options: { degen?: boolean; degenFloorOpen?: boolean; liveQuoteDelayMs?: number } = {},
+  ) => createExchangePanel({
+    operations: new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture,
+        // 300 is the Exchange's bound; upstairs the fake widens it to 1200,
+        // exactly as the adapter's `swapLimits` does.
+        priceCheck: { status: 'checked', boundBps: 300, shortfallBps, sellUsd: 4_310_000n, expectedBuyUsd: 4_310_000n },
+      },
+    }),
+    receipts: createReceiptLedger(), canStartFinancialAction: () => true, quoteSpacingMs: 0,
+    ...options,
+  });
+
+  it('refuses the 3.96% quote on the ground floor and says so, with the figure and the floor upstairs', async () => {
+    const machine = guarded(396, { degenFloorOpen: true });
+    await ready(machine); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow).toMatchObject({ name: 'failed', kind: 'price-guard', recovery: 'prepare-again' });
+    if (flow.name !== 'failed') return;
+    // The pair is STRK → ETH, so the refusal names the token that is not STRK.
+    expect(flow.message).toBe(
+      "avnu's price for ETH is 4.0% worse than the market price, so this swap was stopped to protect you. Nothing was sent, and your wallet was not asked.",
+    );
+    expect(flow.hint).toBe(COPY.exchange.priceGuardDegenFloor);
+  });
+
+  it('leaves out the degen pointer in a build with no degen floor, but never the reason', async () => {
+    const machine = guarded(396);
+    await ready(machine); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow).toMatchObject({ name: 'failed', kind: 'price-guard' });
+    if (flow.name !== 'failed') return;
+    expect(flow.message).toContain('4.0% worse than the market price');
+    expect(flow.hint).toBeUndefined();
+  });
+
+  it('lets the same 3.96% quote through upstairs, with the small warning line and no gate', async () => {
+    const machine = guarded(396, { degen: true });
+    await ready(machine); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow.name).toBe('review');
+    if (flow.name !== 'review') return;
+    expect(flow.summary.priceWarning).toBe('Price is 4.0% below market: thin liquidity.');
+    // Within the cap, so the review confirms as usual: no acknowledgement and
+    // no second button (the review is `checked`, not `unchecked`).
+    expect(flow.summary.priceCheck).toBe('checked');
+    await machine.confirm();
+    expect(machine.store.getState().flow.name).toBe('submitted');
+  });
+
+  it('refuses past 12% upstairs, and says so with the degen floor\'s own figure', async () => {
+    const machine = guarded(1_250, { degen: true });
+    await ready(machine); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow).toMatchObject({ name: 'failed', kind: 'price-guard' });
+    if (flow.name !== 'failed') return;
+    expect(flow.message).toBe(
+      "avnu's price for ETH is 12.5% worse than the market price, more than the 12% the degen floor allows, so this swap was stopped. Nothing was sent, and your wallet was not asked.",
+    );
+    // Upstairs there is nowhere further up to point at.
+    expect(flow.hint).toBeUndefined();
+  });
+
+  it.each([
+    ['at the warning threshold', 300, null],
+    ['under it', 120, null],
+    ['at or above the oracle price', 0, null],
+    ['just past it', 301, 'Price is 3.0% below market: thin liquidity.'],
+    ['well past it', 820, 'Price is 8.2% below market: thin liquidity.'],
+    ['at the degen cap', 1_200, 'Price is 12.0% below market: thin liquidity.'],
+  ])('warns only past 3%: %s', async (_label, shortfallBps, warning) => {
+    const machine = guarded(shortfallBps, { degen: true });
+    await ready(machine); await machine.prepare();
+    const flow = machine.store.getState().flow;
+    expect(flow.name).toBe('review');
+    if (flow.name !== 'review') return;
+    expect(flow.summary.priceWarning).toBe(warning);
+  });
+
+  it('says the same thing while the player types, so the Buy field is never silently empty', async () => {
+    const machine = guarded(396, { degenFloorOpen: true, liveQuoteDelayMs: 0 });
+    await machine.open(); await machine.refreshBalances();
+    machine.setAmount('1');
+    await vi.waitFor(() => { expect(machine.store.getState().live.status).toBe('failed'); });
+    const live = machine.store.getState().live;
+    if (live.status !== 'failed') return;
+    expect(live.message).toContain('4.0% worse than the market price');
+    expect(live.hint).toBe(COPY.exchange.priceGuardDegenFloor);
+  });
+
+  /** The degen floor's cog offers 8%, the Exchange's 3%, with no build value. */
+  it('offers the degen floor\'s own slippage ceiling upstairs and the Exchange\'s downstairs', () => {
+    expect(guarded(0).store.getState().slippageCeilingBps).toBe(300);
+    expect(guarded(0, { degen: true }).store.getState().slippageCeilingBps).toBe(800);
+  });
+});
+
 function controlledOperations(confirmResult: Promise<{ transactionHash: string }>, secondPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, onConfirmEntered?: () => void, thirdPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, slippageBps = 50, onDiscard?: () => void): PrivacyOperations {
   let poolCalls = 0;
   const canonical = { kind: 'swap' as const, tokenIn: strk!.token, tokenOut: eth!.token, amountIn: 10n ** 18n, minAmountOut: 1_990000000000000000n };

@@ -31,7 +31,16 @@ import {
   type FixedRoomLevelMap,
 } from './fixed-room.js';
 import type { InputGate } from './input-gate.js';
-import { createStreetMap, isSolidAt, TILE_SIZE, tileToWorld, worldToTile } from './map/street.js';
+import {
+  AVATAR_STUDIO_RETURN_FACING,
+  avatarStudioReturnTile,
+  createStreetMap,
+  doorAt,
+  isSolidAt,
+  TILE_SIZE,
+  tileToWorld,
+  worldToTile,
+} from './map/street.js';
 import { PLAZA_MONUMENT_STATION } from './map/plaza.js';
 import type { InteractionTarget } from './interaction.js';
 import { PLAYER_WALK_SPEED } from './movement-input.js';
@@ -75,6 +84,8 @@ const BANK_STATION = FIXED_ROOM_DEFINITIONS.bank.stations[0];
 const BANK_APPROACH = { x: BANK_STATION.x, y: BANK_STATION.y + BANK_STATION.height };
 const STUDIO_ENTRANCE = { x: STREET.avatarStudioEntrance.x, y: STREET.avatarStudioEntrance.y };
 const STUDIO_EXIT = { x: AVATAR_STUDIO_DEFINITION.exit.x, y: AVATAR_STUDIO_DEFINITION.exit.y };
+/** D-125: the street tile the Studio's exit puts the player on, just outside its entrance. */
+const STUDIO_RETURN = avatarStudioReturnTile(STREET);
 const STUDIO_SPAWN = avatarStudioSpawnToWorld(
   AVATAR_STUDIO_DEFINITION,
   ROOM_ORIGIN,
@@ -2042,7 +2053,8 @@ describe('WorldSession movement (D-059)', () => {
       { position: STUDIO_SPAWN, snap: true },
       { position: { x: STUDIO_SPAWN.x, y: STUDIO_SPAWN.y + WALK_STEP }, snap: false },
       { position: { x: studioExit.x, y: studioExit.y + WALK_STEP }, snap: false },
-      { position: spawn, snap: true },
+      // D-125: outside the Studio's entrance, not back at the street spawn.
+      { position: streetTileCentre(STUDIO_RETURN), snap: true },
     ]);
   });
 });
@@ -2492,6 +2504,137 @@ describe('WorldSession: shared presence areas (D-087)', () => {
     expect(session.area).toBe('street');
     // The last Studio placement, then the street's, then the exit.
     expect(eventsSince(world, leaving)).toEqual(['area:moved', 'player:moved', 'avatar-studio:exited']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-125: a building exit puts the player outside it, on the street
+// ---------------------------------------------------------------------------
+
+/** A building's whole street door rect, the arena's arch and the bunker's stairhead included. */
+function streetDoor(building: BuildingId) {
+  const door = STREET.doors.find((candidate) => candidate.building === building);
+  if (!door) throw new Error(`No door for ${building}`);
+  return door;
+}
+
+/** Is `tile` orthogonally outside `rect`, touching it? (Inside scores 0, so false.) */
+function tileTouchesRect(
+  tile: Point,
+  rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+): boolean {
+  const dx = Math.max(rect.x - tile.x, 0, tile.x - (rect.x + rect.width - 1));
+  const dy = Math.max(rect.y - tile.y, 0, tile.y - (rect.y + rect.height - 1));
+  return dx + dy === 1;
+}
+
+/** Hold `keys` for up to `frames` walking frames, or until `until` is true. */
+function walkUntil(
+  world: World,
+  keys: Partial<MovementInput>,
+  until: () => boolean,
+  frames = 200,
+): void {
+  for (let i = 0; i < frames && !until(); i++) tickHolding(world, keys, MAX_SESSION_FRAME_MS);
+}
+
+describe('WorldSession: a building exit puts the player outside it (D-125)', () => {
+  /**
+   * The lead's bug, on real keys end to end: walk south down the Studio path
+   * onto the hidden entrance, walk north out of the Studio's exit, and end up
+   * standing on the street outside the entrance — not back at the spawn, which
+   * is where this used to drop the player.
+   */
+  it('walks into the Studio and out again, onto the street tile outside its entrance, facing away', () => {
+    const world = createWorld();
+    const session = world.start();
+    // Two tiles north of the entrance, on the Studio path's return column.
+    place(world.session, streetTileCentre({ x: STUDIO_RETURN.x, y: STUDIO_RETURN.y - 1 }));
+    walkUntil(world, { down: true }, () => session.area === 'studio');
+    expect(session.area).toBe('studio');
+    expect(session.player).toEqual(STUDIO_SPAWN);
+
+    const leaving = world.bus.emitted.length;
+    // North out of the exit, the two tiles above the Studio spawn.
+    walkUntil(world, { up: true }, () => session.area === 'street');
+
+    // Outside the room: on the street, on the tile just outside its entrance.
+    expect(session.area).toBe('street');
+    expect(worldToTile(session.player.x, session.player.y)).toEqual(STUDIO_RETURN);
+    expect(session.player).toEqual(streetTileCentre(STUDIO_RETURN));
+    expect(isSolidAt(STREET, STUDIO_RETURN.x, STUDIO_RETURN.y)).toBe(false);
+    // Touching the entrance, and off it: outside, not still in the doorway.
+    expect(STUDIO_RETURN.y).toBe(STREET.avatarStudioEntrance.y - 1);
+
+    // Facing away from the entrance, in the view and on the wire.
+    expect(AVATAR_STUDIO_RETURN_FACING).toBe('up');
+    expect(session.facing).toBe('up');
+    expect(world.view.last('setPlayerFacing')).toEqual(['up']);
+
+    // D-087: presence is back in street scope — the street placement, carrying
+    // the tile outside the entrance, lands before the exit is announced, and
+    // no further Studio area move follows it.
+    expect(eventsSince(world, leaving).slice(-2)).toEqual(['player:moved', 'avatar-studio:exited']);
+    expect(world.bus.payloads('player:moved').at(-1)).toEqual({
+      position: streetTileCentre(STUDIO_RETURN),
+      facing: 'up',
+    });
+    const areaMoves = world.bus.count('area:moved');
+    walkUntil(world, { up: true }, () => false, 3);
+    expect(world.bus.count('area:moved')).toBe(areaMoves);
+    expect(world.bus.count('player:moved')).toBeGreaterThan(0);
+  });
+
+  it('holds the Studio entrance after the exit, so a held key cannot walk the player back in', () => {
+    const world = createWorld();
+    const session = world.start();
+    enterStudioByEntrance(world);
+    stepOntoStudioTile(world, STUDIO_EXIT);
+    expect(session.area).toBe('street');
+
+    // The key that walked them out is still down, and the entrance is one tile
+    // south. The hold swallows it, and it stays shut until stepped off.
+    walkUntil(world, { down: true }, () => false, 40);
+    expect(session.area).toBe('street');
+    expect(world.bus.count('avatar-studio:entered')).toBe(1);
+
+    // Step off the entrance and walk back on: it opens again.
+    walkUntil(world, { up: true }, () => worldToTile(session.player.x, session.player.y).y < STUDIO_RETURN.y);
+    walkUntil(world, { down: true }, () => session.area === 'studio');
+    expect(session.area).toBe('studio');
+    expect(world.bus.count('avatar-studio:entered')).toBe(2);
+  });
+
+  it('puts the player outside every other building too: Bank, Vault, Exchange, Post Office, Bridge, bunker and arena', () => {
+    // Every room a World can build, the opened Vault's included.
+    const definitions = fixedRoomDefinitionsFor({ vaultOpen: true });
+    expect(new Set(definitions.map((definition) => definition.building))).toEqual(
+      new Set(['bank', 'vault', 'exchange', 'post-office', 'bridge', 'bunker', 'arena']),
+    );
+    for (const definition of definitions) {
+      const building = definition.building;
+      const world = createWorld({ vaultOpen: true });
+      const session = world.start();
+      const door = streetDoor(building);
+      place(session, streetTileCentre({ x: door.x, y: door.y }));
+      tick(world);
+      expect(session.area, building).toBe(building);
+
+      place(session, interiorTileCentre(definition.exit));
+      tick(world);
+      const landed = worldToTile(session.player.x, session.player.y);
+      // Outside: on the street, on a walkable tile, off the door itself (so
+      // the player is never left standing in their own doorway) and touching
+      // it, so the exit is where the door is and not somewhere else entirely.
+      expect(session.area, building).toBe('street');
+      expect(isSolidAt(STREET, landed.x, landed.y), building).toBe(false);
+      expect(doorAt(STREET, landed.x, landed.y), building).toBe(null);
+      expect(tileTouchesRect(landed, door), building).toBe(true);
+      // The street placement carries that tile: presence goes back live on the
+      // street there, not where the player entered from.
+      expect(world.bus.payloads('player:moved').at(-1)?.position, building)
+        .toEqual(streetTileCentre(landed));
+    }
   });
 });
 

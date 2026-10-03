@@ -57,7 +57,12 @@ function liveSnapshot(extra: readonly DegenToken[] = [LIVE]): DegenCatalogSnapsh
   return { source: 'live', tokens: [...DEGEN_CURATED_CORE, ...extra] };
 }
 
-function fixture(options: { degen?: DegenConfig | null; catalog?: DegenCatalogPort | null } = {}) {
+function fixture(options: {
+  degen?: DegenConfig | null;
+  catalog?: DegenCatalogPort | null;
+  /** D-126: the degen floor's own, wider slippage ceiling for the quote proxy. */
+  degenMaxSlippageBps?: number;
+} = {}) {
   let snapshot = liveSnapshot();
   const catalog: DegenCatalogPort = options.catalog === null
     ? undefined as never
@@ -105,6 +110,7 @@ function fixture(options: { degen?: DegenConfig | null; catalog?: DegenCatalogPo
       unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 0, quoteBound: false, allowedTokens: [STRK] },
       swap: {
         enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 0, quoteBound: true, allowedTokens: [STRK, OTHER], maxSlippageBps: 300,
+        ...(options.degenMaxSlippageBps === undefined ? {} : { degenMaxSlippageBps: options.degenMaxSlippageBps }),
       },
     },
     ...(degen ? { degen } : {}),
@@ -252,9 +258,39 @@ describe('degen swap admission (D-067, on the quote proxy since D-084)', () => {
     expect(catalog.snapshot).not.toHaveBeenCalled();
   });
 
-  it('keeps the route\'s slippage ceiling for a degen swap', async () => {
+  it('keeps the route\'s slippage ceiling for a degen swap with no degen ceiling set', async () => {
     const { api, swapQuotes } = fixture();
     await expect(quote(api, STRK, LORDS, { slippageBps: 301 })).resolves.toMatchObject({ status: 400 });
+    expect(swapQuotes.quote).not.toHaveBeenCalled();
+  });
+
+  /**
+   * D-126: the degen floor's tokens are the thin ones, so a quote for a pair
+   * only the degen list admits may ask for more slippage — up to the degen
+   * ceiling and no further. The ground floor's pairs are untouched by it.
+   */
+  it('admits a degen pair up to the degen ceiling, and keeps the Exchange at its own', async () => {
+    const { api, swapQuotes } = fixture({ degenMaxSlippageBps: 800 });
+    // A pair the degen list admits: 8% is allowed, 8.01% is not.
+    await expect(quote(api, STRK, LORDS, { slippageBps: 800 })).resolves.toMatchObject({ status: 200 });
+    expect(swapQuotes.quote).toHaveBeenCalledWith(expect.objectContaining({ slippageBps: 800 }));
+    await expect(quote(api, STRK, LORDS, { slippageBps: 801 })).resolves.toMatchObject({ status: 400 });
+    // A pair the static allowlist names whole keeps the Exchange's 3%.
+    await expect(quote(api, STRK, OTHER, { slippageBps: 301 })).resolves.toMatchObject({ status: 400 });
+    await expect(quote(api, STRK, OTHER, { slippageBps: 300 })).resolves.toMatchObject({ status: 200 });
+    expect(swapQuotes.quote).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a slippage past the widest ceiling without reading the degen list at all', async () => {
+    const { api, catalog, swapQuotes } = fixture({ degenMaxSlippageBps: 800 });
+    await expect(quote(api, STRK, LORDS, { slippageBps: 900 })).resolves.toMatchObject({ status: 400 });
+    expect(catalog.snapshot).not.toHaveBeenCalled();
+    expect(swapQuotes.quote).not.toHaveBeenCalled();
+  });
+
+  it('does not let the degen ceiling admit a token the degen list does not', async () => {
+    const { api, swapQuotes } = fixture({ degenMaxSlippageBps: 800 });
+    await expect(quote(api, STRK, STRANGER, { slippageBps: 500 })).resolves.toMatchObject({ status: 400 });
     expect(swapQuotes.quote).not.toHaveBeenCalled();
   });
 

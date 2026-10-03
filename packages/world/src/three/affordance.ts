@@ -15,6 +15,7 @@ import {
   type Material,
   type Object3D,
 } from 'three';
+import { PLAZA_MONUMENT_STATION } from '../map/plaza.js';
 import { GeometryBin, type Paint, type PaintRGBA } from './palette.js';
 
 /**
@@ -32,7 +33,9 @@ import { GeometryBin, type Paint, type PaintRGBA } from './palette.js';
  *   collectible. The sweep is what makes it legible from across a room: a
  *   brightness breathe alone reads as nothing on a dark counter, because the
  *   eye has no moving edge to catch. With reduced motion it is a still,
- *   slightly stronger tint instead.
+ *   slightly stronger tint instead. A station that reads too strong at the
+ *   shared level (the plaza's obelisk) carries its own multiplier, baked per
+ *   vertex: see `SHIMMER_STATION_SCALES`.
  * - **Edge glow.** When the interaction system chooses it (in range and
  *   faced), the shimmer cross-fades over `AFFORDANCE_FADE_MS` into a soft
  *   ember rim: its surfaces brighten towards their edges (a fresnel term), and
@@ -73,9 +76,9 @@ export const AFFORDANCE_FADE_MS = 200;
 /** One slow breath of the shimmer's base lift. */
 export const SHIMMER_PERIOD_MS = 2500;
 /** The base lift's peak, as additive tint over the surface. */
-export const SHIMMER_PEAK = 0.2;
+export const SHIMMER_PEAK = 0.14;
 /** The base lift's trough: it never goes out, so it reads as a property of the thing. */
-export const SHIMMER_FLOOR = 0.12;
+export const SHIMMER_FLOOR = 0.084;
 /** One glide of the sweep: the band enters one side and leaves the other. */
 export const SHIMMER_SWEEP_PERIOD_MS = 3000;
 /**
@@ -84,7 +87,7 @@ export const SHIMMER_SWEEP_PERIOD_MS = 3000;
  */
 export const SHIMMER_SWEEP_WIDTH = 0.18;
 /** The sweep's crest, on top of the base lift. */
-export const SHIMMER_SWEEP_PEAK = 0.45;
+export const SHIMMER_SWEEP_PEAK = 0.315;
 /**
  * Each slot starts its breathe and its sweep this much further round the
  * cycle than the one before (golden ratio, so a long row never lines up).
@@ -99,7 +102,27 @@ export const SHIMMER_SLOT_PHASE = 0.618_033_988_75;
  */
 export const SHIMMER_SWEEP_AXIS = Object.freeze(new Vector3(0.68, 0.62, 0.39).normalize());
 /** With reduced motion: a still tint, a shade stronger than the moving base, and no sweep. */
-export const SHIMMER_STATIC = 0.24;
+export const SHIMMER_STATIC = 0.168;
+
+/**
+ * Stations that shimmer quieter than the rest, by id, as a multiplier on the
+ * whole idle cue (the breathe, the sweep and the reduced-motion tint alike).
+ * Anything absent shimmers at 1: the global level above.
+ *
+ * The plaza's monument is a tall black obelisk standing alone in an open
+ * square, so the same lift that reads as a hint on a counter reads as a lit
+ * beacon on it (D-123 amended 2026-10-02, at calc's request).
+ *
+ * This costs nothing per frame: the multiplier is baked per vertex into
+ * `aSweep.z` at build time, so a quieted station still shares its area's one
+ * draw call and its one uniform write.
+ */
+export const SHIMMER_STATION_SCALES: ReadonlyMap<string, number> = new Map([[PLAZA_MONUMENT_STATION, 0.2]]);
+
+/** How strongly `id` shimmers, relative to the global level: 1 unless `SHIMMER_STATION_SCALES` says quieter. */
+export function shimmerScaleFor(id: string): number {
+  return SHIMMER_STATION_SCALES.get(id) ?? 1;
+}
 /** How far the glow's band grows past the silhouette, world units (a tile is 1). */
 export const GLOW_WIDTH = 0.06;
 /** Slots per shell: one per station in an area. */
@@ -172,9 +195,13 @@ export function shimmerSweep(timeMs: number, along: number, reducedMotion: boole
   return SHIMMER_SWEEP_PEAK * band * band * (3 - 2 * band);
 }
 
-/** The shimmer's strength at `timeMs`, exactly as the shader computes it. */
-export function shimmerStrength(timeMs: number, along: number, reducedMotion: boolean, phase = 0): number {
-  return shimmerBase(timeMs, reducedMotion, phase) + shimmerSweep(timeMs, along, reducedMotion, phase);
+/**
+ * The shimmer's strength at `timeMs`, exactly as the shader computes it.
+ * `scale` is the station's own multiplier (`shimmerScaleFor`), which quiets the
+ * breathe, the sweep and the reduced-motion tint together.
+ */
+export function shimmerStrength(timeMs: number, along: number, reducedMotion: boolean, phase = 0, scale = 1): number {
+  return scale * (shimmerBase(timeMs, reducedMotion, phase) + shimmerSweep(timeMs, along, reducedMotion, phase));
 }
 
 /**
@@ -192,6 +219,8 @@ export interface AffordanceSet {
   has(id: string): boolean;
   /** The colour this thing shimmers in, derived from its own paint at build time. */
   shimmerColor(id: string): number;
+  /** How strongly this thing shimmers relative to the global level: 1, unless `SHIMMER_STATION_SCALES` quiets it. */
+  shimmerScale(id: string): number;
   /** Usable things shimmer and can glow; an unusable one (a locked counter) does neither. */
   setUsable(id: string, usable: boolean): void;
   isUsable(id: string): boolean;
@@ -309,11 +338,12 @@ export function createAffordanceShells(): AffordanceShells {
         return null;
       }
       const tints = slots.map((id) => shimmerTint(tallies.get(id)!).getHex());
-      const geometry = mergeShell(slots.map((id) => pieces.get(id)!), tints);
+      const scales = slots.map((id) => shimmerScaleFor(id));
+      const geometry = mergeShell(slots.map((id) => pieces.get(id)!), tints, scales);
       for (const list of pieces.values()) for (const piece of list) piece.dispose();
       pieces.clear();
       tallies.clear();
-      return createAffordanceSet(name, slots, geometry, tints);
+      return createAffordanceSet(name, slots, geometry, tints, scales);
     },
   };
 }
@@ -624,8 +654,14 @@ function shellPiece(source: BufferGeometry, matrix?: Matrix4): BufferGeometry | 
  * one, measured over each *station's* own extent, so one glide crosses a
  * Studio figure and a six-tile desk in the same time. `aSweep.y` is that
  * station's offset into the cycle, so a room's stations never move as one.
+ * `aSweep.z` is its shimmer multiplier (`shimmerScaleFor`), so a station that
+ * reads too strong is quieted here rather than by a uniform or a second mesh.
  */
-function mergeShell(slots: readonly (readonly BufferGeometry[])[], tints: readonly number[]): BufferGeometry {
+function mergeShell(
+  slots: readonly (readonly BufferGeometry[])[],
+  tints: readonly number[],
+  scales: readonly number[],
+): BufferGeometry {
   let count = 0;
   for (const list of slots) for (const piece of list) count += piece.getAttribute('position').count;
   const total = count * 2;
@@ -634,7 +670,7 @@ function mergeShell(slots: readonly (readonly BufferGeometry[])[], tints: readon
   const grow = new Float32Array(total * 3);
   const slot = new Float32Array(total);
   const band = new Float32Array(total);
-  const sweep = new Float32Array(total * 2);
+  const sweep = new Float32Array(total * 3);
   const tint = new Float32Array(total * 3);
   const axis = SHIMMER_SWEEP_AXIS;
   const extents = slots.map((list) => {
@@ -656,6 +692,7 @@ function mergeShell(slots: readonly (readonly BufferGeometry[])[], tints: readon
     slots.forEach((list, index) => {
       const extent = extents[index]!;
       const phase = shimmerSlotPhase(index);
+      const scale = scales[index] ?? 1;
       tintColor.setHex(tints[index] ?? 0xffffff);
       for (const piece of list) {
         const points = piece.getAttribute('position');
@@ -667,8 +704,9 @@ function mergeShell(slots: readonly (readonly BufferGeometry[])[], tints: readon
         band.fill(copy, at, at + n);
         for (let i = 0; i < n; i++) {
           const along = points.getX(i) * axis.x + points.getY(i) * axis.y + points.getZ(i) * axis.z;
-          sweep[(at + i) * 2] = (along - extent.min) / extent.size;
-          sweep[(at + i) * 2 + 1] = phase;
+          sweep[(at + i) * 3] = (along - extent.min) / extent.size;
+          sweep[(at + i) * 3 + 1] = phase;
+          sweep[(at + i) * 3 + 2] = scale;
           tint[(at + i) * 3] = tintColor.r;
           tint[(at + i) * 3 + 1] = tintColor.g;
           tint[(at + i) * 3 + 2] = tintColor.b;
@@ -683,7 +721,7 @@ function mergeShell(slots: readonly (readonly BufferGeometry[])[], tints: readon
   geometry.setAttribute('aGrow', new BufferAttribute(grow, 3));
   geometry.setAttribute('aSlot', new BufferAttribute(slot, 1));
   geometry.setAttribute('aBand', new BufferAttribute(band, 1));
-  geometry.setAttribute('aSweep', new BufferAttribute(sweep, 2));
+  geometry.setAttribute('aSweep', new BufferAttribute(sweep, 3));
   geometry.setAttribute('aTint', new BufferAttribute(tint, 3));
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -699,7 +737,7 @@ attribute vec3 aGrow;
 attribute vec3 aTint;
 attribute float aSlot;
 attribute float aBand;
-attribute vec2 aSweep;
+attribute vec3 aSweep;
 uniform vec2 uSlots[${AFFORDANCE_MAX_SLOTS}];
 uniform float uTime;
 uniform float uMotion;
@@ -724,7 +762,9 @@ void main() {
   float sweep = ${SHIMMER_SWEEP_PEAK.toFixed(4)} * edge * edge * (3.0 - 2.0 * edge);
   // Reduced motion: neither, just a still tint a shade stronger.
   float level = mix(${SHIMMER_STATIC.toFixed(4)}, lift + sweep, uMotion);
-  vShimmer = slot.x * (1.0 - glow) * level;
+  // This station's own multiplier, baked in at build time: the plaza's obelisk
+  // reads too strong at the level a counter needs (D-123 amended 2026-10-02).
+  vShimmer = slot.x * (1.0 - glow) * level * aSweep.z;
   vGlow = glow;
   vBand = aBand;
   vTint = aTint;
@@ -788,6 +828,7 @@ function createAffordanceSet(
   ids: readonly string[],
   geometry: BufferGeometry,
   tints: readonly number[],
+  scales: readonly number[],
 ): AffordanceSet {
   // x: shimmer weight (usable, eased), y: glow level (eased), per slot.
   const levels = new Float32Array(AFFORDANCE_MAX_SLOTS * 2);
@@ -844,6 +885,10 @@ function createAffordanceSet(
     shimmerColor(id) {
       const slot = index.get(id);
       return slot === undefined ? 0 : tints[slot]!;
+    },
+    shimmerScale(id) {
+      const slot = index.get(id);
+      return slot === undefined ? 0 : scales[slot]!;
     },
     setUsable(id, value) {
       const slot = index.get(id);

@@ -16,7 +16,8 @@ import { createArenaController } from './arena/arena-controller.js';
 import { createArenaAuthority } from '@strkworld/lobby/arena';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet, withLeaderboardProbe } from './production/config.js';
-import { detectLeaderboardProbe } from './production/leaderboard-probe.js';
+import { detectLeaderboardProbe, leaderboardProbe } from './production/leaderboard-probe.js';
+import { debugLeaderboard } from './debug/debug-tap.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
 import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
@@ -158,8 +159,25 @@ if (usesProductionWallet(environment)) {
         // The relay client binds fetch when the session is built, so an
         // opted-in debug logger must wrap it first (D-069).
         if (debugLogsReady) await debugLogsReady;
-        const { createProductionWalletSession, ReservePublicShieldPlanner } = await import('@strkworld/privacy');
+        const {
+          createProductionWalletSession,
+          ReservePublicShieldPlanner,
+          setLeaderboardNoticeSink,
+        } = await import('@strkworld/privacy');
         createShieldPlanner = (options) => new ReservePublicShieldPlanner(options);
+        // D-122, amended 2026-10-02: the placement's own decisions on D-069's
+        // channel, so a probe that attaches no receipt says which step
+        // declined. Reason codes only — never `p`, a commitment, a shadow
+        // address or the account. Without an opted-in logger every call is a
+        // no-op, so this is installed unconditionally and stays silent.
+        setLeaderboardNoticeSink((notice) => debugLeaderboard(notice));
+        const probe = leaderboardProbe();
+        debugLeaderboard({
+          event: 'probe',
+          on: probe.on,
+          reason: probe.reason,
+          build: environment.VITE_STRK20_LEADERBOARD_ENABLED === 'true',
+        });
         return createProductionWalletSession(config);
       },
       render: (session) => {
