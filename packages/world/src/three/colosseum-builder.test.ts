@@ -15,7 +15,7 @@ import { PAVEMENT_HEIGHT, buildStreet, streetSurfaceHeightAt, type StreetOcclude
 import type { StreetView } from './types.js';
 
 /**
- * The Colosseum in the street scene (D-114, D-128): four draw calls of its
+ * The Colosseum in the street scene (D-114, D-129): four draw calls of its
  * own, nothing in the way on a walkable tile, a shell and a grand arch that
  * fade as two occluders with a box per row (so no corner of the oval is an
  * invisible wall), a silhouette that tops out where the arena room's own wall
@@ -93,7 +93,7 @@ function intrusions(mesh: Mesh, map: DistrictMap, band = { min: 0.15, max: 1.9 }
   return found;
 }
 
-describe('the Colosseum in the street scene (D-114, D-128)', () => {
+describe('the Colosseum in the street scene (D-114, D-129)', () => {
   it('costs the street four draw calls: stone, the grand arch, flames and the nameplate', () => {
     const { map, view } = build();
     const meshes: string[] = [];

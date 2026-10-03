@@ -106,13 +106,13 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    */
   service: Object.freeze({ kind: 'service', solid: true, colour: 0x6f6a66 }),
   /**
-   * The Colosseum's outer wall (D-114, D-128): the ring of masonry round the
+   * The Colosseum's outer wall (D-114, D-129): the ring of masonry round the
    * stadium, the grand arch's piers included. Solid; the renderer stands the
    * stacked arcades, the attic and the cressets on these.
    */
   colwall: Object.freeze({ kind: 'colwall', solid: true, colour: 0x8f8574 }),
   /**
-   * What the Colosseum's wall encloses (D-114, D-128). Solid: nobody walks
+   * What the Colosseum's wall encloses (D-114, D-129). Solid: nobody walks
    * in off the street, the grand arch's door takes them into the arena. The
    * street ground skips these tiles and the builder draws the sand bowl the
    * camera glimpses over the near wall.
@@ -329,7 +329,7 @@ export function createStreetMap(options?: StreetMapOptions): DistrictMap {
   // Unmarked: no facade, no sign, no label (see bunker.ts).
   paintBunker(tiles);
 
-  // The Colosseum (D-114, D-128): the stadium on the south lawn just east of
+  // The Colosseum (D-114, D-129): the stadium on the south lawn just east of
   // the Studio's path, its grand arch on its west front and a short stone
   // path branching east off the Studio's path to it (see colosseum.ts).
   paintColosseum(tiles);

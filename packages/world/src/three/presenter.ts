@@ -90,7 +90,7 @@ export interface PresenterOptions {
   /** Leaderboard phase 1: the placement stand east of the plaza. Sessions must match it too. */
   readonly placementStand?: boolean;
   /**
-   * D-128: a coarse-pointer screen (a phone). The arena's surround then
+   * D-129: a coarse-pointer screen (a phone). The arena's surround then
    * leaves out the water south of it, which the north-looking camera (D-059)
    * can never show. Read once, when the rooms are built.
    */

@@ -6226,7 +6226,7 @@ Two things had kept the bug comfortable. The spawn happens to sit in the entranc
 
 ---
 
-## D-128 — The gladiator pit becomes the Colosseum, outside and in: one building, one set of proportions, and the city behind the arena's walls
+## D-129 — The gladiator pit becomes the Colosseum, outside and in: one building, one set of proportions, and the city behind the arena's walls
 
 **2026-10-03 · Accepted under the lead's brief ("the colosseum has no background, it's just floating in blank white nothingness"; "make the outside match the inside … I want the background internally to the colosseum to be the city backdrop, and the building inside the city to match the look of the colosseum") · amends D-114 (the arena and its street lot) and reuses D-124's south vista · no gameplay, collision, door, wire or privacy change**
 

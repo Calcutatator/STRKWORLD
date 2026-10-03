@@ -14075,7 +14075,7 @@ there was nothing but linear fog on a `SKY_HORIZON` background, which reads as
 "floating in blank white nothingness". The sky dome and the `Fog` *are* shared
 (one `Scene` in `world-engine.ts`), so the fix is not a second sky: it is
 mounting `backdropCity` and `createSouthVista` into the room's own group
-(`three/arena-surround.ts`, D-128). Verified by the arena room's draw-call test
+(`three/arena-surround.ts`, D-129). Verified by the arena room's draw-call test
 listing `arena:outside-city`, `arena:outside-windows` and the vista's six
 meshes, and by renders from the in-game camera on the sand and on the top tier.
 

@@ -317,7 +317,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     // ground. No label and no sign: nothing here names it.
     buildBunkerEntrance(map, res, { ground, animators, floorHeight: PAVEMENT_HEIGHT });
 
-    // The Colosseum (D-114, D-128), in its own module: the stacked arcades,
+    // The Colosseum (D-114, D-129), in its own module: the stacked arcades,
     // the attic with its banners and cressets, the grand arch on the west
     // front and the nameplate, merged into the street's groups. The building
     // fades like any other when it stands between the camera and the player.
@@ -448,7 +448,7 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   if (kind === 'turf' || kind === 'walkway' || kind === 'footing') return 'pitch';
   // And the hidden stair, its cut and the vending machine's pad (D-107).
   if (kind === 'stairhead' || kind === 'service') return 'bunker';
-  // And the Colosseum, its wall, its core and its threshold (D-114, D-128).
+  // And the Colosseum, its wall, its core and its threshold (D-114, D-129).
   if (kind === 'colwall' || kind === 'colcore' || kind === 'colstep') return 'colosseum';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
@@ -707,7 +707,7 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
             break;
           case 'colosseum':
             // Laid by colosseum-builder.ts: the building's own footing and
-            // the threshold under its grand arch (D-114, D-128).
+            // the threshold under its grand arch (D-114, D-129).
             break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'

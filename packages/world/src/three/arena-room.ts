@@ -80,7 +80,7 @@ import { createAffordanceShells, type AffordanceSet } from './affordance.js';
  * occluder (`arenaFades`): the near stands never hide the player, in the
  * tunnel or on the sand.
  *
- * D-128: the stadium no longer floats in a white void. The city the street
+ * D-129: the stadium no longer floats in a white void. The city the street
  * stands in is mounted round it (three/arena-surround.ts), the arcade carries
  * an attic colonnade up to the Colosseum's own `COLOSSEUM_WALL_TOP`, and the
  * ground beyond the wall goes into the sand's own bin, so inside and outside
@@ -150,7 +150,7 @@ const ARCADE_SHADOW = 0x4a3a2c;
 const DOORWAY_SHADOW = 0x1f1812;
 const SAND = 0xdcc191;
 const SAND_DARK = 0xc2a473;
-/** D-128: the lawn outside the walls, the colour the street's south lawn is. */
+/** D-129: the lawn outside the walls, the colour the street's south lawn is. */
 const OUTSIDE_LAWN = PALETTE.grassWarm;
 const TUNNEL = 0x8e7b62;
 const TIMBER = 0x7a5532;
@@ -240,7 +240,7 @@ export function buildArenaRoom(
   const boxStation = map.stations[0];
   try {
     sandFloor(bin);
-    // D-128: the ground the city beyond the wall stands on, in the sand's own
+    // D-129: the ground the city beyond the wall stands on, in the sand's own
     // bin, so it costs no draw call of its own.
     layArenaOutsideGround(bin, 'sand');
     stands(bin);
@@ -338,7 +338,7 @@ export function buildArenaRoom(
     group.add(dummy);
     group.add(fxMount);
 
-    // D-128: the street's own city and water, hung round the arena. Built
+    // D-129: the street's own city and water, hung round the arena. Built
     // last, so a failure here cannot leave the stadium half-built.
     surround = createArenaSurround({
       lowDetail: options.lowDetail === true,
@@ -561,7 +561,7 @@ function sandFloor(bin: GeometryBin): void {
   };
   for (let y = 0; y < ARENA_HEIGHT; y++) {
     for (const [x0, x1] of rowRuns(y, (kind) => kind === 'void')) {
-      // D-128: the ground outside the walls. It was bare earth while the room
+      // D-129: the ground outside the walls. It was bare earth while the room
       // floated in a white void; now the city stands round it, it is the same
       // lawn the Colosseum stands on in the street, so there is no apron of
       // dirt under the building that the street does not have.
@@ -657,7 +657,7 @@ function stands(bin: GeometryBin): void {
 }
 
 /**
- * The attic over the arcade's outer edge (D-128), on the tiles where the
+ * The attic over the arcade's outer edge (D-129), on the tiles where the
  * stadium meets the open air: a pier every other bay and the architrave they
  * carry, up to `COLOSSEUM_WALL_TOP` — the height the Colosseum's wall reaches
  * on the street, so inside and outside are plainly the same building.

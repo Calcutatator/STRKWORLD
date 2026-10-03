@@ -2,14 +2,14 @@ import { ARENA_BUILDING, STREET_ORIGIN_X, type BuildingId, type Facing } from '@
 import type { TileKind } from './street.js';
 
 /**
- * The Colosseum (D-114, D-128), as data: the stadium on the south lawn just
+ * The Colosseum (D-114, D-129), as data: the stadium on the south lawn just
  * east of the Avatar Studio's path, entered through a three-tile grand arch
  * on its west front. A short stone path branches east off the Studio's path
  * to the arch, so walking east off the branch through the arch enters the
  * arena, and leaving puts the player back on the branch facing west (amended
  * 2026-10-02: the arch was on the north side, off the road).
  *
- * The footprint is exactly what the sunken pit's was (D-128 replaced the pit
+ * The footprint is exactly what the sunken pit's was (D-129 replaced the pit
  * with the building the arena is from the inside, and changed nothing a
  * walker can feel): the same lot, the same door tiles, the same branch and
  * the same return tile and facing.

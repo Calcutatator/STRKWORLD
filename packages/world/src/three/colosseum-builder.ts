@@ -42,7 +42,7 @@ import {
 import type { LabelFactory, Occluder, OccluderBounds, TextLabel } from './types.js';
 
 /**
- * The Colosseum in 3D (D-114, D-128): the stadium on the south lawn, the
+ * The Colosseum in 3D (D-114, D-129): the stadium on the south lawn, the
  * building the arena room is the inside of.
  *
  * It replaced the sunken gladiator pit that stood on this lot, which read as

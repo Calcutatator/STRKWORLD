@@ -76,7 +76,7 @@ function tiles(test: (x: number, y: number) => boolean): Array<{ x: number; y: n
   return found;
 }
 
-/** Is `object` part of the surround — the city hung round the stadium (D-128)? */
+/** Is `object` part of the surround — the city hung round the stadium (D-129)? */
 function outsideSurround(object: Object3D): boolean {
   for (let node: Object3D | null = object; node; node = node.parent) {
     if (node.name === 'arena:outside') return true;
@@ -107,7 +107,7 @@ function headroomIntrusions(root: Object3D): string[] {
   const world = new Matrix4();
   root.traverse((object) => {
     if (!(object instanceof Mesh) || found.has(object.name)) return;
-    // D-128: the city round the stadium stands tens of tiles beyond the
+    // D-129: the city round the stadium stands tens of tiles beyond the
     // walls, nowhere near a walkable tile, and sweeping its thousands of
     // triangles here would cost minutes. The test below holds it clear of the
     // stadium by its bounding box instead.
@@ -190,14 +190,14 @@ describe('the arena in 3D (D-114)', () => {
       'arena:flames',
       'arena:gate',
       'arena:gate-lamp',
-      // D-128: the city round the stadium, the street's own backdrop module.
+      // D-129: the city round the stadium, the street's own backdrop module.
       'arena:outside-city',
       'arena:outside-windows',
       'arena:sand',
       'arena:seats',
       'arena:stone',
       'arena:stone-south',
-      // D-128: D-124's river, station and far city, mounted behind the south
+      // D-129: D-124's river, station and far city, mounted behind the south
       // wall. Left out of the low-detail path below.
       'south-vista:banks',
       'south-vista:city',
@@ -214,7 +214,7 @@ describe('the arena in 3D (D-114)', () => {
     room.dispose();
   });
 
-  it('drops the water south of it on the low-detail path: the camera never looks south (D-128)', () => {
+  it('drops the water south of it on the low-detail path: the camera never looks south (D-129)', () => {
     const full = meshes(build().group).map((mesh) => mesh.name).sort();
     const low = build({ lowDetail: true });
     const names = meshes(low.group).map((mesh) => mesh.name).sort();
@@ -225,7 +225,7 @@ describe('the arena in 3D (D-114)', () => {
     low.dispose();
   });
 
-  it('stands the city clear of the stadium, beyond its walls on both sides (D-128)', () => {
+  it('stands the city clear of the stadium, beyond its walls on both sides (D-129)', () => {
     const room = build();
     const surround = room.group.getObjectByName('arena:outside');
     expect(surround).toBeDefined();

@@ -16,7 +16,7 @@ import {
 import { MAP_SOUTH_EDGE, createSouthVista, type SouthVista } from './south-vista.js';
 
 /**
- * What a player inside the arena sees over its wall (D-128): the same city
+ * What a player inside the arena sees over its wall (D-129): the same city
  * the street stands in.
  *
  * The arena is a room, drawn at the interiors' origin over the hidden street

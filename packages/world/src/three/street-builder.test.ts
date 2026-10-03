@@ -87,7 +87,7 @@ describe('buildStreet', () => {
     // Plaza's (D-076): its gateway sign, the monument's three faces, the
     // table's card (its E prompt is the World's shared one, D-117); then the
     // football pitch's (D-078): its scoreboard and its gate's board; then the
-    // Colosseum's nameplate (D-114, D-128).
+    // Colosseum's nameplate (D-114, D-129).
     expect(view.labels.children).toHaveLength(20);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'colosseum')).toHaveLength(1);
     expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(5);
@@ -204,7 +204,7 @@ describe('buildStreet', () => {
     expect(gates).toHaveLength(1);
     // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts)
     // the pitch gate (D-078, pitch-builder.test.ts) and the Colosseum's shell
-    // and grand arch (D-128, colosseum-builder.test.ts).
+    // and grand arch (D-129, colosseum-builder.test.ts).
     expect(occluders.filter((occluder) => occluder.kind !== 'plaza' && occluder.kind !== 'pitch' && occluder.kind !== 'colosseum')).toHaveLength(PLAN.length + 1);
     const gate = gates[0]!;
     const mesh = meshNamed(view.ground, 'street:sandbox-gate');

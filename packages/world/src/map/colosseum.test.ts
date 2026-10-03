@@ -14,10 +14,10 @@ import { PLACEMENT_PATH, PLACEMENT_STAND, PLAZA_AREA } from './plaza.js';
 import { createStreetMap, doorAt, isSolidAt, TILES, type TileKind } from './street.js';
 
 /**
- * The Colosseum on the street (D-114, amended 2026-10-02; D-128 replaced the
+ * The Colosseum on the street (D-114, amended 2026-10-02; D-129 replaced the
  * sunken pit with the building): its exact rows, its west grand arch, the
  * branch off the Studio's path to it, the return tile, and no invisible walls
- * anywhere round it. D-128 changed none of this on purpose, so the rows below
+ * anywhere round it. D-129 changed none of this on purpose, so the rows below
  * are the pit's rows unchanged.
  */
 
@@ -40,7 +40,7 @@ function runs(y: number, of: TileKind): Array<[number, number]> {
   return found;
 }
 
-describe('the Colosseum on the street (D-114, D-128)', () => {
+describe('the Colosseum on the street (D-114, D-129)', () => {
   it('lies on the south lawn just east of the Studio path, street x 57-70, rows 20-26', () => {
     expect(COLOSSEUM_AREA).toEqual({ x: X + 28, y: 20, width: 14, height: 7 });
     expect(X + 28).toBe(57);

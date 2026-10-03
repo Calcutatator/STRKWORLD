@@ -1,5 +1,5 @@
 /**
- * The Colosseum's one set of proportions and stones (D-128).
+ * The Colosseum's one set of proportions and stones (D-129).
  *
  * The building on the street (three/colosseum-builder.ts) and the arena
  * inside it (three/arena-room.ts) are two models of the same place, so they
