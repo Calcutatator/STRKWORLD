@@ -259,6 +259,76 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — A seat is not one height: the sixteen looks sit 0.07 to 0.25 above their own feet, and the rig hangs its thighs below the hips (D-133)
+
+**Superseded the same day by D-127's seat system.** The measurement below still
+holds — a seat is not one height — but `three/avatar-seating.ts` and its
+`seatedFit()` are **gone**: the one measurement in the World is
+`avatarSeatedContact()` on the figure, handed a `SeatPlace` on the motion, and
+the swing is one of its five seats. The hanging-thigh paragraph below describes
+a pose that no longer ships either; the seated thighs are level now, which is
+the only sit a one-piece leg can hold, and the swing's plank became a bench
+because of it.
+
+The roof swing dropped every rider the same 1.78 below its pivot, so the look
+you happened to be wearing decided whether you sat on the board, in it or over
+it. Verified by measuring, not by eye: a figure is seated
+(`createAvatarFigure(key).update(…, { seated: true })`), its hip band's
+underside read off the posed geometry, and the sixteen come out between 0.071
+(a small build) and 0.249 (a large one) — a spread of 0.18, which at this
+figure's scale is the difference between hips on a plank and hips a hand's
+width over it. `three/avatar-seating.ts` measures it once per look and caches
+it; `tools/swing-fit.ts` checks the result across all sixteen, both outfits
+and three head poses.
+
+Two things that are not obvious until you measure them, and that any other
+seat in this world will meet:
+
+- **The thighs hang below the hips.** The legs turn about a pivot
+  `LEG_PIVOT_DROP` (0.1) below the hip band, so a seated figure's thigh boxes
+  reach about 0.14 *below* the plane its buttocks rest on. There is no seat
+  surface that both carries the hips and misses the legs: a plank under the
+  hips is always crossed by the thighs at its front edge. The seat was
+  therefore built as a **plank set back from the hanging axis** (front edge
+  0.06 ahead of it), with the thigh-over-the-front-edge contact named as an
+  exception in the check rather than pretended away.
+- **What is behind a seated figure is not its back.** A cloak reaches 0.60
+  behind the hips, a cat tail curls up to 0.38 high and 0.46 back, a quiver
+  and a sheath about 0.46. A single backrest bar anywhere a back would lean on
+  is speared by one of them. Two bars with a gap down the middle — which is
+  also the division between a two-seater's seats — clears the tail, and cloth
+  is allowed to drape.
+
+Also verified: the figure's head pivot (`avatar-head-pivot`) is free to carry
+a look-around yaw on top of the gait's own counter-twist, and a ±75° turn
+clips nothing in any of the sixteen.
+
+### 2026-10-03 — Grey is not one setting: a desaturated palette, a cool haze and ACES tone mapping compound into weather (D-133)
+
+"The view is just grey only." Diagnosed by reading the three things that paint
+it rather than by guessing at the fog:
+
+- The vista's palette was deliberately desaturated — water, quay, bank, shed
+  and city were all stand-ins for distance.
+- Its own baked haze took every far vertex up to **0.9** of the way to
+  `mix(SKY_HORIZON, 0xccd2d8, 0.34)` — a *cool* grey. At that strength the
+  colour underneath does not matter.
+- The engine tone maps with `ACESFilmicToneMapping` at exposure 1 (and the
+  offline render harness does the same, `color /= 0.6` and all), which pulls
+  the saturation out of pale colours. Anything already washed arrives grey.
+
+The engine's **fog was not the cause**: the vista's materials set
+`fog = false` and bake their own haze (D-124), and the ride already widens the
+range (`fogRange(elevation, true)`) past the far bank. Changing fog would have
+changed nothing visible from the seat.
+
+The fix was all three at once: warm the haze and cap it at 0.74, let the
+materials be the colours they are, and put something *in* the frame — trees,
+a sunset in the cloud sea (D-132's banks were three shades of white, which is
+exactly what a grey sky looks like after tone mapping), and two invented
+towers on the skyline. Each one alone reads as a tweak; together they are the
+difference between weather and a view.
+
 ### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
 
 The brief was "make jumping actually move the character model … jump over the
@@ -14548,50 +14618,85 @@ Renders are from the offline rasteriser, not a GPU:
 `arena-throne-merged.png` (game camera, close-up and the chair in
 three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
 browser, and whether the sit-down wants a transition animation.
-
 ---
-
+### 2026-10-03 — A camera placed *behind* what the player is sitting in is a shot of the ride, not a view from it
+The roof swing's first cut (D-133) put the rider's camera seven units back
+along the shot's yaw and pitch and looked at the seat. Every frame of the
+twenty seconds therefore had the A-frame's black upright and the rider's own
+back down the middle of it, which is the opposite of the lookout the brief
+asked for. The geometry behind it is worth stating plainly, because the same
+mistake is available to every "cinematic" shot in this repo: **a camera placed
+along a yaw and a pitch and pointed back at its focus is already looking down
+that yaw and pitch**, so `distance` changes nothing about the *direction* of
+the view — all it decides is how much of what the player is sitting in stands
+between the lens and what they came to look at. For an interior-feeling shot
+the answer is 0. `CameraShot.distance` of 0 is now a near-eye case in the rig:
+at 0 the lens is on its focus and `lookAt(focus)` is degenerate, so it aims a
+fixed length out along the shot's own direction instead.
+Two traps found doing it. **The lens inside the rider is the rider's own hair
+across the frame.** The local figure is hidden from its own camera by the
+*drawn* camera's distance to the eye, not by "is this player riding", so the
+sweep in keeps them visible until they fill the frame and a cut hides them at
+once; a peer on the swing is always drawn whole, and nobody is ever hidden for
+a spectator. **The A-frame straddles the deck**, so at the swing's northmost
+the rider sits inside its footprint and a hard head-turn looks straight into a
+splayed leg — the eye point had to move forward of where a head really sits
+(0.52 rather than 0.18) before the steel stayed out at every angle.
+A related one from the same review: **two colours are not a gradient.** The
+sky dome crossfaded the brand's warm Horizon straight into its cool Sky, and a
+warm-to-cool crossfade passes through a neutral — measured through the
+engine's own ACES tone mapping, the band from a tenth to a third of the way up
+the dome sat at 0.01–0.06 saturation, which is a grey, and in any shallow shot
+that band is most of the frame. Both endpoints being colourful says nothing
+about the middle. It goes gold → peach → rose → blue now, and the floor of the
+whole sweep is asserted.
+*Verified:* "nothing big and black in the centre" is measured, not eyeballed —
+`swingFrameCentreGap()` projects the A-frame's boxes into the lens's own
+space, clips them at the near plane (so a beam passing *beside* the lens is
+not mistaken for one across it) and reports how near the middle the steel
+comes as a fraction of half the frame; `three/roof-swing.test.ts` sweeps 9
+swing angles × 7 head yaws plus the reduced-motion arc, and pins that the
+seven-unit shot it replaced **fails** the same check, so the test has teeth.
+The sky's floor is checked through `skyColourAt()`, which is the same
+arithmetic the shader runs, against the two-stop crossfade it replaced. The
+rider's own fit is `tools/swing-fit.ts` against D-127's shipped level-thigh
+pose: 0 findings for all 16 looks × 3 head poses, after the seat was rebuilt
+as a bench (a one-piece leg can only sit with its thighs level, so the plank
+the old hanging-leg pose sat on became furniture nobody could sit on, and the
+foot bar went — there are no hanging feet). Full suite (319 files, 6828
+tests), `npm run typecheck` and `./scripts/check-invariants.sh` pass after the
+merge with `origin/main`. Renders are from the offline rasteriser, not a GPU:
+`renders/swing-look-left.png`, `swing-look-centre.png`, `swing-look-right.png`,
+`swing-fit-all-looks.png`, `swing-street-north.png`, `swing-title-check.png`.
+Not verified: a real browser, a GPU or a touch screen.
 ### 2026-10-03 — A D-number taken from `origin/main` can be taken again while you work
-
 D-135's entry was written as D-129, renumbered to D-134 when a fetch showed
 D-129 had become the Colosseum, and renumbered again to D-135 when the fetch
 immediately before committing showed D-134 had become the Garden. With a dozen
 branches open, the number you reserved at the start of a long change is not
 yours at the end of it.
-
 *How to avoid it:* take the number from a fetch **immediately before you
 commit**, not when you start, and keep the whole change greppable for it so the
 renumber is one `grep -rl | xargs perl -pi -e` (here it was 84 references across
 29 files, then 140 across 35). Re-fetch and re-check even if you already
 renumbered once.
-
 *Verified:* `git show origin/main:docs/DECISIONS.md | grep -o "^## D-[0-9]*"`
 before each renumber; D-129 is the Colosseum and D-134 the Garden on
 `origin/main` today, and neither existed in this branch's base.
-
----
-
 ### 2026-10-03 — The static-scene rule treats a moving figure as a walkable-tile intrusion
-
 `street-builder.test.ts` asserts no volume in `street:ground` stands on a
 walkable tile between knee and head height. D-135's pitch dummies are figures
 that walk the field, so parenting them to `ground` failed that test — and
 correctly so: the rule is about authored scene geometry, which is why avatars
 have never been in that group either. Hiding them (`visible = false`) does not
 help; the test traverses geometry, not visibility.
-
 *How to avoid it:* anything that moves over walkable ground belongs outside
 `street:ground`. D-135 added `street:figures` for exactly this, hidden and shown
 with the street like the ball.
-
 *Verified:* reproduced red — with the dummies in `ground` the test reports four
 intrusions at the world origin; moving them to `street:figures` turns it green,
 and `pitch-builder.test.ts` pins that they are not in `ground`.
-
----
-
 ### 2026-10-03 — Two features that each claim "the budget is still the whole of it" both say 37.7, and the merge has to add them
-
 D-133's swing and D-135's pitch branched from the same base and each added its
 own client floor to `client-arena.test.ts`'s pinned sum, each asserting
 `toBeCloseTo(37.7, 1)`. Both were right in isolation — the base through D-128
@@ -14599,19 +14704,13 @@ is 36.7 — and both are wrong together. A conflict resolution that keeps "both
 sides" of the sum but keeps either side's *number* leaves a test that passes by
 luck or fails for the wrong reason. The real figure is 38.7 a second against
 `MAX_MESSAGES_PER_SECOND` of 40, and nothing had to be paced down to fit.
-
 *How to avoid it:* when two branches each append a term to a pinned total,
 recompute the total from the constants rather than taking either side's
 assertion, and fix every prose copy of it — `config.ts` carried the 37.7 twice,
 in `JUMP_CLIENT_INTERVAL_MS`'s comment and in `PITCH_CLIENT_GATE_INTERVAL_MS`'s.
-
 *Verified:* `perSecond()` over the eight constants gives 38.709; the merged
 `client-arena.test.ts` pins 38.7 and `expect(budget).toBeLessThan(40)` passes.
-
----
-
 ### 2026-10-03 — "Both sides" is wrong wherever the two sides share a `/**`
-
 Six of the twenty-two conflicts in the football/main merge opened on a doc
 comment the two sides had in common, so the marker fell *inside* it: ours began
 `* One slot of the pitch match…` and theirs `* The Exchange roof's swing…`.
@@ -14619,12 +14718,10 @@ Concatenating them yields one comment whose body is two comments, and the next
 declaration is swallowed. In `config.ts` this produced a file tsc reported at
 thirty-odd syntax errors starting with `TS1002: Unterminated string literal` —
 twenty lines below the real damage.
-
 *How to avoid it:* before concatenating a conflict, check whether the common
 context immediately above it is an unterminated `/**`. If it is, the second
 side needs its own `/**` opener. The tell in tsc's output is a cluster of
 TS1005/TS1002 in a file whose conflict you thought was a one-line addition.
-
 *Verified:* `npm run typecheck` red on `config.ts(341)` with the shared opener,
 green with `/**` restored before the swing's block; the same shape was fixed by
 hand in `state.ts`, `room.ts`, `copy.ts`, `world-session.ts` and `AGENTS.md`.

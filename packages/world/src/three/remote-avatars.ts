@@ -20,6 +20,7 @@ import { createSeatTracker, createSwingClock, type SeatTracker, type SwingClock 
 import type { AvatarFigure, AvatarFigureFactory, AvatarMotion, SeatPlace } from './types.js';
 import { ARENA_THRONE_SEAT, ARENA_TIER_SEAT } from './arena-room.js';
 import { streetSeatPlaceAt } from '../seats.js';
+import { ROOF_SWING_SEAT } from './roof-swing.js';
 
 /**
  * Time constant of the critically damped follow of the latest snapshot
@@ -135,8 +136,16 @@ export interface RemoteAvatarLayer3D {
    * `seat` (world units) instead of where the lobby holds them — the lobby's
    * seat tile is on the ledge, and the seat itself hangs out past it. Null
    * for nobody.
+   *
+   * `seat` is the board's top face on the hanging axis; the peer's own look
+   * decides how far its hips sit below the figure's origin, and `angle` (the
+   * pendulum, radians) leans it with the seat rather than leaving it upright.
    */
-  setRider(gameId: string | null, seat: { readonly x: number; readonly y: number; readonly z: number } | null): void;
+  setRider(
+    gameId: string | null,
+    seat: { readonly x: number; readonly y: number; readonly z: number } | null,
+    angle?: number,
+  ): void;
   /** Unsubscribe and retire every figure, once. Inert afterwards. */
   destroy(): void;
 }
@@ -256,6 +265,8 @@ export function createRemoteAvatarLayer3D({
   /** D-133: the peer on the roof swing, and where its seat is this frame. */
   let rider: string | null = null;
   let riderSeat: { x: number; y: number; z: number } | null = null;
+  /** The pendulum's angle this frame: the rider leans with the seat. */
+  let riderAngle = 0;
 
   /** Detach and dispose one figure; true once nothing of it is left owned. */
   const retire = (avatar: RemoteAvatar, errors: unknown[]): boolean => {
@@ -598,8 +609,12 @@ export function createRemoteAvatarLayer3D({
       seat = ARENA_THRONE_SEAT;
     }
     const guard = fighter === avatar.id;
-    // D-133: a peer on the swing sits in it, whatever the floor under them says.
-    if (rider === avatar.id && riderSeat !== null) seated = true;
+    // D-133: a peer on the swing sits in it, whatever the floor under them
+    // says, and on the swing's own seat (D-127's seat system, adopted here).
+    if (rider === avatar.id && riderSeat !== null) {
+      seated = true;
+      seat = ROOF_SWING_SEAT;
+    }
     const blocking = blocker === avatar.id;
     if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
     return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking, seat };
@@ -623,12 +638,13 @@ export function createRemoteAvatarLayer3D({
       if (destroyed) return;
       throned = typeof gameId === 'string' ? gameId : null;
     },
-    setRider(gameId, seat) {
+    setRider(gameId, seat, angle = 0) {
       if (destroyed) return;
       const valid = seat !== null && typeof seat === 'object' &&
         Number.isFinite(seat.x) && Number.isFinite(seat.y) && Number.isFinite(seat.z);
       rider = typeof gameId === 'string' && valid ? gameId : null;
       riderSeat = rider !== null && valid ? { x: seat!.x, y: seat!.y, z: seat!.z } : null;
+      riderAngle = rider !== null && Number.isFinite(angle) ? angle : 0;
     },
     setVisible(visible) {
       // A visibility callback that outlives teardown is stale, not an error.
@@ -659,8 +675,14 @@ export function createRemoteAvatarLayer3D({
         // D-133: the swing's rider is drawn on its seat, facing south out
         // over the edge, wherever the lobby holds them on the ledge.
         if (rider === avatar.id && riderSeat !== null) {
+          // The seat point *is* where the figure goes: the board's top face,
+          // which `ROOF_SWING_SEAT` says is the rider's own ground plane, so
+          // every look lands on the board. It leans with the pendulum rather
+          // than hanging upright beside it.
           avatar.figure.object.position.set(riderSeat.x, riderSeat.y, riderSeat.z);
-          avatar.figure.object.rotation.y = 0;
+          avatar.figure.object.rotation.set(-riderAngle, 0, 0);
+        } else if (avatar.figure.object.rotation.x !== 0) {
+          avatar.figure.object.rotation.x = 0;
         }
         const jump = dt > 0 ? stepJump(avatar, dt) : null;
         if (destroyed) break;

@@ -527,3 +527,40 @@ describe('avatar figure disposal', () => {
     expect(mesh(rebuilt, 'avatar-torso').material).not.toBe(material);
   });
 });
+
+describe('the head turns where the player looks (D-133, 2026-10-03)', () => {
+  const headYawOf = (figure: { object: Object3D }): number => {
+    const pivot = figure.object.getObjectByName('avatar-head-pivot');
+    if (!pivot) throw new Error('figure has no head pivot');
+    return pivot.rotation.y;
+  };
+
+  it('points the head at the yaw it is given, left and right', () => {
+    const figure = createAvatarFigure('avatar-1');
+    try {
+      figure.update(16, { moving: false, sprinting: false, seated: true });
+      expect(headYawOf(figure)).toBeCloseTo(0, 6);
+      figure.update(16, { moving: false, sprinting: false, seated: true, headYaw: 0.6 });
+      expect(headYawOf(figure)).toBeCloseTo(0.6, 6);
+      figure.update(16, { moving: false, sprinting: false, seated: true, headYaw: -0.6 });
+      expect(headYawOf(figure)).toBeCloseTo(-0.6, 6);
+      // And it comes back when nothing asks for a turn.
+      figure.update(16, { moving: false, sprinting: false, seated: true });
+      expect(headYawOf(figure)).toBeCloseTo(0, 6);
+    } finally {
+      figure.dispose();
+    }
+  });
+
+  it('refuses a wrung neck, and nonsense', () => {
+    const figure = createAvatarFigure('avatar-1');
+    try {
+      figure.update(16, { moving: false, sprinting: false, headYaw: 9 });
+      expect(Math.abs(headYawOf(figure))).toBeLessThan(Math.PI / 2);
+      figure.update(16, { moving: false, sprinting: false, headYaw: Number.NaN });
+      expect(headYawOf(figure)).toBeCloseTo(0, 6);
+    } finally {
+      figure.dispose();
+    }
+  });
+});

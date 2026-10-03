@@ -10,9 +10,11 @@ import type { SwingShellChannel } from './swing-controller.js';
  *
  * The ride is the server's twenty seconds and the World draws it; the Shell
  * adds only the way out. While this client is the rider the hint reads
- * "Esc to get off", with the same words on a button for a touch screen, and
- * Esc anywhere else on the page does the same. Nothing renders off the roof,
- * for a spectator, or when the swing is idle.
+ * "\u25c0 \u25b6 look around \u00b7 Esc to get off": the look is the World's own
+ * (the keys, or a drag across the canvas, turn the rider's head), and the
+ * way off is this button, which a touch screen taps and Esc presses anywhere
+ * on the page. Nothing renders off the roof, for a spectator, or when the
+ * swing is idle.
  */
 
 export interface SwingHudProps {
@@ -70,6 +72,7 @@ export function SwingHud({
       aria-label={COPY.swing.label}
       role="region"
     >
+      <span className="swing-hud-look">{COPY.swing.look}</span>
       <button type="button" className="swing-hud-hint" onClick={() => swing.press()}>
         {COPY.swing.getOff}
       </button>

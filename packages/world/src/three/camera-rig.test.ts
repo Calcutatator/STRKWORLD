@@ -295,3 +295,101 @@ describe('fixed camera framing', () => {
     }
   });
 });
+
+describe('a near-eye shot (D-133, amended 2026-10-03)', () => {
+  /**
+   * A shot with `distance` 0 stands the lens on its focus, which is how the
+   * roof swing's ride looks out from the rider's own eye instead of at the
+   * back of their head. There is nothing to look *back* at from there, so the
+   * rig points the lens out along the shot's own yaw and pitch.
+   */
+  const shotAt = (yaw: number, pitch: number) => ({ yaw, pitch, distance: 0, aimHeight: 0, cut: true });
+
+  const forwardOf = (camera: PerspectiveCamera): Vector3 =>
+    new Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+
+  it('puts the lens exactly on the focus', () => {
+    const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+    const rig = createCameraRig({ camera });
+    rig.update(16, { x: 7, z: -3 }, null, 12, 'rooftop', shotAt(Math.PI, 0.3));
+    expect(camera.position.x).toBeCloseTo(7, 9);
+    expect(camera.position.y).toBeCloseTo(12, 9);
+    expect(camera.position.z).toBeCloseTo(-3, 9);
+  });
+
+  it('looks out along the shot, not back at what it stands on', () => {
+    for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 3]) {
+      for (const pitch of [0, 0.26, -0.2]) {
+        const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+        createCameraRig({ camera }).update(16, { x: 2, z: 5 }, null, 1, 'street', shotAt(yaw, pitch));
+        const forward = forwardOf(camera);
+        // The same direction a shot standing back would have looked: the
+        // negative of the rig's own offset. Only the standing place changed.
+        const back = cameraOffset(yaw, pitch, 1);
+        expect(forward.x, `yaw ${yaw} pitch ${pitch}`).toBeCloseTo(-back.x, 6);
+        expect(forward.y, `yaw ${yaw} pitch ${pitch}`).toBeCloseTo(-back.y, 6);
+        expect(forward.z, `yaw ${yaw} pitch ${pitch}`).toBeCloseTo(-back.z, 6);
+      }
+    }
+  });
+
+  it('is the same heading a shot standing back from the focus gives', () => {
+    // The point of the change is the standing place, not the heading: a
+    // camera placed along a yaw and pointed at its focus already looks down
+    // that yaw. So the ride turns exactly as it did; it just stopped having
+    // the A-frame and the rider in the way.
+    const near = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+    const far = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+    createCameraRig({ camera: near }).update(16, { x: 0, z: 0 }, null, 2, 'street', shotAt(Math.PI, 0.26));
+    createCameraRig({ camera: far }).update(16, { x: 0, z: 0 }, null, 2, 'street', {
+      ...shotAt(Math.PI, 0.26),
+      distance: 7,
+    });
+    const a = forwardOf(near);
+    const b = forwardOf(far);
+    expect(a.x).toBeCloseTo(b.x, 6);
+    expect(a.y).toBeCloseTo(b.y, 6);
+    expect(a.z).toBeCloseTo(b.z, 6);
+  });
+
+  it('still aims at the focus for every shot that stands back from it', () => {
+    const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+    createCameraRig({ camera }).update(16, { x: 4, z: 9 }, null, 0, 'street', {
+      yaw: 0,
+      pitch: CAMERA_PITCH,
+      distance: CAMERA_DISTANCE,
+      aimHeight: CAMERA_AIM_HEIGHT,
+      cut: true,
+    });
+    const forward = forwardOf(camera);
+    const toFocus = new Vector3(4 - camera.position.x, CAMERA_AIM_HEIGHT - camera.position.y, 9 - camera.position.z)
+      .normalize();
+    expect(forward.x).toBeCloseTo(toFocus.x, 6);
+    expect(forward.y).toBeCloseTo(toFocus.y, 6);
+    expect(forward.z).toBeCloseTo(toFocus.z, 6);
+  });
+
+  it('sweeps into one without the heading tumbling on the way', () => {
+    // Easing from the preset (eleven units back) to a near-eye shot takes the
+    // distance to zero; the heading has to stay sane through every frame of
+    // it, or the ride would start with a spin.
+    const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 400);
+    const rig = createCameraRig({ camera });
+    rig.update(16, { x: 0, z: 0 }, null, 0, 'street');
+    const headings: Vector3[] = [];
+    for (let frame = 0; frame < 120; frame += 1) {
+      rig.update(16, { x: 0, z: 0 }, null, 0, 'street', { yaw: Math.PI, pitch: 0.26, distance: 0, aimHeight: 0 });
+      const forward = forwardOf(camera);
+      expect(Number.isFinite(forward.x) && Number.isFinite(forward.y) && Number.isFinite(forward.z)).toBe(true);
+      headings.push(forward);
+    }
+    // No frame turns by more than a few degrees from the one before it.
+    for (let i = 1; i < headings.length; i += 1) {
+      expect(headings[i]!.angleTo(headings[i - 1]!)).toBeLessThan(0.2);
+    }
+    // And it arrives looking south and a little down.
+    const last = headings.at(-1)!;
+    expect(last.z).toBeGreaterThan(0.9);
+    expect(last.y).toBeLessThan(0);
+  });
+});

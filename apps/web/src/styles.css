@@ -5116,6 +5116,28 @@ button.ui-balance-fill:focus-visible {
   font-size-adjust: none;
 }
 
+/* D-133 (2026-10-03): the look half of the hint, beside the way out. */
+.swing-hud-look {
+  align-self: center;
+  margin-right: 0.55rem;
+  padding: 0.4rem 0.7rem;
+  border: 4px solid var(--brand-outline, #24120a);
+  border-radius: 4px;
+  background: var(--brand-window, #3a2415);
+  box-shadow: inset 0 0 0 2px var(--brand-window-rim, #6e3e1e);
+  color: var(--brand-cream, #fff6e6);
+  font-family: var(--brand-font-menu, var(--ui-btn-font));
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: swing-hud-rise 260ms ease-out both;
+}
+
+.swing-hud[data-motion="reduced"] .swing-hud-look {
+  animation: none;
+}
+
 .swing-hud-hint {
   pointer-events: auto;
   margin: 0;

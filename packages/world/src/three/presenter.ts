@@ -20,6 +20,7 @@ import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights
 import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
 import { buildFootball, type FootballView } from './football-view.js';
 import { avatarFigureHeight } from './avatar-figure.js';
+import { ROOF_SWING_SEAT, SWING_RIDER_DROP } from './roof-swing.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
 import {
@@ -162,6 +163,13 @@ const SIGHT_HEIGHTS = [0.7, 1.25] as const;
  * stacks growing underneath — lands at once; drops fall under gravity.
  */
 const MAX_HOP_RISE = 1.5;
+/**
+ * D-133 (amended): how near the ride's lens has to come to the rider's eye
+ * before their own figure stops being drawn *for them*. A metre: by then the
+ * figure is across the whole frame, so there is no pop to see, and the lens
+ * never ends up inside a head.
+ */
+const SWING_RIDER_LENS_CLEARANCE = 1;
 /** A carried block rides this far above the carrier's head. */
 const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
@@ -507,8 +515,17 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let swingFrame: RoofSwingViewFrame | null = null;
   /** Where the local rider is drawn while riding (world units); null otherwise. */
   let swingSeat: { x: number; y: number; z: number } | null = null;
+  /**
+   * Where the local rider's own eye is while riding (world units), which is
+   * where the ride's near-eye camera stands; null otherwise.
+   */
+  let swingEye: { x: number; y: number; z: number } | null = null;
   /** The rider's camera this frame, or null. */
   let swingShot: CameraShot | null = null;
+  /** The pendulum's angle while this client rides: the avatar leans with the seat. */
+  let swingAngle = 0;
+  /** How far the rider has turned their head this frame (D-133, 2026-10-03). */
+  let swingLook = 0;
   let studioVisible = false;
   let remote: RemoteAvatarLayer3D | null = null;
   let sessionToken = 0;
@@ -555,7 +572,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
     // The roof swing's frame and camera belong to the session that set them (D-133).
     swingFrame = null;
     swingSeat = null;
+    swingEye = null;
     swingShot = null;
+    swingAngle = 0;
+    swingLook = 0;
     street.swing?.setAngle(0);
     // The arena's frame, prompt and swing belong to the session that set them (D-114).
     swingElapsed = null;
@@ -607,14 +627,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
   const remoteRider = (
     gameId: GameId | null,
     seat: { readonly x: number; readonly y: number; readonly z: number } | null,
+    angle = 0,
   ): void => {
     const layer = remote as
       | (RemoteAvatarLayer3D & {
-        setRider?: (id: GameId | null, at: { readonly x: number; readonly y: number; readonly z: number } | null) => void;
+        setRider?: (
+          id: GameId | null,
+          at: { readonly x: number; readonly y: number; readonly z: number } | null,
+          angle?: number,
+        ) => void;
       })
       | null;
     try {
-      layer?.setRider?.(gameId, seat);
+      layer?.setRider?.(gameId, seat, angle);
     } catch {
       // A failing layer leaves the rider where the lobby holds them.
     }
@@ -651,8 +676,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   return {
     get player() {
-      // D-133: riding the roof swing, the camera follows the seat's arc.
-      if (swingSeat) return { ground: { x: swingSeat.x, z: swingSeat.z }, yaw, elevation: swingSeat.y };
+      // D-133 (amended): riding the roof swing, the camera *is* the rider's
+      // eye — so the focus the rig follows is the eye point, not the seat, and
+      // the near-eye shot stands on it (distance 0).
+      if (swingEye) return { ground: { x: swingEye.x, z: swingEye.z }, yaw, elevation: swingEye.y };
       // Indoors the camera follows the feet up the arena's tiers (D-114).
       return { ground, yaw, elevation: streetVisible ? elevationShown : feet };
     },
@@ -873,24 +900,35 @@ export function createPresenter(options: PresenterOptions): Presenter {
           const swing = street.swing ?? null;
           if (!frame || !swing) {
             swingSeat = null;
+            swingEye = null;
             swingShot = null;
+            swingAngle = 0;
+            swingLook = 0;
             swing?.setAngle(0);
             remoteRider(null, null);
             return;
           }
           swing.setAngle(frame.angle);
-          const seat = swing.riderAt(frame.angle);
-          // D-123: the seat stops inviting a press while someone is on it.
+          // The board's top face, which is where every rider's figure goes:
+          // the seat does the rest (`ROOF_SWING_SEAT`, D-127/D-133).
+          const board = swing.riderAt(frame.angle, SWING_RIDER_DROP);
           extraAffordances.get(swing.object as Object3D)?.setUsable(ROOF_SWING_TARGET_ID, !frame.busy);
           if (frame.selfRiding) {
-            swingSeat = { x: seat.x, y: seat.y, z: seat.z };
+            swingSeat = { x: board.x, y: board.y, z: board.z };
+            const eye = swing.eyeAt(frame.angle);
+            swingEye = { x: eye.x, y: eye.y, z: eye.z };
             swingShot = frame.shot;
+            swingAngle = frame.angle;
+            swingLook = frame.headYaw ?? 0;
             remoteRider(null, null);
             return;
           }
           swingSeat = null;
+          swingEye = null;
           swingShot = null;
-          remoteRider(frame.riderId, frame.busy ? seat : null);
+          swingAngle = 0;
+          swingLook = 0;
+          remoteRider(frame.riderId, frame.busy ? board : null, frame.angle);
         },
         syncArena(frame) {
           if (!live()) return;
@@ -1033,8 +1071,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
         avatar.object.position.set(swingSeat.x, swingSeat.y, swingSeat.z);
         yaw = 0;
         targetYaw = 0;
-        avatar.object.rotation.y = 0;
+        // The rider leans with the pendulum rather than hanging upright
+        // beside it, so their hips stay on the board through the whole arc.
+        avatar.object.rotation.set(-swingAngle, 0, 0);
         jumpShadow.place(swingSeat.x, swingSeat.y, swingSeat.z, 0, jumpHeight);
+      } else if (avatar.object.rotation.x !== 0) {
+        avatar.object.rotation.x = 0;
       }
       // D-114: the arena swing, the fighter's battle stance, and sitting on a tier.
       let attack: AttackPose | null = null;
@@ -1058,12 +1100,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
         attack,
         guard,
         blocking,
-        // D-133: the swing's rider sits in it, as a spectator sits on a tier.
+        // D-133: the swing's rider sits in it, as a spectator sits on a tier,
+        // and turns their head where they are looking.
         seated: benchSeat !== null || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
-        // D-127/D-128: whichever seat is under them. A tier's plank sits
-        // behind where the spectator stands; the throne's own seat does not.
-        // The swing places its rider itself (D-133), so it passes no seat here.
-        seat: benchSeat ?? (onThrone ? ARENA_THRONE_SEAT : onTier ? ARENA_TIER_SEAT : null),
+        // D-127/D-128/D-133: whichever seat is under them. A tier's plank sits
+        // behind where the spectator stands; the throne's own seat and the
+        // swing's board do not.
+        seat: swingSeat !== null
+          ? ROOF_SWING_SEAT
+          : benchSeat ?? (onThrone ? ARENA_THRONE_SEAT : onTier ? ARENA_TIER_SEAT : null),
+        headYaw: swingSeat === null ? 0 : swingLook,
       });
       if (streetVisible) {
         street.update(dt);
@@ -1081,6 +1127,18 @@ export function createPresenter(options: PresenterOptions): Presenter {
     },
     updateOcclusion(camera, deltaMs) {
       if (disposed) return;
+      // D-133 (amended): the ride's lens stands on the rider's own eye, so for
+      // the last of the sweep in — and for the whole ride — it is inside their
+      // head. Drawing them from there is their own hair across the lens. The
+      // rule is the drawn camera's own distance rather than "are they riding",
+      // so the sweep keeps them visible until the lens is close enough that
+      // they fill the frame, and a cut (reduced motion) hides them at once.
+      // Only this client's own figure: a peer on the swing is drawn whole.
+      avatar.object.visible = !(
+        swingEye !== null &&
+        Math.hypot(camera.x - swingEye.x, camera.y - swingEye.y, camera.z - swingEye.z) <
+          SWING_RIDER_LENS_CLEARANCE
+      );
       const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
       const blend = 1 - Math.exp(-dt / FADE_TIME_CONSTANT_MS);
       const active = new Set(visibleOccluders());

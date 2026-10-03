@@ -39,6 +39,18 @@ export interface CameraRigOptions {
 export interface CameraShot {
   readonly yaw: number;
   readonly pitch: number;
+  /**
+   * How far back from the focus the lens stands. **0 is a near-eye shot**
+   * (D-133, amended 2026-10-03): the lens sits on the focus itself and looks
+   * out along `yaw` and `pitch`, rather than standing off and looking in.
+   *
+   * It is the same view direction either way — a camera placed along a yaw and
+   * a pitch and pointed back at its focus is already looking down that yaw and
+   * pitch — so the only thing `distance` decides is how much of what the
+   * player is sitting in stands between the lens and the view. Seven units
+   * behind a swing's seat is the whole A-frame and the rider's own back; zero
+   * is the view they are looking at.
+   */
   readonly distance: number;
   readonly aimHeight: number;
   /** Cut to and from the shot instead of sweeping into it. */
@@ -133,6 +145,21 @@ interface Angle {
   distance: number;
   aimHeight: number;
 }
+
+/**
+ * D-133 (amended 2026-10-03): how far ahead a near-eye shot aims.
+ *
+ * A camera standing `distance` back from its focus and pointed at it already
+ * looks along the shot's yaw and pitch, so the aim point can be anywhere on
+ * that ray. At `distance` 0 the lens is *on* the focus and there is no ray
+ * left to aim down — `lookAt` its own position is degenerate — so it aims a
+ * fixed length out along the shot's own direction instead. Far enough that
+ * single-precision rounding cannot wobble the heading, near enough to stay
+ * inside the world.
+ */
+const NEAR_EYE_AIM = 32;
+/** Below this, a shot counts as standing on its focus rather than back from it. */
+const NEAR_EYE_DISTANCE = 1e-3;
 
 /** `to - from`, wrapped into (-π, π]. A half turn goes the same way every time. */
 function yawDelta(from: number, to: number): number {
@@ -234,7 +261,15 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
       const aimY = focus.y + shown.aimHeight;
       const offset = cameraOffset(shown.yaw, shown.pitch, shown.distance);
       camera.position.set(focus.x + offset.x, aimY + offset.y, focus.z + offset.z);
-      camera.lookAt(focus.x, aimY, focus.z);
+      if (shown.distance > NEAR_EYE_DISTANCE) {
+        camera.lookAt(focus.x, aimY, focus.z);
+      } else {
+        // A near-eye shot stands on its focus, so there is nothing to look
+        // back at: it looks out along its own yaw and pitch instead.
+        // `cameraOffset` points away from the view, so forward is its negative.
+        const ahead = cameraOffset(shown.yaw, shown.pitch, NEAR_EYE_AIM);
+        camera.lookAt(focus.x - ahead.x, aimY - ahead.y, focus.z - ahead.z);
+      }
     },
     snap() {
       pendingSnap = true;

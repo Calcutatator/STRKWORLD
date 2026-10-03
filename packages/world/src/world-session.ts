@@ -307,6 +307,13 @@ export interface WorldKeyboard extends KeyboardLike {
   readonly held: MovementInput;
   readonly sprinting: boolean;
   /**
+   * D-133 (2026-10-03): horizontal pointer drag on the World's canvas since
+   * the last call, in screen pixels, and zero afterwards. The roof swing's
+   * rider turns their head with it on a touch screen; nothing else reads it,
+   * and the camera still takes no pointer input of its own (D-059).
+   */
+  takeDragX?(): number;
+  /**
    * `keydown-F` toggles the outfit (D-053); `keydown-E` is interact (D-117):
    * it uses the station the player stands at (a plaza station, a counter, a
    * Studio figure, the bunker's lift), or else picks or places a block
@@ -2175,6 +2182,7 @@ class Session implements WorldSession {
       // C's optional host members (D-117): the World not owning the keys, the
       // combat yield, and the gate's mesh for its station's cues.
       inputSuspended: () => this.cleanedUp || !this.worldOwnsKeys(),
+      lookInput: () => this.swingLookInput(),
       suspendInteractions: (reason: string) => this.interactionSystem.suspend(reason),
       gateObject: () => (this.cleanedUp ? null : this.view.arenaGateObject?.() ?? null),
     });
@@ -2307,9 +2315,36 @@ class Session implements WorldSession {
       reducedMotion: () => this.prefersReducedMotion(),
       swingObject: () => (this.cleanedUp ? null : this.view.roofSwingObject?.() ?? null),
       inputSuspended: () => this.cleanedUp || !this.worldOwnsKeys(),
+      lookInput: () => this.swingLookInput(),
       suspendInteractions: (reason: string) => this.interactionSystem.suspend(reason),
       suspendInput: (reason: string) => this.suspendMovement(reason),
     });
+  }
+
+  /**
+   * D-133 (2026-10-03): what the rider is doing with the look controls this
+   * frame. The movement keys are already held for the ride (`suspendMovement`),
+   * so reading them here steers the head and nothing else — and the session
+   * only asks while this client is the rider, with the World owning the keys.
+   * On a touch screen the same turn comes from a horizontal drag on the
+   * canvas, which the keyboard hands over a frame at a time.
+   */
+  private swingLookInput(): { left: boolean; right: boolean; dragX: number } | null {
+    if (this.cleanedUp || !this.worldOwnsKeys()) return null;
+    const keyboard = this.keyboard;
+    if (!keyboard) return null;
+    const held = keyboard.held ?? NO_MOVEMENT;
+    let dragX = 0;
+    try {
+      dragX = keyboard.takeDragX?.() ?? 0;
+    } catch {
+      dragX = 0;
+    }
+    return {
+      left: held.left === true,
+      right: held.right === true,
+      dragX: Number.isFinite(dragX) ? dragX : 0,
+    };
   }
 
   /**

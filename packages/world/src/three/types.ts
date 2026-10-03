@@ -40,6 +40,13 @@ export interface AvatarMotion {
   /** D-114: a spectator sitting on an arena tier. */
   readonly seated?: boolean;
   /**
+   * D-133: how far the head is turned from straight ahead, in radians,
+   * positive to the figure's own left. The roof swing's rider looks around
+   * with it; it is already smoothed by the time it arrives (the caller's
+   * spring), so the figure simply points the head where it says.
+   */
+  readonly headYaw?: number;
+  /**
    * D-127 (amended 2026-10-03): the seat `seated` sits on. Without it a
    * seated figure keeps its feet on the ground and only takes the pose, which
    * is what sank a sitter into a bench; with it the figure rises until its

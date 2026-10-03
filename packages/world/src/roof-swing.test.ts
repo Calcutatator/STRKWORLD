@@ -10,6 +10,8 @@ import { SWING_RIDE_MS } from '@strkworld/shared';
 import {
   SWING_BUILD_MS,
   SWING_CAMERA_PITCH,
+  SWING_CAMERA_AIM_HEIGHT,
+  SWING_CAMERA_DISTANCE,
   SWING_CAMERA_REDUCED_DISTANCE,
   SWING_CAMERA_REDUCED_PITCH,
   SWING_CAMERA_YAW,
@@ -17,11 +19,16 @@ import {
   SWING_PERIOD_MS,
   SWING_REDUCED_MAX_ANGLE,
   SWING_REDUCED_SWAY_MS,
+  SWING_LOOK_MAX_YAW,
+  SWING_LOOK_REST,
   SWING_SETTLE_MS,
+  stepSwingLook,
   swingAngleAt,
   swingCameraShot,
   swingEnvelopeAt,
   swingRideOver,
+  type SwingLookInput,
+  type SwingLookState,
 } from './roof-swing';
 
 /** Every angle across a ride, sampled every 50 ms. */
@@ -141,5 +148,149 @@ describe('the rider\'s camera (D-133)', () => {
 
   it('returns a frozen shot, so no caller can edit the camera out from under the rig', () => {
     expect(Object.isFrozen(swingCameraShot(0))).toBe(true);
+  });
+
+  it('stands on the rider, not behind them: a near-eye shot (amended 2026-10-03)', () => {
+    // The reviewer's complaint was that the A-frame and the rider's own back
+    // filled the middle of the frame. They did because the lens was seven
+    // units behind the seat looking back at it. It is on the eye now, so the
+    // focus the session hands the rig is already where the lens goes.
+    expect(SWING_CAMERA_DISTANCE).toBe(0);
+    expect(SWING_CAMERA_AIM_HEIGHT).toBe(0);
+    for (const reduced of [false, true]) {
+      for (const angle of [-SWING_MAX_ANGLE, 0, SWING_MAX_ANGLE]) {
+        const shot = swingCameraShot(angle, reduced, 0);
+        expect(shot.distance).toBe(0);
+        expect(shot.aimHeight).toBe(0);
+      }
+    }
+  });
+
+  it('swings no further than a real swing does: 45 degrees (amended 2026-10-03)', () => {
+    // The lead: the seat at the top of the arc "looks odd". It was 54°, which
+    // is past where a swing on chains stays a pendulum. The ride is still the
+    // server's twenty seconds through a smaller arc.
+    expect(SWING_MAX_ANGLE).toBeCloseTo(Math.PI / 4, 9);
+    expect((SWING_MAX_ANGLE * 180) / Math.PI).toBeCloseTo(45, 6);
+    const peak = Math.max(
+      ...Array.from({ length: 2001 }, (_, i) => Math.abs(swingAngleAt((i / 2000) * SWING_RIDE_MS))),
+    );
+    expect(peak).toBeLessThanOrEqual(SWING_MAX_ANGLE);
+    expect((peak * 180) / Math.PI).toBeGreaterThan(40);
+  });
+
+  it('still sways under reduced motion, only less', () => {
+    const gentle = Math.max(
+      ...Array.from({ length: 2001 }, (_, i) => Math.abs(swingAngleAt((i / 2000) * SWING_RIDE_MS, true))),
+    );
+    expect(gentle).toBeGreaterThan(0);
+    expect(gentle).toBeLessThan(SWING_MAX_ANGLE / 4);
+  });
+});
+
+describe('looking around from the seat (D-133, 2026-10-03)', () => {
+  /** Run the spring for `ms` with one input, 16 ms at a time. */
+  const hold = (
+    input: SwingLookInput | null,
+    ms: number,
+    from: SwingLookState = SWING_LOOK_REST,
+    reduced = false,
+  ): { state: SwingLookState; yaws: number[] } => {
+    let state = from;
+    const yaws: number[] = [state.yaw];
+    for (let t = 0; t < ms; t += 16) {
+      state = stepSwingLook(state, input, 16, reduced);
+      yaws.push(state.yaw);
+    }
+    return { state, yaws };
+  };
+
+  it('turns the head towards the key that is held, and no further than the limit', () => {
+    const left = hold({ left: true }, 4_000);
+    expect(left.state.yaw).toBeCloseTo(SWING_LOOK_MAX_YAW, 3);
+    expect(Math.max(...left.yaws)).toBeLessThanOrEqual(SWING_LOOK_MAX_YAW);
+    const right = hold({ right: true }, 4_000);
+    expect(right.state.yaw).toBeCloseTo(-SWING_LOOK_MAX_YAW, 3);
+    expect(Math.min(...right.yaws)).toBeGreaterThanOrEqual(-SWING_LOOK_MAX_YAW);
+    // About 75 degrees either way: a seated turn, not an owl's.
+    expect((SWING_LOOK_MAX_YAW * 180) / Math.PI).toBeCloseTo(75, 6);
+  });
+
+  it('moves smoothly: no step is a jump, and it never overshoots', () => {
+    const { yaws } = hold({ left: true }, 3_000);
+    let worst = 0;
+    for (let i = 1; i < yaws.length; i += 1) worst = Math.max(worst, Math.abs(yaws[i]! - yaws[i - 1]!));
+    // A frame turns the head by a fraction of a degree, not a snap to the limit.
+    expect(worst).toBeLessThan(SWING_LOOK_MAX_YAW / 8);
+    // Critically damped: it approaches the limit from below and stays there.
+    expect(Math.max(...yaws)).toBeLessThanOrEqual(SWING_LOOK_MAX_YAW + 1e-9);
+    for (let i = 1; i < yaws.length; i += 1) expect(yaws[i]).toBeGreaterThanOrEqual(yaws[i - 1]! - 1e-9);
+  });
+
+  it('eases back to centre when the key is let go, without snapping', () => {
+    const turned = hold({ left: true }, 3_000).state;
+    const back = hold(null, 3_000, turned);
+    expect(back.state.yaw).toBeCloseTo(0, 2);
+    expect(back.yaws[1]!).toBeLessThan(turned.yaw);
+    expect(Math.abs(back.yaws[1]! - turned.yaw)).toBeLessThan(SWING_LOOK_MAX_YAW / 8);
+    // It comes back the whole way, not to some lesser rest.
+    expect(Math.abs(back.state.target)).toBeLessThan(1e-3);
+  });
+
+  it('both keys at once is neither: the head comes back to the middle', () => {
+    const turned = hold({ left: true }, 3_000).state;
+    const both = hold({ left: true, right: true }, 2_000, turned);
+    expect(both.state.yaw).toBeCloseTo(0, 2);
+  });
+
+  it('turns with a horizontal drag too, and a drag right looks right', () => {
+    const dragged = hold({ dragX: 6 }, 1_000);
+    expect(dragged.state.yaw).toBeLessThan(0);
+    expect(dragged.state.yaw).toBeGreaterThanOrEqual(-SWING_LOOK_MAX_YAW);
+    const other = hold({ dragX: -6 }, 1_000);
+    expect(other.state.yaw).toBeGreaterThan(0);
+    // A drag that would spin the head round is clamped like a held key.
+    const wild = hold({ dragX: 400 }, 1_000);
+    expect(wild.state.yaw).toBeGreaterThanOrEqual(-SWING_LOOK_MAX_YAW);
+  });
+
+  it('is brisker under reduced motion, and still smooth', () => {
+    const full = hold({ left: true }, 400).state.yaw;
+    const reduced = hold({ left: true }, 400, SWING_LOOK_REST, true).state.yaw;
+    expect(reduced).toBeGreaterThan(full);
+    expect(reduced).toBeLessThanOrEqual(SWING_LOOK_MAX_YAW);
+  });
+
+  it('survives a stalled tab, a NaN frame and a nonsense state', () => {
+    expect(stepSwingLook(SWING_LOOK_REST, { left: true }, Number.NaN).yaw).toBe(0);
+    expect(stepSwingLook(SWING_LOOK_REST, { left: true }, -5).yaw).toBe(0);
+    // One enormous frame is clamped, so a stall cannot fling the head.
+    const stalled = stepSwingLook(SWING_LOOK_REST, { left: true }, 10_000);
+    expect(Math.abs(stalled.yaw)).toBeLessThanOrEqual(SWING_LOOK_MAX_YAW);
+    const nonsense = stepSwingLook(
+      { yaw: Number.NaN, rate: Number.NaN, target: Number.NaN } as SwingLookState,
+      null,
+      16,
+    );
+    expect(Number.isFinite(nonsense.yaw)).toBe(true);
+    expect(Object.isFrozen(nonsense)).toBe(true);
+  });
+
+  it('carries the head into the rider\'s camera, and nothing else of the shot', () => {
+    const ahead = swingCameraShot(0.3, false, 0);
+    const left = swingCameraShot(0.3, false, SWING_LOOK_MAX_YAW);
+    const right = swingCameraShot(0.3, false, -SWING_LOOK_MAX_YAW);
+    expect(left.yaw - ahead.yaw).toBeCloseTo(SWING_LOOK_MAX_YAW, 9);
+    expect(right.yaw - ahead.yaw).toBeCloseTo(-SWING_LOOK_MAX_YAW, 9);
+    // The pendulum still owns the pitch, and the shot is still the same shot.
+    expect(left.pitch).toBe(ahead.pitch);
+    expect(left.distance).toBe(ahead.distance);
+    expect(left.aimHeight).toBe(ahead.aimHeight);
+    // Reduced motion holds its still shot, but the head still turns it.
+    expect(swingCameraShot(0.3, true, SWING_LOOK_MAX_YAW).yaw - swingCameraShot(0.3, true, 0).yaw)
+      .toBeCloseTo(SWING_LOOK_MAX_YAW, 9);
+    // And a wild yaw is clamped rather than pointing the camera anywhere.
+    expect(swingCameraShot(0, false, 99).yaw).toBe(swingCameraShot(0, false, SWING_LOOK_MAX_YAW).yaw);
+    expect(swingCameraShot(0, false, Number.NaN).yaw).toBe(SWING_CAMERA_YAW);
   });
 });

@@ -95,10 +95,19 @@ export interface DomKeyboardOptions {
 interface PointerEventLike {
   readonly button?: unknown;
   readonly isPrimary?: unknown;
+  readonly pointerId?: unknown;
+  readonly clientX?: unknown;
   readonly target?: unknown;
   readonly currentTarget?: unknown;
   readonly defaultPrevented?: unknown;
 }
+
+/**
+ * D-133 (2026-10-03): a drag across the canvas further than this, in screen
+ * pixels, is a drag rather than a tap, so a tap that wobbles never turns the
+ * roof swing's rider's head.
+ */
+const DRAG_THRESHOLD_PX = 6;
 
 export interface DomKeyboard extends WorldKeyboard {
   destroy(): void;
@@ -120,6 +129,13 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   let enabled = true;
   let capture = true;
   let destroyed = false;
+  /** D-133: the pointer being dragged across the canvas, and where it was last seen. */
+  let dragPointer: unknown = null;
+  let dragFrom = 0;
+  let dragAt = 0;
+  let dragging = false;
+  /** Horizontal drag not yet taken by `takeDragX`, in screen pixels. */
+  let dragX = 0;
 
   const onKeyDown: Listener = (event) => {
     if (destroyed || !enabled || event.defaultPrevented === true) return;
@@ -153,7 +169,35 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     if (destroyed || !enabled || event.defaultPrevented === true) return;
     if (event.button !== 0 || event.isPrimary === false) return;
     if (options.canvas && event.target !== options.canvas) return;
+    // D-133: this press may become a drag, which turns a swing rider's head.
+    if (typeof event.clientX === 'number' && Number.isFinite(event.clientX)) {
+      dragPointer = event.pointerId ?? 'primary';
+      dragFrom = event.clientX;
+      dragAt = event.clientX;
+      dragging = false;
+    }
     emitAction('pointerdown-primary', { repeat: false, target: event.target });
+  }) as Listener;
+
+  /**
+   * D-133: a horizontal drag on the canvas, accumulated for whoever asks. It
+   * steers nothing by itself: the only reader is the roof swing's ride, and
+   * only while this client is the rider.
+   */
+  const onPointerMove = ((event: PointerEventLike) => {
+    if (destroyed || !enabled || dragPointer === null) return;
+    if ((event.pointerId ?? 'primary') !== dragPointer) return;
+    if (typeof event.clientX !== 'number' || !Number.isFinite(event.clientX)) return;
+    if (!dragging && Math.abs(event.clientX - dragFrom) < DRAG_THRESHOLD_PX) return;
+    dragging = true;
+    dragX += event.clientX - dragAt;
+    dragAt = event.clientX;
+  }) as Listener;
+
+  const onPointerUp = ((event: PointerEventLike) => {
+    if ((event.pointerId ?? 'primary') !== dragPointer) return;
+    dragPointer = null;
+    dragging = false;
   }) as Listener;
 
   /**
@@ -163,6 +207,9 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
    * to lower a block.
    */
   const clearHeld = (): void => {
+    dragPointer = null;
+    dragging = false;
+    dragX = 0;
     const releasing = [...held].filter((code) => RELEASE_EVENTS[code] !== undefined);
     held.clear();
     for (const code of releasing) emitAction(RELEASE_EVENTS[code]!, { repeat: false, target: null });
@@ -197,6 +244,9 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   options.window.addEventListener('blur', onBlur);
   options.document?.addEventListener('visibilitychange', onVisibilityChange);
   options.canvas?.addEventListener('pointerdown', onPointerDown);
+  options.canvas?.addEventListener('pointermove', onPointerMove);
+  options.window.addEventListener('pointerup', onPointerUp);
+  options.window.addEventListener('pointercancel', onPointerUp);
 
   const isHeld = (codes: readonly string[]): boolean => codes.some((code) => held.has(code));
 
@@ -218,6 +268,15 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     },
     get sprinting(): boolean {
       return !destroyed && enabled && isHeld(SPRINT_CODES);
+    },
+    takeDragX(): number {
+      if (destroyed || !enabled) {
+        dragX = 0;
+        return 0;
+      }
+      const moved = dragX;
+      dragX = 0;
+      return moved;
     },
     disableGlobalCapture(): void {
       capture = false;
@@ -248,6 +307,9 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
       options.window.removeEventListener('blur', onBlur);
       options.document?.removeEventListener('visibilitychange', onVisibilityChange);
       options.canvas?.removeEventListener('pointerdown', onPointerDown);
+      options.canvas?.removeEventListener('pointermove', onPointerMove);
+      options.window.removeEventListener('pointerup', onPointerUp);
+      options.window.removeEventListener('pointercancel', onPointerUp);
     },
   };
 }

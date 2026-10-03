@@ -21,7 +21,13 @@ import type {
   RoofSwingTarget,
   RoofSwingViewFrame,
 } from './roof-swing-channel.js';
-import { swingAngleAt, swingCameraShot } from './roof-swing.js';
+import {
+  SWING_LOOK_REST,
+  stepSwingLook,
+  swingAngleAt,
+  swingCameraShot,
+  type SwingLookState,
+} from './roof-swing.js';
 
 /**
  * D-133: the lookout swing's client session.
@@ -41,7 +47,15 @@ import { swingAngleAt, swingCameraShot } from './roof-swing.js';
  * - **Esc.** Sends the leave; the server ends the ride and everyone sees it
  *   end. The session never ends its own ride.
  * - **Reduced motion.** A slow shallow sway instead of the arcs, and a still
- *   south-facing shot the rig cuts to rather than sweeps.
+ *   south-facing shot the rig cuts to rather than sweeps — but the head still
+ *   turns, a little brisker, so the ride is still worth taking.
+ * - **Looking around** (2026-10-03). While this client rides, the left and
+ *   right keys (and a horizontal drag) turn the rider's head on a critically
+ *   damped spring, and the camera goes with it. It is local: the lobby's
+ *   swing says who is riding and how long is left, and nothing else, so a
+ *   spectator sees a rider facing out over the edge whichever way that rider
+ *   is looking. Adding it to the wire would mean a message per frame on the
+ *   one high-rate path, which the budget has no room for.
  */
 
 /** The chip's words while the swing is free, and while someone is on it. */
@@ -85,6 +99,8 @@ export function createRoofSwingSession(
   let startedAt = 0;
   /** The angle last handed to the view; kept while nobody rides so the seat settles at rest. */
   let angle = 0;
+  /** The rider's head, eased towards wherever the look keys point it. */
+  let look: SwingLookState = SWING_LOOK_REST;
   let reduced = false;
   /** Reduced motion, re-read about once a second: the setting changes rarely. */
   let reducedAge = Infinity;
@@ -155,6 +171,8 @@ export function createRoofSwingSession(
   const mount = (round: number): void => {
     riding = round;
     startedAt = now();
+    // Every ride starts looking straight ahead, over the edge.
+    look = SWING_LOOK_REST;
     readReduced();
     hold(true);
     safely(() => host.placeAt(SWING_SEAT_TILE, SWING_SEAT_FACING));
@@ -163,6 +181,7 @@ export function createRoofSwingSession(
   const dismount = (place: boolean): void => {
     riding = null;
     angle = 0;
+    look = SWING_LOOK_REST;
     hold(false);
     if (place) safely(() => host.placeAt(SWING_STEP_OFF_TILE, SWING_STEP_OFF_FACING));
   };
@@ -263,6 +282,21 @@ export function createRoofSwingSession(
       // Only this client's own ride is timed locally; a spectator's seat is
       // drawn from the seconds the server says are left (see `frame`).
       angle = riding === null ? 0 : swingAngleAt(now() - startedAt, reduced);
+      // The head only turns for this client's own rider, and only while the
+      // World owns the keys: a panel holding them must not steer the ride.
+      if (riding === null) {
+        look = SWING_LOOK_REST;
+      } else {
+        let input = null;
+        if (!inputSuspended()) {
+          try {
+            input = host.lookInput?.() ?? null;
+          } catch {
+            input = null;
+          }
+        }
+        look = stepSwingLook(look, input, deltaMs, reduced);
+      }
     },
     targets(): readonly RoofSwingTarget[] {
       if (destroyed || swing === null || riding !== null) return NO_TARGETS;
@@ -294,12 +328,14 @@ export function createRoofSwingSession(
         angle: self ? angle : theirs,
         riderId: swing.riderId,
         selfRiding: self,
-        shot: self ? swingCameraShot(angle, reduced) : null,
+        shot: self ? swingCameraShot(angle, reduced, look.yaw) : null,
+        headYaw: self ? look.yaw : 0,
       });
     },
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
+      look = SWING_LOOK_REST;
       safely(() => unsubscribe?.());
       safely(() => unsubscribeLeaves?.());
       unsubscribe = null;
