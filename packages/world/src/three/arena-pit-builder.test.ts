@@ -94,7 +94,9 @@ describe('the gladiator pit in the street scene (D-114)', () => {
     const without = build(plain).view;
     expect(named(without.ground, 'pit:stone')).toBeUndefined();
     expect(streetCalls(view)).toBe(streetCalls(without) + 4);
-    expect(streetCalls(view)).toBeLessThanOrEqual(90);
+    // 92 since D-131 added the lookout's two: the ticker on the roof's
+    // panoramic band, and the swing's seat (which has to move on its own).
+    expect(streetCalls(view)).toBeLessThanOrEqual(92);
     expect(streetCalls(view)).toBeLessThan(150);
     without.dispose();
     view.dispose();

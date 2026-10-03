@@ -13729,3 +13729,28 @@ on 2026-10-02; both CASM files hashed with starknet.js; a mainnet
 the snforge behaviour from a failing test in `contracts/receipt-ledger`.
 
 ---
+
+### A roof inside the street scene needs one vista mount, not two — and D-numbers go stale on a long branch
+
+The Exchange tower's roof is **not** a separate room scene: it is the tower's
+real top, built by `street-builder.ts` and drawn inside the street scene. So a
+backdrop mounted for the street (D-124's `createSouthVista`) is already behind
+anything you look at from the deck, and a second mount in a "roof scene" would
+be both wrong and a duplicate. Check which scene a walkable area belongs to
+before mounting scenery for it.
+
+Separately: a branch that picks its D-number when it starts will collide. This
+branch wrote `D-125` throughout while `origin/main` moved from D-123 to D-130
+under it, so D-125 became the Avatar Studio exit and every comment and test
+name here was wrong. **Re-fetch `origin/main` and renumber immediately before
+committing**, not when you start.
+
+*Verified:* `grep` for `createSouthVista` across the tree showed one call, in
+`three/presenter.ts`, added to `street.ground`; `rooftop`/`roofSurfaceHeightAt`
+in the same file read the roof out of the street build, with no roof scene.
+The number clash from `git fetch origin main` then
+`git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-130 against a
+local file ending at D-123; `git ls-tree origin/main
+packages/world/src/three/south-vista.ts` confirmed D-124's module is already
+on main, exporting exactly the `createSouthVista` / `SouthVista` signature
+this branch's placeholder was written against.

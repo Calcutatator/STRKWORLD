@@ -85,6 +85,7 @@ import {
 } from '../fixed-room.js';
 import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
+import { buildRoofSwing, type RoofSwingView } from './roof-swing.js';
 import { buildPitch, type PitchOccluder } from './pitch-builder.js';
 import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
 import { buildBunkerEntrance } from './bunker-builder.js';
@@ -209,6 +210,8 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
   const occluders: StreetOccluder[] = [];
   let plaza: PlazaView | null = null;
   let pitch: PitchView | null = null;
+  /** D-131: the Exchange roof's lookout swing, from whichever building has one. */
+  let swing: RoofSwingView | null = null;
 
   try {
     const kinds = classifyGround(map);
@@ -222,6 +225,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
       ground.add(building.group);
       occluders.push(building.occluder);
       animators.push(building.animate);
+      if (building.swing) swing = building.swing;
     }
 
     for (const door of map.doors) {
@@ -363,6 +367,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory, options: Str
     occluders,
     plaza,
     pitch,
+    swing,
     update(deltaMs) {
       if (disposed) return;
       const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
@@ -1184,6 +1189,8 @@ interface BuiltBuilding {
   /** Where the theme's brand plate goes, when the style makes room for one. */
   readonly brand?: SignPlacement;
   readonly lifts?: readonly RoofLift[];
+  /** D-131: the lookout swing's swinging seat, when this building has one. */
+  readonly swing?: RoofSwingView | null;
   readonly animate: Animator;
 }
 
@@ -1211,6 +1218,8 @@ interface StyleResult {
   readonly sign: SignPlacement;
   readonly brand?: SignPlacement;
   readonly lifts?: readonly RoofLift[];
+  /** D-131: the lookout swing's swinging seat, for the view to drive. */
+  readonly swing?: RoofSwingView | null;
   /**
    * Top of the occluder box, when it is not the building's highest point: a
    * walkable roof's deck, so nothing standing on it can hide the player.
@@ -1305,7 +1314,17 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       if (beacon) beacon.emissiveIntensity = Math.sin(elapsed / 1000 * 3.1 + phase) > 0.55 ? 3 : 0.25;
       style.animate?.(elapsed);
     };
-    return { group, occluder, doorTop: style.doorTop, sign: style.sign, brand: style.brand, lifts: style.lifts, animate };
+    if (style.swing) group.add(style.swing.object);
+    return {
+      group,
+      occluder,
+      doorTop: style.doorTop,
+      sign: style.sign,
+      brand: style.brand,
+      lifts: style.lifts,
+      swing: style.swing ?? null,
+      animate,
+    };
   } finally {
     bins.dispose();
   }
@@ -1742,8 +1761,9 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   ctx.bins.add(BODY, boxGeometry(bandA, bandLow, front, bandB, bandHigh, front + 0.08), AVNU.navy);
   ctx.bins.add(GLOW, boxGeometry(bandA, bandLow - 0.04, front, bandB, bandLow, front + 0.09), t.glow);
   tickers.push(tickerFace(ctx, bandB - bandA - 0.16, bandHigh - bandLow - 0.16, (bandA + bandB) / 2, (bandLow + bandHigh) / 2, front + 0.085, 0, 'podium-ticker'));
-  const lifts = towerRoof(ctx, roof, H, front, tickers);
-  return tickerResult({ doorTop, sign, brand, tickers, lifts, occluderHeight: H, solidGlass: true });
+  const swings: RoofSwingView[] = [];
+  const lifts = towerRoof(ctx, roof, H, front, tickers, swings);
+  return tickerResult({ doorTop, sign, brand, tickers, lifts, swing: swings[0] ?? null, occluderHeight: H, solidGlass: true });
 }
 
 /** Height of one of the tower's floors above the podium, in world units. */
@@ -1774,6 +1794,7 @@ function tickerResult(options: {
   readonly brand: SignPlacement;
   readonly tickers: readonly Mesh[];
   readonly lifts?: readonly RoofLift[];
+  readonly swing?: RoofSwingView | null;
   readonly occluderHeight?: number;
   readonly solidGlass?: boolean;
 }): StyleResult {
@@ -1785,6 +1806,7 @@ function tickerResult(options: {
     sign: options.sign,
     brand: options.brand,
     lifts: options.lifts,
+    swing: options.swing ?? null,
     occluderHeight: options.occluderHeight,
     solidGlass: options.solidGlass,
     fadeMaterials: options.tickers.map((mesh) => mesh.material as MeshBasicMaterial),
@@ -1838,17 +1860,51 @@ function blockRoof(ctx: BuildingCtx, H: number, front: number, tickers: Mesh[]):
   tickers.push(tickerFace(ctx, boardB - boardA - 0.16, 0.54, (boardA + boardB) / 2, H + 0.75, boardFront + 0.005, 0, 'ticker'));
 }
 
+/** D-131: how far the lookout's top deck cantilevers past the tower, all round. */
+export const ROOF_OVERHANG = 1;
+/** The cantilever's pale fascia, its brighter lip and its soffit. */
+const ROOF_FASCIA = 0xdfe3ea;
+const ROOF_FASCIA_LIP = 0xf1f3f7;
+const ROOF_SOFFIT = 0xc8cedb;
+/** The panoramic band under it: dark glass, almost black against the pale slab. */
+const ROOF_GLAZING = 0x171b2a;
+/** The deck's own paving: pale, chequered, so avnu's blue reads as the inlay. */
+const ROOF_DECK_PALE = 0xcdd3dd;
+const ROOF_DECK_PALE_ALT = 0xbfc6d2;
+/** The deck cap's thickness: the pale slab the overhang reads as. */
+const ROOF_CAP_DEPTH = 0.46;
+/** The dark panoramic glazing under the cap: its top and bottom, below the deck. */
+const ROOF_GLAZING_TOP = ROOF_CAP_DEPTH + 0.1;
+const ROOF_GLAZING_BOTTOM = ROOF_GLAZING_TOP + 1.5;
+
 /**
- * The Exchange tower's roof, a floor of the building (fixed-room.ts): a deck
- * on the roof grid's walkable tiles at exactly the roof's height, ringed by a
- * planted ledge and a glass balustrade on the grid's solid ring, so nobody
- * can walk off. The old rooftop model stands on that ring, out of the way:
- * the plant in the north-west corner, the mast in the north-east, and the
- * ticker along the north side, tipped back towards the deck and the camera
- * looking down on it. The lift down is a lit pad with a glass cab beside it.
- * Nothing below head height stands on a walkable tile.
+ * The Exchange tower's roof, a floor of the building (fixed-room.ts), and the
+ * lookout it became in D-131.
+ *
+ * The top is a wide flat deck cantilevered a whole unit past the tower on
+ * every side, with a pale fascia round its rim and a pale soffit under the
+ * overhang, and a band of dark panoramic glazing in the tower's face just
+ * beneath it — the avnu ticker runs along that band's south face, where the
+ * street camera reads it.
+ *
+ * On top: a deck on the roof grid's walkable tiles at exactly the roof's
+ * height, a planted ledge over the grid's solid ring and out onto the
+ * overhang, and a glass balustrade all round at the overhang's rim, so
+ * nobody can walk off. The old rooftop model stands on that ring, out of the
+ * way: the plant in the north-west corner, the mast in the north-east, and
+ * the roof's own ticker along the north side, tipped back towards the deck
+ * and the camera looking down on it. The lift down is a lit pad with a glass
+ * cab beside it, and the lookout swing's A-frame stands on the south ledge
+ * (`roof-swing.ts`). Nothing below head height stands on a walkable tile.
  */
-function towerRoof(ctx: BuildingCtx, roof: FixedRoomLevelMap, H: number, front: number, tickers: Mesh[]): RoofLift[] {
+function towerRoof(
+  ctx: BuildingCtx,
+  roof: FixedRoomLevelMap,
+  H: number,
+  front: number,
+  tickers: Mesh[],
+  swings: RoofSwingView[],
+): RoofLift[] {
   const t = ctx.theme;
   const origin = roof.rooftop!;
   const xa = ctx.x0 + SIDE_INSET;
@@ -1872,14 +1928,62 @@ function towerRoof(ctx: BuildingCtx, roof: FixedRoomLevelMap, H: number, front: 
       dz1 = Math.max(dz1, origin.y + y + 1);
     }
   }
-  // The slab, its top exactly at the roof's height, where the player's feet go.
-  ctx.bins.add(BODY, boxGeometry(xa, H - 0.08, za, xb, H, front), t.roof);
+  // D-131, the lookout's cantilever. A wide pale cap whose top is exactly the
+  // roof's height, overhanging the tower on every side, with a soffit set
+  // back under it so the overhang reads as a slab with a shadow line, and a
+  // proud fascia round its rim.
+  const rx0 = ctx.x0 - ROOF_OVERHANG;
+  const rx1 = ctx.x1 + ROOF_OVERHANG;
+  const rz0 = ctx.z0 - ROOF_OVERHANG;
+  const rz1 = ctx.zf + ROOF_OVERHANG;
+  /** The four strips of a rectangular ring `thickness` wide, inside (x0, z0)-(x1, z1). */
+  const ring = (
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    thickness: number,
+  ): ReadonlyArray<readonly [number, number, number, number]> => [
+    [x0, z0, x1, z0 + thickness],
+    [x0, z1 - thickness, x1, z1],
+    [x0, z0 + thickness, x0 + thickness, z1 - thickness],
+    [x1 - thickness, z0 + thickness, x1, z1 - thickness],
+  ];
+  ctx.bins.add(BODY, boxGeometry(rx0, H - ROOF_CAP_DEPTH, rz0, rx1, H - 0.1, rz1), ROOF_FASCIA);
+  ctx.bins.add(BODY, boxGeometry(rx0 - 0.05, H - 0.1, rz0 - 0.05, rx1 + 0.05, H, rz1 + 0.05), ROOF_FASCIA_LIP);
+  // The soffit: the overhang's pale underside, set back from the fascia.
+  ctx.bins.add(
+    BODY,
+    boxGeometry(rx0 + 0.14, H - ROOF_CAP_DEPTH - 0.12, rz0 + 0.14, rx1 - 0.14, H - ROOF_CAP_DEPTH, rz1 - 0.14),
+    ROOF_SOFFIT,
+  );
+  // The dark panoramic glazing in the tower's own face, just beneath it.
+  for (const [x0, z0, x1, z1] of ring(xa - 0.05, za - 0.05, xb + 0.05, front + 0.05, 0.1)) {
+    ctx.bins.add(GLASS, boxGeometry(x0, H - ROOF_GLAZING_BOTTOM, z0, x1, H - ROOF_GLAZING_TOP, z1), ROOF_GLAZING);
+  }
+  // The avnu ticker runs along that band's south face, where the street reads it.
+  const glazeA = xa + 0.3;
+  const glazeB = xb - 0.3;
+  tickers.push(tickerFace(
+    ctx,
+    glazeB - glazeA,
+    ROOF_GLAZING_BOTTOM - ROOF_GLAZING_TOP - 0.22,
+    (glazeA + glazeB) / 2,
+    H - (ROOF_GLAZING_TOP + ROOF_GLAZING_BOTTOM) / 2,
+    front + 0.06,
+    0,
+    'lookout-ticker',
+  ));
+  // The slab the deck sits on, its top exactly at the roof's height.
+  ctx.bins.add(BODY, boxGeometry(xa, H - 0.12, za, xb, H, front), t.roof);
   for (let y = 0; y < roof.height; y++) {
     for (let x = 0; x < roof.width; x++) {
       if (!walkable(x, y)) continue;
       const wx = origin.x + x;
       const wz = origin.y + y;
-      ctx.bins.add(BODY, flatQuad(wx + 0.02, wz + 0.02, wx + 0.98, wz + 0.98, H + 0.004), (x + y) % 2 === 0 ? lift(AVNU.card, 0.05) : lift(AVNU.navy, 0.1));
+      // D-131: a pale terrace, as the lookout's is, with avnu's blue left for
+      // the inlaid ring and the lift pad.
+      ctx.bins.add(BODY, flatQuad(wx + 0.02, wz + 0.02, wx + 0.98, wz + 0.98, H + 0.004), (x + y) % 2 === 0 ? ROOF_DECK_PALE : ROOF_DECK_PALE_ALT);
     }
   }
   // An avnu-blue ring inlaid in the deck's middle.
@@ -1889,51 +1993,59 @@ function towerRoof(ctx: BuildingCtx, roof: FixedRoomLevelMap, H: number, front: 
   if (ringR > 0.3) {
     ctx.bins.add(GLOW, new RingGeometry(ringR - 0.05, ringR, 40).rotateX(-Math.PI / 2).translate(ringX, H + 0.007, ringZ), t.glow);
   }
-  // The ledge ring: planted, knee high, on every solid tile of the grid.
+  // The ledge ring: planted, knee high, over every solid tile of the grid and
+  // on out across the cantilever to its rim.
   const ledgeTop = H + 0.45;
-  const ledge = lift(AVNU.card, 0.08);
+  // D-131: the parapet is the cantilever's own pale stone, not the tower's navy.
+  const ledge = ROOF_FASCIA;
   const ledges: ReadonlyArray<readonly [number, number, number, number]> = [
-    [xa, za, dx0, front],
-    [dx1, za, xb, front],
-    [dx0, za, dx1, dz0],
-    [dx0, dz1, dx1, front],
+    [rx0, rz0, dx0, rz1],
+    [dx1, rz0, rx1, rz1],
+    [dx0, rz0, dx1, dz0],
+    [dx0, dz1, dx1, rz1],
   ];
   for (const [x0, z0, x1, z1] of ledges) {
     if (x1 - x0 < 0.02 || z1 - z0 < 0.02) continue;
     ctx.bins.add(BODY, boxGeometry(x0, H, z0, x1, ledgeTop, z1), ledge);
-    ctx.bins.add(BODY, boxGeometry(x0, ledgeTop, z0, x1, ledgeTop + 0.03, z1), lift(AVNU.slate, -0.06));
+    ctx.bins.add(BODY, boxGeometry(x0, ledgeTop, z0, x1, ledgeTop + 0.03, z1), ROOF_FASCIA_LIP);
   }
-  // Greenery along the ledge top, clear of the corners' kit.
+  // Greenery along the north and west ledges, clear of the corners' kit, the
+  // swing's frame on the south ledge and the balustrade at the rim.
   for (let x = dx0 + 0.5; x < dx1; x += 1) {
-    shrub(ctx, x, ledgeTop, (za + dz0) / 2 + 0.05, 0.16);
+    shrub(ctx, x, ledgeTop, (rz0 + dz0) / 2 + 0.2, 0.16);
   }
   for (let z = dz0 + 0.5; z < dz1 - 1; z += 1) {
-    shrub(ctx, (xa + dx0) / 2, ledgeTop, z, 0.17);
+    shrub(ctx, (rx0 + dx0) / 2 + 0.2, ledgeTop, z, 0.17);
   }
-  // A glass balustrade on the ledge's outer edge, a slate rail along its top.
-  const railTop = ledgeTop + 0.7;
+  // A continuous glass balustrade at the cantilever's rim, a slate rail along
+  // its top: the deck is enclosed all the way out to the overhang's edge.
+  const railTop = ledgeTop + 0.75;
   const glass = lift(AVNU.lightBlue, -0.2);
-  for (const [x0, z0, x1, z1] of [
-    [xa, za, xb, za + 0.05],
-    [xa, front - 0.05, xb, front],
-    [xa, za, xa + 0.05, front],
-    [xb - 0.05, za, xb, front],
-  ] as const) {
+  for (const [x0, z0, x1, z1] of ring(rx0, rz0, rx1, rz1, 0.07)) {
     ctx.bins.add(GLASS, boxGeometry(x0, ledgeTop, z0, x1, railTop, z1), glass);
-    ctx.bins.add(BODY, boxGeometry(x0 - 0.01, railTop, z0 - 0.01, x1 + 0.01, railTop + 0.05, z1 + 0.01), AVNU.slate);
+    ctx.bins.add(BODY, boxGeometry(x0 - 0.02, railTop, z0 - 0.02, x1 + 0.02, railTop + 0.06, z1 + 0.02), AVNU.slate);
   }
+  // D-131: the lookout swing's A-frame on the south ledge, its seat hanging
+  // out past the balustrade. The frame merges into the building's own bins;
+  // the seat is its own group, which swings.
+  swings.push(buildRoofSwing(ctx.bins, ctx.res, {
+    originX: origin.x,
+    originZ: origin.y,
+    deckY: H,
+    ledgeY: ledgeTop + 0.03,
+  }));
   // The old rooftop model, moved up here: the plant in the north-west corner...
-  const nw = { x: (xa + dx0) / 2, z: (za + dz0) / 2 };
+  const nw = { x: (rx0 + dx0) / 2, z: (rz0 + dz0) / 2 };
   ctx.bins.add(BODY, boxGeometry(nw.x - 0.36, ledgeTop, nw.z - 0.32, nw.x + 0.36, ledgeTop + 0.42, nw.z + 0.32), AVNU.slate);
   ctx.bins.add(BODY, cylinderGeometry(nw.x, ledgeTop + 0.42, nw.z, 0.24, 0.24, 0.04, 10), AVNU.navy);
   // ...the mast and its beacon in the north-east...
-  const ne = { x: (dx1 + xb) / 2, z: (za + dz0) / 2 };
+  const ne = { x: (dx1 + rx1) / 2, z: (rz0 + dz0) / 2 };
   ctx.bins.add(BODY, cylinderGeometry(ne.x, ledgeTop, ne.z, 0.035, 0.05, 1.25, 6), AVNU.slate);
   ctx.bins.add(BEACON, sphereGeometry(ne.x, ledgeTop + 1.3, ne.z, 0.08, { widthSegments: 6, heightSegments: 4 }), t.beacon);
   // ...and the ticker along the north side, tipped back to face the deck.
   const boardA = dx0 + 0.2;
   const boardB = dx1 - 0.2;
-  const boardZ = (za + dz0) / 2 + 0.12;
+  const boardZ = (rz0 + dz0) / 2 + 0.5;
   const tilt = 0.5;
   const boardHeight = 0.7;
   const boardY = ledgeTop + 0.3 + (boardHeight / 2) * Math.cos(tilt);
@@ -1979,10 +2091,10 @@ function towerRoof(ctx: BuildingCtx, roof: FixedRoomLevelMap, H: number, front: 
     }
     // The cab: a glass box with a lit roof on the ledge to the pad's east.
     const cabX0 = x1;
-    const cabX1 = xb - 0.06;
+    const cabX1 = rx1 - 0.12;
     if (cabX1 - cabX0 > 0.3) {
       const cz0 = z0 - 0.3;
-      const cz1 = Math.min(front - 0.06, z1 + 0.25);
+      const cz1 = Math.min(rz1 - 0.12, z1 + 0.25);
       ctx.bins.add(GLASS, boxGeometry(cabX0 + 0.06, ledgeTop, cz0, cabX1, ledgeTop + 0.72, cz1), lift(AVNU.lightBlue, -0.1));
       ctx.bins.add(BODY, boxGeometry(cabX0 + 0.03, ledgeTop + 0.72, cz0 - 0.03, cabX1 + 0.03, ledgeTop + 0.8, cz1 + 0.03), AVNU.navy);
       ctx.bins.add(GLOW, boxGeometry(cabX0 + 0.1, ledgeTop + 0.8, cz0 + 0.06, cabX1 - 0.04, ledgeTop + 0.82, cz1 - 0.06), AVNU.lightBlue);

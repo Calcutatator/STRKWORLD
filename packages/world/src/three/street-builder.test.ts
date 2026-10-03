@@ -32,6 +32,7 @@ import {
   PAVEMENT_HEIGHT,
   SANDBOX_GATE_TEXT,
   SANDBOX_SIGN_TEXT,
+  ROOF_OVERHANG,
   buildStreet,
   streetSurfaceHeightAt,
   type BuildingOccluder,
@@ -580,9 +581,24 @@ describe('buildStreet', () => {
         }
       }
     }
-    for (const [x, z] of [[exchange.bounds.minX + 0.12, 8], [exchange.bounds.maxX - 0.12, 8], [X + 15.5, exchange.bounds.minZ + 0.12], [X + 15.5, front - 0.02]] as const) {
-      expect(firstBelow(x, z), `edge ${x},${z}`).toBeGreaterThan(H + 1.1);
+    // D-131: the enclosure is at the cantilever's rim, a whole unit past the
+    // tower on every side, so that is where the balustrade stands.
+    const rim = {
+      minX: exchange.bounds.minX - ROOF_OVERHANG,
+      maxX: exchange.bounds.maxX + ROOF_OVERHANG,
+      minZ: exchange.bounds.minZ - ROOF_OVERHANG,
+      maxZ: exchange.bounds.maxZ + ROOF_OVERHANG,
+    };
+    for (const [x, z] of [
+      [rim.minX + 0.03, 8],
+      [rim.maxX - 0.03, 8],
+      [X + 15.5, rim.minZ + 0.03],
+      [X + 15.5, rim.maxZ - 0.03],
+    ] as const) {
+      expect(firstBelow(x, z), `rim ${x},${z}`).toBeGreaterThan(H + 1.1);
     }
+    // And the overhang itself is a pale slab under the deck, out past the tower.
+    expect(firstBelow(exchange.bounds.minX - 0.5, 8), 'overhang').toBeGreaterThan(H + 0.4);
     // Nothing stands on the deck below head height, the lift pad included.
     const deck = (x: number, z: number) => walkable(x, z);
     expect(findWalkableIntrusions(tower, deck, map, { minY: H + 0.15, maxY: H + 1.9 })).toEqual([]);

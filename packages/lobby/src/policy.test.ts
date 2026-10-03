@@ -68,7 +68,8 @@ describe('default lobby vocabulary ownership', () => {
     expect(MESSAGE.kick).toBe('football:kick');
     expect(SERVER_MESSAGE.goal).toBe('football:goal');
     expect(Object.keys(MESSAGE).sort()).toEqual([
-      'area', 'arenaAttack', 'arenaClaim', 'arenaLeave', 'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace', 'suspend',
+      'area', 'arenaAttack', 'arenaClaim', 'arenaLeave', 'jump', 'kick', 'move', 'resume', 'sandboxPick', 'sandboxPlace',
+      'suspend', 'swingClaim', 'swingLeave',
     ]);
   });
 

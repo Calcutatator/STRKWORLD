@@ -124,6 +124,13 @@ export interface RemoteAvatarLayer3D {
   playSwing(gameId: string): void;
   /** D-114: the peer in the ring holds the battle stance; null for nobody. */
   setFighter(gameId: string | null): void;
+  /**
+   * D-131: this peer is riding the roof swing, so they are drawn sitting at
+   * `seat` (world units) instead of where the lobby holds them — the lobby's
+   * seat tile is on the ledge, and the seat itself hangs out past it. Null
+   * for nobody.
+   */
+  setRider(gameId: string | null, seat: { readonly x: number; readonly y: number; readonly z: number } | null): void;
   /** Unsubscribe and retire every figure, once. Inert afterwards. */
   destroy(): void;
 }
@@ -230,6 +237,9 @@ export function createRemoteAvatarLayer3D({
   let clock = 0;
   /** D-114: the peer in the ring, who holds the battle stance. */
   let fighter: string | null = null;
+  /** D-131: the peer on the roof swing, and where its seat is this frame. */
+  let rider: string | null = null;
+  let riderSeat: { x: number; y: number; z: number } | null = null;
 
   /** Detach and dispose one figure; true once nothing of it is left owned. */
   const retire = (avatar: RemoteAvatar, errors: unknown[]): boolean => {
@@ -557,6 +567,8 @@ export function createRemoteAvatarLayer3D({
       seated = avatar.seat.step(dt, moving || jump != null, onSeat);
     }
     const guard = fighter === avatar.id;
+    // D-131: a peer on the swing sits in it, whatever the floor under them says.
+    if (rider === avatar.id && riderSeat !== null) seated = true;
     if (!attack && !seated && !guard) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
     return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated };
   };
@@ -570,6 +582,13 @@ export function createRemoteAvatarLayer3D({
     setFighter(gameId) {
       if (destroyed) return;
       fighter = typeof gameId === 'string' ? gameId : null;
+    },
+    setRider(gameId, seat) {
+      if (destroyed) return;
+      const valid = seat !== null && typeof seat === 'object' &&
+        Number.isFinite(seat.x) && Number.isFinite(seat.y) && Number.isFinite(seat.z);
+      rider = typeof gameId === 'string' && valid ? gameId : null;
+      riderSeat = rider !== null && valid ? { x: seat!.x, y: seat!.y, z: seat!.z } : null;
     },
     setVisible(visible) {
       // A visibility callback that outlives teardown is stale, not an error.
@@ -596,6 +615,12 @@ export function createRemoteAvatarLayer3D({
           const lift = avatar.jumpElapsed !== null ? jumpLiftOf(avatar, avatar.jumpElapsed) : 0;
           stepElevation(avatar, dt, goal, lift);
           place(avatar);
+        }
+        // D-131: the swing's rider is drawn on its seat, facing south out
+        // over the edge, wherever the lobby holds them on the ledge.
+        if (rider === avatar.id && riderSeat !== null) {
+          avatar.figure.object.position.set(riderSeat.x, riderSeat.y, riderSeat.z);
+          avatar.figure.object.rotation.y = 0;
         }
         const jump = dt > 0 ? stepJump(avatar, dt) : null;
         if (destroyed) break;
