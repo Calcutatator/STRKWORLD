@@ -1,4 +1,4 @@
-import { BUILDINGS, presenceAreaOfBuilding, type BuildingId, type Facing, type PresenceArea, type StationId } from '@strkworld/shared';
+import { BUILDINGS, NO_SEAT, presenceAreaOfBuilding, type BuildingId, type Facing, type PresenceArea, type StationId } from '@strkworld/shared';
 
 const FACINGS = new Set<unknown>(['up', 'down', 'left', 'right']);
 
@@ -65,7 +65,12 @@ export function ownPlazaNearbyPayload(value: unknown): { readonly near: boolean 
 
 export function ownMovementPayload(
   value: unknown,
-): { readonly position: { readonly x: number; readonly y: number }; readonly facing: Facing } | null {
+): {
+  readonly position: { readonly x: number; readonly y: number };
+  readonly facing: Facing;
+  /** D-127: the bench seat the player sits on, or -1 standing. */
+  readonly seat: number;
+} | null {
   const position = ownData(value, 'position');
   const x = ownData(position, 'x');
   const y = ownData(position, 'y');
@@ -73,5 +78,9 @@ export function ownMovementPayload(
   if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y) || !FACINGS.has(facing)) {
     return null;
   }
-  return Object.freeze({ position: Object.freeze({ x, y }), facing: facing as Facing });
+  // D-127: the seat is cosmetic and the room judges it anyway, so anything
+  // that is not a whole, non-negative index simply reads as standing.
+  const seat = ownData(value, 'seat');
+  const sat = typeof seat === 'number' && Number.isInteger(seat) && seat >= 0 ? seat : NO_SEAT;
+  return Object.freeze({ position: Object.freeze({ x, y }), facing: facing as Facing, seat: sat });
 }

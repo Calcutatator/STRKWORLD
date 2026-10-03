@@ -1,4 +1,4 @@
-import { SANDBOX_COLOURS, type AvatarSpriteKey, type Facing } from '@strkworld/shared';
+import { SANDBOX_COLOURS, streetSeatAt, type AvatarSpriteKey, type Facing } from '@strkworld/shared';
 import {
   AVATAR_SPRITE_KEYS,
   DEFAULT_AVATAR_SPRITE,
@@ -32,6 +32,13 @@ export interface RemotePeerSnapshot {
    * it explicitly.
    */
   readonly jumps?: number;
+  /**
+   * D-127: the bench seat this peer sits on — an index into `STREET_SEATS` —
+   * or null standing. Cosmetic like `carrying`, so anything that is not a
+   * whole seat index reads as null: the figure stands rather than being
+   * dropped. Optional for producers; every validated snapshot states it.
+   */
+  readonly seat?: number | null;
 }
 
 export type RemotePeerListener = (snapshot: readonly RemotePeerSnapshot[]) => void;
@@ -98,6 +105,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
     sprite: validateAvatarSprite(sprite),
     carrying: validateCarriedColour(carrying),
     jumps: validateJumpCounter(jumps),
+    seat: validateSeatIndex(ownDataField(value, 'seat')),
   });
 }
 
@@ -109,6 +117,11 @@ function validateCarriedColour(value: unknown): number | null {
     value < SANDBOX_COLOURS
     ? value
     : null;
+}
+
+/** D-127: a real street seat, or none — the lobby's -1 included. */
+function validateSeatIndex(value: unknown): number | null {
+  return streetSeatAt(value) === null ? null : (value as number);
 }
 
 /** D-097: a byte counter, or 0. */

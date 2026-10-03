@@ -201,6 +201,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
         football: config.football,
+        // D-127: the session reads the peers to know which bench seats are taken.
+        ...(config.remotePeers ? { peers: config.remotePeers } : {}),
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
         reducedMotion: () => prefersReducedMotion(win),
