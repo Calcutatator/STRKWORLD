@@ -136,6 +136,7 @@ import {
   type WorldBench,
   type WorldSeat,
 } from './seats.js';
+import type { SeatPlace } from './three/types.js';
 import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 import { createArenaSession } from './arena-session.js';
 import type {
@@ -251,8 +252,12 @@ export interface WorldSessionView {
   setPlayerFacing?(facing: Facing): void;
   // D-127: sittable benches. Optional: a view without it simply never shows
   // the seated pose, and sitting is then only a place and a facing.
-  /** The local avatar sits down on a bench, or stands up. */
-  setPlayerSeated?(seated: boolean): void;
+  /**
+   * The local avatar sits down on a bench, or stands up (null). The seat
+   * carries its own geometry (D-127, amended 2026-10-03): without it the view
+   * would leave the figure on the ground, sunk into the bench it sits on.
+   */
+  setPlayerSeated?(seat: SeatPlace | null): void;
   /** The ring gate's mesh in the arena room, for the gate station's press-E cues; null if none. */
   arenaGateObject?(): unknown;
   // The Exchange roof's lookout swing (D-133). Optional: a view without it
@@ -1769,7 +1774,7 @@ class Session implements WorldSession {
       this.view.setPlayerMotion(IDLE_MOTION);
       this.view.setPlayerPosition(this.position, false);
       this.view.setPlayerFacing?.(seat.facing);
-      this.view.setPlayerSeated?.(true);
+      this.view.setPlayerSeated?.(seat.place);
       this.publishSeatedPlace(seat.facing);
     } catch (error) {
       // Sitting down is one transaction: a failed handoff puts the player back
@@ -1783,7 +1788,7 @@ class Session implements WorldSession {
         }
         this.position = from;
         try {
-          this.view.setPlayerSeated?.(false);
+          this.view.setPlayerSeated?.(null);
           this.view.setPlayerPosition(this.position, false);
         } catch {
           // Preserve the original failure.
@@ -1806,7 +1811,7 @@ class Session implements WorldSession {
     }
     this.position = { x: sitting.from.x, y: sitting.from.y };
     try {
-      this.view.setPlayerSeated?.(false);
+      this.view.setPlayerSeated?.(null);
       this.view.setPlayerPosition(this.position, false);
     } catch (error) {
       errors.push(error);
@@ -1873,7 +1878,7 @@ class Session implements WorldSession {
       // The teleport is authoritative; a failed release only leaves the
       // stations suspended, which the next suspension release clears.
     }
-    this.view.setPlayerSeated?.(false);
+    this.view.setPlayerSeated?.(null);
   }
 
   // -- the jump (D-097) --------------------------------------------------------

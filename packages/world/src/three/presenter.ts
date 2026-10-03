@@ -22,7 +22,12 @@ import { buildFootball, type FootballView } from './football-view.js';
 import { avatarFigureHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
-import { arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
+import {
+  ARENA_THRONE_SEAT,
+  ARENA_TIER_SEAT,
+  arenaSurfaceHeightAt,
+  type ArenaRoomView,
+} from './arena-room.js';
 import { createArenaFx, type ArenaFx, type RemoteSwingPort } from './arena-fx.js';
 import type { ArenaViewFrame } from '../arena-channel.js';
 import type { RoofSwingViewFrame } from '../roof-swing-channel.js';
@@ -53,6 +58,7 @@ import type {
   LabelFactory,
   Occluder,
   RoomView,
+  SeatPlace,
   StreetView,
   StudioView,
   TextLabel,
@@ -477,8 +483,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let arenaFrame: ArenaViewFrame | null = null;
   /** D-114: how long the local avatar has stood still on an arena tier. */
   let idleOnTier = 0;
-  /** D-127: the session says the local avatar is sitting on a bench. */
-  let benchSeated = false;
+  /** D-127: the bench seat the session sat the local avatar on, or null. */
+  let benchSeat: SeatPlace | null = null;
   let arenaPrompt: TextLabel | null = null;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -546,7 +552,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     arenaFrame = null;
     idleOnTier = 0;
     // D-127: a seat belongs to the session that sat down on it.
-    benchSeated = false;
+    benchSeat = null;
     if (arenaPrompt) arenaPrompt.object.visible = false;
     arenaGate = 'open';
     arenaRoom?.setGate('open');
@@ -800,11 +806,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
             ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
             : null);
         },
-        setPlayerSeated(seated) {
+        setPlayerSeated(seat) {
           if (!live()) return;
-          // D-127: sitting on a bench is told, not guessed. The arena's tiers
-          // keep their own idle rule; this is simply or-ed with it.
-          benchSeated = seated === true;
+          // D-127: sitting on a bench is told, not guessed, and the seat comes
+          // with it, so the figure rises onto the bench instead of into it.
+          // The arena's tiers keep their own idle rule and their own seat.
+          benchSeat = seat && Number.isFinite(seat.surface) ? seat : null;
         },
         setInteractionPrompt(prompt) {
           if (!live()) return;
@@ -1027,7 +1034,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
         guard,
         blocking,
         // D-133: the swing's rider sits in it, as a spectator sits on a tier.
-        seated: benchSeated || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        seated: benchSeat !== null || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        // D-127/D-128: whichever seat is under them. A tier's plank sits
+        // behind where the spectator stands; the throne's own seat does not.
+        // The swing places its rider itself (D-133), so it passes no seat here.
+        seat: benchSeat ?? (onThrone ? ARENA_THRONE_SEAT : onTier ? ARENA_TIER_SEAT : null),
       });
       if (streetVisible) {
         street.update(dt);

@@ -14385,6 +14385,44 @@ the rider's camera. The number clash came from `git fetch origin` then
 `git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-131 against a
 local file ending at D-123.
 ---
+### 2026-10-03 — A seated pose with no seat height is a figure sitting on the floor, and a rigid leg cannot perch
+D-127's benches shipped with sitters sunk through the slats. The pose was
+reused from the arena's tiers (D-114), where it had always been wrong and
+nobody had noticed: `AvatarMotion.seated` lowered the hips and swung the
+thighs, but the figure's root stayed on the ground. A pose is a *shape*; it
+carries no idea of what the body is resting on. Nothing on the seam said how
+high the bench was, so sitting on a 0.45-high bench put the body 0.45 into it.
+The fix is a `SeatPlace` on the motion — surface height, front edge, and an
+optional settle-back — expressed entirely in the sitter's own frame, so one
+description serves a plaza bench, a bleacher plank, the Bridge lounge, an arena
+tier and the throne without any of them knowing where the others are.
+Two traps behind it. **Measure the rise, don't state it.** How far a figure
+has to come up is its own backside's distance from its feet, which differs per
+build and per outfit; and it must be measured only from the parts that take the
+weight (hip band, thighs, boots) — a robe hem or a coat tail hangs lower and
+would hold the figure up off the seat. **A one-piece leg cannot perch.** These
+legs are one rigid box from hip to sole with no knee, so *any* thigh angle that
+still dips drives the shin through the seat within a hand's width of the hips,
+however high you raise the body. Level thighs are the only sit such a leg can
+hold: they lie along the seat and carry the boots past its front edge. That in
+turn needs a lower leg pivot while seated, or the level thigh comes out through
+the front of the hip band; and a long robe's legs must tuck back inside the
+bell, which has no knee to fold over either.
+The third fault was ordinary drift: the bench's drawn numbers lived in the
+builders and the seat's numbers were guessed beside them. Each bench type now
+has one `BenchProfile` (`packages/world/src/seats.ts`) and the builder draws
+from it. D-128's throne was worse than drift — it was one closed block through
+the middle of its tile, so a seated champion stood inside it; it is now a
+plinth, a pad and a back drawn from the same solids the figure sits on.
+*Verified:* a new offline audit, `packages/world/tools/avatar-seat.ts`, in the
+style of the clipping and z-fight ones — all 16 looks × five seat types, each
+asserted to rest within `CLIP_TOLERANCE` of the seat top with no leg or hip box
+inside the seat, the backrest or the step. It pins the bug itself too: a figure
+told nothing about its seat is caught more than 0.4 below the slats, which is
+the sunk screenshot. Renders from the offline rasteriser in the scratchpad
+(game camera, side and overhead, plus a 16-look contact sheet). Full suite
+(310 files, 6528 tests) and `npm run typecheck` pass.
+---
 ### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
 Making the World a floating rock (D-132) was not mostly modelling — it was
 finding every place that quietly assumed the ground went on forever. The
