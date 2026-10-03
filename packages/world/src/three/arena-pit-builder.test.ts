@@ -95,8 +95,9 @@ describe('the gladiator pit in the street scene (D-114)', () => {
     expect(named(without.ground, 'pit:stone')).toBeUndefined();
     expect(streetCalls(view)).toBe(streetCalls(without) + 4);
     // Headroom, not the pit's own cost: the south vista's six merged meshes
-    // joined the street's ground group since (D-124).
-    expect(streetCalls(view)).toBeLessThanOrEqual(96);
+    // joined the street's ground group since (D-124), and the sky island's
+    // five since (D-132).
+    expect(streetCalls(view)).toBeLessThanOrEqual(101);
     expect(streetCalls(view)).toBeLessThan(150);
     without.dispose();
     view.dispose();

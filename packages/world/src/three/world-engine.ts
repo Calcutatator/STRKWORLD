@@ -139,7 +139,10 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   const placementStand = options.config.placementStand === true;
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
+  // 360, not the 240 it was: the World stands on a floating rock (D-132) and
+  // the cloud sea round it has to be inside the frustum from anywhere on the
+  // street, or a bank would clip against the sky instead of fading into it.
+  const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 360);
   const sun = new DirectionalLight(SUN_COLOR, SUN_INTENSITY);
   const sky = createSky();
 

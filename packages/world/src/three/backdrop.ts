@@ -2,6 +2,7 @@ import type { Color, ColorRepresentation } from 'three';
 import { STREET_ORIGIN_X } from '@strkworld/shared';
 import { westRoadColumn, type DistrictMap } from '../map/street.js';
 import { SOUTH_SHORE_Z } from './south-vista.js';
+import { onRockTop } from './sky-island.js';
 import {
   PALETTE,
   aoPaint,
@@ -205,11 +206,21 @@ function parcelAt(l: Layout, x: number, z: number): number {
   return i * 100 + j;
 }
 
+/**
+ * How far in from the rock's rim the country stops: enough grass, boulders and
+ * shrubs to read as an edge before the drop (sky-island.ts lays that belt).
+ */
+export const RIM_SETBACK = 10;
+
 /** The ground code at (x, z); 0 where street-builder lays the ground itself, or beyond it all. */
 function groundCode(l: Layout, x: number, z: number): number {
   const W = l.width;
   const H = l.height;
   if (x < -HINTERLAND || x >= W + HINTERLAND || z < -HINTERLAND || z >= H + OUTSKIRT) return 0;
+  // The world stands on a floating rock (D-132): past its rim there is no
+  // ground at all, so no field, hedgerow, tree line, house or hill may be laid
+  // there — and the last of them stops a little short of the drop.
+  if (!onRockTop(x, z, RIM_SETBACK)) return 0;
   // South, the country stops at the water (D-124). Past the shore the south
   // vista owns the ground, so there is no field here to lay, no hedgerow to
   // run between parcels and no tree line to plant in a river.
