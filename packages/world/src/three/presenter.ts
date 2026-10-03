@@ -89,6 +89,12 @@ export interface PresenterOptions {
   readonly vaultOpen?: boolean;
   /** Leaderboard phase 1: the placement stand east of the plaza. Sessions must match it too. */
   readonly placementStand?: boolean;
+  /**
+   * D-128: a coarse-pointer screen (a phone). The arena's surround then
+   * leaves out the water south of it, which the north-looking camera (D-059)
+   * can never show. Read once, when the rooms are built.
+   */
+  readonly lowDetail?: boolean;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -249,7 +255,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
   const images = options.images ?? null;
   // D-107: the hidden room's flickering tube holds steady for reduced motion.
-  const roomOptions = options.reducedMotion ? { reducedMotion: options.reducedMotion } : {};
+  const roomOptions = {
+    ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+    ...(options.lowDetail === true ? { lowDetail: true } : {}),
+  };
   // D-114: the arena is a big room most sessions never enter, so it is built
   // the first time it is shown, not with the street.
   const lazyRooms = new Map<string, () => RoomView>();

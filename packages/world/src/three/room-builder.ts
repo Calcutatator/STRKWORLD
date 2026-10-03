@@ -437,7 +437,7 @@ export function buildFixedRoom(
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
   images: ImageTextureLoader | null = null,
-  options: { readonly reducedMotion?: () => boolean } = {},
+  options: { readonly reducedMotion?: () => boolean; readonly lowDetail?: boolean } = {},
 ): RoomView {
   // D-114: the arena is a 41 x 33 open-air stadium oval, not four walls round
   // a flat floor, so its own builder draws all of it.

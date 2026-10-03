@@ -14065,3 +14065,35 @@ backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 was used; the live ledger's `leaf_count()` has not been re-read.
 
 ---
+
+### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
+
+The arena (D-114) is a room, drawn at the interiors' origin over the hidden
+street (D-039). The city, the backdrop and D-124's south vista are all mounted
+in `street.ground`, which a room never shows — so outside the arena's arcade
+there was nothing but linear fog on a `SKY_HORIZON` background, which reads as
+"floating in blank white nothingness". The sky dome and the `Fog` *are* shared
+(one `Scene` in `world-engine.ts`), so the fix is not a second sky: it is
+mounting `backdropCity` and `createSouthVista` into the room's own group
+(`three/arena-surround.ts`, D-128). Verified by the arena room's draw-call test
+listing `arena:outside-city`, `arena:outside-windows` and the vista's six
+meshes, and by renders from the in-game camera on the sand and on the top tier.
+
+Two traps that cost time there. **The backdrop's plan is district-wide**: it
+lays fields and hedgerows west, east and south of the street as well as the
+city to the north, and at the offset that puts the city behind the arena's
+north wall those bands stand *inside* the stadium — the module had to be
+flushed through a triangle filter that keeps only what stays north of the
+wall. And **a geometry sweep over a backdrop is not free**: the arena's
+headroom test (sample every triangle, barycentric, against every walkable
+tile) went from seconds to a 30 s timeout the moment the city joined the
+group. The surround is excluded from that sweep by name and held clear of the
+stadium by its bounding box instead, which is the assertion that actually
+matters — it is tens of tiles away, not a hair over a tier.
+
+Also: the room drew bare earth on its `void` tiles, which was invisible while
+there was nothing around it and became a hard-edged brown apron the moment
+there was a lawn. When you give a scene a world, re-check every surface that
+was only ever seen against nothing.
+
+---

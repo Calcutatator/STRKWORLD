@@ -125,7 +125,7 @@ import {
 } from './football-channel.js';
 import { withinKickRange } from './map/pitch.js';
 import { createJumpState, type JumpPhase, type JumpState } from './jump.js';
-import { ARENA_PIT_RETURN, ARENA_PIT_RETURN_FACING } from './map/arena-pit.js';
+import { COLOSSEUM_RETURN, COLOSSEUM_RETURN_FACING } from './map/colosseum.js';
 import type { ArenaChannel, ArenaSession, ArenaSessionHost, ArenaViewFrame } from './arena-channel.js';
 import { createArenaSession } from './arena-session.js';
 
@@ -1106,7 +1106,7 @@ class Session implements WorldSession {
     // D-114: back on the pit's branch path, facing west, away from the arch.
     if (definition.building === ARENA_BUILDING) {
       this.clearArena();
-      this.view.setPlayerFacing?.(ARENA_PIT_RETURN_FACING);
+      this.view.setPlayerFacing?.(COLOSSEUM_RETURN_FACING);
     }
   }
 
@@ -1237,7 +1237,7 @@ class Session implements WorldSession {
       resumeStreet: () => this.movement.exit(
         { x: this.position.x, y: this.position.y },
         () => this.reportTile(),
-        definition.building === ARENA_BUILDING ? ARENA_PIT_RETURN_FACING : undefined,
+        definition.building === ARENA_BUILDING ? COLOSSEUM_RETURN_FACING : undefined,
       ),
     });
   }
@@ -1294,7 +1294,7 @@ class Session implements WorldSession {
   private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
     // D-114: the tile below the pit's door is lawn beside its bowl; the
     // return is the branch path, just west of the arch.
-    if (building === ARENA_BUILDING) return { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
+    if (building === ARENA_BUILDING) return { x: COLOSSEUM_RETURN.x, y: COLOSSEUM_RETURN.y };
     const door = this.map.doors.find((candidate) => candidate.building === building);
     return {
       x: door?.x ?? this.map.spawn.x,

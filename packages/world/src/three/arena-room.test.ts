@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Material, type Object3D } from 'three';
+import { Box3, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Material, type Object3D } from 'three';
 import {
   ARENA_BOX,
   ARENA_DUMMY_TILE,
@@ -47,8 +47,13 @@ const OX = ROOM_ORIGIN.x / 32;
 const OZ = ROOM_ORIGIN.y / 32;
 const map = createFixedRoom(ARENA_ROOM_DEFINITION);
 
-function build(options: { readonly reducedMotion?: () => boolean; readonly labels?: LabelFactory } = {}): ArenaRoomView {
-  return buildArenaRoom(map, options.labels ?? createNullLabelFactory(), ROOM_ORIGIN, options.reducedMotion ? { reducedMotion: options.reducedMotion } : {});
+function build(
+  options: { readonly reducedMotion?: () => boolean; readonly labels?: LabelFactory; readonly lowDetail?: boolean } = {},
+): ArenaRoomView {
+  return buildArenaRoom(map, options.labels ?? createNullLabelFactory(), ROOM_ORIGIN, {
+    ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+    ...(options.lowDetail === true ? { lowDetail: true } : {}),
+  });
 }
 
 function meshes(root: Object3D): Mesh[] {
@@ -69,6 +74,14 @@ function tiles(test: (x: number, y: number) => boolean): Array<{ x: number; y: n
   const found: Array<{ x: number; y: number }> = [];
   for (let y = 0; y < ARENA_HEIGHT; y++) for (let x = 0; x < ARENA_WIDTH; x++) if (test(x, y)) found.push({ x, y });
   return found;
+}
+
+/** Is `object` part of the surround — the city hung round the stadium (D-128)? */
+function outsideSurround(object: Object3D): boolean {
+  for (let node: Object3D | null = object; node; node = node.parent) {
+    if (node.name === 'arena:outside') return true;
+  }
+  return false;
 }
 
 /**
@@ -94,6 +107,11 @@ function headroomIntrusions(root: Object3D): string[] {
   const world = new Matrix4();
   root.traverse((object) => {
     if (!(object instanceof Mesh) || found.has(object.name)) return;
+    // D-128: the city round the stadium stands tens of tiles beyond the
+    // walls, nowhere near a walkable tile, and sweeping its thousands of
+    // triangles here would cost minutes. The test below holds it clear of the
+    // stadium by its bounding box instead.
+    if (outsideSurround(object)) return;
     const position = object.geometry.getAttribute('position');
     const index = object.geometry.getIndex();
     const triangles = (index ? index.count : position.count) / 3;
@@ -145,7 +163,7 @@ describe('the arena in 3D (D-114)', () => {
     room.dispose();
   });
 
-  it('stays within its draw-call budget: 22 or fewer, the rooms\' limit is 40', () => {
+  it('stays within its draw-call budget: 24 or fewer, the rooms\' limit is 40', () => {
     const labels: Object3D[] = [];
     const counting: LabelFactory = {
       sign: (text) => {
@@ -172,16 +190,57 @@ describe('the arena in 3D (D-114)', () => {
       'arena:flames',
       'arena:gate',
       'arena:gate-lamp',
+      // D-128: the city round the stadium, the street's own backdrop module.
+      'arena:outside-city',
+      'arena:outside-windows',
       'arena:sand',
       'arena:seats',
       'arena:stone',
       'arena:stone-south',
+      // D-128: D-124's river, station and far city, mounted behind the south
+      // wall. Left out of the low-detail path below.
+      'south-vista:banks',
+      'south-vista:city',
+      'south-vista:ferries',
+      'south-vista:glass',
+      'south-vista:station',
+      'south-vista:water',
     ]);
     // The ring's sign and the emperor's box label.
     expect(labels.map((label) => label.userData['text'])).toEqual(['THE RING', "EMPEROR'S BOX\nCLOSED"]);
     const calls = names.length + labels.length;
-    expect(calls).toBe(13);
-    expect(calls).toBeLessThanOrEqual(22);
+    expect(calls).toBe(21);
+    expect(calls).toBeLessThanOrEqual(24);
+    room.dispose();
+  });
+
+  it('drops the water south of it on the low-detail path: the camera never looks south (D-128)', () => {
+    const full = meshes(build().group).map((mesh) => mesh.name).sort();
+    const low = build({ lowDetail: true });
+    const names = meshes(low.group).map((mesh) => mesh.name).sort();
+    // The stadium and the city north of it are unchanged; only D-124's vista goes.
+    expect(names).toEqual(full.filter((name) => !name.startsWith('south-vista:')));
+    expect(names).toContain('arena:outside-city');
+    expect(names).toHaveLength(13);
+    low.dispose();
+  });
+
+  it('stands the city clear of the stadium, beyond its walls on both sides (D-128)', () => {
+    const room = build();
+    const surround = room.group.getObjectByName('arena:outside');
+    expect(surround).toBeDefined();
+    // The stadium's own tiles, in arena-local coordinates: nothing of the
+    // surround may stand inside them, or the city would be in the sand.
+    for (const child of surround!.children) {
+      const box = new Box3().setFromObject(child);
+      const northOfIt = box.max.z - OZ < 0;
+      const southOfIt = box.min.z - OZ > ARENA_HEIGHT;
+      expect(northOfIt || southOfIt, child.name).toBe(true);
+    }
+    // And it reaches past the fog on both sides, so there is no visible edge.
+    const whole = new Box3().setFromObject(surround!);
+    expect(whole.min.z - OZ).toBeLessThan(-40);
+    expect(whole.max.z - OZ).toBeGreaterThan(ARENA_HEIGHT + 40);
     room.dispose();
   });
 
