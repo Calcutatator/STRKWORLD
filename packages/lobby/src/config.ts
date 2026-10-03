@@ -136,7 +136,7 @@ export const JUMP_MIN_INTERVAL_MS = JUMP_AIR_MS;
  * sandbox actions, kicks, jumps, the arena's intents, attacks and blocks, and
  * the swing's intents together stay under `MAX_MESSAGES_PER_SECOND`:
  * 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 4 + 1 = 37.7 a second, against 40 (D-128,
- * D-132; `client-arena.test.ts` pins the sum).
+ * D-133; `client-arena.test.ts` pins the sum).
  */
 export const JUMP_CLIENT_INTERVAL_MS = JUMP_AIR_MS + 50;
 
@@ -320,13 +320,13 @@ export const MESSAGE = Object.freeze({
    */
   arenaSit: 'arena:sit',
   /**
-   * No payload — D-132: claim the Exchange roof's lookout swing from the
+   * No payload — D-133: claim the Exchange roof's lookout swing from the
    * deck in front of it. Only while the swing is idle and the sender is live
    * on the roof; the room sits the rider on the seat itself. Whatever a
    * client sends with it is never read.
    */
   swingClaim: 'roof:swing-claim',
-  /** No payload — D-132: get off the swing early (the ride ends as `left`). Never read. */
+  /** No payload — D-133: get off the swing early (the ride ends as `left`). Never read. */
   swingLeave: 'roof:swing-leave',
 } as const);
 

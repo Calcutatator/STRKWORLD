@@ -582,7 +582,7 @@ describe('buildStreet', () => {
         }
       }
     }
-    // D-132: the enclosure is at the cantilever's rim, a whole unit past the
+    // D-133: the enclosure is at the cantilever's rim, a whole unit past the
     // tower on every side, so that is where the balustrade stands.
     const rim = {
       minX: exchange.bounds.minX - ROOF_OVERHANG,

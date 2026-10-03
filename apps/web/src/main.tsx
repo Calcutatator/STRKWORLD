@@ -74,7 +74,7 @@ const stopFootballWorld = football.listen(worldOut);
 // the arena HUD.
 const arena = createArenaController({ solo: () => createArenaAuthority() });
 const stopArenaWorld = arena.listen(worldOut);
-// The Exchange roof's lookout swing (D-132), likewise: the lobby's swing
+// The Exchange roof's lookout swing (D-133), likewise: the lobby's swing
 // while connected, the same rules locally for solo play, one stable channel
 // for the World and the swing's HUD hint.
 const roofSwing = createSwingController({ solo: () => createSwingAuthority() });

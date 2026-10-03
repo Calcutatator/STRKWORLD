@@ -33,7 +33,7 @@ export interface WorldConfig {
   football?: FootballChannel;
   /** Optional gladiator pit ring (D-114), supplied by the Shell. */
   arena?: ArenaChannel;
-  /** D-132: the Exchange roof's lookout swing; absent means the roof has none. */
+  /** D-133: the Exchange roof's lookout swing; absent means the roof has none. */
   roofSwing?: RoofSwingChannel;
   /**
    * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its

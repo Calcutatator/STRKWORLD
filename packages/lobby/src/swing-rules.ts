@@ -1,5 +1,5 @@
 /**
- * The roof swing's rules (D-132). Pure, synchronous, transport-free.
+ * The roof swing's rules (D-133). Pure, synchronous, transport-free.
  *
  * One authority object owns the swing: its phase, the round, the rider and
  * the deadline. The lobby room runs one instance per room and the Shell can

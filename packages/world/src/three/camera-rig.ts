@@ -30,7 +30,7 @@ export interface CameraRigOptions {
 }
 
 /**
- * D-132: a cinematic override, for the roof swing's ride. While one is
+ * D-133: a cinematic override, for the roof swing's ride. While one is
  * supplied the rig places the camera from it instead of the preset, sweeping
  * into and out of it (or cutting, under reduced motion). The published `yaw`
  * does not change — movement keys stay camera-relative to north — so a shot
@@ -56,7 +56,7 @@ export interface CameraRig {
    * Ease towards the target; a pending snap jumps instead. `elevation` lifts
    * the aim with a player standing on sandbox blocks (D-060) or a roof. A new
    * `preset` jumps too: it changes only with a teleport onto or off a roof.
-   * `shot` (D-132) overrides the preset's angle while it is supplied.
+   * `shot` (D-133) overrides the preset's angle while it is supplied.
    */
   update(
     deltaMs: number,
@@ -118,7 +118,7 @@ export const CAMERA_PRESETS: Readonly<Record<CameraPresetId, CameraPreset>> = Ob
 const FOLLOW_TIME_CONSTANT_MS = 70;
 
 /**
- * D-132: how fast the rig sweeps between the preset's angle and a shot's.
+ * D-133: how fast the rig sweeps between the preset's angle and a shot's.
  * About a second and a half end to end, which reads as a camera move rather
  * than a cut. A shot that asks to cut skips it in both directions.
  */
@@ -173,7 +173,7 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
   let focus: { x: number; y: number; z: number } | null = null;
   let pendingSnap = true;
   let destroyed = false;
-  /** D-132: the angle the camera is drawn at now, eased towards the goal. */
+  /** D-133: the angle the camera is drawn at now, eased towards the goal. */
   let angle: Angle | null = null;
 
   return {
@@ -209,7 +209,7 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
         focus.y += (goalY - focus.y) * blend;
         focus.z += (goal.z - focus.z) * blend;
       }
-      // D-132: the angle comes from the shot while one is supplied, and from
+      // D-133: the angle comes from the shot while one is supplied, and from
       // the preset otherwise; the rig sweeps between them unless told to cut.
       const base = CAMERA_PRESETS[preset];
       const wanted: Angle = shot

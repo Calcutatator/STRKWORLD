@@ -14,7 +14,7 @@
  * (D-078) takes nothing at all, and the goal broadcast names a side. The
  * arena ring's three verbs (D-114) take nothing either, and the ring answers
  * only through its one view-filtered state entry, sent to arena members. The
- * roof swing's two verbs (D-132) are the same shape, answered by one
+ * roof swing's two verbs (D-133) are the same shape, answered by one
  * view-filtered entry sent to roof members.
  *
  * ## Configuration is trusted; onCreate options are not
@@ -60,7 +60,7 @@ export const ARENA_TICK_MS = 100;
 
 /**
  * How often the room runs the roof swing's clock while a ride is on, in ms
- * (D-132): the ride's end and the cooldown's close land within this, and
+ * (D-133): the ride's end and the cooldown's close land within this, and
  * `secondsLeft` is refreshed. Only while the swing has a deadline; an idle
  * swing costs nothing.
  */
@@ -144,7 +144,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   /** The arena ring's clock, while it has a deadline. D-114. */
   #arenaTimer: Delayed | undefined;
 
-  /** The roof swing's clock, while it has a deadline. D-132. */
+  /** The roof swing's clock, while it has a deadline. D-133. */
   #swingTimer: Delayed | undefined;
 
   /**
@@ -367,7 +367,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     /*
-     * D-132. The roof swing's two intents. No payload is read: the claim is
+     * D-133. The roof swing's two intents. No payload is read: the claim is
      * judged from where the registry holds the sender, on the deck in front
      * of the swing. Colyseus hands this room one message at a time, so of
      * two claims in one patch the first takes the swing and the second finds
@@ -529,7 +529,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
 
   /**
    * Keep the roof swing's clock running while a ride or its cooldown is on,
-   * and stopped otherwise (D-132). Called after every swing intent and every
+   * and stopped otherwise (D-133). Called after every swing intent and every
    * change to who is in the room; idempotent.
    */
   #scheduleSwing(): void {
@@ -744,7 +744,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     if (member && !holds) view.add(ring);
     else if (!member && holds) view.remove(ring);
 
-    // D-132: the same rule for the roof's swing entry — in a view exactly
+    // D-133: the same rule for the roof's swing entry — in a view exactly
     // while its client is live on the roof.
     const swing = this.#registry.swingEntry;
     const onRoof = this.#registry.isRoofMember(client.sessionId);

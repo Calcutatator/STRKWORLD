@@ -120,7 +120,7 @@ export interface Presenter {
   /** How the camera frames the player: level with the street, or looking down from a roof. */
   readonly cameraPreset: CameraPresetId;
   /**
-   * D-132: a cinematic override for the rider on the roof swing — south over
+   * D-133: a cinematic override for the rider on the roof swing — south over
    * the edge, following the arc — or null for the preset's own angle. The
    * engine also widens the fog while one is set, so the vista shows.
    */
@@ -237,7 +237,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
   /*
-   * D-132: the roof's swing looks south over D-124's river, station and
+   * D-133: the roof's swing looks south over D-124's river, station and
    * skyline. There is no mount here: `street-builder.ts` already puts the
    * vista in `street.ground`, and the roof is drawn inside the street scene
    * (it is the tower's real top), so that one mount serves the deck and the
@@ -488,7 +488,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let visibleRoom: string | null = null;
   /** The roof the player stands on, if any: the street stays drawn below it. */
   let rooftop: BuildingId | null = null;
-  /** D-132: the swing's frame this client is drawing, or none. */
+  /** D-133: the swing's frame this client is drawing, or none. */
   let swingFrame: RoofSwingViewFrame | null = null;
   /** Where the local rider is drawn while riding (world units); null otherwise. */
   let swingSeat: { x: number; y: number; z: number } | null = null;
@@ -536,7 +536,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     jumpClimbed = false;
     jumpRaise = 0;
     jumpShadow.place(0, 0, 0, 0);
-    // The roof swing's frame and camera belong to the session that set them (D-132).
+    // The roof swing's frame and camera belong to the session that set them (D-133).
     swingFrame = null;
     swingSeat = null;
     swingShot = null;
@@ -587,7 +587,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     return port;
   };
 
-  /** D-132: put a peer on the roof swing's seat, or take them off it. */
+  /** D-133: put a peer on the roof swing's seat, or take them off it. */
   const remoteRider = (
     gameId: GameId | null,
     seat: { readonly x: number; readonly y: number; readonly z: number } | null,
@@ -635,7 +635,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   return {
     get player() {
-      // D-132: riding the roof swing, the camera follows the seat's arc.
+      // D-133: riding the roof swing, the camera follows the seat's arc.
       if (swingSeat) return { ground: { x: swingSeat.x, z: swingSeat.z }, yaw, elevation: swingSeat.y };
       // Indoors the camera follows the feet up the arena's tiers (D-114).
       return { ground, yaw, elevation: streetVisible ? elevationShown : feet };
@@ -644,7 +644,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
       return lift;
     },
     get cameraBounds() {
-      // D-132: the ride swings out past the deck's bounds, so they are lifted
+      // D-133: the ride swings out past the deck's bounds, so they are lifted
       // for its length; the rig is following the seat, not the player's feet.
       return swingSeat ? null : cameraBounds;
     },
@@ -993,7 +993,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
       const standOn = feet + (streetVisible ? elevationShown : 0);
       avatar.object.position.y = standOn + lift;
       jumpShadow.place(ground.x, standOn, ground.z, lift, jumpHeight);
-      // D-132: riding the swing, the local avatar is drawn on the seat,
+      // D-133: riding the swing, the local avatar is drawn on the seat,
       // facing south over the edge, and casts no contact shadow out there.
       if (swingSeat) {
         avatar.object.position.set(swingSeat.x, swingSeat.y, swingSeat.z);
@@ -1026,7 +1026,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
         attack,
         guard,
         blocking,
-        // D-132: the swing's rider sits in it, as a spectator sits on a tier.
+        // D-133: the swing's rider sits in it, as a spectator sits on a tier.
         seated: benchSeated || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
       });
       if (streetVisible) {

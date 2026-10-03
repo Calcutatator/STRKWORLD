@@ -78,7 +78,7 @@ const FOG_FAR = 64;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
 /**
- * D-132: how far the fog is pushed back while a cinematic shot is running —
+ * D-133: how far the fog is pushed back while a cinematic shot is running —
  * the roof swing's ride, which looks south over the river to the skyline.
  * Short of the camera's 240 far plane, so the horizon still fades out.
  */
@@ -88,7 +88,7 @@ export const VISTA_FOG_FAR = 215;
 /**
  * The fog's linear range, in view depth, for a player `elevation` up: pushed
  * back as they climb, so a tower top still shows what they built below.
- * `vista` (D-132) pushes it back further still for the swing's ride, so the
+ * `vista` (D-133) pushes it back further still for the swing's ride, so the
  * south vista is inside it.
  */
 export function fogRange(elevation: number, vista = false): { readonly near: number; readonly far: number } {
@@ -216,7 +216,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         ...(config.remotePeers ? { peers: config.remotePeers } : {}),
         // The gladiator pit's ring (D-114), and reduced motion for its leaps.
         ...(config.arena ? { arena: config.arena } : {}),
-        // The Exchange roof's lookout swing (D-132).
+        // The Exchange roof's lookout swing (D-133).
         ...(config.roofSwing ? { roofSwing: config.roofSwing } : {}),
         reducedMotion: () => prefersReducedMotion(win),
         // The creation value, never `config.vaultOpen`: the presenter drew

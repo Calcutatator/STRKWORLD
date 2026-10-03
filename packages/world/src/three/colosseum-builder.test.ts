@@ -114,7 +114,7 @@ describe('the Colosseum in the street scene (D-114, D-129)', () => {
     expect(named(without.ground, 'colosseum:stone')).toBeUndefined();
     expect(streetCalls(view)).toBe(streetCalls(without) + 4);
     // Headroom, not the building's own cost: the south vista's six merged
-    // meshes joined the street's ground group since (D-124), and D-132 added
+    // meshes joined the street's ground group since (D-124), and D-133 added
     // the Exchange roof's two — the ticker on its panoramic band and the
     // swing's seat, which has to be its own object because it moves.
     expect(streetCalls(view)).toBeLessThanOrEqual(97);

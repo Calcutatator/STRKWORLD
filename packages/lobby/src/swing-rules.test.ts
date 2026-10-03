@@ -1,5 +1,5 @@
 /**
- * D-132: the lookout swing's lock, with no transport. One person at a time on
+ * D-133: the lookout swing's lock, with no transport. One person at a time on
  * a public roof — so the interesting cases are the second claimant, and every
  * way a ride can end before its twenty seconds are up.
  *
@@ -49,7 +49,7 @@ function ridden(now = 10_000): { swing: SwingAuthority; start: number } {
 /** Past both sessions' intent floors, so a throttle never masks a real answer. */
 const later = (t: number) => t + SWING_INTENT_MIN_INTERVAL_MS;
 
-describe('claiming the swing (D-132)', () => {
+describe('claiming the swing (D-133)', () => {
   it('seats the first claimant and tells the caller to stand them on the seat', () => {
     const swing = createSwingAuthority();
     expect(swing.claim(claimant('a', A), 1000)).toBe('applied');
@@ -139,7 +139,7 @@ describe('claiming the swing (D-132)', () => {
   });
 });
 
-describe('ending a ride (D-132)', () => {
+describe('ending a ride (D-133)', () => {
   it('ends on the deadline as a timeout, then cools down and goes idle', () => {
     const { swing, start } = ridden();
     const over = start + SWING_RIDE_MS;
@@ -256,7 +256,7 @@ describe('ending a ride (D-132)', () => {
   });
 });
 
-describe('the swing\'s clock (D-132)', () => {
+describe('the swing\'s clock (D-133)', () => {
   it('is active exactly while a deadline is pending, so an idle swing costs nothing', () => {
     const swing = createSwingAuthority();
     expect(swing.active).toBe(false);

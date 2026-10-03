@@ -6,7 +6,7 @@
  * clients or the matchmaker, so every rule that matters — admission,
  * throttling, suspend, presence areas (D-087), interest, the block sandbox's actions and returns
  * (D-060), the football's kicks and steps (D-078), the arena ring (D-114)
- * and the roof's lookout swing (D-132) — is exercisable in a
+ * and the roof's lookout swing (D-133) — is exercisable in a
  * plain unit test against the same objects that get encoded in production.
  *
  * Nothing here persists. When the last session leaves, the registry is empty
@@ -198,7 +198,7 @@ export interface LobbyPresenceOptions {
   footballBall?: BallState;
   /** D-114: the round the arena's next claim increments from. A test seam (the wrap). */
   arenaRound?: number;
-  /** D-132: the round the roof swing's next claim increments from. A test seam (the wrap). */
+  /** D-133: the round the roof swing's next claim increments from. A test seam (the wrap). */
   swingRound?: number;
   /**
    * Randomness source for server-minted identifiers. Injectable so a test can
@@ -279,7 +279,7 @@ export class LobbyPresence {
   readonly #arena: LobbyArena;
   /** The ring entry itself, for the room to add to arena views only. */
   readonly #ringEntry: ArenaRingEntry;
-  /** D-132: the roof's lookout swing, mirrored into `state.swing`'s one entry. */
+  /** D-133: the roof's lookout swing, mirrored into `state.swing`'s one entry. */
   readonly #swing: LobbySwing;
   /** The swing entry itself, for the room to add to roof views only. */
   readonly #swingEntry: SwingEntry;
@@ -407,7 +407,7 @@ export class LobbyPresence {
     // street keeps its rule, a clamp to the world.
     // D-114: the arena's challenger also walks the ring's interior.
     // D-128: the seated champion holds the emperor's box's own tile.
-    // D-132: the roof swing's rider also stands on its seat tile.
+    // D-133: the roof swing's rider also stands on its seat tile.
     const extra = session.area === 'arena'
       ? this.#arena.holdsRing(sessionKey)
         ? ARENA_CHALLENGER_WALKABLE
@@ -535,7 +535,7 @@ export class LobbyPresence {
     this.#seen(now);
     // D-114: a fighter who steps out of the world forfeits, and is not returned.
     if (session.area === 'arena') this.#arena.gone(sessionKey, 'left', now);
-    // D-132: so does a rider on the roof swing: the ride ends and nobody is put down.
+    // D-133: so does a rider on the roof swing: the ride ends and nobody is put down.
     if (session.area === 'roof') this.#swing.gone(sessionKey, 'left', now);
     // Every live position, the leaver's included, before their entry goes.
     const players = this.#livePlayers();
@@ -632,7 +632,7 @@ export class LobbyPresence {
       // D-114: the arena's challenger refreshing their look keeps the place
       // the room holds for them, wherever the request says they stand.
       if (area === 'arena' && this.#refreshFighter(session, sessionKey, request, now)) return true;
-      // D-132: and so does the roof swing's rider, whose seat is ledge to
+      // D-133: and so does the roof swing's rider, whose seat is ledge to
       // everyone else and so never passes the walkable check.
       if (area === 'roof' && this.#refreshRider(session, sessionKey, request, now)) return true;
       this.suspend(sessionKey, now);
@@ -657,7 +657,7 @@ export class LobbyPresence {
       if (!this.#throttle.stamp(sessionKey, now)) return false;
       // D-114: leaving the arena forfeits a fight in its ring, with no return.
       if (session.area === 'arena' && area !== 'arena') this.#arena.gone(sessionKey, 'left', now);
-      // D-132: leaving the roof ends a ride on its swing, with no step-off.
+      // D-133: leaving the roof ends a ride on its swing, with no step-off.
       if (session.area === 'roof' && area !== 'roof') this.#swing.gone(sessionKey, 'left', now);
       if (session.area === 'street' && area !== 'street') {
         // Every street position, the leaver's included, before they go.
@@ -708,7 +708,7 @@ export class LobbyPresence {
     // D-114: a fighter who disconnects ends the fight as `disconnect`.
     this.#arena.gone(sessionKey, 'disconnect', now);
     this.#arena.forget(sessionKey);
-    // D-132: so does a rider on the roof swing.
+    // D-133: so does a rider on the roof swing.
     this.#swing.gone(sessionKey, 'disconnect', now);
     this.#swing.forget(sessionKey);
     const players = this.#livePlayers();
@@ -1092,7 +1092,7 @@ export class LobbyPresence {
   }
 
   // -------------------------------------------------------------------------
-  // The roof's lookout swing — D-132
+  // The roof's lookout swing — D-133
   // -------------------------------------------------------------------------
 
   /**

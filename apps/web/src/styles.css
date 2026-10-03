@@ -4883,7 +4883,7 @@ button.ui-balance-fill:focus-visible {
 }
 
 /* ==========================================================================
- * D-132: the lookout swing's HUD — one hint, low on the screen, for the
+ * D-133: the lookout swing's HUD — one hint, low on the screen, for the
  * rider alone. The brand's menu face on an Outline-bordered dark window with
  * the hard drop (docs/brand/README.md); it never takes a click meant for the
  * World except on the hint itself, which is the touch screen's way off.

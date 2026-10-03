@@ -5,7 +5,7 @@ import { keyBelongsElsewhere } from '../arena/ArenaHud.js';
 import type { SwingShellChannel } from './swing-controller.js';
 
 /**
- * The lookout swing's HUD (D-132): one small hint, in the brand style
+ * The lookout swing's HUD (D-133): one small hint, in the brand style
  * (`docs/brand/README.md`), shown to the rider and nobody else.
  *
  * The ride is the server's twenty seconds and the World draws it; the Shell

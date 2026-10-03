@@ -974,7 +974,7 @@ export const COPY = freezeCopy({
   },
 
   /**
-   * D-132: the Exchange roof's lookout swing (`roof/SwingHud.tsx`). One
+   * D-133: the Exchange roof's lookout swing (`roof/SwingHud.tsx`). One
    * hint, shown to the rider only. Game copy: no money, no names, no
    * disclosure. The World's own chip words (`SWING`, `IN USE`) live in
    * `roof-swing-session.ts`.

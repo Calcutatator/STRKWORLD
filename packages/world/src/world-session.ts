@@ -255,7 +255,7 @@ export interface WorldSessionView {
   setPlayerSeated?(seated: boolean): void;
   /** The ring gate's mesh in the arena room, for the gate station's press-E cues; null if none. */
   arenaGateObject?(): unknown;
-  // The Exchange roof's lookout swing (D-132). Optional: a view without it
+  // The Exchange roof's lookout swing (D-133). Optional: a view without it
   // draws no swing, and the roof is a deck to stand on.
   /** The swing as the session sees it this frame (its angle, its rider, the rider's camera), or none. */
   syncRoofSwing?(frame: RoofSwingViewFrame | null): void;
@@ -319,7 +319,7 @@ export interface WorldSessionOptions {
    */
   readonly arena?: ArenaChannel;
   /**
-   * The Exchange roof's lookout swing (D-132); absent means the roof is a
+   * The Exchange roof's lookout swing (D-133); absent means the roof is a
    * deck to stand on, with no swing to claim.
    */
   readonly roofSwing?: RoofSwingChannel;
@@ -546,15 +546,15 @@ class Session implements WorldSession {
    * everything.
    */
   private heading = { x: 0, y: 0 };
-  /** D-132: the roof swing's channel and session, only with a channel. */
+  /** D-133: the roof swing's channel and session, only with a channel. */
   private readonly roofSwingChannel?: RoofSwingChannel;
   private roofSwingSession?: RoofSwingSession;
-  /** D-132: removes the swing's press-E station from the interaction system. */
+  /** D-133: removes the swing's press-E station from the interaction system. */
   private stopRoofSwingSource?: () => void;
   /** Whether the view currently holds a swing frame. */
   private roofSwingShown = false;
   /**
-   * D-132: holds on movement, by reason. While any is held the player stands
+   * D-133: holds on movement, by reason. While any is held the player stands
    * still wherever the session put them: the swing's ride holds one for its
    * whole twenty seconds, so no key walks the rider off the seat.
    */
@@ -1490,7 +1490,7 @@ class Session implements WorldSession {
       this.view.setPlayerMotion(IDLE_MOTION);
       return;
     }
-    // D-132: a ride on the roof swing holds the player still for its length.
+    // D-133: a ride on the roof swing holds the player still for its length.
     if (this.movementHeld) {
       this.view.setPlayerMotion(IDLE_MOTION);
       return;
@@ -2112,7 +2112,7 @@ class Session implements WorldSession {
     if (before && before !== current) this.avatarOutfit.select(before);
   }
 
-  // -- the roof's lookout swing (D-132) ---------------------------------------
+  // -- the roof's lookout swing (D-133) ---------------------------------------
 
   /**
    * The swing's client session (`roof-swing-session.ts`), with this session
@@ -2158,7 +2158,7 @@ class Session implements WorldSession {
   }
 
   /**
-   * D-132: hold the player still until the returned release is called. The
+   * D-133: hold the player still until the returned release is called. The
    * ride holds one for its whole length, so no held key walks the rider off
    * the seat; releasing twice is harmless.
    */
@@ -2170,13 +2170,13 @@ class Session implements WorldSession {
     };
   }
 
-  /** Whether anything is holding movement (D-132: a ride on the swing). */
+  /** Whether anything is holding movement (D-133: a ride on the swing). */
   private get movementHeld(): boolean {
     return this.movementHolds.size > 0;
   }
 
   /**
-   * D-132: the server moved the rider (onto the seat on a claim, back to the
+   * D-133: the server moved the rider (onto the seat on a claim, back to the
    * step-off tile when the ride closes); stand there too and publish the new
    * place. A roof-local tile; ignored off the roof or off its grid.
    */

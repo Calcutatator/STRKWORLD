@@ -129,7 +129,7 @@ export interface RemoteAvatarLayer3D {
   /** D-128: the champion on the emperor's throne, drawn seated wherever they are; null for nobody. */
   setThroned(gameId: string | null): void;
   /**
-   * D-132: this peer is riding the roof swing, so they are drawn sitting at
+   * D-133: this peer is riding the roof swing, so they are drawn sitting at
    * `seat` (world units) instead of where the lobby holds them — the lobby's
    * seat tile is on the ledge, and the seat itself hangs out past it. Null
    * for nobody.
@@ -251,7 +251,7 @@ export function createRemoteAvatarLayer3D({
   /** D-128: the peer holding a block, and the champion on the throne. */
   let blocker: string | null = null;
   let throned: string | null = null;
-  /** D-132: the peer on the roof swing, and where its seat is this frame. */
+  /** D-133: the peer on the roof swing, and where its seat is this frame. */
   let rider: string | null = null;
   let riderSeat: { x: number; y: number; z: number } | null = null;
 
@@ -589,7 +589,7 @@ export function createRemoteAvatarLayer3D({
     // tiers' idle wait: the server put them on the throne, so they are on it.
     if (throned === avatar.id) seated = true;
     const guard = fighter === avatar.id;
-    // D-132: a peer on the swing sits in it, whatever the floor under them says.
+    // D-133: a peer on the swing sits in it, whatever the floor under them says.
     if (rider === avatar.id && riderSeat !== null) seated = true;
     const blocking = blocker === avatar.id;
     if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
@@ -647,7 +647,7 @@ export function createRemoteAvatarLayer3D({
           stepElevation(avatar, dt, goal, lift);
           place(avatar);
         }
-        // D-132: the swing's rider is drawn on its seat, facing south out
+        // D-133: the swing's rider is drawn on its seat, facing south out
         // over the edge, wherever the lobby holds them on the ledge.
         if (rider === avatar.id && riderSeat !== null) {
           avatar.figure.object.position.set(riderSeat.x, riderSeat.y, riderSeat.z);

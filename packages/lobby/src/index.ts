@@ -11,7 +11,7 @@
  * The pure sandbox rules the Shell runs for solo play live at
  * `@strkworld/lobby/sandbox`, the football's at `@strkworld/lobby/football`
  * the arena ring's (D-114) at `@strkworld/lobby/arena` and the roof swing's
- * (D-132) at `@strkworld/lobby/swing`, with no Colyseus import at all.
+ * (D-133) at `@strkworld/lobby/swing`, with no Colyseus import at all.
  *
  * ## This entry is browser-safe
  *

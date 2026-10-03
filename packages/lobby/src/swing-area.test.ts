@@ -1,5 +1,5 @@
 /**
- * D-132: the lookout swing through the registry — the half the rules module
+ * D-133: the lookout swing through the registry — the half the rules module
  * cannot see. The server's own teleports onto the seat and back, the seat
  * being ledge to everyone but its rider, every way a ride ends through a
  * session's life (suspend, area change, disconnect), and the roof-membership
@@ -46,7 +46,7 @@ function riding(now = 1000): { registry: LobbyPresence; a: GameId } {
 
 const later = (t: number) => t + SWING_INTENT_MIN_INTERVAL_MS;
 
-describe('the roof swing through the registry (D-132)', () => {
+describe('the roof swing through the registry (D-133)', () => {
   it('stands the rider on the seat itself: the claim message carries no position', () => {
     const { registry } = riding();
     expect(positionOf(registry, 'a')).toEqual({ x: SEAT.x, y: SEAT.y, facing: 'down' });
