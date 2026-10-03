@@ -14494,6 +14494,62 @@ on the lit material. Not verified on a real GPU — the rasteriser models the
 engine's hemisphere, sun, ACES and sRGB but not its exact shader.
 
 ---
+### 2026-10-03 — The server placed the champion on the throne; the client never did
+The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
+and the avatar went on standing on the sand. Nothing was broken on the server:
+`arena-rules.ts` already emitted a `place` to `ARENA_BOX` and back to
+`ARENA_BOX_STAND`, and `presence.ts` already opened the throne's tile to the
+one session sitting on it. The gap was that **the World only ever moves itself
+for the ring's own teleports** — it reads the ring snapshot, it does not
+consume the server's `place` effects. So a seat the server had granted moved
+nothing a player could see. The fix is to mirror the snapshot's `seated` to the
+host (`ArenaSessionHost.setThroned`) and let the World place the avatar from
+that, never from the press: a deposed champion is then stood up without
+touching anything. Two details that matter. It is a *place*, not a leap, so
+D-087's straight-line step check is not involved and there is no jump — sitting
+down is not a vault. And the stand-up is an intent that shares the claim
+floor, so it has to be kept and re-sent from `update`; dropped, a player who
+asked to get up has to guess when to ask again.
+Two smaller traps in the same area. **A pose nothing checks will clip.** The
+block (Q) was never in `tools/avatar-clipping.ts`'s `arenaPoses`, so its inward
+arm turn had never been run against the 16 looks — it drove hands into coats,
+mantles and pauldrons, and it was also what put a shield across the face at
+-1.45 rad. The block is in the pose list now and the angles chosen are the
+highest that are clipping-free. **A seat needs a declared top.** Drawing a
+seated figure at the floor height of the tile puts every look *inside* the
+furniture. This branch and `claude/benchsit` found that independently and each
+wrote its own height; on the merge the throne was moved onto benchsit's
+(D-127's) seat system and this branch's `ARENA_THRONE_SEAT_TOP`,
+`seatedBaseHeight` and `avatarSeatedHipHeight` were deleted. The lesson is the
+second half: two correct solutions to one problem is still a defect, because
+the two numbers drift. There is now one `SeatPlace` per seat in the World and
+one measured rise per look, and the throne is the fifth seat in the same audit
+the benches use.
+*Verified:* the block's face clearance is asserted as geometry, not by eye —
+nothing on the shield arm may lie between the eyes and the camera (+Z, D-059)
+for any of the 16 looks — and the clipping check runs the block standing, on
+the walk at four phases of the gait, and easing out. The seat height is checked
+by `tools/avatar-seat.ts`, which rests all 16 looks on the throne's own pad and
+admits nothing through its pad, back or arms. The arms are the one seat solid
+in the game that does not run the whole way across its sitter, so `SeatSolid`
+gained an optional `minX`/`maxX` and the audit judges width when it is given:
+their inner edge stands clear of the broadest seated thigh (0.299) and their
+top passes under the hip band, which is broader still (0.353) — the arms this
+branch first drew would have gone straight through the four heavy builds, and
+nothing but the audit would have said so. The seat/stand round trip is driven through the real
+`world-session` host (tile, facing, no jump, held still, keys only asking,
+hold dropped on leaving the arena) and through the real session against a
+snapshot (a new champion standing the old one up, the kept stand-up re-sent
+past the intent floor, `destroy` putting the World back on its feet). Full
+suite (317 files, 6764 tests), `npm run typecheck` and
+`./scripts/check-invariants.sh` pass after the merge with `origin/main`.
+Renders are from the offline rasteriser, not a GPU:
+`renders/arena-block-polish.png`, `arena-box-label-states.png`,
+`arena-throne-merged.png` (game camera, close-up and the chair in
+three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
+browser, and whether the sit-down wants a transition animation.
+
+---
 
 ### 2026-10-03 — A D-number taken from `origin/main` can be taken again while you work
 
@@ -14531,3 +14587,44 @@ with the street like the ball.
 *Verified:* reproduced red — with the dummies in `ground` the test reports four
 intrusions at the world origin; moving them to `street:figures` turns it green,
 and `pitch-builder.test.ts` pins that they are not in `ground`.
+
+---
+
+### 2026-10-03 — Two features that each claim "the budget is still the whole of it" both say 37.7, and the merge has to add them
+
+D-133's swing and D-135's pitch branched from the same base and each added its
+own client floor to `client-arena.test.ts`'s pinned sum, each asserting
+`toBeCloseTo(37.7, 1)`. Both were right in isolation — the base through D-128
+is 36.7 — and both are wrong together. A conflict resolution that keeps "both
+sides" of the sum but keeps either side's *number* leaves a test that passes by
+luck or fails for the wrong reason. The real figure is 38.7 a second against
+`MAX_MESSAGES_PER_SECOND` of 40, and nothing had to be paced down to fit.
+
+*How to avoid it:* when two branches each append a term to a pinned total,
+recompute the total from the constants rather than taking either side's
+assertion, and fix every prose copy of it — `config.ts` carried the 37.7 twice,
+in `JUMP_CLIENT_INTERVAL_MS`'s comment and in `PITCH_CLIENT_GATE_INTERVAL_MS`'s.
+
+*Verified:* `perSecond()` over the eight constants gives 38.709; the merged
+`client-arena.test.ts` pins 38.7 and `expect(budget).toBeLessThan(40)` passes.
+
+---
+
+### 2026-10-03 — "Both sides" is wrong wherever the two sides share a `/**`
+
+Six of the twenty-two conflicts in the football/main merge opened on a doc
+comment the two sides had in common, so the marker fell *inside* it: ours began
+`* One slot of the pitch match…` and theirs `* The Exchange roof's swing…`.
+Concatenating them yields one comment whose body is two comments, and the next
+declaration is swallowed. In `config.ts` this produced a file tsc reported at
+thirty-odd syntax errors starting with `TS1002: Unterminated string literal` —
+twenty lines below the real damage.
+
+*How to avoid it:* before concatenating a conflict, check whether the common
+context immediately above it is an unterminated `/**`. If it is, the second
+side needs its own `/**` opener. The tell in tsc's output is a cluster of
+TS1005/TS1002 in a file whose conflict you thought was a one-line addition.
+
+*Verified:* `npm run typecheck` red on `config.ts(341)` with the shared opener,
+green with `/**` restored before the swing's block; the same shape was fixed by
+hand in `state.ts`, `room.ts`, `copy.ts`, `world-session.ts` and `AGENTS.md`.

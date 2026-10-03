@@ -996,6 +996,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
       }
       // Step up and down kerbs quickly rather than popping 8 cm in one frame.
       const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
+      /*
+       * D-128, amended 2026-10-03: a champion the ring has seated keeps the
+       * podium under their feet here. The rise onto the throne's own seat is
+       * the figure's (D-127's `seat`, passed below), not the kerb's, so one
+       * seat system lifts a sitter whether it is a bench, a tier or the
+       * throne; the kerb only ever says what the floor is.
+       */
+      const inArena = !streetVisible && visibleRoom === 'arena';
+      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       // Indoors, the arena's stairs and tiers ease the same way (D-114).
       const kerb = streetVisible
         ? !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0
@@ -1034,7 +1043,6 @@ export function createPresenter(options: PresenterOptions): Presenter {
         attack = attackPoseAt(swingElapsed);
         if (attack === null) swingElapsed = null;
       }
-      const inArena = !streetVisible && visibleRoom === 'arena';
       const onTier = inArena && arenaSeatAt(ground.x * PIXELS_PER_UNIT, ground.z * PIXELS_PER_UNIT);
       idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
       const guard = inArena && arenaFrame?.selfIsChallenger === true &&
@@ -1043,7 +1051,6 @@ export function createPresenter(options: PresenterOptions): Presenter {
       // local prediction; and the champion sits the moment the server seats
       // them, without the tiers' idle wait.
       const blocking = guard && arenaFrame?.challengerGuarding === true;
-      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       avatar.update(dt, {
         moving: moving && swingSeat === null,
         sprinting: moving && motion.sprinting && swingSeat === null,
