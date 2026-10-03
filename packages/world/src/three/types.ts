@@ -4,6 +4,7 @@ import type { FixedRoomStationPresentation } from '../fixed-room.js';
 import type { PlazaStatsPresentation } from '../plaza-stations.js';
 import type { JumpPose } from '../jump.js';
 import type { AffordanceSet } from './affordance.js';
+import type { RoofSwingView } from './roof-swing.js';
 
 /**
  * Contracts shared by the 3D presentation modules (D-059).
@@ -189,6 +190,8 @@ export interface StreetView {
   readonly plaza?: PlazaView | null;
   /** The football pitch's live parts (D-078), or null on a map without it. */
   readonly pitch?: PitchView | null;
+  /** The Exchange roof's lookout swing (D-133), or null on a map without it. */
+  readonly swing?: RoofSwingView | null;
   update(deltaMs: number): void;
   dispose(): void;
 }

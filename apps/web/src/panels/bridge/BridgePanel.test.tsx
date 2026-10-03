@@ -72,6 +72,19 @@ describe('BridgePanel', () => {
     expect(markup).not.toContain('Bridging is public. Your destination address and amount are visible');
   });
 
+  /**
+   * D-131: the balance line is the thing a press fills the amount from, and
+   * the Bridge's deposit has none — the source chain's balance is not
+   * something this app reads — so its field shows no figure to press. The
+   * bridged amount is still typed, as it always was.
+   */
+  it('shows no balance line to fill the deposit amount from, since the source chain balance is never read', () => {
+    const markup = renderBridge();
+    expect(markup).toContain('class="ui-amount"');
+    expect(markup).not.toContain('ui-amount-balance');
+    expect(markup).not.toContain('ui-balance-fill');
+  });
+
   it('keeps recovery controls and quote evidence compact instead of making them primary actions', () => {
     const markup = renderBridge();
     expect(markup).toContain('<summary>Recover a saved deposit</summary>');
