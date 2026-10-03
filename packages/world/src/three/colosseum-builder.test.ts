@@ -9,7 +9,8 @@ import {
   arenaFlameOpacity,
   type ColosseumOccluder,
 } from './colosseum-builder.js';
-import { COLOSSEUM_ATTIC_TOP } from './colosseum-style.js';
+import * as colosseumStyle from './colosseum-style.js';
+import { COLOSSEUM_ARCADE_TOP, COLOSSEUM_ATTIC_TOP, COLOSSEUM_PLINTH } from './colosseum-style.js';
 import { createNullLabelFactory } from './labels.js';
 import { PAVEMENT_HEIGHT, buildStreet, streetSurfaceHeightAt, type StreetOccluder } from './street-builder.js';
 import type { StreetView } from './types.js';
@@ -149,7 +150,7 @@ describe('the Colosseum in the street scene (D-114, D-129)', () => {
   it('rises as a landmark, to the same height the arena room\'s own wall reaches', () => {
     const { view } = build();
     const stone = new Box3().setFromObject(named(view.ground, 'colosseum:stone')!);
-    // Stacked arcades, an attic and a cornice: the wall tops out at exactly the
+    // An arcade, an attic and a cornice: the wall tops out at exactly the
     // height arena-room.ts carries its attic colonnade to, so standing inside
     // and standing outside are the same building.
     // The wall caps at `COLOSSEUM_WALL_TOP`; only the four cressets standing
@@ -162,6 +163,33 @@ describe('the Colosseum in the street scene (D-114, D-129)', () => {
     expect(stone.min.y).toBeGreaterThan(-0.1);
     const arch = new Box3().setFromObject(named(view.ground, 'colosseum:arch')!);
     expect(arch.max.y).toBeCloseTo(COLOSSEUM_WALL_TOP, 1);
+    view.dispose();
+  });
+
+  it('stands two floors, not three, and lets the street behind it be seen over it (D-129 amended 2026-10-03)', () => {
+    // The middle storey of arches came off: the stack is the ground arcade and
+    // the attic over it, and nothing between them.
+    expect(COLOSSEUM_PLINTH).toBeLessThan(COLOSSEUM_ARCADE_TOP);
+    expect(COLOSSEUM_ARCADE_TOP).toBe(2.5);
+    expect(COLOSSEUM_ATTIC_TOP).toBe(4.6);
+    expect(COLOSSEUM_WALL_TOP).toBe(4.8);
+    // No third floor hiding in the shared heights: one arcade top, one attic.
+    expect(Object.keys(colosseumStyle).filter((key) => /TIER|STOREY/.test(key))).toEqual([]);
+    // The ground arcade is exactly what it was, so the grand arch under it and
+    // the arches either side of it read as they did.
+    expect(COLOSSEUM_ARCADE_TOP - COLOSSEUM_PLINTH).toBeCloseTo(2.05, 5);
+    expect(COLOSSEUM_ARCH_SPRING).toBe(1.9);
+
+    // The lead's complaint: it hid the buildings across the street. Every
+    // shopfront on the far side of the road now stands taller than the wall.
+    const { view } = build();
+    const behind = (view.occluders as readonly StreetOccluder[]).filter(
+      (occluder) => occluder.kind === 'building' && occluder.bounds.maxZ <= COLOSSEUM_AREA.y - 1,
+    );
+    expect(behind.length).toBeGreaterThan(3);
+    for (const building of behind) {
+      expect(building.bounds.height, `a building at z ${building.bounds.minZ}`).toBeGreaterThan(COLOSSEUM_WALL_TOP);
+    }
     view.dispose();
   });
 
