@@ -31,6 +31,7 @@ import {
   type Point2,
 } from './palette.js';
 import { SKY_HORIZON } from './sky.js';
+import { onRockTop, rockSpanAtZ } from './sky-island.js';
 
 /**
  * The south vista (D-124): the water the district stands on, and the city
@@ -74,12 +75,16 @@ export const MAP_SOUTH_EDGE = 33;
  */
 export const SOUTH_SHORE_Z = 58;
 
-/** The far bank's quay wall, where the water ends. */
-const FAR_QUAY_Z = 110;
+/**
+ * The far bank's quay wall, where the water ends. Exported because the sky
+ * island hangs the river's waterfalls off the rim between here and the near
+ * shore (D-132), and sky-island.test.ts pins the pair equal.
+ */
+export const FAR_QUAY_Z = 110;
 /** The far bank's ground, a step above the water. */
 const FAR_BANK_Y = 1;
-/** The water's surface, below the district's lawn. */
-const WATER_Y = -1.15;
+/** The water's surface, below the district's lawn; the falls leave at it. */
+export const WATER_Y = -1.15;
 
 /** The station's waterside face, and the back of its train shed. */
 const STATION_FRONT_Z = 113;
@@ -97,19 +102,52 @@ const SHED_RISE = 6.6;
 
 /** The city behind the station, from its first row to the last the haze keeps. */
 const CITY_Z0 = 145;
-const CITY_Z1 = 213;
+const CITY_Z1 = 200;
 
-/** How wide the water runs: past the frame's edges from any camera on the roof. */
+/**
+ * How wide the water would run if the world had no edge. The rock does
+ * (D-132), so every row is cut to the rim at its own z and the river pours off
+ * both flanks; this pair is only the bound the solver starts from, and the
+ * cap on the city, which stops a setback short of the drop.
+ */
 const VISTA_X0 = -185;
 const VISTA_X1 = SANDBOX_AREA.x + SANDBOX_AREA.width + 185;
 
+/** How far in from the rim the far bank's buildings stop, leaving grass at the edge. */
+const CITY_SETBACK = 12;
+
 /**
- * How wide the city runs. Narrower than the water: it stands far enough back
- * that a smaller span still fills the frame corner to corner, and every row
- * costs houses.
+ * How wide the city runs at most. Narrower than the water: it stands far
+ * enough back that a smaller span still fills the frame corner to corner, and
+ * every row costs houses.
  */
 const CITY_X0 = -160;
 const CITY_X1 = SANDBOX_AREA.x + SANDBOX_AREA.width + 158;
+
+/**
+ * The water's edges at a z: the rock's rim, where the river goes over. Falls
+ * back to the nominal span only if the rim somehow does not reach, which it
+ * always does across the river's band.
+ */
+function waterSpan(z: number): readonly [number, number] {
+  const rim = rockSpanAtZ(z);
+  return rim ? [Math.max(VISTA_X0, rim[0]), Math.min(VISTA_X1, rim[1])] : [VISTA_X0, VISTA_X1];
+}
+
+/** The far bank's ground at an x: from the quay out to the rim. */
+function bankSpan(x: number): number | null {
+  // Walk south from the quay until the rim is crossed; the bank is a wedge of
+  // the disc, so a coarse bisection on z is exact enough for a slab's back edge.
+  if (!onRockTop(x, FAR_QUAY_Z)) return null;
+  let lo = FAR_QUAY_Z;
+  let hi = FAR_QUAY_Z + 260;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (onRockTop(x, mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
 
 /**
  * Haze. Distance alone decides it, not the engine's fog: the fog's range
@@ -321,8 +359,11 @@ function layWater(bin: GeometryBin, low: boolean): void {
   for (let r = 0; r + 1 < rows.length; r++) {
     const z0 = rows[r]!;
     const z1 = rows[r + 1]!;
-    for (let x = VISTA_X0; x < VISTA_X1; x += step) {
-      const x1 = Math.min(VISTA_X1, x + step);
+    // The row runs rim to rim: the river is as wide as the rock here, and goes
+    // over the edge at both ends (sky-island.ts hangs the falls off them).
+    const [west, east] = waterSpan((z0 + z1) / 2);
+    for (let x = west; x < east; x += step) {
+      const x1 = Math.min(east, x + step);
       bin.add('water', flatQuad(x, z0, x1, z1, WATER_Y), (vx, _vy, vz) => waterColour(vx, vz));
     }
   }
@@ -377,10 +418,11 @@ function layBanks(bin: GeometryBin, low: boolean): void {
   // The district's own edge. A paved quay rather than a lawn running into the
   // water: a swing hanging out over the drop wants stone under it, and from
   // the roof this strip is the frame's bottom edge.
-  bin.add('banks', flatQuad(VISTA_X0, SOUTH_SHORE_Z - 4.2, VISTA_X1, SOUTH_SHORE_Z, 0.04), (_x, _y, z) => hazed(PALETTE.apron, z, 0));
+  const [nearWest, nearEast] = waterSpan(SOUTH_SHORE_Z - 2);
+  bin.add('banks', flatQuad(nearWest, SOUTH_SHORE_Z - 4.2, nearEast, SOUTH_SHORE_Z, 0.04), (_x, _y, z) => hazed(PALETTE.apron, z, 0));
   bin.add(
     'banks',
-    boxGeometry(VISTA_X0, WATER_Y - 0.6, SOUTH_SHORE_Z - 0.75, VISTA_X1, 0.3, SOUTH_SHORE_Z),
+    boxGeometry(nearWest, WATER_Y - 0.6, SOUTH_SHORE_Z - 0.75, nearEast, 0.3, SOUTH_SHORE_Z),
     air(VISTA.quay),
   );
   // Mooring posts along it, a reason for the edge to read as a quay.
@@ -389,12 +431,29 @@ function layBanks(bin: GeometryBin, low: boolean): void {
     bin.add('banks', boxGeometry(px - 0.22, 0.3, SOUTH_SHORE_Z - 0.5, px + 0.22, 0.86, SOUTH_SHORE_Z - 0.08), air(VISTA.quayDark));
   }
 
-  // The far bank itself: one slab under the station and the city, a step
-  // above the water, and the quay wall that holds it back.
-  bin.add('banks', boxGeometry(VISTA_X0, WATER_Y - 0.4, FAR_QUAY_Z, VISTA_X1, FAR_BANK_Y - 0.06, CITY_Z1 + 14), air(VISTA.quayDark));
-  bin.add('banks', flatQuad(VISTA_X0, FAR_QUAY_Z, VISTA_X1, CITY_Z1 + 14, FAR_BANK_Y), (_x, _y, z) => hazed(VISTA.bankGround, z, FAR_BANK_Y));
+  // The far bank itself: the ground under the station and the city, a step
+  // above the water, and the quay wall that holds it back. It is cut into
+  // columns because its back edge is now the rock's rim, not a straight line:
+  // past the city the bank runs on as grass and ends at the drop (D-132).
+  const column = low ? 12 : 7;
+  const [farWest, farEast] = waterSpan(FAR_QUAY_Z - 0.5);
+  for (let x = farWest; x < farEast; x += column) {
+    const x1 = Math.min(farEast, x + column);
+    // The nearest of the column's three rim readings, so neither corner of
+    // the slab overhangs where the rim wanders in between them.
+    const reaches = [bankSpan(x), bankSpan((x + x1) / 2), bankSpan(x1)];
+    if (reaches.some((reach) => reach === null)) continue;
+    const back = Math.min(...(reaches as number[])) - 0.6;
+    if (back <= FAR_QUAY_Z + 0.5) continue;
+    bin.add('banks', boxGeometry(x, WATER_Y - 0.4, FAR_QUAY_Z, x1, FAR_BANK_Y - 0.06, back), air(VISTA.quayDark));
+    bin.add('banks', flatQuad(x, FAR_QUAY_Z, x1, back, FAR_BANK_Y), (vx, _vy, vz) => {
+      // Dockside by the water, meadow out at the rim, as the near bank is.
+      const green = clamp01((vz - (CITY_Z0 - 8)) / 52);
+      return hazed(mixColor(VISTA.bankGround, PALETTE.grassCool, green), vz, FAR_BANK_Y);
+    });
+  }
   // The quay's coping, proud of the wall it caps.
-  bin.add('banks', boxGeometry(VISTA_X0, -0.1, FAR_QUAY_Z - 0.5, VISTA_X1, FAR_BANK_Y + 0.22, FAR_QUAY_Z + 0.4), air(VISTA.quay));
+  bin.add('banks', boxGeometry(farWest, -0.1, FAR_QUAY_Z - 0.5, farEast, FAR_BANK_Y + 0.22, FAR_QUAY_Z + 0.4), air(VISTA.quay));
 
   // Finger piers and two ferry stages along the quay, out into the water. Low
   // and pale: at this range they read as a fringe along the bank, and anything
@@ -607,11 +666,25 @@ function layStation(bin: GeometryBin, low: boolean): void {
 /** The rows of gabled houses, by their waterward faces, and how tall each row runs. */
 const CITY_ROWS: ReadonlyArray<readonly [number, number, number]> = [
   [CITY_Z0, 4.5, 8.5],
-  [CITY_Z0 + 13, 5, 9.5],
-  [CITY_Z0 + 28, 4.5, 9],
-  [CITY_Z0 + 45, 4, 8],
-  [CITY_Z1 - 3, 4, 7.5],
+  [CITY_Z0 + 12, 5, 9.5],
+  [CITY_Z0 + 25, 4.5, 9],
+  [CITY_Z0 + 38, 4, 8],
+  [CITY_Z1 - 7, 4, 7.5],
 ];
+
+/**
+ * Whether a footprint stands clear of the rock's rim, with the setback every
+ * building on the far bank keeps from the drop (D-132). Checked at the corners:
+ * a house is small next to a rim 180 across.
+ */
+function onBank(x0: number, z0: number, x1: number, z1: number): boolean {
+  return (
+    onRockTop(x0, z0, CITY_SETBACK) &&
+    onRockTop(x1, z0, CITY_SETBACK) &&
+    onRockTop(x0, z1, CITY_SETBACK) &&
+    onRockTop(x1, z1, CITY_SETBACK)
+  );
+}
 
 function layCity(bin: GeometryBin, low: boolean): void {
   waterfront(bin);
@@ -626,7 +699,7 @@ function layCity(bin: GeometryBin, low: boolean): void {
     let x = CITY_X0;
     for (let s = 1; x < CITY_X1; s++) {
       const w = 2.2 + hash01(s, 1, channel) * 2.3 + r * 0.35;
-      if (hash01(s, 2, channel) >= skip) {
+      if (hash01(s, 2, channel) >= skip && onBank(x, zFront, x + w, zFront + depth)) {
         canalHouse(bin, x, w, depth, zFront, hLow + hash01(s, 3, channel) * (hHigh - hLow), s, channel);
       }
       x += w + 0.25 + hash01(s, 4, channel) * 0.5;
@@ -643,6 +716,7 @@ function layCity(bin: GeometryBin, low: boolean): void {
   ];
   for (const [x, z, height] of low ? spires.filter((_, i) => i % 2 === 0) : spires) {
     const w = 2.9;
+    if (!onBank(x - w, z - w, x + w, z + w)) continue;
     bin.add('city', boxGeometry(x - w / 2, FAR_BANK_Y, z - w / 2, x + w / 2, height, z + w / 2), air(VISTA.spire));
     bin.add('city', boxGeometry(x - w / 2 - 0.3, height, z - w / 2 - 0.3, x + w / 2 + 0.3, height + 0.45, z + w / 2 + 0.3), air(VISTA.slate));
     bin.add('city', coneGeometry(x, height + 0.45, z, w * 0.72, 6 + hash01(Math.round(x), Math.round(z), 362) * 3, 4), air(VISTA.slate));
@@ -659,6 +733,7 @@ function layCity(bin: GeometryBin, low: boolean): void {
     [STATION_CENTRE_X + 158, CITY_Z0 + 24, 11, 12],
   ];
   blocks.forEach(([x, z, w, height], i) => {
+    if (!onBank(x, z, x + w, z + 7.75)) return;
     const colour = pick(VISTA.modern, hash01(i, 0, 361));
     bin.add('city', boxGeometry(x, FAR_BANK_Y, z, x + w, height, z + 7.5), air(colour));
     bin.add('city', boxGeometry(x - 0.25, height, z - 0.25, x + w + 0.25, height + 0.4, z + 7.75), air(shade(colour, -0.1)));
@@ -688,6 +763,10 @@ function waterfront(bin: GeometryBin): void {
       const depth = 8 + hash01(s, 1, 371) * 9;
       const height = 4 + hash01(s, 2, 371) * 6.5;
       const zFront = FAR_QUAY_Z + 1.6 + hash01(s, 3, 371) * 3;
+      if (!onBank(x, zFront, x + w, zFront + depth)) {
+        x += w + 1 + hash01(s, 7, 371) * 2.5;
+        continue;
+      }
       const colour = townStone(s * 13 + 4, 371);
       bin.add('city', boxGeometry(x, FAR_BANK_Y, zFront, x + w, height, zFront + depth), air(colour));
       // A long ridged roof: a dock shed reads by its roof more than its walls.

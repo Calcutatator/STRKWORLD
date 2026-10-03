@@ -21,6 +21,7 @@ import type {
   FixedRoomStationPresentation,
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
+import { LOUNGE_PROFILE } from '../seats.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import {
   DEGEN,
@@ -2203,15 +2204,18 @@ function writingDesk(bin: GeometryBin, r: FixedRoomRect): void {
 function loungeSeats(bin: GeometryBin, r: FixedRoomRect, theme: RoomTheme): void {
   const [x0, x1, z0, z1] = [r.x + 0.1, r.x + r.width - 0.1, r.y + 0.18, r.y + r.height - 0.14];
   const seat = lift(NEAR.raised, 0.12);
-  bin.add('floor', boxGeometry(x0 + 0.1, 0.3, z0 + 0.2, x1 - 0.1, 0.36, z1 - 0.2), NEAR.black);
-  for (const x of [x0 + 0.3, x1 - 0.3]) bin.add('floor', boxGeometry(x - 0.05, 0, z0 + 0.2, x + 0.05, 0.3, z1 - 0.2), NEAR.black);
+  // The cushion's height and its back are LOUNGE_PROFILE's, which is what a
+  // seated figure rests on (D-127, amended 2026-10-03).
+  const sit = LOUNGE_PROFILE;
+  bin.add('floor', boxGeometry(x0 + 0.1, sit.underside - 0.06, z0 + 0.2, x1 - 0.1, sit.underside, z1 - 0.2), NEAR.black);
+  for (const x of [x0 + 0.3, x1 - 0.3]) bin.add('floor', boxGeometry(x - 0.05, 0, z0 + 0.2, x + 0.05, sit.underside - 0.06, z1 - 0.2), NEAR.black);
   const count = Math.max(1, Math.round((x1 - x0) / 0.9));
   const step = (x1 - x0) / count;
   for (let i = 0; i < count; i++) {
     const a = x0 + step * i + 0.05;
     const b = x0 + step * (i + 1) - 0.05;
-    bin.add('floor', boxGeometry(a, 0.36, z0, b, 0.46, z1 - 0.1), seat);
-    bin.add('floor', boxGeometry(a, 0.46, z1 - 0.12, b, 0.98, z1), seat);
+    bin.add('floor', boxGeometry(a, sit.underside, z0, b, sit.surface, z1 - 0.1), seat);
+    bin.add('floor', boxGeometry(a, sit.surface, z1 - 0.12, b, sit.restTop ?? 0.98, z1), seat);
     bin.add('glow', boxGeometry(a + 0.06, 0.9, z1, b - 0.06, 0.93, z1 + 0.012), theme.floorAccent);
   }
 }

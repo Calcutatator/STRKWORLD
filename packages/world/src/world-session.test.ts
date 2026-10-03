@@ -364,6 +364,11 @@ function createRecordingView(journal: Journal) {
       record('arenaGateObject', []);
       return null;
     },
+    syncRoofSwing: (frame) => record('syncRoofSwing', [frame]),
+    roofSwingObject: () => {
+      record('roofSwingObject', []);
+      return null;
+    },
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>

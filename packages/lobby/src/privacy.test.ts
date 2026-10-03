@@ -35,6 +35,7 @@ import {
   type GameId,
   type Position,
   type PresenceState,
+  type RoofSwingSnapshot,
   type SandboxColumn,
   type SandboxTile,
 } from '@strkworld/shared';
@@ -55,6 +56,7 @@ import {
   PositionSchema,
   PresenceEntry,
   SandboxColumnEntry,
+  SwingEntry,
 } from './state';
 import vocabulary from './testing/forbidden-vocabulary.json';
 
@@ -98,6 +100,15 @@ const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
   west: true,
   east: true,
   phase: true,
+};
+
+/** D-133's roof swing, likewise: the frozen snapshot, field for field. */
+const FROZEN_SWING_FIELDS: Record<keyof RoofSwingSnapshot, true> = {
+  phase: true,
+  round: true,
+  riderId: true,
+  secondsLeft: true,
+  reason: true,
 };
 
 /** D-114's ring slot, likewise: the frozen slot, field for field (D-128 adds the block's two). */
@@ -172,8 +183,8 @@ describe('the schema is the enforcement point', () => {
     );
   });
 
-  it('has four fields at the root: interest-filtered presence, the shared sandbox, the shared ball and the view-filtered arena ring', () => {
-    expect(fieldNames(LobbyState)).toEqual(['arena', 'football', 'peers', 'sandbox']);
+  it('has five fields at the root: interest-filtered presence, the shared sandbox, the shared ball, the view-filtered arena ring and the view-filtered roof swing', () => {
+    expect(fieldNames(LobbyState)).toEqual(['arena', 'football', 'peers', 'sandbox', 'swing']);
     const fields = Metadata.getFields(LobbyState) as Record<string, unknown>;
     expect(fields['peers']).toEqual({ map: PresenceEntry, view: true });
     // D-060: everyone shares one sandbox, so it is deliberately not a view.
@@ -182,6 +193,20 @@ describe('the schema is the enforcement point', () => {
     expect(fields['football']).toBe(FootballEntry);
     // D-114: the ring is a view, like peers: only arena members are sent it.
     expect(fields['arena']).toEqual({ map: ArenaRingEntry, view: true });
+    // D-133: so is the roof's swing — only roof members are sent it.
+    expect(fields['swing']).toEqual({ map: SwingEntry, view: true });
+  });
+
+  it('carries exactly the frozen RoofSwingSnapshot shape, in bytes, one 16-bit round and the rider\'s presence id (D-133)', () => {
+    const swing = Metadata.getFields(SwingEntry) as Record<string, unknown>;
+    expect(Object.keys(swing).sort()).toEqual(Object.keys(FROZEN_SWING_FIELDS).sort());
+    expect(swing).toEqual({
+      phase: 'uint8',
+      round: 'uint16',
+      riderId: 'string',
+      secondsLeft: 'uint8',
+      reason: 'uint8',
+    });
   });
 
   it('carries exactly the frozen ArenaRingSnapshot shape, in bytes, one 16-bit round and a presence id per slot (D-114)', () => {

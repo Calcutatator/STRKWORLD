@@ -779,3 +779,7 @@ export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
 export * from './arena.js';
 // D-127: the overworld's sittable benches, and the seat table the wire indexes into.
 export * from './seats.js';
+// D-133: the Exchange roof's lookout swing: its tiles, the swing as the wire
+// carries it, and the ride's timings. Last, because it reads
+// `ROOF_PRESENCE_GRID` above (inside its functions only).
+export * from './roof-swing.js';
