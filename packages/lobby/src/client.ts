@@ -94,6 +94,18 @@
  * dropped, not held. A claim or an attack lets a newer position still
  * waiting on the move floor go first, so the room judges it from where the
  * player stands and faces now. Swings, hits and results arrive only as state.
+ *
+ * ## The roof's lookout swing (D-133)
+ *
+ * `swing()` is a frozen snapshot of the Exchange roof's swing — phase,
+ * round, the rider's presence id, seconds left and how the last ride ended —
+ * validated through `normalizeRoofSwing`, or null unless this client is live
+ * on the roof (the room sends it to roof members only). `onSwing` delivers
+ * it whenever it changes. `swingClaim()` and `swingLeave()` send the two
+ * payload-less intents, only while live on the roof, both held to
+ * `SWING_INTENT_CLIENT_INTERVAL_MS`. A call inside the floor is dropped, not
+ * held. A claim lets a newer position still waiting on the move floor go
+ * first, so the room judges it from where the player stands now.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
@@ -114,6 +126,11 @@ import {
   PRESENCE_AREAS,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
+  SWING_END_REASONS,
+  SWING_INTENT_CLIENT_INTERVAL_MS,
+  SWING_PHASES,
+  normalizeRoofSwing,
+  type RoofSwingSnapshot,
   type Facing,
   type FootballGoal,
   type FootballPhase,
@@ -259,6 +276,7 @@ type ResyncListener = (position: Position) => void;
 type FootballListener = (snapshot: FootballSnapshot | null) => void;
 type GoalListener = (goal: FootballGoal) => void;
 type ArenaListener = (ring: ArenaRingSnapshot | null) => void;
+type SwingListener = (swing: RoofSwingSnapshot | null) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -294,6 +312,11 @@ interface FootballDelivery {
 interface ArenaDelivery {
   readonly listeners: readonly ListenerOwner<ArenaListener>[];
   readonly ring: ArenaRingSnapshot | null;
+}
+
+interface SwingDelivery {
+  readonly listeners: readonly ListenerOwner<SwingListener>[];
+  readonly swing: RoofSwingSnapshot | null;
 }
 
 interface GoalDelivery {
@@ -342,6 +365,8 @@ export class LobbyClient {
   readonly #goalDeliveries: GoalDelivery[] = [];
   readonly #arenaListeners = new Map<ArenaListener, symbol>();
   readonly #arenaDeliveries: ArenaDelivery[] = [];
+  readonly #swingListeners = new Map<SwingListener, symbol>();
+  readonly #swingDeliveries: SwingDelivery[] = [];
 
   #deliveringPeers = false;
   #deliveringStatus = false;
@@ -351,6 +376,7 @@ export class LobbyClient {
   #deliveringFootball = false;
   #deliveringGoals = false;
   #deliveringArena = false;
+  #deliveringSwing = false;
 
   /** The last value `sandbox()` returned, reused while nothing changes. */
   #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
@@ -418,6 +444,15 @@ export class LobbyClient {
   /** A claim or an attack waiting only for a newer position to go first. */
   #arenaClaimHandle: ReturnType<typeof setTimeout> | null = null;
   #arenaAttackHandle: ReturnType<typeof setTimeout> | null = null;
+
+  /** D-133: the last value `swing()` returned, reused while nothing changes. */
+  #swingView: RoofSwingSnapshot | null = null;
+  /** The last value delivered to swing listeners, for change detection. */
+  #swingPublished: RoofSwingSnapshot | null = null;
+  /** When the last claim or leave left this client: their shared client floor. */
+  #lastSwingIntentAt: number | null = null;
+  /** A claim waiting only for a newer position to go first. */
+  #swingClaimHandle: ReturnType<typeof setTimeout> | null = null;
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joinAttempt: JoinAttempt | null = null;
@@ -563,6 +598,7 @@ export class LobbyClient {
     this.#cancelSandboxAction();
     this.#cancelKick();
     this.#cancelArena();
+    this.#cancelSwing();
     this.#desired = null;
     const room = this.#room;
     room.send(MESSAGE.suspend);
@@ -577,6 +613,7 @@ export class LobbyClient {
     this.#emitPeers();
     this.#emitSandbox();
     this.#emitArena();
+    this.#emitSwing();
   }
 
   /**
@@ -676,6 +713,8 @@ export class LobbyClient {
     }
     // D-114: a held claim or swing was meant for the arena.
     if (area !== 'arena') this.#cancelArena();
+    // D-133: a held swing claim was meant for the roof.
+    if (area !== 'roof') this.#cancelSwing();
     const room = this.#room;
     room.send(MESSAGE.area, {
       area,
@@ -1111,6 +1150,105 @@ export class LobbyClient {
   }
 
   /**
+   * D-133: the Exchange roof's lookout swing, or null unless live on the roof
+   * and a valid snapshot has arrived. Frozen, and the same object for as long
+   * as nothing in it changes. Validated through `normalizeRoofSwing`, so it
+   * fails closed.
+   */
+  swing(): RoofSwingSnapshot | null {
+    const next = this.#readSwing();
+    if (sameSwing(this.#swingView, next)) return this.#swingView;
+    this.#swingView = next;
+    return next;
+  }
+
+  /**
+   * Subscribe to the roof swing. Returns an unsubscribe function.
+   *
+   * Opens nothing. Fires once immediately with the current swing, then
+   * whenever it changes (null on leaving the roof). Delivery follows
+   * `onArena`: FIFO, generation-owned, and a throwing subscriber is isolated
+   * behind a fixed diagnostic.
+   */
+  onSwing(listener: SwingListener): () => void {
+    const owner = Symbol('swing listener');
+    this.#swingListeners.set(listener, owner);
+    this.#notifySwing(listener, this.swing());
+    return () => {
+      if (this.#swingListeners.get(listener) === owner) {
+        this.#swingListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * D-133: claim the roof swing. No payload: the room judges the claim from
+   * where it holds this player (the deck in front of the swing, while it is
+   * idle) and sits them on the seat itself. Returns whether a claim was sent
+   * or is about to be; false unless live on the roof, or inside the intent
+   * floor it shares with `swingLeave`.
+   */
+  swingClaim(): boolean {
+    if (!this.#onRoof() || this.#room === null) return false;
+    if (this.#swingClaimHandle !== null) return true;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastSwingIntentAt;
+    if (last !== null && now - last < SWING_INTENT_CLIENT_INTERVAL_MS) return false;
+    const wait = this.#unsentMoveWait(now);
+    if (wait !== null && wait > 0) {
+      // Claim the floor now, so a second press while this one waits is dropped.
+      this.#lastSwingIntentAt = now;
+      this.#swingClaimHandle = setTimeout(() => {
+        this.#swingClaimHandle = null;
+        this.#sendSwing(MESSAGE.swingClaim, true);
+      }, wait);
+      return true;
+    }
+    return this.#sendSwing(MESSAGE.swingClaim, wait !== null);
+  }
+
+  /**
+   * D-133: get off the swing. No payload. Returns whether it was sent; false
+   * unless live on the roof, or inside the intent floor it shares with
+   * `swingClaim`.
+   */
+  swingLeave(): boolean {
+    if (!this.#onRoof() || this.#room === null) return false;
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) return false;
+    const last = this.#lastSwingIntentAt;
+    if (last !== null && now - last < SWING_INTENT_CLIENT_INTERVAL_MS) return false;
+    return this.#sendSwing(MESSAGE.swingLeave, false);
+  }
+
+  /** Send a swing intent, after the waiting position if `moveFirst`, and stamp its floor. */
+  #sendSwing(message: string, moveFirst: boolean): boolean {
+    if (!this.#onRoof() || this.#room === null) return false;
+    const now = performance.now();
+    if (moveFirst) {
+      const before = this.#room;
+      this.#pump(now);
+      if (this.#room !== before || !this.#onRoof() || this.#room === null) return false;
+    }
+    const room = this.#room;
+    room.send(message);
+    // A transport can report closure synchronously from send; a retired room
+    // must not stamp the floor of whatever replaces it.
+    if (this.#room !== room || !this.#onRoof()) return false;
+    if (isValidMonotonicTime(now)) this.#lastSwingIntentAt = now;
+    return true;
+  }
+
+  /** Forget a held claim. Called wherever this client stops sending to the roof. */
+  #cancelSwing(): void {
+    if (this.#swingClaimHandle !== null) {
+      clearTimeout(this.#swingClaimHandle);
+      this.#swingClaimHandle = null;
+    }
+  }
+
+  /**
    * How long a newer position must wait before it can go, or null when none
    * is waiting: 0 when it may go now, the rest of the move floor otherwise.
    */
@@ -1193,6 +1331,7 @@ export class LobbyClient {
     this.#cancelSandboxAction();
     this.#cancelKick();
     this.#cancelArena();
+    this.#cancelSwing();
     this.#desired = null;
     const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
@@ -1615,6 +1754,7 @@ export class LobbyClient {
     this.#emitSandbox();
     this.#emitFootball();
     this.#emitArena();
+    this.#emitSwing();
   }
 
   /** Deliver the current arena ring if it differs from the last one delivered (D-114). */
@@ -1666,6 +1806,57 @@ export class LobbyClient {
   /** Live in the arena (D-114): the only place the ring is sent, and its intents mean anything. */
   #inArena(): boolean {
     return this.#status === 'connected' && this.#area === 'arena';
+  }
+
+  /** Deliver the current swing if it differs from the last one delivered (D-133). */
+  #emitSwing(): void {
+    const swing = this.swing();
+    if (sameSwing(swing, this.#swingPublished)) return;
+    this.#swingPublished = swing;
+    if (this.#swingListeners.size === 0) return;
+    this.#swingDeliveries.push({ listeners: [...this.#swingListeners], swing });
+    if (this.#deliveringSwing) return;
+
+    this.#deliveringSwing = true;
+    try {
+      for (;;) {
+        const delivery = this.#swingDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#swingListeners.get(listener) !== owner) continue;
+          this.#notifySwing(listener, delivery.swing);
+        }
+      }
+    } finally {
+      this.#deliveringSwing = false;
+    }
+  }
+
+  #notifySwing(listener: SwingListener, swing: RoofSwingSnapshot | null): void {
+    try {
+      listener(swing);
+    } catch {
+      console.error('lobby client: swing subscriber threw');
+    }
+  }
+
+  /** The roof swing from room state, validated; null unless live on the roof. */
+  #readSwing(): RoofSwingSnapshot | null {
+    const room = this.#room;
+    if (room === null || !this.#onRoof()) return null;
+    let entry: unknown;
+    try {
+      const map = (room.state as { swing?: { get?: (key: string) => unknown } } | undefined)?.swing;
+      entry = typeof map?.get === 'function' ? map.get('swing') : undefined;
+    } catch {
+      return null;
+    }
+    return readSwingEntry(entry);
+  }
+
+  /** Live on the roof (D-133): the only place the swing is sent, and its intents mean anything. */
+  #onRoof(): boolean {
+    return this.#status === 'connected' && this.#area === 'roof';
   }
 
   /** Deliver the current ball if it differs from the last one delivered. */
@@ -2389,6 +2580,48 @@ function sameArena(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): bo
     sameArenaSlot(a.opponent, b.opponent) &&
     (a.outcome === b.outcome ||
       (a.outcome !== null && b.outcome !== null && a.outcome.reason === b.outcome.reason && a.outcome.winner === b.outcome.winner))
+  );
+}
+
+/**
+ * The roof swing entry as `RoofSwingSnapshot`, validated (D-133): wire codes
+ * to names, an empty presence id to null, a zero reason to none, then
+ * `normalizeRoofSwing`. Null for anything malformed.
+ */
+function readSwingEntry(value: unknown): RoofSwingSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  try {
+    const record = value as Partial<Record<'phase' | 'round' | 'riderId' | 'secondsLeft' | 'reason', unknown>>;
+    const phase = typeof record.phase === 'number' && Number.isInteger(record.phase)
+      ? SWING_PHASES[record.phase]
+      : undefined;
+    const rawReason = record.reason;
+    if (typeof rawReason !== 'number' || !Number.isInteger(rawReason)) return null;
+    const reason = rawReason === 0 ? null : SWING_END_REASONS[rawReason - 1];
+    if (reason === undefined) return null;
+    const riderId = record.riderId;
+    if (typeof riderId !== 'string') return null;
+    return normalizeRoofSwing({
+      phase,
+      round: record.round,
+      riderId: phase === 'riding' ? riderId : riderId === '' ? null : riderId,
+      secondsLeft: record.secondsLeft,
+      reason,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function sameSwing(a: RoofSwingSnapshot | null, b: RoofSwingSnapshot | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.phase === b.phase &&
+    a.round === b.round &&
+    a.riderId === b.riderId &&
+    a.secondsLeft === b.secondsLeft &&
+    a.reason === b.reason
   );
 }
 

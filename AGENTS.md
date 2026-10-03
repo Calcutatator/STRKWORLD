@@ -14352,6 +14352,38 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
+### A roof inside the street scene needs one vista mount, not two — and D-numbers go stale on a long branch
+The Exchange tower's roof is **not** a separate room scene: it is the tower's
+real top, built by `street-builder.ts` and drawn inside the street scene. So a
+backdrop mounted for the street (D-124's `createSouthVista`) is already behind
+anything you look at from the deck, and a second mount for a "roof scene"
+would be both wrong and a duplicate. Check which scene a walkable area belongs
+to before mounting scenery for it.
+This cost a real double mount at integration. The roof-swing branch, cut
+before D-124 landed, mounted its own placeholder vista in `three/presenter.ts`
+and on that branch `grep` honestly showed one call. Merging main — where D-124
+mounts the real module in `street-builder.ts` (and again in
+`arena-surround.ts`, for the arena room's own group) — made it two in the
+street scene. The presenter mount is gone; the swing's ride camera sees
+`street-builder.ts`'s mount, because the deck is in `street.ground` with it.
+**After any merge, re-grep for the mount of anything you mounted yourself** —
+a conflict marker never appears when the duplicate lives in another file.
+Separately: a branch that picks its D-number when it starts will collide. This
+branch wrote `D-125` throughout while `origin/main` moved from D-123 to D-131
+under it, so D-125 became the Avatar Studio exit and every comment and test
+name here was wrong. **Re-fetch `origin/main` and renumber immediately before
+committing**, not when you start.
+*Verified:* after the merge, `grep -rn createSouthVista packages/world/src`
+shows the street's one mount in `three/presenter.ts` gone and exactly two
+calls in product code — `street-builder.ts` (into `ground`) and
+`arena-surround.ts` (the arena room's own group, a different scene) —
+with `rooftop`/`roofSurfaceHeightAt` in `presenter.ts` still reading the roof
+out of the street build, no roof scene. `south-vista.test.ts` pins the street
+mount and `arena-room.test.ts` the arena one; the ride renders
+(`renders/swing-ride-1..3.png`) show the real river, station and skyline from
+the rider's camera. The number clash came from `git fetch origin` then
+`git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-131 against a
+local file ending at D-123.
 ---
 ### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
 Making the World a floating rock (D-132) was not mostly modelling — it was

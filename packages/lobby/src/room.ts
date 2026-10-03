@@ -13,7 +13,9 @@
  * drop and a burst (D-071), each name a tile and nothing else. The kick
  * (D-078) takes nothing at all, and the goal broadcast names a side. The
  * arena ring's three verbs (D-114) take nothing either, and the ring answers
- * only through its one view-filtered state entry, sent to arena members.
+ * only through its one view-filtered state entry, sent to arena members. The
+ * roof swing's two verbs (D-133) are the same shape, answered by one
+ * view-filtered entry sent to roof members.
  *
  * ## Configuration is trusted; onCreate options are not
  *
@@ -55,6 +57,14 @@ import { FOOTBALL_TICK_MS, type FootballSide, type GameId, type SandboxTile } fr
  * while the ring has a deadline; an idle ring costs nothing.
  */
 export const ARENA_TICK_MS = 100;
+
+/**
+ * How often the room runs the roof swing's clock while a ride is on, in ms
+ * (D-133): the ride's end and the cooldown's close land within this, and
+ * `secondsLeft` is refreshed. Only while the swing has a deadline; an idle
+ * swing costs nothing.
+ */
+export const SWING_TICK_MS = 100;
 import {
   DEFAULT_ROOM_CONFIG,
   MESSAGE,
@@ -133,6 +143,9 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
 
   /** The arena ring's clock, while it has a deadline. D-114. */
   #arenaTimer: Delayed | undefined;
+
+  /** The roof swing's clock, while it has a deadline. D-133. */
+  #swingTimer: Delayed | undefined;
 
   /**
    * Set when someone moved, arrived, left, stepped inside or came back out:
@@ -230,6 +243,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
         this.#scheduleFootball();
         this.#scheduleArena();
+        this.#scheduleSwing();
       }
     });
 
@@ -263,6 +277,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#scheduleSpawn();
         this.#scheduleFootball();
         this.#scheduleArena();
+        this.#scheduleSwing();
       });
     });
 
@@ -350,6 +365,27 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
         this.#viewsStale = true;
       }
     });
+
+    /*
+     * D-133. The roof swing's two intents. No payload is read: the claim is
+     * judged from where the registry holds the sender, on the deck in front
+     * of the swing. Colyseus hands this room one message at a time, so of
+     * two claims in one patch the first takes the swing and the second finds
+     * it busy. Every refusal is silent; the swing entry is the only answer.
+     * An accepted claim sits the rider on the seat, so views are stale; the
+     * clock runs while the swing has a deadline.
+     */
+    this.onMessage(MESSAGE.swingClaim, (client: Client) => {
+      if (this.#registry.swingClaim(client.sessionId, performance.now()) === 'applied') {
+        this.#viewsStale = true;
+      }
+      this.#scheduleSwing();
+    });
+
+    this.onMessage(MESSAGE.swingLeave, (client: Client) => {
+      this.#registry.swingLeave(client.sessionId, performance.now());
+      this.#scheduleSwing();
+    });
   }
 
   override onJoin(client: Client, options?: unknown): void {
@@ -388,6 +424,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#scheduleSpawn();
     this.#scheduleFootball();
     this.#scheduleArena();
+    this.#scheduleSwing();
   }
 
   /**
@@ -486,6 +523,35 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#footballTimer = undefined;
     this.#arenaTimer?.clear();
     this.#arenaTimer = undefined;
+    this.#swingTimer?.clear();
+    this.#swingTimer = undefined;
+  }
+
+  /**
+   * Keep the roof swing's clock running while a ride or its cooldown is on,
+   * and stopped otherwise (D-133). Called after every swing intent and every
+   * change to who is in the room; idempotent.
+   */
+  #scheduleSwing(): void {
+    const active = this.#registry.swingActive;
+    if (active && this.#swingTimer === undefined) {
+      this.#swingTimer = this.clock.setInterval(() => this.#swingTick(), SWING_TICK_MS);
+    } else if (!active && this.#swingTimer !== undefined) {
+      this.#swingTimer.clear();
+      this.#swingTimer = undefined;
+    }
+  }
+
+  #swingTick(): void {
+    try {
+      // The close puts the rider back on the deck: a move, so views are stale.
+      if (this.#registry.swingTick(performance.now())) this.#viewsStale = true;
+    } catch {
+      // The room clock runs this outside any handler; an escape would take
+      // the process down with every room in it. A fixed, content-free line.
+      console.error('lobby: swing step failed');
+    }
+    this.#scheduleSwing();
   }
 
   /**
@@ -677,6 +743,14 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     const holds = view.has(ring);
     if (member && !holds) view.add(ring);
     else if (!member && holds) view.remove(ring);
+
+    // D-133: the same rule for the roof's swing entry — in a view exactly
+    // while its client is live on the roof.
+    const swing = this.#registry.swingEntry;
+    const onRoof = this.#registry.isRoofMember(client.sessionId);
+    const hasSwing = view.has(swing);
+    if (onRoof && !hasSwing) view.add(swing);
+    else if (!onRoof && hasSwing) view.remove(swing);
   }
 }
 

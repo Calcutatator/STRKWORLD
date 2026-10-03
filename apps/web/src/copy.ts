@@ -973,6 +973,17 @@ export const COPY = freezeCopy({
     countdownLive: 'Fight starts in',
   },
 
+  /**
+   * D-133: the Exchange roof's lookout swing (`roof/SwingHud.tsx`). One
+   * hint, shown to the rider only. Game copy: no money, no names, no
+   * disclosure. The World's own chip words (`SWING`, `IN USE`) live in
+   * `roof-swing-session.ts`.
+   */
+  swing: {
+    label: 'Lookout swing',
+    getOff: 'Esc to get off',
+  },
+
   presence: {
     connecting: 'Connecting to multiplayer…',
     connected: 'Multiplayer connected',

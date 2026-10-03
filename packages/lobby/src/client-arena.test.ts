@@ -19,6 +19,7 @@ import {
   ARENA_GUARD_RECOVERY_MS,
   ARENA_INTENT_CLIENT_INTERVAL_MS,
   ARENA_MAX_HP,
+  SWING_INTENT_CLIENT_INTERVAL_MS,
   arenaTileCentre,
   type ArenaRingSnapshot,
   type ArenaTile,
@@ -244,17 +245,20 @@ describe('the message budget (D-114)', () => {
       perSecond(ARENA_ATTACK_CLIENT_INTERVAL_MS) + // attacks: 2.2
       perSecond(ARENA_INTENT_CLIENT_INTERVAL_MS) + // claim/leave/sit: 1
       // D-128: a block start on its floor, and at most one release per start.
-      2 * perSecond(ARENA_BLOCK_CLIENT_INTERVAL_MS); // block + unblock: 4
-    expect(budget).toBeCloseTo(36.7, 1);
+      2 * perSecond(ARENA_BLOCK_CLIENT_INTERVAL_MS) + // block + unblock: 4
+      // D-133: the swing's claim and leave share one floor, as the arena's do.
+      perSecond(SWING_INTENT_CLIENT_INTERVAL_MS); // swing claim/leave: 1
+    expect(budget).toBeCloseTo(37.7, 1);
     expect(budget).toBeLessThan(MAX_MESSAGES_PER_SECOND);
     // D-127: sitting on a bench added no message type at all — the seat rides
-    // on the move. D-128 adds the block pair and the throne's sit, all counted
-    // above, so the budget is still the whole of it.
+    // on the move. D-128 adds the block pair and the throne's sit and D-133 the
+    // swing's two, all counted above, so the budget is still the whole of it.
     expect(Object.values(MESSAGE)).toEqual([
       'move', 'suspend', 'resume', 'area',
       'sandbox:pick', 'sandbox:place', 'football:kick', 'jump',
       'arena:claim', 'arena:attack', 'arena:leave',
       'arena:block', 'arena:unblock', 'arena:sit',
+      'roof:swing-claim', 'roof:swing-leave',
     ]);
   });
 });
