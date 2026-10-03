@@ -11,7 +11,12 @@ describe('World event payload ownership', () => {
     expect(ownBuildingPayload({ building: 'bank' })).toEqual({ building: 'bank' });
     expect(ownLockedBuildingPayload({ building: 'vault', reason: 'coming-soon' })).toEqual({ building: 'vault', reason: 'coming-soon' });
     expect(ownStationPayload({ building: 'bank', station: 'bank:not-registered' })).toEqual({ building: 'bank', station: 'bank:not-registered' });
-    expect(ownMovementPayload({ position: { x: -1.5, y: 2 }, facing: 'left' })).toEqual({ position: { x: -1.5, y: 2 }, facing: 'left' });
+    expect(ownMovementPayload({ position: { x: -1.5, y: 2 }, facing: 'left' })).toEqual({ position: { x: -1.5, y: 2 }, facing: 'left', seat: -1 });
+    // D-127: a bench seat rides along with the placement, and only a whole,
+    // non-negative index is one.
+    expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: 3 })?.seat).toBe(3);
+    expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: 1.5 })?.seat).toBe(-1);
+    expect(ownMovementPayload({ position: { x: 1, y: 2 }, facing: 'left', seat: '3' })?.seat).toBe(-1);
   });
 
   it('rejects unknown semantic values and non-finite positions', () => {

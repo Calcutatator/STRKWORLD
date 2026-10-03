@@ -886,6 +886,44 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
     world.presenter.dispose();
   });
 
+  /**
+   * D-127: a bench asks for the chip alone. The plaza draws four benches and
+   * the pitch two, and none of them has a shell at all; a prompt that says
+   * `cue: 'none'` lights nothing, not even an object it carried by mistake.
+   */
+  it('gives a bench no shimmer and no edge glow: the chip is the whole cue', () => {
+    const world = setup();
+    const plaza = shells(world.parent, 'plaza:affordances');
+    // No bench is a slot in any area's shell.
+    const slots = new Set<string>();
+    world.parent.traverse((object) => {
+      const ids = object.userData['affordance'];
+      if (Array.isArray(ids)) for (const id of ids) slots.add(String(id));
+    });
+    expect([...slots].filter((id) => id.startsWith('seat:'))).toEqual([]);
+
+    // A bench's own prompt focuses nothing, and builds no shell for it.
+    world.view.setInteractionPrompt({ id: 'seat:plaza:2', label: 'SIT', x: 0, y: 0, cue: 'none' });
+    world.presenter.update(250);
+    expect(plaza.glow('plaza:monument')).toBe(0);
+    expect(plaza.glow('plaza:shells')).toBe(0);
+    expect(() => shells(world.parent, 'affordance:seat:plaza:2')).toThrow();
+
+    // Even a chip-only target that carries an object lights nothing.
+    const bench = new Group();
+    bench.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    world.parent.add(bench);
+    world.view.setInteractionPrompt({ id: 'seat:plaza:3', label: 'SIT', x: 0, y: 0, cue: 'none', object: bench });
+    world.presenter.update(250);
+    expect(() => shells(world.parent, 'affordance:seat:plaza:3')).toThrow();
+
+    // And a station after it glows as usual: nothing is left stuck.
+    world.view.setInteractionPrompt({ id: 'plaza:monument', label: 'POOL STATS', x: 0, y: 0 });
+    world.presenter.update(250);
+    expect(plaza.glow('plaza:monument')).toBe(1);
+    world.presenter.dispose();
+  });
+
   it('pulses on one shared clock, and holds still for reduced motion', () => {
     const moving = setup(() => false);
     moving.presenter.update(16);

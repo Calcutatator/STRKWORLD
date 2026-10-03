@@ -13946,3 +13946,51 @@ the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
 transaction was used.
 
 ---
+
+### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
+
+Adding a seated pose to shared presence looks like a new message and a new
+state block. It is neither. Sitting down *is* a move — onto the seat's own
+spot — so the seat index can ride on the existing `move` payload: the client's
+move floor already paces it, the reconcile loop already re-sends it until the
+server's copy matches, and the room's message budget does not change at all
+(`client-arena.test.ts` now also pins the message set, which is how that stays
+true). And because both sides share one frozen seat table, the wire needs only
+an index: the position, the facing and which bench it is all come out of the
+table. `PresenceState.seat` is therefore a single `int8`.
+
+Two things that only worked because of that shape. The server's whole rule is
+"the index is real, the position I just wrote is that seat's own spot, nobody
+else holds it, and you are on the street" — no geometry, no tolerance, no
+trust. That needs the seat spots to be **whole pixels**, since
+`normalizeCoordinate` rounds everything the room is sent; a spot derived at
+`x * 32 * 0.425` and compared with `===` would never match. And a client that
+mentions a seat the room refuses keeps re-sending it forever unless the
+reconcile comparison includes the seat, which is why `samePlacement` and the
+client's own view of its server entry both carry it.
+
+Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
+its sibling modules at the bottom, and `arena.ts` gets away with importing
+back from it only because every one of those imports is type-only; a *value*
+read back at module scope is a real ESM cycle and dies in the TDZ. The new
+`seats.ts` therefore keeps its own copy of `STREET_ORIGIN_X` with a test
+pinning the two together. And adding a field to a validated snapshot breaks
+every `toEqual` on it across three packages at once (51 tests here) — the
+field has to be added to the fixtures, not worked around.
+
+Also worth knowing: a bench did not need a "no cue" mechanism to look right —
+registering no affordance shell already leaves it dark. It needed one to *stay*
+right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
+even if a shell for that id turns up later.
+
+*Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
+`packages/world/src/world-session-benches.test.ts`,
+`packages/lobby/src/seats.test.ts`, plus a real-wire test in
+`packages/lobby/src/client.test.ts` where a second player's claim on a taken
+seat is refused and they stand on its spot instead. Renders from a WebGL
+harness in headless Chrome: `renders/benches-plaza.png`,
+`benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
+suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
+funds or transaction was used.
+
+---

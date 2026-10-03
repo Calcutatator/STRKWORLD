@@ -14,7 +14,7 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import { CLIMB_WINDOW_MS, SANDBOX_STEP_HEIGHT, arenaTileCentre } from '@strkworld/shared';
+import { CLIMB_WINDOW_MS, NO_SEAT, SANDBOX_STEP_HEIGHT, arenaTileCentre, isAtStreetSeat } from '@strkworld/shared';
 import type {
   ArenaRingSnapshot,
   Facing,
@@ -83,11 +83,19 @@ export interface AreaRequest extends PlacementRequest {
   area?: unknown;
 }
 
-/** What a client may offer on the high-rate path. */
+/**
+ * What a client may offer on the high-rate path.
+ *
+ * D-127: `seat` rides along on the move rather than having a message of its
+ * own, because sitting down *is* a move — onto the seat's own spot — and the
+ * message budget had no room to spare. Absent, -1, or anything the seat rule
+ * refuses means standing.
+ */
 export interface MoveRequest {
   x?: unknown;
   y?: unknown;
   facing?: unknown;
+  seat?: unknown;
 }
 
 export type AdmitRejection =
@@ -390,8 +398,33 @@ export class LobbyPresence {
     entry.position.x = x;
     entry.position.y = y;
     entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+    // D-127: the seat is judged from the position just written, so a claim can
+    // only ever mean "I am sitting where this seat is".
+    entry.seat = this.#seatClaim(session, entry.gameId, ownDataField(request, 'seat'), x, y);
     this.#movedAt.set(sessionKey, now);
     return 'applied';
+  }
+
+  /**
+   * D-127: the seat a move may claim, or -1.
+   *
+   * Four rules, all of them the server's: the session is live on the street
+   * (the only presence area with benches); the index names a real seat in
+   * `STREET_SEATS`; the position the room just wrote is that seat's own spot;
+   * and no other live entry holds it. A claim that fails any of them is simply
+   * standing — the move itself still applies, and the state is the only answer,
+   * as with every other refusal here.
+   */
+  #seatClaim(session: Session, gameId: string, raw: unknown, x: number, y: number): number {
+    if (session.area !== 'street') return NO_SEAT;
+    if (!isAtStreetSeat(raw, x, y)) return NO_SEAT;
+    const claimed = raw as number;
+    for (const other of this.#sessions.values()) {
+      if (other === session || other.suspended) continue;
+      if (other.gameId === gameId) continue;
+      if (this.peers.get(other.gameId)?.seat === claimed) return NO_SEAT;
+    }
+    return claimed;
   }
 
   /**
@@ -578,6 +611,10 @@ export class LobbyPresence {
       entry.position.x = x;
       entry.position.y = y;
       entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+      // D-127: an area request is a teleport or a look change, never a sit, so
+      // the seat is given up here — including on a refresh within the street,
+      // which is how a bench is freed without waiting for the next move.
+      entry.seat = NO_SEAT;
       entry.sprite = normalizeSprite(
         ownDataField(request, 'sprite'),
         this.#spriteKeys,
