@@ -17,7 +17,9 @@ import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow, type JumpShadow } from './jump-shadow.js';
 import { createSeatTracker, createSwingClock, type SeatTracker, type SwingClock } from '../arena-swing.js';
-import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
+import type { AvatarFigure, AvatarFigureFactory, AvatarMotion, SeatPlace } from './types.js';
+import { ARENA_THRONE_SEAT, ARENA_TIER_SEAT } from './arena-room.js';
+import { streetSeatPlaceAt } from '../seats.js';
 
 /**
  * Time constant of the critically damped follow of the latest snapshot
@@ -566,6 +568,9 @@ export function createRemoteAvatarLayer3D({
     // D-127: a bench sitter sits because the room says so — no idle timer, and
     // it holds while the figure eases onto the seat.
     let seated = avatar.benchSeat !== null && !jump;
+    // D-127 (amended 2026-10-03): the seat the sitter rests on, so a peer rises
+    // onto the bench or the plank rather than sinking into it.
+    let seat: SeatPlace | null = seated ? streetSeatPlaceAt(avatar.benchSeat) : null;
     if (seatAt && !seated) {
       let onSeat = false;
       try {
@@ -574,14 +579,18 @@ export function createRemoteAvatarLayer3D({
         onSeat = false;
       }
       seated = avatar.seat.step(dt, moving || jump != null, onSeat);
+      if (seated) seat = ARENA_TIER_SEAT;
     }
     // D-128: the champion sits the moment the server says so, without the
     // tiers' idle wait: the server put them on the throne, so they are on it.
-    if (throned === avatar.id) seated = true;
+    if (throned === avatar.id) {
+      seated = true;
+      seat = ARENA_THRONE_SEAT;
+    }
     const guard = fighter === avatar.id;
     const blocking = blocker === avatar.id;
     if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
-    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking };
+    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking, seat };
   };
 
   return {
