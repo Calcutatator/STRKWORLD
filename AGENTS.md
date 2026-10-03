@@ -13764,3 +13764,47 @@ the demo city (`renders/lb-consent.png`) and fixed in the next one. Full suite
 transaction was used.
 
 ---
+
+### 2026-10-03 — A balance you can press: the fee has to come from the panel's own maths, and the figure shown is not the figure filled
+
+Making every balance line fill its amount input (D-131) looked like a UI
+change and was really an arithmetic one. Three traps.
+
+**The shown figure is rounded; the filled figure must not be.** `balanceText`
+goes through `formatTokenAmount`, which trims for reading: a pool holding
+`100.000000000000000001 STRK` reads "100 STRK". Filling what the line *reads*
+would silently drop or invent wei, so the press fills
+`formatTokenAmountExact(balance - fee)` — the Exchange's Max already did this,
+and its test (`94.000000000000000001`) is the one that catches a regression.
+The `aria-label` keeps the rounded words, so what a screen reader hears
+matches what the eye reads.
+
+**Never re-derive the fee in the component.** The fee that may be kept aside
+differs per counter and per asset — the pool fee comes out of the balance on
+UNSHIELD, STAKE, TRANSFER and a STRK SUPPLY, out of the *wallet* on SHIELD
+(same asset, so still kept aside), and not at all from a REDEEM, a REPAY or a
+withdrawal, whose figure is the loan's own. A swap keeps it aside only when
+the asset sold is the fee's token. So `AmountField` takes one `balanceFee`
+prop and the panel passes the very `feeReserve(token, pool)` it already uses
+for its `limit`, its Max and its review; the kit does the subtraction once
+(`fillFromBalance`) and nothing duplicates the 6 STRK.
+
+**"Not fetched", "unknown fee" and "too small" are three different states,
+and only one of them is "no balance line".** Balances are user-requested
+(the wallet prompts), so no line is drawn at all until a figure is read; a
+read balance with an unread pool fee, or one the fee alone would eat, still
+shows its figure but as plain dim text with the reason in `title`, never a
+dead button. `fillFromBalance` returns `null` for all three and the component
+branches on that single answer.
+
+*Verified:* `apps/web/src/panels/kit/amount-math.test.ts` and `kit.test.tsx`
+for the maths and the control (exact decimals at 18 and 6 places, the fee
+aside, keyboard activation without touching the game's E, Refresh unaffected,
+every unpressable state), plus a flow per panel family through the real
+windows in `panels/amount-standard.flow.test.tsx`,
+`exchange/ExchangePanel.amount.test.tsx` and `bridge/BridgePanel.test.tsx`.
+Full suite (295 files, 6255 tests) and `npm run typecheck` pass. A Playwright
+render of the Bank's SHIELD counter with the figure hovered and the amount
+filled by it is in the working scratchpad (`renders/balance-click.png`), shot
+through the real `VisitLayer` over the deterministic fake seam. No wallet,
+RPC, funds or transaction was used.

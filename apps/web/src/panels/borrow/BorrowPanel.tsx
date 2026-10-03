@@ -473,6 +473,7 @@ function ComposeBlock({ state, panel, poolFee }: { state: BorrowState; panel: Bo
             decimals={collateral.decimals}
             symbol={collateral.symbol}
             balance={preview.pool.balance}
+            balanceFee={preview.pool.fee}
             {...(preview.pool.limit !== null ? { limit: preview.pool.limit, exceedsMessage: COPY.kit.exceedsWithFee } : {})}
             {...(preview.pool.max ? { max: preview.pool.max } : {})}
             hint={preview.pool.hint(state.collateralText)}
@@ -488,6 +489,7 @@ function ComposeBlock({ state, panel, poolFee }: { state: BorrowState; panel: Bo
         decimals={amountToken.decimals}
         symbol={amountToken.symbol}
         balance={preview.balance}
+        balanceFee={preview.balanceFee}
         {...(preview.limit !== null ? { limit: preview.limit } : {})}
         {...(preview.balanceLabel ? { balanceLabel: preview.balanceLabel } : {})}
         {...(preview.exceeds ? { exceedsMessage: preview.exceeds } : {})}
@@ -605,17 +607,20 @@ function poolFieldFor(state: BorrowState, collateral: BorrowTokenView): {
   balance: bigint | null;
   /** D-103: the balance less the pool fee when the collateral is the fee token, so amount + fee fits. */
   limit: bigint | null;
+  /** D-131: the fee in this same token a press on the balance line keeps aside. */
+  fee: bigint | null;
   max: (() => bigint | null) | null;
   hint: (text: string) => string | null;
 } {
   const held = poolBalanceFor(state, collateral.token);
-  if (!held) return { balance: null, limit: null, max: null, hint: () => null };
+  if (!held) return { balance: null, limit: null, fee: null, max: null, hint: () => null };
   const fee = state.balances.status === 'loaded' ? state.balances.fee : null;
   const reserve = feeReserve(collateral.token, fee);
   const maximum = tidied(maxAfterReserve(maxBasis(held), reserve), collateral);
   return {
     balance: held.total,
     limit: reserve !== null && reserve > 0n ? held.total - reserve : null,
+    fee: reserve,
     max: () => maximum,
     hint: (text) => maximum !== null && reserve !== null && reserve > 0n && text === formatTokenAmountExact(maximum, collateral.decimals)
       ? COPY.balance.feeReserved
@@ -635,6 +640,13 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   pool: ReturnType<typeof poolFieldFor>;
   balance: bigint | null;
   balanceLabel: string | null;
+  /**
+   * D-131: the fee in the balance line's own token that a press on it keeps
+   * aside. Nothing (`0n`) on a repay or a withdrawal, whose figure is the
+   * loan's own — what is owed, what is held as collateral — which the pool
+   * fee never comes out of.
+   */
+  balanceFee: bigint | null;
   exceeds: string | null;
   max: (() => bigint | null) | null;
   /** 'add-collateral' asks for collateral first, with a Max-collateral chip. */
@@ -657,6 +669,7 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   const added = collateralCheck.status === 'ok' ? collateralCheck.amount : 0n;
   let balance: bigint | null = null;
   let limit: bigint | null = null;
+  let balanceFee: bigint | null = 0n;
   let balanceLabel: string | null = null;
   let exceeds: string | null = null;
   let max: (() => bigint | null) | null = null;
@@ -667,6 +680,7 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
   if (mode === 'add-collateral') {
     balance = pool.balance;
     limit = pool.limit;
+    balanceFee = pool.fee;
     max = pool.max;
   }
   if (held && market) {
@@ -753,7 +767,7 @@ function previewFor(state: BorrowState, pair: BorrowPairChoice, collateral: Borr
         ? COPY.borrow.form.withdrawAllLine
         : null;
   const exceedsAfterFee = limit !== null ? COPY.kit.exceedsWithFee : exceeds;
-  return { check, collateralCheck, pool, balance, limit, balanceLabel, exceeds: exceedsAfterFee, max, hint, rows, tooLow, typed, added, everything };
+  return { check, collateralCheck, pool, balance, limit, balanceFee, balanceLabel, exceeds: exceedsAfterFee, max, hint, rows, tooLow, typed, added, everything };
 }
 
 /**
