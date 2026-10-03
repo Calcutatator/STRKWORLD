@@ -14244,6 +14244,21 @@ Also: the room drew bare earth on its `void` tiles, which was invisible while
 there was nothing around it and became a hard-edged brown apron the moment
 there was a lawn. When you give a scene a world, re-check every surface that
 was only ever seen against nothing.
+### 2026-10-03 — A height shared by two models is a two-way constraint: the inside sets the floor on how low the outside can go
+Taking a storey off the street's Colosseum (D-129 amended) looked like editing
+one number in `three/colosseum-style.ts`. It is not: `COLOSSEUM_WALL_TOP` is
+also where the arena room's attic colonnade stops, and that colonnade stands
+on the room's own arcade at `ARENA_SURFACE.arcade` (3.6), which is itself held
+up by the banners hung on that face above the top tier (2.6) — each needs
+about 0.6 of wall. Drop the shared top by a full storey (2.0, to 4.2) and the
+room's colonnade silently becomes a 0.28 lip, and one of its shadow quads
+inverts (`v0 > v1`). The exterior absorbed the difference in its attic
+instead: one arcade storey plus a taller attic to 4.8. Before you move a
+shared proportion, walk *both* models' stacks from the ground up and find
+which one has the least slack — the number belongs to the tighter of the two.
+Verified by rendering both sides from the in-game camera (north-facing street
+shot and the sand) and by tests that pin the stack on each side.
+
 ## The arena's block and the emperor's box (D-128)
 Two traps cost time here, both about the gap between a test's shortcut and
 what a player can actually do.

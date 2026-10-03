@@ -7,13 +7,12 @@ import {
 } from '../map/colosseum.js';
 import type { DistrictMap, TileKind } from '../map/street.js';
 import {
+  COLOSSEUM_ARCADE_TOP,
   COLOSSEUM_ARCH_SPRING,
   COLOSSEUM_ATTIC_TOP,
   COLOSSEUM_EMBER,
   COLOSSEUM_PLINTH,
   COLOSSEUM_STONE,
-  COLOSSEUM_TIER1_TOP,
-  COLOSSEUM_TIER2_TOP,
   COLOSSEUM_WALL_TOP,
 } from './colosseum-style.js';
 import type { SignStyleOptions } from './labels.js';
@@ -51,11 +50,16 @@ import type { LabelFactory, Occluder, OccluderBounds, TextLabel } from './types.
  * three-tile door on the west front, the same branch path and the same
  * return tile and facing (map/colosseum.ts). Only the model is new.
  *
- * An oval of stacked arcades in warm sandstone, rounded at its east end and
- * square across its west front: a plinth, two storeys of arches on piers, a
- * blind attic with banners, a cornice, and four cressets burning on its
- * corners. The grand arch over the walkable threshold is the one piece of it
- * that stands over a tile a player can be on, so its underside clears head
+ * An oval of arcades in warm sandstone, rounded at its east end and square
+ * across its west front: a plinth, a storey of arches on piers, a blind attic
+ * with banners, a cornice, and four cressets burning on its corners. It stood
+ * three floors tall and hid the street's own buildings behind it, so the
+ * middle storey of arches came off (amended 2026-10-03): two floors now, the
+ * ground arcade and the attic, to the lower `COLOSSEUM_WALL_TOP` the arena
+ * room's attic colonnade also came down to.
+ *
+ * The grand arch over the walkable threshold is the one piece of it that
+ * stands over a tile a player can be on, so its underside clears head
  * height (`COLOSSEUM_ARCH_SPRING`) and it fades as its own occluder, as the
  * plaza gateway does. Everything else stands on solid `colwall` tiles or on
  * the solid `colcore` the wall encloses, where a stepped cavea and a sliver
@@ -145,7 +149,7 @@ const ARCH_RING = 0.36;
  * The nameplate on the building's south attic, facing south: the camera
  * always looks north (D-059), so this is the face the street reads.
  */
-const SIGN_Y = (COLOSSEUM_TIER2_TOP + COLOSSEUM_ATTIC_TOP) / 2;
+const SIGN_Y = (COLOSSEUM_ARCADE_TOP + COLOSSEUM_ATTIC_TOP) / 2;
 const SIGN_Z = COLOSSEUM_AREA.y + COLOSSEUM_AREA.height;
 const SIGN_X = COLOSSEUM_DOOR.x + 6;
 
@@ -367,8 +371,11 @@ function shell(map: DistrictMap, bin: GeometryBin): void {
 }
 
 /**
- * One tile of the outward façade: a plinth, two storeys of arched openings
- * between piers, a blind attic panel and the cornices between them.
+ * One tile of the outward façade: a plinth, a storey of arched openings
+ * between piers, a blind attic panel and the cornices between them (amended
+ * 2026-10-03: the middle storey of arches is gone, and the attic carries the
+ * height it used to; the ground arcade is unchanged, so the grand arch and
+ * the arches either side of it read exactly as they did).
  *
  * Everything below head height is flush or recessed, so nothing of the
  * building stands over the lawn a player walks on; only the cornices, all of
@@ -390,17 +397,16 @@ function arcadeFace(bin: GeometryBin, face: Face, u0: number, u1: number, seed: 
     bin.add('stone', faceQuad(face, uc + half, v0 + 0.06, uc + half + 0.07, head + half * 0.6, 0.006), shade(STONE.pier, 0.04));
     bin.add('stone', faceQuad(face, uc - 0.06, head + half - 0.05, uc + 0.06, head + half + 0.1, 0.007), shade(STONE.pier, 0.1));
   };
-  storey(COLOSSEUM_PLINTH, COLOSSEUM_TIER1_TOP, ARCH_HALF);
-  storey(COLOSSEUM_TIER1_TOP + CORNICE_DEPTH, COLOSSEUM_TIER2_TOP, ARCH_HALF - 0.02);
+  storey(COLOSSEUM_PLINTH, COLOSSEUM_ARCADE_TOP, ARCH_HALF);
 
   // The cornices: proud of the wall, well above any head.
-  for (const top of [COLOSSEUM_TIER1_TOP + CORNICE_DEPTH, COLOSSEUM_TIER2_TOP + CORNICE_DEPTH, COLOSSEUM_WALL_TOP]) {
+  for (const top of [COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH, COLOSSEUM_WALL_TOP]) {
     bin.add('stone', faceBox(face, u0, top - CORNICE_DEPTH, 0, u1, top, CORNICE_PROUD), shade(STONE.cornice, -0.02 + seed * 0.05));
   }
   // The attic: a blind wall with a flat pilaster and a bronze boss every other tile.
-  bin.add('stone', faceQuad(face, u0 + 0.06, COLOSSEUM_TIER2_TOP + CORNICE_DEPTH + 0.04, u1 - 0.06, COLOSSEUM_ATTIC_TOP - 0.06, 0.004), shade(STONE.wall, 0.04));
+  bin.add('stone', faceQuad(face, u0 + 0.06, COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH + 0.04, u1 - 0.06, COLOSSEUM_ATTIC_TOP - 0.06, 0.004), shade(STONE.wall, 0.04));
   if (seed > 0.5) {
-    bin.add('stone', faceDisc(face, uc, (COLOSSEUM_TIER2_TOP + COLOSSEUM_ATTIC_TOP) / 2 + 0.1, 0.006, 0.16, 0.03, 10), shade(COLOSSEUM_EMBER.gold, -0.3));
+    bin.add('stone', faceDisc(face, uc, (COLOSSEUM_ARCADE_TOP + COLOSSEUM_ATTIC_TOP) / 2 + 0.1, 0.006, 0.16, 0.03, 10), shade(COLOSSEUM_EMBER.gold, -0.3));
   }
 }
 
@@ -413,19 +419,21 @@ function arcadeFace(bin: GeometryBin, face: Face, u0: number, u1: number, seed: 
  * ring reads as the back of a stadium, as the arena room's arcade does.
  */
 function innerFace(bin: GeometryBin, face: Face, u0: number, u1: number): void {
-  const BACK = COLOSSEUM_TIER1_TOP + 0.6;
+  // The undercroft's head, below the arcade's own top: the lit band above it
+  // is as deep as it was when the wall carried two storeys of arches.
+  const BACK = COLOSSEUM_ARCADE_TOP - 1.4;
   // Under the stands: deep shade, where the vaults would be.
   bin.add('stone', faceQuad(face, u0, 0, u1, BACK, 0.004), shade(STONE.shadow, 0.1));
   // The upper tiers' back wall, lit, with a blind arch every other bay.
-  bin.add('stone', faceQuad(face, u0, BACK, u1, COLOSSEUM_TIER2_TOP, 0.004), (_u: number, v: number) =>
-    shade(STONE.wallDark, -0.1 + 0.12 * clamp01((v - BACK) / (COLOSSEUM_TIER2_TOP - BACK))),
+  bin.add('stone', faceQuad(face, u0, BACK, u1, COLOSSEUM_ARCADE_TOP, 0.004), (_u: number, v: number) =>
+    shade(STONE.wallDark, -0.1 + 0.12 * clamp01((v - BACK) / (COLOSSEUM_ARCADE_TOP - BACK))),
   );
   const uc = (u0 + u1) / 2;
-  bin.add('stone', faceQuad(face, uc - 0.26, BACK + 0.1, uc + 0.26, COLOSSEUM_TIER2_TOP - 0.5, 0.006), shade(STONE.shadow, 0.16));
-  bin.add('stone', faceDisc(face, uc, COLOSSEUM_TIER2_TOP - 0.5, 0.001, 0.26, 0.006, 10), shade(STONE.shadow, 0.16));
+  bin.add('stone', faceQuad(face, uc - 0.26, BACK + 0.1, uc + 0.26, COLOSSEUM_ARCADE_TOP - 0.5, 0.006), shade(STONE.shadow, 0.16));
+  bin.add('stone', faceDisc(face, uc, COLOSSEUM_ARCADE_TOP - 0.5, 0.001, 0.26, 0.006, 10), shade(STONE.shadow, 0.16));
   // The cornice and the attic over it, as the outward face has.
-  bin.add('stone', faceQuad(face, u0, COLOSSEUM_TIER2_TOP, u1, COLOSSEUM_TIER2_TOP + CORNICE_DEPTH, 0.006), shade(STONE.cornice, -0.06));
-  bin.add('stone', faceQuad(face, u0, COLOSSEUM_TIER2_TOP + CORNICE_DEPTH, u1, COLOSSEUM_WALL_TOP, 0.004), shade(STONE.wall, -0.06));
+  bin.add('stone', faceQuad(face, u0, COLOSSEUM_ARCADE_TOP, u1, COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH, 0.006), shade(STONE.cornice, -0.06));
+  bin.add('stone', faceQuad(face, u0, COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH, u1, COLOSSEUM_WALL_TOP, 0.004), shade(STONE.wall, -0.06));
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +463,9 @@ function cavea(map: DistrictMap, bin: GeometryBin): void {
   // By distance from the wall: the top ring of seating under the arcade, a
   // middle ring, then the sand. The outer ring meets the wall's undercroft, so
   // the bowl reads as a rake and not as a shaft.
-  const tops = [0, 4.0, 2.4, 0.9];
+  // Amended 2026-10-03: the rake came down with the wall, so the top ring
+  // still sits under the arcade's own top and not against the cornice.
+  const tops = [0, 2.3, 1.4, 0.6];
   for (let y = COLOSSEUM_AREA.y; y < COLOSSEUM_AREA.y + COLOSSEUM_AREA.height; y++) {
     for (let x = COLOSSEUM_AREA.x; x < COLOSSEUM_AREA.x + COLOSSEUM_AREA.width; x++) {
       if (colosseumKind(map, x, y) !== 'colcore') continue;
@@ -504,7 +514,7 @@ function entranceRecess(map: DistrictMap, bin: GeometryBin): void {
 /** One banner hanging on the attic: the cloth, two gold bands and a sun. */
 function bannerOn(bin: GeometryBin, face: Face, u0: number, u1: number, red: boolean): void {
   const top = COLOSSEUM_ATTIC_TOP - 0.1;
-  const bottom = COLOSSEUM_TIER2_TOP + CORNICE_DEPTH + 0.1;
+  const bottom = COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH + 0.1;
   const main = red ? COLOSSEUM_EMBER.bannerRed : COLOSSEUM_EMBER.navy;
   const trim = red ? COLOSSEUM_EMBER.gold : COLOSSEUM_EMBER.bone;
   bin.add('stone', faceBox(face, u0 - 0.03, top, CORNICE_PROUD, u1 + 0.03, top + 0.05, CORNICE_PROUD + 0.05), STONE.iron);
@@ -624,7 +634,7 @@ function grandArch(bin: GeometryBin): void {
   bin.add('arch', slab(ox0, ox1, extrados, COLOSSEUM_WALL_TOP), (_px: number, py: number) =>
     shade(STONE.wall, -0.1 + 0.12 * clamp01(py / COLOSSEUM_WALL_TOP)),
   );
-  for (const top of [COLOSSEUM_TIER2_TOP + CORNICE_DEPTH, COLOSSEUM_WALL_TOP]) {
+  for (const top of [COLOSSEUM_ARCADE_TOP + CORNICE_DEPTH, COLOSSEUM_WALL_TOP]) {
     bin.add('arch', slab(ox0, ox1, top - CORNICE_DEPTH, top, CORNICE_PROUD), shade(STONE.cornice, 0));
   }
   // A banner on each pier's west face, the face the branch path walks up to.
