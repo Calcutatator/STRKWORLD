@@ -263,6 +263,19 @@ export function createWalletSession(
     // Leaderboard phase 1: the placement check, owned the same way. Counts only
     // come back; a check answered for a retired account is refused.
     checkPlacement: (signal) => ownedResult((owned) => owned.checkPlacement(signal)),
+    // D-122 (amended 2026-10-03): whether the next check reaches the wallet.
+    // A read of this connection's memory cache, so it needs no owner guard;
+    // with no connection, or an implementation that cannot say, the honest
+    // answer is "a prompt may come".
+    placementWillPrompt() {
+      try {
+        const owned = operations;
+        if (!owned || snapshot.phase !== 'connected') return true;
+        return owned.placementWillPrompt?.() ?? true;
+      } catch {
+        return true;
+      }
+    },
   };
 
   async function ownedBorrowBatch(
@@ -341,7 +354,24 @@ export function createWalletSession(
     }
   }
 
+  /**
+   * Drop every shadow-account commitment this connection's operations cached
+   * in memory (D-122, amended 2026-10-03). Called wherever `operations` is
+   * released — the HUD pill's "Disconnect & return to menu" (D-120), an
+   * account change, a wrong network, a failure, destroy — so the next account
+   * can never read the last one's commitments, and a cached `p` cannot outlive
+   * the connection that shared it. Best effort: it can never fail a transition.
+   */
+  function forgetCommitments(owned: PrivacyOperations | null): void {
+    try {
+      owned?.forgetCommitments?.();
+    } catch {
+      // Forgetting is housekeeping; it cannot mask the transition that asked for it.
+    }
+  }
+
   function retireConnectionBestEffort(): void {
+    forgetCommitments(operations);
     operations = null;
     const cleanup = connectionCleanup;
     const owned = connection;
@@ -356,6 +386,7 @@ export function createWalletSession(
   }
 
   function retireConnectionExplicit(): void {
+    forgetCommitments(operations);
     operations = null;
     const cleanup = connectionCleanup;
     const owned = connection;
@@ -526,6 +557,7 @@ export function createWalletSession(
             changed = readConnectionSnapshot(connected.getSnapshot());
           } catch {
             generation += 1;
+            forgetCommitments(operations);
             operations = null;
             publish('failed', null);
             return;
@@ -535,6 +567,7 @@ export function createWalletSession(
               assertAddress(changed.account);
             } catch {
               generation += 1;
+              forgetCommitments(operations);
               operations = null;
               publish('failed', null);
               return;
@@ -550,6 +583,8 @@ export function createWalletSession(
             return;
           }
           generation += 1;
+          // An account change forgets the last account's commitments.
+          forgetCommitments(operations);
           operations = null;
           if (!changed.account) {
             selectedKey = null;
@@ -565,6 +600,7 @@ export function createWalletSession(
             operations = connected.createOperations(policy);
             publish('connected', changed.account);
           } catch {
+            forgetCommitments(operations);
             operations = null;
             publish('failed', null);
           }

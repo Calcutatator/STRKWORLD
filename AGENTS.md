@@ -259,6 +259,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — Nothing in STRKWORLD blocks an avatar but the authored map: the jump already carried you, the football was the only thing in the way (D-130)
+
+The brief was "make jumping actually move the character model … jump over the
+football or characters", on the premise that avatars are blocked by other
+players and by the ball. Read before changing anything, that premise is false
+and most of the feature already shipped.
+
+- **The model rises and the run carries through, already.** `presenter.ts`
+  lifts the figure along `jumpLift` (1.15 units over 800 ms, D-097 amended) and
+  `remote-avatars.ts` plays the same arc for peers. D-097 made the jump touch
+  neither speed nor direction, so a walking jump is 4 tiles of ground and a
+  sprint 6 — already far more than the 0.5 tiles the ball is wide. A forward
+  boost would be pure extra speed with no server-side street cap to hold it
+  (D-087 kept the street's clamp-to-world and no path check at all).
+- **There is no avatar-to-avatar or avatar-to-ball collision anywhere.** Street
+  movement is `isSolidAt(map, …)` plus sandbox stacks higher than your level,
+  and that is the whole of it (`world-session.ts` `moveStreetPlayer`,
+  `stepOnHeightmap`). The lobby validates finiteness, a shared area's walkable
+  tiles, and D-106's climb window — never a peer, never the ball. Players walk
+  through each other today.
+- **The only thing in the way was the dribble.** D-078's `stepBall` pushes the
+  ball off every overlapping player's 12-pixel body. That rule did not know the
+  player was in the air, so jumping over the football shoved it away exactly as
+  running through it did. Dropping the jumper from the pushers — in the room,
+  in the solo authority and in the drawn ball — is the entire feature.
+- **Phase, never height.** The pass window is normalised like D-106's climb
+  window (`JUMP_PASS_FROM_PHASE` 0.1 to `JUMP_PASS_UNTIL_PHASE` 0.9), so
+  reduced motion's 0.3-unit hop clears the same ball as the 1.15-unit arc with
+  no second code path. Reading the lift instead would have silently excluded
+  reduced motion.
+- **The room must time its own jumps.** `player:moved` carries `airborne` for
+  the Shell's ball only; it is dropped structurally by `ownMovementPayload` and
+  the room reads its own `#jumps` record instead (`JUMP_PASS_WINDOW_MS`, 870
+  ms). A client-asserted airborne flag would be a free "never dribble me".
+
+*Verified:* read the shipped sources listed above rather than the docs, and
+pinned the premise in tests that fail if it changes — a run across the exact
+spot a peer stands on covers the same ground as a run with nobody there
+(`world-session-jump-over.test.ts`), and the same run over the ball with and
+without a jump leaves it still or dribbles it (`lobby/src/jump-over.test.ts`),
+one tick either side of the window edge. Solo play and the room are compared
+step for step over the ball (`football-controller.test.ts`). Full suite (306
+files, 6418 tests) and `npm run typecheck` pass. No wallet, RPC, funds or
+transaction was used.
+
+---
+
 ### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
 
 "I went to the bridge counter and it's not popping up an interface." Nothing in
@@ -13994,8 +14041,45 @@ transaction was used.
 
 ---
 
+### 2026-10-03 — A balance you can press: the fee has to come from the panel's own maths, and the figure shown is not the figure filled
+Making every balance line fill its amount input (D-131) looked like a UI
+change and was really an arithmetic one. Three traps.
+**The shown figure is rounded; the filled figure must not be.** `balanceText`
+goes through `formatTokenAmount`, which trims for reading: a pool holding
+`100.000000000000000001 STRK` reads "100 STRK". Filling what the line *reads*
+would silently drop or invent wei, so the press fills
+`formatTokenAmountExact(balance - fee)` — the Exchange's Max already did this,
+and its test (`94.000000000000000001`) is the one that catches a regression.
+The `aria-label` keeps the rounded words, so what a screen reader hears
+matches what the eye reads.
+**Never re-derive the fee in the component.** The fee that may be kept aside
+differs per counter and per asset — the pool fee comes out of the balance on
+UNSHIELD, STAKE, TRANSFER and a STRK SUPPLY, out of the *wallet* on SHIELD
+(same asset, so still kept aside), and not at all from a REDEEM, a REPAY or a
+withdrawal, whose figure is the loan's own. A swap keeps it aside only when
+the asset sold is the fee's token. So `AmountField` takes one `balanceFee`
+prop and the panel passes the very `feeReserve(token, pool)` it already uses
+for its `limit`, its Max and its review; the kit does the subtraction once
+(`fillFromBalance`) and nothing duplicates the 6 STRK.
+**"Not fetched", "unknown fee" and "too small" are three different states,
+and only one of them is "no balance line".** Balances are user-requested
+(the wallet prompts), so no line is drawn at all until a figure is read; a
+read balance with an unread pool fee, or one the fee alone would eat, still
+shows its figure but as plain dim text with the reason in `title`, never a
+dead button. `fillFromBalance` returns `null` for all three and the component
+branches on that single answer.
+*Verified:* `apps/web/src/panels/kit/amount-math.test.ts` and `kit.test.tsx`
+for the maths and the control (exact decimals at 18 and 6 places, the fee
+aside, keyboard activation without touching the game's E, Refresh unaffected,
+every unpressable state), plus a flow per panel family through the real
+windows in `panels/amount-standard.flow.test.tsx`,
+`exchange/ExchangePanel.amount.test.tsx` and `bridge/BridgePanel.test.tsx`.
+Full suite (295 files, 6255 tests) and `npm run typecheck` pass. A Playwright
+render of the Bank's SHIELD counter with the figure hovered and the amount
+filled by it is in the working scratchpad (`renders/balance-click.png`), shot
+through the real `VisitLayer` over the deterministic fake seam. No wallet,
+RPC, funds or transaction was used.
 ### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
-
 Adding a seated pose to shared presence looks like a new message and a new
 state block. It is neither. Sitting down *is* a move — onto the seat's own
 spot — so the seat index can ride on the existing `move` payload: the client's
@@ -14005,7 +14089,6 @@ server's copy matches, and the room's message budget does not change at all
 true). And because both sides share one frozen seat table, the wire needs only
 an index: the position, the facing and which bench it is all come out of the
 table. `PresenceState.seat` is therefore a single `int8`.
-
 Two things that only worked because of that shape. The server's whole rule is
 "the index is real, the position I just wrote is that seat's own spot, nobody
 else holds it, and you are on the street" — no geometry, no tolerance, no
@@ -14015,7 +14098,6 @@ trust. That needs the seat spots to be **whole pixels**, since
 mentions a seat the room refuses keeps re-sending it forever unless the
 reconcile comparison includes the seat, which is why `samePlacement` and the
 client's own view of its server entry both carry it.
-
 Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
 its sibling modules at the bottom, and `arena.ts` gets away with importing
 back from it only because every one of those imports is type-only; a *value*
@@ -14024,12 +14106,10 @@ read back at module scope is a real ESM cycle and dies in the TDZ. The new
 pinning the two together. And adding a field to a validated snapshot breaks
 every `toEqual` on it across three packages at once (51 tests here) — the
 field has to be added to the fixtures, not worked around.
-
 Also worth knowing: a bench did not need a "no cue" mechanism to look right —
 registering no affordance shell already leaves it dark. It needed one to *stay*
 right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
 even if a shell for that id turns up later.
-
 *Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
 `packages/world/src/world-session-benches.test.ts`,
 `packages/lobby/src/seats.test.ts`, plus a real-wire test in
@@ -14039,11 +14119,8 @@ harness in headless Chrome: `renders/benches-plaza.png`,
 `benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
 suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
 funds or transaction was used.
-
 ---
-
 ### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
-
 The D-123 shimmer is tuned as a single global level, and the amendment that
 made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
 dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
@@ -14056,7 +14133,6 @@ it worse, because a near-black station takes the pale warm fallback tint
 station in the game. The lead saw it as "the shimmer on the plaza pillar"
 specifically, 80% too strong, while the rest of the world was only 30% too
 strong.
-
 What this means for the next cue: a per-object strength knob is not a
 special case to be avoided, it is a requirement of any additive cue applied
 across both interiors and daylight. Keep the knob *relative* to the global
@@ -14067,7 +14143,6 @@ shell buffer's `aSweep` attribute had a free third component, so
 per-frame work. The ember edge glow is a separate effect and must not read the
 multiplier: widening the gap between "usable" and "the one E would use" is the
 point.
-
 *Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
 70%, the monument at 0.2 and every other station at 1, the multiplier baked
 per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
@@ -14076,13 +14151,8 @@ renders from the same harness and the same camera —
 the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
 used.
-
----
-
 ## 6. Findings log
-
 ### A hidden entrance is not a door, so none of the doors' machinery applies to it
-
 The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
 tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
 handles it before `DoorTrigger.update` is ever reached. So the Studio got none
@@ -14093,7 +14163,6 @@ up the path instead of outside the room (the lead's bug, D-125) — and it had n
 re-entry hold, which only looked harmless because the wrong return tile was too
 far away for a held key to carry anyone back in. Fixing the first on its own
 would have introduced the bounce PR #205 had already fixed for the doors.
-
 The lesson generalises past this entrance: when a feature is built *beside* a
 shared mechanism rather than *through* it, every invariant the mechanism
 carries has to be re-checked by hand, and a later amendment to the mechanism
@@ -14103,7 +14172,6 @@ one call site) found the whole gap in one pass; grepping for the *concept*
 now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
 trigger and the Studio's entrance as its two users, so the next amendment to it
 lands on both.
-
 *Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
 real keys end to end (walk in from the street entrance, walk out of the Studio
 exit, land on the tile outside the entrance facing away, with the street
@@ -14114,13 +14182,7 @@ each lands on a walkable street tile off its own door and touching it, none of
 which needed changing). Each new assertion was also run against the unfixed
 code and seen to fail. Full suite (296 files, 6260 tests) and
 `npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
-
----
-
-## 6. Findings log
-
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
-
 The private leaderboard's first mainnet probe had every variable set, the
 ledger address in the bundle, `?lb=1` in the tab and the placement stand on
 the lawn — and attached no receipt at all. `ownPolicy` in
@@ -14132,7 +14194,6 @@ one step before `WalletApiPrivacyOperations` could see it. With no ledger that
 class builds no receipts object, which is byte-for-byte a build with the
 leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
 line, and no error anywhere.
-
 Two things make this class of bug worth writing down. First, the stand kept
 working, which argued the probe was fine: it reads
 `placementStandFrom(environment)`, a seam that never passes through the
@@ -14145,7 +14206,6 @@ channel that reports every decision as a reason code (`no-ledger`,
 formatter admits each field from a fixed list, so `p`, a commitment, a shadow
 address, the account, a nonce and a transaction hash cannot be written even by
 a caller that offers them.
-
 *Verified:* reproduced red first — with `ownPolicy` restored,
 `apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
 policy's missing ledger. That file now drives the real production wiring (a
@@ -14158,11 +14218,112 @@ seven otherwise; the notices are checked against the real operations in
 backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 (298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
 was used; the live ledger's `leaf_count()` has not been re-read.
+### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
+The arena (D-114) is a room, drawn at the interiors' origin over the hidden
+street (D-039). The city, the backdrop and D-124's south vista are all mounted
+in `street.ground`, which a room never shows — so outside the arena's arcade
+there was nothing but linear fog on a `SKY_HORIZON` background, which reads as
+"floating in blank white nothingness". The sky dome and the `Fog` *are* shared
+(one `Scene` in `world-engine.ts`), so the fix is not a second sky: it is
+mounting `backdropCity` and `createSouthVista` into the room's own group
+(`three/arena-surround.ts`, D-129). Verified by the arena room's draw-call test
+listing `arena:outside-city`, `arena:outside-windows` and the vista's six
+meshes, and by renders from the in-game camera on the sand and on the top tier.
+Two traps that cost time there. **The backdrop's plan is district-wide**: it
+lays fields and hedgerows west, east and south of the street as well as the
+city to the north, and at the offset that puts the city behind the arena's
+north wall those bands stand *inside* the stadium — the module had to be
+flushed through a triangle filter that keeps only what stays north of the
+wall. And **a geometry sweep over a backdrop is not free**: the arena's
+headroom test (sample every triangle, barycentric, against every walkable
+tile) went from seconds to a 30 s timeout the moment the city joined the
+group. The surround is excluded from that sweep by name and held clear of the
+stadium by its bounding box instead, which is the assertion that actually
+matters — it is tens of tiles away, not a hair over a tier.
+Also: the room drew bare earth on its `void` tiles, which was invisible while
+there was nothing around it and became a hard-edged brown apron the moment
+there was a lawn. When you give a scene a world, re-check every surface that
+was only ever seen against nothing.
+### 2026-10-03 — A height shared by two models is a two-way constraint: the inside sets the floor on how low the outside can go
+Taking a storey off the street's Colosseum (D-129 amended) looked like editing
+one number in `three/colosseum-style.ts`. It is not: `COLOSSEUM_WALL_TOP` is
+also where the arena room's attic colonnade stops, and that colonnade stands
+on the room's own arcade at `ARENA_SURFACE.arcade` (3.6), which is itself held
+up by the banners hung on that face above the top tier (2.6) — each needs
+about 0.6 of wall. Drop the shared top by a full storey (2.0, to 4.2) and the
+room's colonnade silently becomes a 0.28 lip, and one of its shadow quads
+inverts (`v0 > v1`). The exterior absorbed the difference in its attic
+instead: one arcade storey plus a taller attic to 4.8. Before you move a
+shared proportion, walk *both* models' stacks from the ground up and find
+which one has the least slack — the number belongs to the tighter of the two.
+Verified by rendering both sides from the in-game camera (north-facing street
+shot and the sand) and by tests that pin the stack on each side.
 
----
-
+## The arena's block and the emperor's box (D-128)
+Two traps cost time here, both about the gap between a test's shortcut and
+what a player can actually do.
+**A test may not teleport across a room.** `client-arena.test.ts` moved a new
+champion from the ring's return tile to the emperor's box with one
+`updatePosition`. The room refused every one of them and the test timed out on
+a position that never changed. `isAreaStepAllowed` (D-087) samples the
+straight line between two points and rejects the move if any sample is not
+walkable — and the line from the gate to the box runs clean through the ring's
+fence. The fix is a `walk` helper that steps round the fence tile by tile,
+waiting for the room to hold each step, which is also what a player does.
+Anything that asserts on a position in a shared room has to walk there.
+**A held key needs a release the gates cannot swallow.** Q is the World's only
+held action key, so `dom-keyboard.ts` gained `keyup-Q`. The press is gated like
+E; the release is gated by nothing except having seen that key go down, and is
+also delivered from blur, a hidden tab and `resetKeys`. Every one of those is a
+case where the real keyup lands somewhere else — over a panel, on another
+window — and a release that the gates ate would leave the fighter guarding on
+the server for ever. The same rule runs through the session (`setBlock(false)`
+is never gated on the ring, and `destroy` sends it) and the HUD's touch button
+(`pointerup`, `pointercancel`, `pointerleave` and a lost capture all lower it).
+*Verified:* the rules tests drive a simulated attacker — `ArenaAuthorityOptions.opponent`, a
+test-only seam putting a second player in the opponent slot — into a guarding
+fighter and assert 0 damage with the target's `blocks` counter up; the
+champion path runs against a real server in `client-arena.test.ts`, including
+the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
+`npm run typecheck` pass. One pre-existing flake was seen once and did not
+reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
+and then asserts `carrying` is null — unrelated to this work. Renders are from
+the offline rasteriser, not a GPU.
+### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
+Every `ShadowAccountResolver` cached its own partial commitment "once per
+connection", and so did the placement's `LeaderboardReceipts`. Read route by
+route that is correct; read from the wallet it is five caches, and a placement
+check touches all five — the season commitment plus each feature shadow's
+commitment, and its partial again when the tally ranks DeFi. The lead saw it
+as "it requested to share the commitment a few times in the wallet". A prompt
+budget is a property of the connection, not of a route, so the cache has to
+live at the connection: one `WalletCommitmentCache` keyed by dapp name alone,
+handed to every route by `WalletApiPrivacyOperations`.
+The second half is that a read-only flow must never be allowed to prompt at
+all. A check now reads the feature shadows from the cache only
+(`cachedFullCommitment`, `cachedPartial`, both returning null when that
+counter has not been used), which means it can send fewer feature partials
+than before — so the tally had to stop treating "no partial" as "no points"
+and keep each claim's last verified count instead, taking the higher of
+stored and re-verified. That keeps "first claim wins" and adds nothing to what
+it already stores: it already held every claim's `h('strkworld-lb-feat',
+season, p_feature) -> entry` mapping.
+Also worth knowing: an optional member on the frozen `PrivacyOperations` seam
+needs `operations.test.ts` taught about it — its `SeamMethod` mapped type
+drops `(() => T) | undefined`, so the pinned-member check fails unless the
+mapping uses `-?` and `NonNullable`.
+*Verified:* `packages/privacy/src/wallet-api/commitment-cache.test.ts` counts
+every `strk20ShadowAccountCommitment` call against the real operations — one
+on a session's first check, zero on the next two, zero after a receipt shared
+`p`, and each dapp name exactly once across two receipts, three DeFi batches
+and two checks. Storage and console spies show nothing cached is written or
+logged. `apps/backend/src/leaderboard.test.ts` drives the kept counts, the
+monotonic update, a lost claim and the store file through the real service.
+Full suite (306 files, 6424 tests, merged with `origin/main` at 84b11a8) and
+`npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used; the prompt count in a real Ready wallet
+has not been observed.
 ### 2026-10-03 — A guard with no message reads as a dead button
-
 The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
 refused the quote at 3.96% against a 3% bound, before anything was asked —
 correct behaviour on the ground floor, wrong on the degen floor, whose tokens
@@ -14172,7 +14333,6 @@ the panel said "That did not go through"; in the live quote path it was one
 faint note under an empty Buy field. Nobody could tell a refused swap from a
 broken button, and the real cause sat in the seam's message string, which the
 Shell is forbidden to render.
-
 Two rules came out of it, both now enforced by tests. **A guard that can refuse
 before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
 what both the log line and the counter's copy are keyed on, so `unknown` means
@@ -14182,7 +14342,6 @@ worse than the market price" without ever rendering the seam's own sentence.
 `SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
 no amount, no token — and `toFailure` reads them with the same own-descriptor
 discipline it reads `kind` with.
-
 *Verified:* reproduced red first — with the old throw restored,
 `apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
 `exchange-machine.test.ts` renders the generic copy. The figures survive two
@@ -14193,11 +14352,8 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
-
 ---
-
 ### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
-
 Making the World a floating rock (D-132) was not mostly modelling — it was
 finding every place that quietly assumed the ground went on forever. The
 backdrop's raster was the obvious one; the three that were not are
@@ -14209,7 +14365,6 @@ horizon. The fix that scales is one exported predicate — `onRockTop(x, z,
 margin)` in `three/sky-island.ts` — and a test that sweeps every backdrop
 surface and every vertex of the vista through it. Anything added outside the
 playable map from now on has to pass it or it hangs in the sky.
-
 Two numbers are load-bearing and not free to pick. The rim's radius is bounded
 *below* by `street-builder.test.ts`'s rooftop test, which fires 1,536 rays from
 the Exchange deck and requires every downward one to hit ground inside the fog
@@ -14217,22 +14372,18 @@ the Exchange deck and requires every downward one to hit ground inside the fog
 (3.3× the playable map) and not a literal 3× (167, which would be marginal).
 And the engine's camera far plane had to go from 240 to 360, or the cloud ring
 clips against the sky from the west and east ends of the street.
-
 *Verified:* the sweep test fails if `RIM_SETBACK` is removed from the
 backdrop's clip; the rooftop ray test fails at a radius of 150; the far-plane
 change was found by rendering the street camera from x 0 and x 111 with the
 offline rasteriser. Full suite (305 files, 6405 tests) and `npm run typecheck`
 pass.
-
 ### 2026-10-03 — A white box in this scene is not white: give cloud its own shading
-
 The first cloud sea was `standardMaterial` boxes in the near-white the title
 screen uses, and every render came back the colour of wet sand. The lighting is
 why: a face pointing anywhere but up gets no sun (the hemisphere's ground term
 is `0x5b4a3c`, a dark brown), so a white box keeps only its top. The same
 arithmetic is why the rock's underside came back black — a downward normal
 lands at about 3% of the paint before tone mapping.
-
 Both are fixed on the paint, not on the light, because adding a light for
 scenery changes everything else in the scene. The clouds are drawn **unlit**
 (`unlitMaterial`, `toneMapped: false`, so a baked hex renders as that hex) and
@@ -14242,11 +14393,8 @@ are only at its corners, a side face interpolates that gradient for free. The
 cliff keeps the scene's light but its paint carries a warm lift that grows with
 depth, standing in for the bounce off the cloud sea — vertex colours are
 floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
-
 *Verified:* five rounds of offline renders in
 `scratchpad/floatrock-tools/render.sh` (a copy of the D-124 vista tool with the
 island's cameras); the sand look is reproducible by putting the cloud bin back
 on the lit material. Not verified on a real GPU — the rasteriser models the
 engine's hemisphere, sun, ACES and sRGB but not its exact shader.
-
----

@@ -823,6 +823,13 @@ export const COPY = freezeCopy({
       check: 'Check privately',
       again: 'Check again',
       checking: 'Counting your receipts…',
+      /**
+       * Shown in the waiting state only when the wallet is about to ask for
+       * the season commitment — the one prompt a check can make (D-122,
+       * amended 2026-10-03). A second check in the same session reuses what
+       * the wallet already shared, prompts nothing, and so says nothing.
+       */
+      walletPrompt: 'Your wallet will ask to share your season ID',
       top: (percent: number) => `Top ${percent}%`,
       rank: (rank: number, total: number) => `Rank about ${rank} of ${total}`,
       count: (count: number) => (count === 1 ? '1 private action' : `${count} private actions`),
@@ -950,6 +957,8 @@ export const COPY = freezeCopy({
     timeLeft: 'Time left',
     fight: 'FIGHT!',
     strike: 'STRIKE',
+    /** D-128: the block, held on Q or on the touch button beside STRIKE. */
+    block: 'BLOCK',
     leave: 'LEAVE RING',
     victory: 'VICTORY',
     /** Followed by the client-timed seconds, e.g. "Dummy down in 12.4 s". */
@@ -1007,7 +1016,7 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you.' },
+      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you. A running jump carries you over the football without kicking it.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, an outfit in the Avatar Studio. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
@@ -1196,6 +1205,17 @@ export const COPY = freezeCopy({
     half: '50%',
     maxLabel: 'Fill in the most you can use',
     halfLabel: 'Fill in half of the most you can use',
+    /**
+     * D-131: the balance line fills the amount. `{amount}` is the figure the
+     * line shows, `{fee}` the fee in the same asset the press keeps aside.
+     */
+    useBalance: 'Use full balance: {amount}',
+    useBalanceLessFee: 'Use {amount}, keeping the {fee} fee aside',
+    feeKeptAside: '{amount} fee kept aside',
+    /** Why the figure cannot be used: the fee in the same asset is the whole of it. */
+    balanceUnderFee: 'Too little here to cover the {fee} fee on top.',
+    /** The fee has not been read yet, so nothing honest can be filled in. */
+    balanceFeeUnknown: 'The pool fee is not known yet.',
     enterAmount: 'Enter an amount',
     chooseToken: 'Choose a token',
     insufficient: 'Insufficient {symbol}',

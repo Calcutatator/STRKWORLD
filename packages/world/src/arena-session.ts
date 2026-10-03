@@ -1,5 +1,8 @@
 import {
   ARENA_ATTACK_CLIENT_INTERVAL_MS,
+  ARENA_BLOCK_CLIENT_INTERVAL_MS,
+  ARENA_BOX,
+  ARENA_BOX_APPROACH,
   ARENA_DUMMY_TILE,
   ARENA_GATE_APPROACH,
   ARENA_HIT_MIN_COS,
@@ -47,6 +50,15 @@ import { JUMP_TOTAL_MS } from './jump.js';
  *   held to the 450 ms client floor. The server holds its own 400 ms floor.
  * - **The swing echo.** The server's swing counter plays this client's swing
  *   unless it predicted one within the last 400 ms.
+ * - **The block (D-128).** Q held, or the HUD's BLOCK, while this client is
+ *   fighting: `onBlock(true)` sends a start on the 500 ms client floor and
+ *   `onBlock(false)` the release. Nothing is predicted — the stance the view
+ *   draws is the server's `guarding` — and the release is sent whenever one
+ *   is owed, including on the way out of the ring and on destroy, so a guard
+ *   can never stick.
+ * - **The emperor's box (D-128).** At the box, the box is the press-E target
+ *   instead of the gate: the champion takes or leaves the throne, and
+ *   everyone else reads the CHAMPION ONLY notice, which sends nothing.
  */
 
 /** The World's arena prompts: game copy, never a disclosure. */
@@ -58,12 +70,32 @@ export const ARENA_GATE_TARGET_ID = 'arena:gate';
 export const ARENA_CLAIM_LABEL = 'CLAIM';
 export const ARENA_BUSY_LABEL = 'IN USE';
 
+/**
+ * D-128: the emperor's box as a press-E target. The id is the room's own
+ * station id, so the box keeps the affordance shell the arena room recorded
+ * for it (D-123's shimmer, and the edge glow when E would use it).
+ */
+export const ARENA_BOX_TARGET_ID = 'arena:box';
+/** What the champion reads at the box, sitting down and standing up. */
+export const ARENA_SIT_LABEL = 'TAKE THE THRONE';
+export const ARENA_STAND_LABEL = 'LEAVE THE THRONE';
+/** What everyone else reads there. E takes the press and does nothing. */
+export const ARENA_BOX_CLOSED_LABEL = "EMPEROR'S BOX — CHAMPION ONLY";
+
 /** The gate's footprint in World pixels (room origin included): what a press-E prompt measures to. */
 export const ARENA_GATE_RECT = Object.freeze({
   x: ARENA_ORIGIN_PX + ARENA_RING_GATE.x * ARENA_TILE_SIZE,
   y: ARENA_ORIGIN_PX + ARENA_RING_GATE.y * ARENA_TILE_SIZE,
   width: ARENA_RING_GATE.width * ARENA_TILE_SIZE,
   height: ARENA_RING_GATE.height * ARENA_TILE_SIZE,
+});
+
+/** D-128: the box's footprint in World pixels, what the box prompt measures to. */
+export const ARENA_BOX_RECT = Object.freeze({
+  x: ARENA_ORIGIN_PX + ARENA_BOX.x * ARENA_TILE_SIZE,
+  y: ARENA_ORIGIN_PX + ARENA_BOX.y * ARENA_TILE_SIZE,
+  width: ARENA_TILE_SIZE,
+  height: ARENA_TILE_SIZE,
 });
 
 /** A predicted swing within this long of the server's counter is the same swing. */
@@ -99,6 +131,22 @@ export function onArenaGateApproach(x: number, y: number): boolean {
 }
 
 /**
+ * D-128: whether a World pixel point is at the emperor's box — the sand in
+ * front of it, or the box's own tile, where the champion sits. The lobby's
+ * own rule, with the same slack (`isAtArenaBox`).
+ */
+export function atArenaBox(x: number, y: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const left = ARENA_ORIGIN_PX + ARENA_BOX_APPROACH.x * ARENA_TILE_SIZE - GATE_SLACK_PX;
+  const right = ARENA_ORIGIN_PX + (ARENA_BOX_APPROACH.x + ARENA_BOX_APPROACH.width) * ARENA_TILE_SIZE + GATE_SLACK_PX;
+  const top = ARENA_ORIGIN_PX + ARENA_BOX_APPROACH.y * ARENA_TILE_SIZE - GATE_SLACK_PX;
+  const bottom = ARENA_ORIGIN_PX + (ARENA_BOX_APPROACH.y + ARENA_BOX_APPROACH.height) * ARENA_TILE_SIZE + GATE_SLACK_PX;
+  if (x >= left && x < right && y >= top && y < bottom) return true;
+  const seat = arenaTileCentre(ARENA_BOX);
+  return Math.abs(x - seat.x) <= ARENA_TILE_SIZE / 2 + GATE_SLACK_PX && Math.abs(y - seat.y) <= ARENA_TILE_SIZE / 2 + GATE_SLACK_PX;
+}
+
+/**
  * Whether a swing from here would reach the dummy, by the lobby's own rule
  * (reach, arc, point-blank). Used only to show `E · STRIKE`: the lobby
  * decides every hit from its own held position.
@@ -119,6 +167,8 @@ export function arenaViewFrame(ring: ArenaRingSnapshot, self: GameId | null): Ar
   const challenger = ring.challenger;
   const challengerId = challenger.kind === 'player' ? challenger.gameId : null;
   const opponent = ring.opponent;
+  const championId = ring.champion;
+  const throneId = ring.seated ? championId : null;
   return Object.freeze({
     phase: ring.phase,
     gate: ring.phase === 'idle' ? 'open' : 'busy',
@@ -128,6 +178,14 @@ export function arenaViewFrame(ring: ArenaRingSnapshot, self: GameId | null): Ar
     challengerId,
     challengerSwings: challenger.swings,
     selfIsChallenger: ring.phase !== 'idle' && self !== null && challengerId === self,
+    // D-128: the server's own guard, so spectators and the fighter draw the
+    // same stance, and the blocked-hit counter the fx sparks from.
+    challengerGuarding: challenger.guarding,
+    challengerBlocks: challenger.blocks,
+    championId,
+    throneId,
+    selfIsChampion: self !== null && championId === self,
+    selfOnThrone: self !== null && throneId === self,
   });
 }
 
@@ -148,6 +206,9 @@ export function createArenaSession(
   let swings = 0;
   let lastAttackAt = Number.NEGATIVE_INFINITY;
   let lastIntentAt = Number.NEGATIVE_INFINITY;
+  /** D-128: when the last block start went, and whether a release is owed. */
+  let lastBlockAt = Number.NEGATIVE_INFINITY;
+  let blockSent = false;
   let predictedAt = Number.NEGATIVE_INFINITY;
   let prompt: string | null = null;
   let look: LookStep = null;
@@ -230,6 +291,8 @@ export function createArenaSession(
 
   const leaveRing = (leap: boolean): void => {
     fighting = null;
+    // D-128: the fight is over, so no guard is held into the next one.
+    setBlock(false);
     holdCombat(false);
     if (leap) safely(() => host.leapTo(ARENA_RING_RETURN, ARENA_RING_RETURN_FACING));
     lockOutfit(false);
@@ -313,6 +376,24 @@ export function createArenaSession(
     rect: ARENA_GATE_RECT,
     activate: () => false,
   });
+  /**
+   * D-128: the emperor's box. The champion sits or stands; everyone else gets
+   * the CHAMPION ONLY notice, which takes the press and sends nothing.
+   */
+  const boxTarget = (label: string, use: boolean): ArenaGateTarget => Object.freeze({
+    id: ARENA_BOX_TARGET_ID,
+    label,
+    rect: ARENA_BOX_RECT,
+    activate: () => {
+      if (!use || destroyed || ring === null || inputSuspended()) return false;
+      if (typeof channel.sit !== 'function') return false;
+      return intent(() => channel.sit?.());
+    },
+  });
+  const SIT_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_SIT_LABEL, true)]);
+  const STAND_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_STAND_LABEL, true)]);
+  const CLOSED_BOX_TARGETS: readonly ArenaGateTarget[] = Object.freeze([boxTarget(ARENA_BOX_CLOSED_LABEL, false)]);
+
   const NO_TARGETS: readonly ArenaGateTarget[] = Object.freeze([]);
   const gateObject = (): unknown => {
     try {
@@ -335,6 +416,32 @@ export function createArenaSession(
     return true;
   };
 
+  /**
+   * D-128: Q down and up. Only while this client is fighting — never in a
+   * countdown, never a spectator — and the start is held to the client
+   * floor. A release always goes if a start went, so the guard cannot stick.
+   */
+  const setBlock = (down: boolean): boolean => {
+    if (typeof channel.block !== 'function') return false;
+    if (!down) {
+      // The release is never gated on anything: it goes whenever this client
+      // believes it raised a guard, destroyed session or not.
+      if (!blockSent) return false;
+      blockSent = false;
+      safely(() => channel.block?.(false));
+      return true;
+    }
+    if (destroyed || ring === null || inputSuspended()) return false;
+    if (!selfIsChallenger() || ring.phase !== 'fighting') return false;
+    if (blockSent) return true;
+    const t = now();
+    if (t - lastBlockAt < ARENA_BLOCK_CLIENT_INTERVAL_MS) return true;
+    lastBlockAt = t;
+    blockSent = true;
+    safely(() => channel.block?.(true));
+    return true;
+  };
+
   const intent = (send: () => void): boolean => {
     const t = now();
     if (t - lastIntentAt < ARENA_INTENT_CLIENT_INTERVAL_MS) return true;
@@ -352,6 +459,7 @@ export function createArenaSession(
 
   let unsubscribe: (() => void) | null = null;
   let unsubscribeStrikes: (() => void) | null = null;
+  let unsubscribeBlocks: (() => void) | null = null;
   try {
     unsubscribe = channel.subscribe((value) => apply(value));
   } catch {
@@ -362,6 +470,12 @@ export function createArenaSession(
     unsubscribeStrikes = channel.subscribeStrikes?.(() => void primary()) ?? null;
   } catch {
     unsubscribeStrikes = null;
+  }
+  try {
+    // D-128: the HUD's touch BLOCK takes the same path as Q.
+    unsubscribeBlocks = channel.subscribeBlocks?.((down) => void setBlock(down === true)) ?? null;
+  } catch {
+    unsubscribeBlocks = null;
   }
   // `subscribe` may or may not replay; read the current ring either way.
   try {
@@ -401,7 +515,13 @@ export function createArenaSession(
     gateTargets(): readonly ArenaGateTarget[] {
       if (destroyed || ring === null || selfIsChallenger()) return NO_TARGETS;
       const at = position();
-      if (at === null || !onArenaGateApproach(at.x, at.y)) return NO_TARGETS;
+      if (at === null) return NO_TARGETS;
+      // D-128: at the emperor's box, the box is what E would use.
+      if (atArenaBox(at.x, at.y)) {
+        if (typeof channel.sit !== 'function' || frame?.selfIsChampion !== true) return CLOSED_BOX_TARGETS;
+        return frame.selfOnThrone ? STAND_TARGETS : SIT_TARGETS;
+      }
+      if (!onArenaGateApproach(at.x, at.y)) return NO_TARGETS;
       const targets = ring.phase === 'idle' ? CLAIM_TARGETS : BUSY_TARGETS;
       const object = gateObject();
       // With the gate's mesh, the cues glow it; the target is otherwise the same.
@@ -411,16 +531,24 @@ export function createArenaSession(
       // E, a click and STRIKE are one path: one floor, one local swing, one send.
       return primary();
     },
+    onBlock(down: boolean): boolean {
+      return setBlock(down === true);
+    },
     frame(): ArenaViewFrame | null {
       return destroyed ? null : frame;
     },
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
+      // A guard this client raised comes down before anything else: the
+      // session is going away, and the server must not hold it up for ever.
+      setBlock(false);
       safely(() => unsubscribe?.());
       safely(() => unsubscribeStrikes?.());
+      safely(() => unsubscribeBlocks?.());
       unsubscribe = null;
       unsubscribeStrikes = null;
+      unsubscribeBlocks = null;
       setPrompt(null);
       holdCombat(false);
       lockOutfit(false);

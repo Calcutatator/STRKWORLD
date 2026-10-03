@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ARENA_BOX,
+  ARENA_BOX_APPROACH,
+  ARENA_BOX_SEAT_FACING,
+  ARENA_BOX_STAND,
+  ARENA_BOX_STAND_FACING,
   ARENA_DUMMY_TILE,
   ARENA_EXIT,
   ARENA_GATE_APPROACH,
@@ -191,6 +195,26 @@ describe('the arena grid (D-114)', () => {
     expect(arenaTileAt(ARENA_BOX.x, ARENA_BOX.y)).toBe('box');
   });
 
+  it('D-128: the emperor’s box is approached from the sand below it, which is where a deposed champion lands', () => {
+    // The approach is the row of sand under the box, and the box is centred on it.
+    expect(ARENA_BOX_APPROACH.y).toBe(ARENA_BOX.y + 1);
+    expect(ARENA_BOX_APPROACH.height).toBe(1);
+    expect(ARENA_BOX_APPROACH.x).toBeLessThanOrEqual(ARENA_BOX.x);
+    expect(ARENA_BOX_APPROACH.x + ARENA_BOX_APPROACH.width).toBeGreaterThan(ARENA_BOX.x);
+    for (const [x, y] of tilesOf(ARENA_BOX_APPROACH)) {
+      expect(arenaTileAt(x, y), `${x},${y}`).toBe('sand');
+      expect(gridWalkable(x, y), `${x},${y}`).toBe(true);
+    }
+    // Where a deposed champion is put down: on that approach, walkable, not the box.
+    expect(inRect(ARENA_BOX_APPROACH, ARENA_BOX_STAND.x, ARENA_BOX_STAND.y)).toBe(true);
+    expect(gridWalkable(ARENA_BOX_STAND.x, ARENA_BOX_STAND.y)).toBe(true);
+    // The throne itself is not floor for anyone: only the seated champion holds it.
+    expect(gridWalkable(ARENA_BOX.x, ARENA_BOX.y)).toBe(false);
+    // Both face south over the sand, to the camera (D-059), as the box's drape does.
+    expect(ARENA_BOX_SEAT_FACING).toBe('down');
+    expect(ARENA_BOX_STAND_FACING).toBe('down');
+  });
+
   it('numbers the tiers 1 to 5 and nothing else', () => {
     const tiers = new Set<number>();
     for (let y = 0; y < ARENA_HEIGHT; y += 1) {
@@ -248,9 +272,18 @@ describe('the arena presence area (D-114)', () => {
 });
 
 describe('normalizeArenaRing (D-114)', () => {
-  const dummy = { kind: 'dummy', gameId: null, hp: 70, swings: 0, hits: 3 };
-  const player = { kind: 'player', gameId: '0123456789abcdef', hp: 100, swings: 5, hits: 0 };
-  const fighting = { phase: 'fighting', round: 7, challenger: player, opponent: dummy, secondsLeft: 42, outcome: null };
+  const dummy = { kind: 'dummy', gameId: null, hp: 70, swings: 0, hits: 3, guarding: false, blocks: 0 };
+  const player = { kind: 'player', gameId: '0123456789abcdef', hp: 100, swings: 5, hits: 0, guarding: false, blocks: 0 };
+  const fighting = {
+    phase: 'fighting',
+    round: 7,
+    challenger: player,
+    opponent: dummy,
+    secondsLeft: 42,
+    outcome: null,
+    champion: null,
+    seated: false,
+  };
 
   it('accepts a valid snapshot and freezes it, slots and outcome included', () => {
     const ring = normalizeArenaRing(fighting) as ArenaRingSnapshot;
@@ -259,9 +292,38 @@ describe('normalizeArenaRing (D-114)', () => {
     const ended = normalizeArenaRing({ ...fighting, phase: 'ended', secondsLeft: 0, outcome: { reason: 'knockout', winner: 'challenger' } });
     expect(ended?.outcome).toEqual({ reason: 'knockout', winner: 'challenger' });
     expect(Object.isFrozen(ended?.outcome)).toBe(true);
-    const empty = { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 };
-    expect(normalizeArenaRing({ phase: 'idle', round: 0, challenger: empty, opponent: empty, secondsLeft: 0, outcome: null })).not.toBeNull();
+    const empty = { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0, guarding: false, blocks: 0 };
+    expect(normalizeArenaRing({ phase: 'idle', round: 0, challenger: empty, opponent: empty, secondsLeft: 0, outcome: null, champion: null, seated: false })).not.toBeNull();
     expect(normalizeArenaRing({ ...fighting, phase: 'ended', secondsLeft: 0, outcome: { reason: 'timeout', winner: null } })).not.toBeNull();
+  });
+
+  it('D-128: accepts a guarding player slot, a champion and a seated champion', () => {
+    const guarding = normalizeArenaRing({ ...fighting, challenger: { ...player, guarding: true, blocks: 2 } });
+    expect(guarding?.challenger.guarding).toBe(true);
+    expect(guarding?.challenger.blocks).toBe(2);
+    const crowned = normalizeArenaRing({ ...fighting, champion: '0123456789abcdef', seated: true });
+    expect(crowned?.champion).toBe('0123456789abcdef');
+    expect(crowned?.seated).toBe(true);
+  });
+
+  it('D-128: rejects a guard on a slot holding nobody, a seat with no champion, and junk', () => {
+    const bad: unknown[] = [
+      // Only a player can guard: not the dummy, not an empty slot.
+      { ...fighting, opponent: { ...dummy, guarding: true } },
+      { ...fighting, challenger: { ...player, guarding: 1 } },
+      { ...fighting, challenger: { ...player, guarding: undefined } },
+      { ...fighting, challenger: { ...player, blocks: 256 } },
+      { ...fighting, challenger: { ...player, blocks: -1 } },
+      { ...fighting, challenger: { ...player, blocks: 1.5 } },
+      // Nobody sits without a champion, and a champion is a presence id.
+      { ...fighting, seated: true },
+      { ...fighting, seated: 1 },
+      { ...fighting, champion: '' },
+      { ...fighting, champion: 'x'.repeat(65) },
+      { ...fighting, champion: 7 },
+      { ...fighting, champion: undefined },
+    ];
+    for (const value of bad) expect(normalizeArenaRing(value), JSON.stringify(value)).toBeNull();
   });
 
   it('rejects anything not exactly a snapshot', () => {

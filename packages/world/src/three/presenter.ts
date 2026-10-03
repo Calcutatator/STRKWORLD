@@ -89,6 +89,12 @@ export interface PresenterOptions {
   readonly vaultOpen?: boolean;
   /** Leaderboard phase 1: the placement stand east of the plaza. Sessions must match it too. */
   readonly placementStand?: boolean;
+  /**
+   * D-129: a coarse-pointer screen (a phone). The arena's surround then
+   * leaves out the water south of it, which the north-looking camera (D-059)
+   * can never show. Read once, when the rooms are built.
+   */
+  readonly lowDetail?: boolean;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -249,7 +255,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
   const images = options.images ?? null;
   // D-107: the hidden room's flickering tube holds steady for reduced motion.
-  const roomOptions = options.reducedMotion ? { reducedMotion: options.reducedMotion } : {};
+  const roomOptions = {
+    ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
+    ...(options.lowDetail === true ? { lowDetail: true } : {}),
+  };
   // D-114: the arena is a big room most sessions never enter, so it is built
   // the first time it is shown, not with the street.
   const lazyRooms = new Map<string, () => RoomView>();
@@ -281,6 +290,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
         return false;
       }
     },
+    /*
+     * D-128: where the blocked spark goes. Only the fighter's own client
+     * knows where it stands in the room's frame; a spectator's fx falls back
+     * to the ring spawn.
+     */
+    fighterAt: () =>
+      !streetVisible && visibleRoom === 'arena' && arenaFrame?.selfIsChallenger === true
+        ? { x: ground.x, z: ground.z }
+        : null,
   });
   disposers.push(() => {
     arenaFx.group.removeFromParent();
@@ -516,7 +534,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
    */
   const remoteSwings = (): RemoteSwingPort | null => {
     const layer = remote as
-      | (RemoteAvatarLayer3D & { playSwing?: (gameId: GameId) => void; setFighter?: (gameId: GameId | null) => void })
+      | (RemoteAvatarLayer3D & {
+          playSwing?: (gameId: GameId) => void;
+          setFighter?: (gameId: GameId | null) => void;
+          setBlocker?: (gameId: GameId | null) => void;
+          setThroned?: (gameId: GameId | null) => void;
+        })
       | null;
     if (!layer) return null;
     const port = {
@@ -525,6 +548,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
       },
       setFighter(gameId: GameId | null) {
         layer.setFighter?.(gameId);
+      },
+      // D-128: a peer's block stance and the champion's throne.
+      setBlocker(gameId: GameId | null) {
+        layer.setBlocker?.(gameId);
+      },
+      setThroned(gameId: GameId | null) {
+        layer.setThroned?.(gameId);
       },
     };
     return port;
@@ -895,13 +925,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
       idleOnTier = onTier && !moving && jumpElapsed === null ? idleOnTier + dt : 0;
       const guard = inArena && arenaFrame?.selfIsChallenger === true &&
         (arenaFrame.phase === 'countdown' || arenaFrame.phase === 'fighting');
+      // D-128: the block stance is the server's own `guarding`, never a
+      // local prediction; and the champion sits the moment the server seats
+      // them, without the tiers' idle wait.
+      const blocking = guard && arenaFrame?.challengerGuarding === true;
+      const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       avatar.update(dt, {
         moving,
         sprinting: moving && motion.sprinting,
         jump: pose,
         attack,
         guard,
-        seated: benchSeated || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        blocking,
+        seated: benchSeated || onThrone || idleOnTier >= ARENA_SEAT_IDLE_MS,
       });
       if (streetVisible) {
         street.update(dt);

@@ -244,6 +244,63 @@ describe('DOM World keyboard', () => {
     expect(typed.preventDefault).not.toHaveBeenCalled();
   });
 
+  it('emits keydown-Q for the arena block (D-128), with the same guards as E', () => {
+    const { window, keyboard } = setup();
+    const down = vi.fn();
+    const up = vi.fn();
+    keyboard.on('keydown-Q', down);
+    keyboard.on('keyup-Q', up);
+    window.dispatch('keydown', key('KeyQ'));
+    expect(down).toHaveBeenCalledWith({ repeat: false, target: null });
+    window.dispatch('keyup', key('KeyQ'));
+    expect(up).toHaveBeenCalledWith({ repeat: false, target: null });
+    // Never from a text field: a player typing "q" does not raise a guard.
+    window.dispatch('keydown', key('KeyQ', { target: { tagName: 'INPUT' } }));
+    window.dispatch('keydown', key('KeyQ', { target: { tagName: 'TEXTAREA' } }));
+    expect(down).toHaveBeenCalledTimes(1);
+    // Nor from a disabled keyboard.
+    keyboard.enabled = false;
+    window.dispatch('keydown', key('KeyQ'));
+    expect(down).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases Q over any target, but only one this keyboard saw go down', () => {
+    const { window, keyboard } = setup();
+    const up = vi.fn();
+    keyboard.on('keyup-Q', up);
+    // Nothing went down here, so there is no guard of ours to lower.
+    window.dispatch('keyup', key('KeyQ'));
+    expect(up).not.toHaveBeenCalled();
+    // Held in the World, let go over a panel: the release still arrives, or
+    // the block would stick up for ever.
+    window.dispatch('keydown', key('KeyQ'));
+    window.dispatch('keyup', key('KeyQ', { target: { tagName: 'INPUT' } }));
+    expect(up).toHaveBeenCalledTimes(1);
+    // And only once: the key is no longer held.
+    window.dispatch('keyup', key('KeyQ'));
+    expect(up).toHaveBeenCalledTimes(1);
+  });
+
+  it('lowers a held Q on blur, on a hidden tab and on resetKeys', () => {
+    for (const drop of ['blur', 'hidden', 'reset'] as const) {
+      const window = fakeHost();
+      const document = fakeHost();
+      const keyboard = createDomKeyboard({ window, document });
+      const up = vi.fn();
+      keyboard.on('keyup-Q', up);
+      window.dispatch('keydown', key('KeyQ'));
+      if (drop === 'blur') window.dispatch('blur');
+      else if (drop === 'hidden') {
+        document.visibilityState = 'hidden';
+        document.dispatch('visibilitychange');
+      } else keyboard.resetKeys();
+      expect(up).toHaveBeenCalledWith({ repeat: false, target: null });
+      // The key is no longer held, so nothing is released twice.
+      keyboard.resetKeys();
+      expect(up).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('detaches every listener on destroy and stays inert', () => {
     const { window, document, keyboard } = setup();
     const handler = vi.fn();

@@ -146,6 +146,20 @@ const SWING_STRIKE_TWIST = 0.18;
 /** The hips lunge forward this far on the strike, world units, and the body leans in. */
 const SWING_LUNGE = 0.1;
 const SWING_LEAN = 0.06;
+/**
+ * D-128: the block (Q), layered on the stance. The shield arm comes up and
+ * across the chest, the weapon arm drops in behind it, the feet set wider and
+ * the body sinks and turns its shoulder into the blow.
+ */
+const BLOCK_ARM_LEFT = -1.45;
+const BLOCK_ARM_LEFT_IN = -0.5;
+const BLOCK_ARM_RIGHT = -0.2;
+const BLOCK_ARM_RIGHT_IN = 0.02;
+const BLOCK_LEG_SPREAD = 0.2;
+const BLOCK_LEAN = 0.12;
+const BLOCK_TWIST = 0.14;
+/** The hips sink this far, world units, on top of the stance's own settle. */
+const BLOCK_CROUCH = 0.07;
 /** Seated on a tier: thighs out ahead (a robe's less), the body lowered onto the seat, hands on the knees. */
 const SEAT_LEG = -0.7;
 const SEAT_DROP = 0.12;
@@ -1956,6 +1970,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   /** D-114: the stance weights (eased) and this frame's swing. */
   let guardWeight = 0;
   let seatWeight = 0;
+  /** D-128: the block's weight, eased the same way. */
+  let blockWeight = 0;
   let attack: AttackPose | null = null;
   /** D-114: this look's swing, set by applyLook. */
   let guardArm = GUARD_ARM_RIGHT;
@@ -2050,9 +2066,10 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   };
 
   /**
-   * D-114: the battle stance, the swing and the seat, layered on the gait.
-   * The swing owns the weapon arm, the twist and the lunge while it plays;
-   * the stance and the seat ease in and out with the gait's time constant.
+   * D-114: the battle stance, the swing and the seat, layered on the gait,
+   * with D-128's block between the stance and the swing. The swing owns the
+   * weapon arm, the twist and the lunge while it plays; the stance, the
+   * block and the seat ease in and out with the gait's time constant.
    */
   const applyArenaPose = (spread: number, swung: number): void => {
     if (guardWeight > 0) {
@@ -2072,6 +2089,21 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       legRightPivot.rotation.z = 0;
     }
     hips.position.z = 0;
+    // D-128: the block, over the stance and under the swing (which cannot
+    // play while a guard is up, but the ease-out of one may still overlap).
+    if (blockWeight > 0) {
+      const b = blockWeight;
+      legLeftPivot.rotation.z = lerp(legLeftPivot.rotation.z, BLOCK_LEG_SPREAD, b);
+      legRightPivot.rotation.z = lerp(legRightPivot.rotation.z, -BLOCK_LEG_SPREAD, b);
+      armLeftPivot.rotation.x = lerp(armLeftPivot.rotation.x, BLOCK_ARM_LEFT, b);
+      armLeftPivot.rotation.z = lerp(armLeftPivot.rotation.z, BLOCK_ARM_LEFT_IN, b);
+      armRightPivot.rotation.x = lerp(armRightPivot.rotation.x, BLOCK_ARM_RIGHT, b);
+      armRightPivot.rotation.z = lerp(armRightPivot.rotation.z, BLOCK_ARM_RIGHT_IN, b);
+      upperBody.rotation.x += BLOCK_LEAN * b;
+      upperBody.rotation.y += BLOCK_TWIST * b;
+      // The feet set wider and the body sinks; the soles stay on the ground.
+      hips.position.y -= swung * (1 - Math.cos(BLOCK_LEG_SPREAD * b)) + BLOCK_CROUCH * b;
+    }
     if (attack !== null) {
       const rest = armRightPivot.rotation.x;
       const restOut = -armRightPivot.rotation.z;
@@ -2161,10 +2193,16 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       const pose = motion?.attack;
       attack = pose && (pose.stage === 'windup' || pose.stage === 'strike' || pose.stage === 'recover') ? pose : null;
       const seated = motion?.seated === true && !moving && attack === null && !jump;
-      guardWeight += ((guard && !seated ? 1 : 0) - guardWeight) * blend;
+      // D-128: a block implies the stance, and never plays while seated or
+      // in the air — there is no blocking from a throne or mid-jump.
+      const blocking = motion?.blocking === true && !seated && !jump;
+      const inStance = (guard || blocking) && !seated;
+      guardWeight += ((inStance ? 1 : 0) - guardWeight) * blend;
       seatWeight += ((seated ? 1 : 0) - seatWeight) * blend;
+      blockWeight += ((blocking ? 1 : 0) - blockWeight) * blend;
       if (guardWeight < 1e-3) guardWeight = 0;
       if (seatWeight < 1e-3) seatWeight = 0;
+      if (blockWeight < 1e-3) blockWeight = 0;
       applyPose();
     },
     dispose(): void {

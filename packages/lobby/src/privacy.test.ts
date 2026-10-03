@@ -100,13 +100,15 @@ const FROZEN_FOOTBALL_FIELDS: Record<keyof FootballSnapshot, true> = {
   phase: true,
 };
 
-/** D-114's ring slot, likewise: the frozen slot, field for field. */
+/** D-114's ring slot, likewise: the frozen slot, field for field (D-128 adds the block's two). */
 const FROZEN_ARENA_SLOT_FIELDS: Record<keyof ArenaSlot, true> = {
   kind: true,
   gameId: true,
   hp: true,
   swings: true,
   hits: true,
+  guarding: true,
+  blocks: true,
 };
 
 function fieldNames(klass: unknown): string[] {
@@ -186,7 +188,7 @@ describe('the schema is the enforcement point', () => {
     const ring = Metadata.getFields(ArenaRingEntry) as Record<string, unknown>;
     // The snapshot's fields, with the outcome split into its two codes.
     expect(Object.keys(ring).sort()).toEqual(
-      ['challenger', 'opponent', 'phase', 'reason', 'round', 'secondsLeft', 'winner'],
+      ['challenger', 'champion', 'opponent', 'phase', 'reason', 'round', 'seated', 'secondsLeft', 'winner'],
     );
     expect(ring).toEqual({
       phase: 'uint8',
@@ -196,11 +198,22 @@ describe('the schema is the enforcement point', () => {
       secondsLeft: 'uint8',
       reason: 'uint8',
       winner: 'uint8',
+      // D-128: the champion's ephemeral presence id, and whether they sit.
+      champion: 'string',
+      seated: 'uint8',
     });
     const slot = Metadata.getFields(ArenaSlotEntry) as Record<string, unknown>;
     expect(Object.keys(slot).sort()).toEqual(Object.keys(FROZEN_ARENA_SLOT_FIELDS).sort());
     // Numbers only, plus the one presence id string a player slot carries.
-    expect(slot).toEqual({ kind: 'uint8', gameId: 'string', hp: 'uint8', swings: 'uint8', hits: 'uint8' });
+    expect(slot).toEqual({
+      kind: 'uint8',
+      gameId: 'string',
+      hp: 'uint8',
+      swings: 'uint8',
+      hits: 'uint8',
+      guarding: 'uint8',
+      blocks: 'uint8',
+    });
   });
 
   it('carries exactly the frozen FootballSnapshot field set, in fields that hold numbers only', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COPY } from '../../copy.js';
-import { balanceText, checkAmount, feeReserve, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor } from './amount-math.js';
+import { balanceText, checkAmount, feeReserve, fillFromBalance, fractionOf, maxAfterReserve, maxBasis, primaryAction, tidyFloor } from './amount-math.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
@@ -50,6 +50,36 @@ describe('maxBasis (D-090)', () => {
 
   it('has no basis before a balance read', () => {
     expect(maxBasis(null)).toBeNull();
+  });
+});
+
+describe('fillFromBalance (D-131)', () => {
+  it('fills the whole figure the balance line shows when no fee in this asset comes on top', () => {
+    expect(fillFromBalance(16n * ONE)).toBe(16n * ONE);
+    expect(fillFromBalance(25_000_000n, { fee: feeReserve(USDC, POOL) })).toBe(25_000_000n);
+  });
+
+  it('keeps a fee in this same asset aside, to the wei', () => {
+    const balance = 12n * ONE + 5n * 10n ** 17n + 1n;
+    expect(fillFromBalance(balance, { fee: feeReserve(STRK, POOL) })).toBe(6n * ONE + 5n * 10n ** 17n + 1n);
+  });
+
+  it('never fills above the field\'s own limit', () => {
+    expect(fillFromBalance(100n * ONE, { limit: 40n * ONE })).toBe(40n * ONE);
+    expect(fillFromBalance(100n * ONE, { fee: 6n * ONE, limit: 94n * ONE })).toBe(94n * ONE);
+  });
+
+  it('fills nothing before a balance is read, or while the fee is unknown', () => {
+    expect(fillFromBalance(null)).toBeNull();
+    expect(fillFromBalance(100n * ONE, { fee: feeReserve(STRK, null) })).toBeNull();
+  });
+
+  it('never fills zero or less: the fee eats the balance, or there is none', () => {
+    expect(fillFromBalance(6n * ONE, { fee: 6n * ONE })).toBeNull();
+    expect(fillFromBalance(5n * ONE, { fee: 6n * ONE })).toBeNull();
+    expect(fillFromBalance(6n * ONE + 1n, { fee: 6n * ONE })).toBe(1n);
+    expect(fillFromBalance(0n)).toBeNull();
+    expect(fillFromBalance(100n * ONE, { limit: 0n })).toBeNull();
   });
 });
 

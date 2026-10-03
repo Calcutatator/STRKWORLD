@@ -25,6 +25,13 @@ function frame(over: Partial<Omit<ArenaViewFrame, 'dummy'>> & { hp?: number; hit
     challengerId: phase === 'idle' ? null : over.challengerId ?? FIGHTER,
     challengerSwings: over.challengerSwings ?? 0,
     selfIsChallenger: over.selfIsChallenger ?? false,
+    // D-128.
+    challengerGuarding: over.challengerGuarding ?? false,
+    challengerBlocks: over.challengerBlocks ?? 0,
+    championId: over.championId ?? null,
+    throneId: over.throneId ?? null,
+    selfIsChampion: over.selfIsChampion ?? false,
+    selfOnThrone: over.selfOnThrone ?? false,
   };
 }
 
@@ -186,7 +193,7 @@ describe('arena fx: reduced motion', () => {
 
 describe('arena fx: spectators see the fighter swing', () => {
   function port() {
-    return { playSwing: vi.fn(), setFighter: vi.fn() } satisfies RemoteSwingPort;
+    return { playSwing: vi.fn(), setFighter: vi.fn(), setBlocker: vi.fn(), setThroned: vi.fn() } satisfies RemoteSwingPort;
   }
 
   it('plays a peer’s swing when the server’s swing counter moves', () => {
@@ -215,6 +222,51 @@ describe('arena fx: spectators see the fighter swing', () => {
     fx.sync(frame({ challengerSwings: 9 }), remote);
     fx.sync(frame({ challengerId: 'g-next' as GameId, challengerSwings: 0, phase: 'countdown' }), remote);
     expect(remote.playSwing).not.toHaveBeenCalled();
+  });
+
+  it('a blocked hit sparks and says BLOCK, with no damage number and no flash (D-128)', () => {
+    const { fx, shownNumbers, find, dummyMaterial } = setup();
+    const remote = port();
+    const spark = () => find('arena:block-spark');
+    fx.sync(frame({ challengerBlocks: 2 }), remote);
+    expect(spark().visible).toBe(false);
+    const before = dummyMaterial().color.getHex();
+    fx.sync(frame({ challengerBlocks: 3 }), remote);
+    expect(spark().visible).toBe(true);
+    // One word shows — BLOCK, which rides the same mesh pool as the damage
+    // numbers — and nothing took damage, so the dummy does not flash.
+    expect(shownNumbers()).toHaveLength(1);
+    expect(dummyMaterial().color.getHex()).toBe(before);
+    // The counter wraps at 256 and is still a block, not a reset.
+    fx.sync(frame({ challengerBlocks: 0 }), remote);
+    expect(spark().visible).toBe(true);
+  });
+
+  it('a new challenger’s block counter is a baseline, not a spark (D-128)', () => {
+    const { fx, find } = setup();
+    const remote = port();
+    fx.sync(frame({ challengerBlocks: 9 }), remote);
+    fx.sync(frame({ challengerId: 'g-next' as GameId, challengerBlocks: 0, phase: 'countdown' }), remote);
+    expect(find('arena:block-spark').visible).toBe(false);
+  });
+
+  it('tells the remote layer who is guarding and who is on the throne (D-128)', () => {
+    const { fx } = setup();
+    const remote = port();
+    fx.sync(frame({ phase: 'fighting' }), remote);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    expect(remote.setThroned).toHaveBeenLastCalledWith(null);
+    fx.sync(frame({ phase: 'fighting', challengerGuarding: true }), remote);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(FIGHTER);
+    // The throne is anyone in the arena, fighter or not.
+    fx.sync(frame({ phase: 'fighting', throneId: 'g-champ' as GameId }), remote);
+    expect(remote.setThroned).toHaveBeenLastCalledWith('g-champ');
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    // An idle ring guards nobody; the throne outlives the fight.
+    fx.sync(frame({ phase: 'idle', throneId: 'g-champ' as GameId }), remote);
+    expect(remote.setFighter).toHaveBeenLastCalledWith(null);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    expect(remote.setThroned).toHaveBeenLastCalledWith('g-champ');
   });
 
   it('marks the fighter for the battle stance while the ring is busy', () => {

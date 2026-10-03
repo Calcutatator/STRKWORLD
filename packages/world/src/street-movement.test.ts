@@ -240,6 +240,38 @@ describe('street movement seam', () => {
     ]);
   });
 
+  it('D-130: puts airborne on the placement only while the feet are clear', () => {
+    const events: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
+    let airborne = false;
+    const reporter = createStreetMovementReporter(
+      { emit: (event, payload) => events.push({ event, payload }) },
+      undefined,
+      () => airborne,
+    );
+    reporter.update({ x: 10, y: 20 }, { ...idle, right: true });
+    // On the ground: exactly the payload it has always been.
+    expect(events[0]!.payload).toEqual({ position: { x: 10, y: 20 }, facing: 'right' });
+    airborne = true;
+    reporter.update({ x: 20, y: 20 }, { ...idle, right: true });
+    expect(events[1]!.payload).toEqual({ position: { x: 20, y: 20 }, facing: 'right', airborne: true });
+    airborne = false;
+    reporter.update({ x: 30, y: 20 }, { ...idle, right: true });
+    expect(events[2]!.payload).toEqual({ position: { x: 30, y: 20 }, facing: 'right' });
+  });
+
+  it('D-130: reads a reader that throws as feet on the ground', () => {
+    const events: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
+    const reporter = createStreetMovementReporter(
+      { emit: (event, payload) => events.push({ event, payload }) },
+      undefined,
+      () => {
+        throw new Error('no jump state');
+      },
+    );
+    reporter.update({ x: 10, y: 20 }, { ...idle, right: true });
+    expect(events[0]!.payload).toEqual({ position: { x: 10, y: 20 }, facing: 'right' });
+  });
+
   it('does not commit a new facing when movement publication fails', () => {
     const error = new Error('movement publication failed');
     let fail = true;
