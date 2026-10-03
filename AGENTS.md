@@ -14492,3 +14492,58 @@ floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
 island's cameras); the sand look is reproducible by putting the cloud bin back
 on the lit material. Not verified on a real GPU — the rasteriser models the
 engine's hemisphere, sun, ACES and sRGB but not its exact shader.
+---
+### 2026-10-03 — The server placed the champion on the throne; the client never did
+The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
+and the avatar went on standing on the sand. Nothing was broken on the server:
+`arena-rules.ts` already emitted a `place` to `ARENA_BOX` and back to
+`ARENA_BOX_STAND`, and `presence.ts` already opened the throne's tile to the
+one session sitting on it. The gap was that **the World only ever moves itself
+for the ring's own teleports** — it reads the ring snapshot, it does not
+consume the server's `place` effects. So a seat the server had granted moved
+nothing a player could see. The fix is to mirror the snapshot's `seated` to the
+host (`ArenaSessionHost.setThroned`) and let the World place the avatar from
+that, never from the press: a deposed champion is then stood up without
+touching anything. Two details that matter. It is a *place*, not a leap, so
+D-087's straight-line step check is not involved and there is no jump — sitting
+down is not a vault. And the stand-up is an intent that shares the claim
+floor, so it has to be kept and re-sent from `update`; dropped, a player who
+asked to get up has to guess when to ask again.
+Two smaller traps in the same area. **A pose nothing checks will clip.** The
+block (Q) was never in `tools/avatar-clipping.ts`'s `arenaPoses`, so its inward
+arm turn had never been run against the 16 looks — it drove hands into coats,
+mantles and pauldrons, and it was also what put a shield across the face at
+-1.45 rad. The block is in the pose list now and the angles chosen are the
+highest that are clipping-free. **A seat needs a declared top.** Drawing a
+seated figure at the floor height of the tile puts every look *inside* the
+furniture. This branch and `claude/benchsit` found that independently and each
+wrote its own height; on the merge the throne was moved onto benchsit's
+(D-127's) seat system and this branch's `ARENA_THRONE_SEAT_TOP`,
+`seatedBaseHeight` and `avatarSeatedHipHeight` were deleted. The lesson is the
+second half: two correct solutions to one problem is still a defect, because
+the two numbers drift. There is now one `SeatPlace` per seat in the World and
+one measured rise per look, and the throne is the fifth seat in the same audit
+the benches use.
+*Verified:* the block's face clearance is asserted as geometry, not by eye —
+nothing on the shield arm may lie between the eyes and the camera (+Z, D-059)
+for any of the 16 looks — and the clipping check runs the block standing, on
+the walk at four phases of the gait, and easing out. The seat height is checked
+by `tools/avatar-seat.ts`, which rests all 16 looks on the throne's own pad and
+admits nothing through its pad, back or arms. The arms are the one seat solid
+in the game that does not run the whole way across its sitter, so `SeatSolid`
+gained an optional `minX`/`maxX` and the audit judges width when it is given:
+their inner edge stands clear of the broadest seated thigh (0.299) and their
+top passes under the hip band, which is broader still (0.353) — the arms this
+branch first drew would have gone straight through the four heavy builds, and
+nothing but the audit would have said so. The seat/stand round trip is driven through the real
+`world-session` host (tile, facing, no jump, held still, keys only asking,
+hold dropped on leaving the arena) and through the real session against a
+snapshot (a new champion standing the old one up, the kept stand-up re-sent
+past the intent floor, `destroy` putting the World back on its feet). Full
+suite (317 files, 6764 tests), `npm run typecheck` and
+`./scripts/check-invariants.sh` pass after the merge with `origin/main`.
+Renders are from the offline rasteriser, not a GPU:
+`renders/arena-block-polish.png`, `arena-box-label-states.png`,
+`arena-throne-merged.png` (game camera, close-up and the chair in
+three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
+browser, and whether the sit-down wants a transition animation.

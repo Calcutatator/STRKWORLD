@@ -12,7 +12,11 @@ import {
   FIXED_ROOM_LEVELS,
   FixedRoomDefinitionError,
   POST_OFFICE_ROOM_DEFINITION,
+  ARENA_BOX_LABELS,
+  ARENA_BOX_STATION,
+  ARENA_ROOM_DEFINITION,
   FIXED_ROOM_STATION_ALIASES,
+  arenaBoxLabel,
   VAULT_BORROW_STATION,
   VAULT_LENDING_STATION,
   VAULT_REDEEM_STATION,
@@ -887,6 +891,48 @@ describe('fixed room definitions', () => {
     expect(VAULT_ROOM_DEFINITION.stations[3].x).toBe(15);
     expect(Object.isFrozen(VAULT_ROOM_DEFINITION.fixtures)).toBe(true);
     expect(Reflect.set(VAULT_ROOM_DEFINITION.fixtures[0], 'width', 1)).toBe(false);
+  });
+
+  /*
+   * D-128, amended 2026-10-03: the box's floating label used to read
+   * "EMPEROR'S BOX / CLOSED" for ever — including while the champion was
+   * sitting on the throne. It is the ring's champion state now.
+   */
+  describe('the emperor\'s box label (D-128, amended 2026-10-03)', () => {
+    it('reads the three champion states, and nothing else', () => {
+      expect(arenaBoxLabel({ champion: null, seated: false })).toBe(ARENA_BOX_LABELS.none);
+      expect(arenaBoxLabel({ champion: null, seated: true })).toBe(ARENA_BOX_LABELS.none);
+      expect(arenaBoxLabel({ champion: 'abc123', seated: false })).toBe(ARENA_BOX_LABELS.champion);
+      expect(arenaBoxLabel({ champion: 'abc123', seated: true })).toBe(ARENA_BOX_LABELS.seated);
+      expect(ARENA_BOX_LABELS.none).toContain("EMPEROR'S BOX");
+      expect(ARENA_BOX_LABELS.none).toContain('WIN A FIGHT');
+      expect(ARENA_BOX_LABELS.champion).toBe("CHAMPION'S SEAT");
+      expect(ARENA_BOX_LABELS.seated).toBe('CHAMPION');
+    });
+
+    it('never puts a player on it, whatever it is handed', () => {
+      for (const champion of ['abc123', 'a'.repeat(64), '0xdeadbeef']) {
+        for (const seated of [true, false]) {
+          const label = arenaBoxLabel({ champion, seated });
+          expect(label).not.toContain(champion);
+          expect(Object.values(ARENA_BOX_LABELS)).toContain(label);
+        }
+      }
+    });
+
+    it('treats junk as nobody: an unknown shape never claims a champion', () => {
+      for (const state of [null, undefined, {} as never, { champion: 7 } as never, { champion: '' }, { champion: {} } as never]) {
+        expect(arenaBoxLabel(state)).toBe(ARENA_BOX_LABELS.none);
+      }
+      // A champion with a junk `seated` is a champion who is not sitting.
+      expect(arenaBoxLabel({ champion: 'abc', seated: 1 as never })).toBe(ARENA_BOX_LABELS.champion);
+    });
+
+    it('is the arena room\'s own station label, so a World with no ring still reads sensibly', () => {
+      const station = ARENA_ROOM_DEFINITION.stations.find((entry) => entry.station === ARENA_BOX_STATION);
+      expect(station?.label).toBe(ARENA_BOX_LABELS.none);
+      expect(station?.reserved).toBe(true);
+    });
   });
 
   it('adds the Vault\'s room, last, only when the Shell opens it, failing closed', () => {

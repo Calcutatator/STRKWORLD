@@ -148,17 +148,36 @@ const SWING_STRIKE_TWIST = 0.18;
 const SWING_LUNGE = 0.1;
 const SWING_LEAN = 0.06;
 /**
- * D-128: the block (Q), layered on the stance. The shield arm comes up and
- * across the chest, the weapon arm drops in behind it, the feet set wider and
- * the body sinks and turns its shoulder into the blow.
+ * D-128: the block (Q), layered on the stance. The shield arm comes up in
+ * front of the chest, the weapon arm drops in behind it, the feet set wider
+ * and the body sinks and turns its shoulder into the blow.
+ *
+ * D-128, amended 2026-10-03. Two changes, both from the same finding.
+ *
+ * The arm used to come up to -1.45 rad — all but horizontal — and turn 0.5 rad
+ * in across the body. On the one look that carries a shield (avatar-12) that
+ * stood its plate straight across the head, so at the game camera's distance a
+ * blocking fighter read as a featureless pale slab. It now stops at
+ * `BLOCK_ARM_LEFT`, or at `BLOCK_SHIELD_ARM_ANGLE` for an arm that carries a
+ * shield, because the plate reaches a third of a unit past the fist and would
+ * otherwise come up over the face whatever the arm did. Both are the highest
+ * angle that is clipping-free for every look.
+ *
+ * And the block no longer turns either arm *in*: it only raises them. The
+ * inward turn was what drove the hands into coats, mantles and pauldrons —
+ * the block was never in `arenaPoses`, so nothing had ever checked it. The
+ * stance's own spread is kept, which is the value the guard poses prove.
+ *
+ * The block's shoulder twist went with them, for the same reason: turning the
+ * upper body swung a long coat's tail into the rear leg on the walk. The lean
+ * and the crouch stay, and they are what sells the brace.
  */
-const BLOCK_ARM_LEFT = -1.45;
-const BLOCK_ARM_LEFT_IN = -0.5;
+const BLOCK_ARM_LEFT = -0.7;
+/** A shield arm stops lower: the plate does the guarding, and it must clear the face. */
+export const BLOCK_SHIELD_ARM_ANGLE = -0.45;
 const BLOCK_ARM_RIGHT = -0.2;
-const BLOCK_ARM_RIGHT_IN = 0.02;
 const BLOCK_LEG_SPREAD = 0.2;
 const BLOCK_LEAN = 0.12;
-const BLOCK_TWIST = 0.14;
 /** The hips sink this far, world units, on top of the stance's own settle. */
 const BLOCK_CROUCH = 0.07;
 /**
@@ -2087,6 +2106,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   /** How far out the wind-up draws the arm; null keeps the stance's. */
   let windupOut: number | null = SWING_WINDUP_OUT;
   let guardOut = GUARD_ARM_OUT;
+  /** D-128, amended: how far the block raises the shield arm; a shield stops lower. */
+  let blockArmLeft = BLOCK_ARM_LEFT;
   let disposed = false;
 
   const applyLook = (): void => {
@@ -2114,7 +2135,9 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     robeBell = findGear(look.outfit, 'coat')?.length === 'ankle';
     strideScale = robeBell ? ROBE_STRIDE : 1;
     const weapon = look.outfit.weapon;
-    swingLeft = findGear(look.outfit, 'shield') ? STEADY_ARM_SWING : 1;
+    const shield = findGear(look.outfit, 'shield');
+    swingLeft = shield ? STEADY_ARM_SWING : 1;
+    blockArmLeft = shield ? BLOCK_SHIELD_ARM_ANGLE : BLOCK_ARM_LEFT;
     swingRight = weapon === null
       ? 1
       : weapon.kind === 'staff' || weapon.kind === 'halberd' || weapon.kind === 'bow'
@@ -2206,12 +2229,10 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       const b = blockWeight;
       legLeftPivot.rotation.z = lerp(legLeftPivot.rotation.z, BLOCK_LEG_SPREAD, b);
       legRightPivot.rotation.z = lerp(legRightPivot.rotation.z, -BLOCK_LEG_SPREAD, b);
-      armLeftPivot.rotation.x = lerp(armLeftPivot.rotation.x, BLOCK_ARM_LEFT, b);
-      armLeftPivot.rotation.z = lerp(armLeftPivot.rotation.z, BLOCK_ARM_LEFT_IN, b);
+      // D-128, amended: raised, never turned in. The spread stays the stance's.
+      armLeftPivot.rotation.x = lerp(armLeftPivot.rotation.x, blockArmLeft, b);
       armRightPivot.rotation.x = lerp(armRightPivot.rotation.x, BLOCK_ARM_RIGHT, b);
-      armRightPivot.rotation.z = lerp(armRightPivot.rotation.z, BLOCK_ARM_RIGHT_IN, b);
       upperBody.rotation.x += BLOCK_LEAN * b;
-      upperBody.rotation.y += BLOCK_TWIST * b;
       // The feet set wider and the body sinks; the soles stay on the ground.
       hips.position.y -= swung * (1 - Math.cos(BLOCK_LEG_SPREAD * b)) + BLOCK_CROUCH * b;
     }

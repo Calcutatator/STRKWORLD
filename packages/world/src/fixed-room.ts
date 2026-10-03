@@ -741,13 +741,42 @@ export const BUNKER_ROOM_DEFINITION = freezeAuthoredRoom({
 
 /**
  * D-114: the arena's one station, the emperor's box in the north podium. A
- * ground floor needs a station; this one is reserved like the bunker's lift,
- * so it is always locked and walking up to it only says it is closed.
+ * ground floor needs a station; it is reserved like the bunker's lift, so the
+ * room itself never opens it — D-128 gave the box to the champion, and only
+ * the ring's authority knows who that is.
  */
 export const ARENA_BOX_STATION: StationId = 'arena:box';
 
 /** D-117: the box's one-line prompt ("E · EMPEROR'S BOX"); E only shows it is closed. */
 export const ARENA_BOX_PROMPT = "EMPEROR'S BOX";
+
+/**
+ * D-128, amended 2026-10-03: what the emperor's box's floating label says.
+ *
+ * It used to read CLOSED for ever, including while the champion sat on the
+ * throne. The three states are the ring's own: nobody has won a fight yet,
+ * someone has but is not in the box, and someone is sitting in it. None of
+ * them names a player — the champion is an ephemeral presence id and the box
+ * never shows one (invariant: the lobby sees no identity, and neither does
+ * this label).
+ */
+export const ARENA_BOX_LABELS = Object.freeze({
+  /** No champion: the box is nobody's, and the way in is to win. */
+  none: "EMPEROR'S BOX\nWIN A FIGHT",
+  /** A champion exists but is not on the throne. */
+  champion: "CHAMPION'S SEAT",
+  /** The champion is on the throne. */
+  seated: 'CHAMPION',
+});
+
+/** D-128, amended: which of `ARENA_BOX_LABELS` the ring's champion state calls for. */
+export function arenaBoxLabel(
+  state: { readonly champion: unknown; readonly seated?: unknown } | null | undefined,
+): string {
+  const champion = typeof state?.champion === 'string' && state.champion.length > 0;
+  if (!champion) return ARENA_BOX_LABELS.none;
+  return state?.seated === true ? ARENA_BOX_LABELS.seated : ARENA_BOX_LABELS.champion;
+}
 
 /**
  * The solid tiles strictly inside the arena's border, as rectangles: every
@@ -809,7 +838,7 @@ export const ARENA_ROOM_DEFINITION = freezeAuthoredRoom({
   spawn: { x: ARENA_SPAWN.x, y: ARENA_SPAWN.y },
   exit: { x: ARENA_EXIT.x, y: ARENA_EXIT.y, width: ARENA_EXIT.width, height: ARENA_EXIT.height },
   stations: [
-    { station: 'arena:box', label: "EMPEROR'S BOX\nCLOSED", x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true, prompt: ARENA_BOX_PROMPT },
+    { station: 'arena:box', label: ARENA_BOX_LABELS.none, x: ARENA_BOX.x, y: ARENA_BOX.y, width: 1, height: 1, reserved: true, prompt: ARENA_BOX_PROMPT },
   ],
   fixtures: arenaFixtures(),
 } satisfies FixedRoomDefinition);

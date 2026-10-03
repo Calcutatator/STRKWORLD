@@ -165,13 +165,19 @@ function weightBoxes(root: Object3D): PartBox[] {
 
 /**
  * How deep `box` is inside `solid`, and where; 0 or less when they do not
- * overlap. Width never decides it: every solid here runs the whole way across
- * its bench at the sitter's place on it, so y and z are the question.
+ * overlap. Width usually does not decide it — a bench's slats, a plank and the
+ * throne's pad all run the whole way across their sitter, so y and z are the
+ * question — but a solid that says where it runs (the throne's arms, which
+ * stand either side of the sitter) is judged on x as well, or a chair with
+ * arms would read as a body through them.
  */
 function overlap(box: PartBox, solid: SeatSolid): { depth: number; point: [number, number, number] } {
   const y = Math.min(box.max.y, solid.maxY) - Math.max(box.min.y, solid.minY);
   const z = Math.min(box.max.z, solid.maxZ) - Math.max(box.min.z, solid.minZ);
-  const depth = Math.min(y, z);
+  const x = solid.minX === undefined || solid.maxX === undefined
+    ? Infinity
+    : Math.min(box.max.x, solid.maxX) - Math.max(box.min.x, solid.minX);
+  const depth = Math.min(x, y, z);
   return {
     depth,
     point: [
