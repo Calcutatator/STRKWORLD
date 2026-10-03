@@ -97,6 +97,8 @@ describe('the degen counter in demo', () => {
       expectedBuyUsd: null,
       priceCheck: 'checked',
       priceCheckNote: COPY.exchange.priceCheckedAbove,
+      // D-126: this fixture is at or above the oracle price, so no warning.
+      priceWarning: null,
     });
 
     await panel.confirm();

@@ -38,6 +38,12 @@ export interface ExchangeReview {
   readonly priceCheck: 'checked' | 'unchecked';
   readonly priceCheckNote: string;
   /**
+   * D-126: a small, non-blocking line for a quote that passes its floor's cap
+   * but still sits more than `SWAP_PRICE_WARN_BPS` below the oracle price.
+   * Null when the quote is inside 3%, or when nothing priced it.
+   */
+  readonly priceWarning: string | null;
+  /**
    * Leaderboard phase 1: present, and true, only when the prepared batch
    * carries a private placement receipt or tick. The review says so, subtly.
    */
@@ -50,7 +56,17 @@ export type ExchangeFlow =
   | { name: 'submitting'; stage: OperationStage; message: string; summary: ExchangeReview }
   /** `restored` is set when this receipt was found outstanding on `open()`, not confirmed this session. */
   | { name: 'submitted'; transactionHash: string; restored?: boolean }
-  | { name: 'failed'; kind: PrivacyErrorKind; message: string; recovery: 'prepare-again' | 'close' };
+  | {
+      name: 'failed';
+      kind: PrivacyErrorKind;
+      message: string;
+      recovery: 'prepare-again' | 'close';
+      /**
+       * D-126: a second line under the message. Only the Exchange's oracle
+       * refusal sets it, to point at the degen floor upstairs.
+       */
+      hint?: string;
+    };
 
 /**
  * The floor's listed assets. The ground floor's fixed six are always ready
@@ -75,7 +91,15 @@ export type ExchangeCatalogState =
  */
 export type LiveQuote =
   | { readonly status: 'idle' | 'quoting' | 'paused' }
-  | { readonly status: 'failed'; readonly message: string }
+  | {
+      readonly status: 'failed';
+      readonly message: string;
+      /**
+       * D-126: a second line under the message, set only by the oracle guard's
+       * refusal on the ground floor, to point at the degen floor upstairs.
+       */
+      readonly hint?: string;
+    }
   | {
       readonly status: 'ready';
       /** Which swap this answers: sell, buy, amount and slippage. */
@@ -174,6 +198,17 @@ export function createExchangePanel(options: {
    * (`WalletRoutePolicy.swap.slippageBps`), at most `SLIPPAGE_CAP_BPS`.
    */
   slippageCeilingBps?: number;
+  /**
+   * D-126: this counter is the degen floor's. Every swap it prepares is
+   * marked `degen`, so the seam runs it under that floor's own, wider oracle
+   * bound and slippage ceiling. Absent or false is the ground floor's.
+   */
+  degen?: boolean;
+  /**
+   * D-126: this build has a degen floor, so the Exchange's oracle refusal may
+   * point upstairs. Read only on the ground floor.
+   */
+  degenFloorOpen?: boolean;
 }): ExchangePanel {
   const { operations, receipts, onError } = options;
   const feeTolerance = options.feeTolerance ?? 0n;
@@ -184,7 +219,9 @@ export function createExchangePanel(options: {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
   let lastQuoteAt: number | null = null;
   const liveDelayMs = options.liveQuoteDelayMs ?? null;
-  const slippageCeilingBps = ownSlippageCeiling(options.slippageCeilingBps);
+  const degen = options.degen === true;
+  const degenFloorOpen = !degen && options.degenFloorOpen === true;
+  const slippageCeilingBps = ownSlippageCeiling(options.slippageCeilingBps, degen);
   const fresh = () => initialState(register, catalogPort !== undefined, slippageCeilingBps);
   const stateStore = createStore<ExchangeState>(freezeExchangeState(fresh()));
   const store: ReadableStore<ExchangeState> = Object.freeze({
@@ -245,13 +282,30 @@ export function createExchangePanel(options: {
     patch({ notice: COPY.errors['submission-uncertain'] });
     return false;
   };
+  /**
+   * D-126: the oracle guard's refusal, said with the figures it refused on.
+   * Anything else keeps its kind's copy. Never silent: this is the failure the
+   * Exchange used to swallow, which read as the Review button doing nothing.
+   */
+  const failureCopy = (failure: ShellFailure): { message: string; hint?: string } => {
+    if (failure.kind !== 'price-guard') return { message: COPY.errors[failure.kind] };
+    const state = store.getState();
+    return priceGuardMessage({ sell: state.sell, buy: state.buy, figures: failure.priceGuard, degen, degenFloorOpen });
+  };
   const fail = (error: unknown, id: number, recovery: 'prepare-again' | 'close' = 'prepare-again') => {
     const failure = toFailure(error);
     if (failure.kind === 'submission-uncertain') onError?.(failure);
     if (!live(id)) return;
     if (failure.kind !== 'submission-uncertain') onError?.(failure);
     discard();
-    patch({ flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery } });
+    const copy = failureCopy(failure);
+    patch({ flow: {
+      name: 'failed',
+      kind: failure.kind,
+      message: copy.message,
+      recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery,
+      ...(copy.hint ? { hint: copy.hint } : {}),
+    } });
   };
 
   /**
@@ -261,7 +315,7 @@ export function createExchangePanel(options: {
    */
   const quote = async (sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, slippageBps: number, signal?: AbortSignal): Promise<{ batch: PreparedBatch; summary: ExchangeReview } | null> => {
     // 1 is a request sentinel only. It never reaches the player-facing review.
-    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n, slippageBps }], signal);
+    const batch = await operations.prepare([{ kind: 'swap', tokenIn: sell.token, tokenOut: buy.token, amountIn, minAmountOut: 1n, slippageBps, ...(degen ? { degen: true } : {}) }], signal);
     const intent = batch.intents.length === 1 ? batch.intents[0] : undefined;
     const review = batch.swapReview;
     // D-090: the floor must be the one for the slippage the player chose.
@@ -296,6 +350,11 @@ export function createExchangePanel(options: {
       priceCheckNote: safeReview.priceCheck.status === 'checked'
         ? priceCheckedNote(safeReview.priceCheck.shortfallBps ?? 0, safeReview.priceCheck.boundBps)
         : COPY.exchange.priceUnchecked,
+      // D-126: inside the cap, so this swap proceeds as usual; the line only
+      // says how far below market it is, and why that happens.
+      priceWarning: safeReview.priceCheck.status === 'checked'
+        ? priceWarningNote(safeReview.priceCheck.shortfallBps ?? 0)
+        : null,
       ...(batch.countsTowardPlacement === true ? { countsTowardPlacement: true as const } : {}),
     };
     return { batch, summary };
@@ -373,7 +432,10 @@ export function createExchangePanel(options: {
         } catch (error) {
           if (run !== liveRun) return;
           liveHalted = true;
-          patch({ live: { status: 'failed', message: COPY.errors[toFailure(error).kind] } });
+          // D-126: a guard refusal says so here too, with its figures: the
+          // live quote is where a thin token's refusal is met first.
+          const copy = failureCopy(toFailure(error));
+          patch({ live: { status: 'failed', message: copy.message, ...(copy.hint ? { hint: copy.hint } : {}) } });
           return;
         }
         if (run !== liveRun) { quoted?.batch.discard(); return; }
@@ -662,9 +724,22 @@ function initialState(register: readonly RouteGrade[], loaded: boolean, slippage
 export const SLIPPAGE_PRESETS_BPS: readonly number[] = Object.freeze([10, 50, 100]);
 export const DEFAULT_SLIPPAGE_BPS = 50;
 export const SLIPPAGE_CAP_BPS = 300;
+/**
+ * D-126: the degen floor's own cap for the cog, 8%, matching the seam's
+ * `SWAP_DEGEN_MAX_SLIPPAGE_BPS`. The ground floor's `SLIPPAGE_CAP_BPS` is
+ * unchanged, and the cog upstairs still offers the same small presets.
+ */
+export const SLIPPAGE_DEGEN_CAP_BPS = 800;
 export const SLIPPAGE_WARN_BPS = 100;
 /** D-090: a price impact above this is shown as a warning. */
 export const PRICE_IMPACT_WARN_BPS = 300;
+/**
+ * D-126: past this far below Pragma's price, a quote that still passes its
+ * floor's own bound carries a small warning line in the review. 3% on both
+ * floors, the same figure as the privacy package's `SWAP_PRICE_WARN_BPS`: the
+ * ground floor's refusal threshold is the degen floor's warning threshold.
+ */
+export const PRICE_WARN_BPS = 300;
 /** The longest a timer can wait: a later expiry would fire at once instead. */
 const MAX_TIMER_MS = 2_147_483_647;
 /** D-090: how long after the last edit the counter quotes live. */
@@ -698,10 +773,11 @@ export function bpsText(bps: number): string {
   return (bps / 100).toString();
 }
 
-function ownSlippageCeiling(value: number | undefined): number {
-  if (value === undefined) return SLIPPAGE_CAP_BPS;
+function ownSlippageCeiling(value: number | undefined, degen: boolean): number {
+  const cap = degen ? SLIPPAGE_DEGEN_CAP_BPS : SLIPPAGE_CAP_BPS;
+  if (value === undefined) return cap;
   if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError('The slippage ceiling must be a positive whole number of bps.');
-  return Math.min(value, SLIPPAGE_CAP_BPS);
+  return Math.min(value, cap);
 }
 
 function swapKey(sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, slippageBps: number): string {
@@ -854,6 +930,60 @@ function validPriceCheck(check: unknown): boolean {
   if (!Number.isSafeInteger(boundBps) || (boundBps as number) <= 0 || !usd(sellUsd) || !usd(expectedBuyUsd)) return false;
   if (status === 'unchecked') return true;
   return status === 'checked' && Number.isSafeInteger(shortfallBps) && (shortfallBps as number) <= (boundBps as number);
+}
+
+/**
+ * D-126: the small warning a quote inside its cap but past 3% carries. The
+ * same line on both floors — on the degen floor it is the usual case, and
+ * downstairs it can only appear for a quote between 3% and the 3% cap, which
+ * rounding alone can produce.
+ */
+function priceWarningNote(shortfallBps: number): string | null {
+  if (shortfallBps <= PRICE_WARN_BPS) return null;
+  return COPY.exchange.priceBelowMarket.replace('{shortfall}', (shortfallBps / 100).toFixed(1));
+}
+
+/**
+ * D-126: the Exchange or the degen floor refused this quote before the wallet
+ * was asked. Says which token, how far off market, and (downstairs, with a
+ * degen floor in this build) where a thinner token can still trade.
+ */
+export function priceGuardMessage(input: {
+  readonly sell: ExchangeAsset | null;
+  readonly buy: ExchangeAsset | null;
+  readonly figures: { readonly shortfallBps: number; readonly boundBps: number } | undefined;
+  readonly degen: boolean;
+  readonly degenFloorOpen: boolean;
+}): { message: string; hint?: string } {
+  const { figures } = input;
+  if (!figures) return { message: COPY.errors['price-guard'] };
+  const symbol = thinSymbol(input.sell, input.buy);
+  const shortfall = (figures.shortfallBps / 100).toFixed(1);
+  const message = input.degen
+    ? COPY.exchange.priceGuardRefusedDegen
+      .replace('{symbol}', symbol)
+      .replace('{shortfall}', shortfall)
+      .replace('{bound}', String(figures.boundBps / 100))
+    : COPY.exchange.priceGuardRefused.replace('{symbol}', symbol).replace('{shortfall}', shortfall);
+  return input.degenFloorOpen ? { message, hint: COPY.exchange.priceGuardDegenFloor } : { message };
+}
+
+/**
+ * The token the degen floor trades against, and the one a refusal does not
+ * name: a LORDS → STRK refusal reads "avnu's price for LORDS".
+ */
+const BASE_SYMBOL = 'STRK';
+
+/**
+ * Which token the refusal names: the one that is not the pool's own money, so
+ * a LORDS → STRK refusal reads "avnu's price for LORDS". A pair with no STRK
+ * side names both, in the order the counter shows them.
+ */
+function thinSymbol(sell: ExchangeAsset | null, buy: ExchangeAsset | null): string {
+  if (!sell || !buy) return sell?.symbol ?? buy?.symbol ?? '';
+  if (sell.symbol === BASE_SYMBOL) return buy.symbol;
+  if (buy.symbol === BASE_SYMBOL) return sell.symbol;
+  return `${sell.symbol} → ${buy.symbol}`;
 }
 
 function priceCheckedNote(shortfallBps: number, boundBps: number): string {

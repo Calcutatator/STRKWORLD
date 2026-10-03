@@ -294,6 +294,24 @@ the swap probe above has passed, with every swap variable from it still set.
    | `BACKEND_DEGEN_MIN_DAILY_VOLUME_USD` | `100` | runtime |
    | `BACKEND_DEGEN_CACHE_TTL_MS` | `600000` (10 minutes) | runtime |
    | `VITE_STRK20_SWAP_DEGEN_ENABLED` | `true` | build (compiled into the bundle; the Dockerfile declares it) |
+   | `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS` | optional, `800` (8%) when unset; 1 to 800, and never below `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS` | runtime |
+   | `VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS` | optional, `800` (8%) when unset; the widest slippage the degen cog offers | build (the Dockerfile declares it) |
+   | `VITE_STRK20_SWAP_DEGEN_ORACLE_BPS` | optional, `1200` (12%) when unset; how far below Pragma's price a degen quote may sit before it is refused | build (the Dockerfile declares it) |
+
+   **The degen floor's own limits (D-126).** Its tokens are the thin ones, and
+   a 3% oracle bound refused every real LORDS quote before the wallet was ever
+   asked — the panel said nothing, so it read as the button doing nothing.
+   Upstairs the bound is 12% and the slippage ceiling 8%; the ground floor
+   keeps 3% and 3%. All three variables above are optional and default to those
+   figures, so the floor works with none of them set; set them only to narrow
+   it. A build value above its ceiling is ignored in the browser (it takes the
+   ceiling), while `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS` above 800, below
+   `BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS`, or malformed stops the backend
+   starting. The backend applies its degen ceiling only to a pair its static
+   `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` does not name on both sides, so none of
+   this widens the Exchange. A quote inside the cap but more than 3% below
+   Pragma's price is still shown with a small warning line in the review, on
+   both floors.
 
    All four `BACKEND_DEGEN_*` are required together: one set without
    `BACKEND_DEGEN_ENABLED`, a tag outside those four (`Unknown` never
@@ -325,8 +343,9 @@ the swap probe above has passed, with every swap variable from it still set.
    the acknowledgement tick (D-084). Read the balance: both arrive as pool
    notes. Then sell the DREAMS back for STRK.
 
-To close it again, unset the five variables and redeploy; the counter then
-says its list is unavailable while the ground floor keeps swapping.
+To close it again, unset the five switches and redeploy; the counter then
+says its list is unavailable while the ground floor keeps swapping. The three
+D-126 limits are inert without the degen floor, so they can be left set.
 
 ## The private leaderboard probe (leaderboard phase 1, D-122)
 

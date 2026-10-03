@@ -68,6 +68,8 @@ const KINDS = setOf({
   'submission-uncertain': true,
   'relay-not-configured': true,
   'shadow-accounts-unsupported': true,
+  // D-126: the swap's oracle guard refused the quote; it used to log as unknown.
+  'price-guard': true,
   unknown: true,
 } satisfies Record<PrivacyErrorKind, true>);
 
