@@ -55,7 +55,7 @@ import {
   type Face,
   type Point2,
 } from './palette.js';
-import type { LabelFactory, Occluder, RoomView, TextLabel } from './types.js';
+import type { LabelFactory, Occluder, RoomView, SeatPlace, TextLabel } from './types.js';
 import { createAffordanceShells, type AffordanceSet } from './affordance.js';
 
 /**
@@ -103,6 +103,84 @@ export const ARENA_SURFACE = Object.freeze({
   podium: 1.0,
   arcade: 3.6,
 });
+
+/**
+ * The arena's two seats as the figure sitting on one sees them — D-127 amended
+ * and D-128, 2026-10-03. Heights are above whatever the sitter's feet stand on
+ * (a tier's own surface, the podium floor), and `front`/`back` run along the
+ * sitter's facing, so the figure needs to know nothing about the arena.
+ *
+ * A tier's plank is behind where a spectator stands, so a sitter settles back
+ * onto it; the throne is drawn around its own tile's middle, so a champion
+ * sits where they stood.
+ */
+export const ARENA_TIER_SEAT: SeatPlace = Object.freeze({ surface: 0.1, front: 0.16, back: 0.24 });
+export const ARENA_THRONE_SEAT: SeatPlace = Object.freeze({ surface: 0.46, front: 0.22 });
+
+/** One solid of a seat, in the sitter's own frame: +Z ahead of them, y above their feet. */
+export interface SeatSolid {
+  readonly minY: number;
+  readonly maxY: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+  /**
+   * How far across the sitter the solid runs, when it does not run the whole
+   * way. A bench's slats, a plank and the throne's own pad all span their
+   * sitter, so they leave these out and width never decides whether a body is
+   * inside them; the throne's arms stand to either side of one, so they say
+   * where, and the seat audit judges them on x as well (tools/avatar-seat.ts).
+   */
+  readonly minX?: number;
+  readonly maxX?: number;
+}
+
+/**
+ * The throne's arms, as its sitter sees them: `inner` is how far out from
+ * their middle the arm starts, `outer` where it ends, and `rise` how far above
+ * the pad its top is.
+ *
+ * None of the three is free. `inner` sits just outside the broadest seated
+ * thigh of the 16 looks (0.299, the heavy build) and flush with the pad's own
+ * edge, so the arm looks joined to the chair and no look sits through it.
+ * `inner + rise` is bounded above by the hip band, which is broader still
+ * (0.353) and begins 0.34 above the pad: an arm this low passes under it, an
+ * arm as high as an elbow would have to stand further out than the tile has
+ * room for. And `outer` keeps clear of the box's corner posts. The seat audit
+ * is what holds all of it (tools/avatar-seat.ts).
+ */
+export const ARENA_THRONE_ARM = Object.freeze({ inner: 0.32, outer: 0.42, rise: 0.22 });
+
+/**
+ * The tier plank a spectator sits on and the step it stands on, as the sitter
+ * sees them (the plank runs 0.08 to 0.4 out from the tile's middle, so after
+ * the settle back it straddles them). `seats()` draws the plank from these.
+ */
+export const ARENA_TIER_SOLIDS: readonly SeatSolid[] = Object.freeze([
+  Object.freeze({ minY: 0.02, maxY: ARENA_TIER_SEAT.surface, minZ: -0.16, maxZ: 0.16 }),
+  // The step itself, from the plank's front edge to the drop at the tile's edge.
+  Object.freeze({ minY: -ARENA_SURFACE.tierStep, maxY: 0, minZ: 0.16, maxZ: 0.74 }),
+]);
+
+/**
+ * The throne's seat pad, its back and an arm each side, as its sitter sees
+ * them; `emperorsBox()` draws all four. The arms are what make it read as a
+ * chair rather than a plinth at the game camera's distance, and they are the
+ * one part of a seat in the World that does *not* run the whole way across
+ * it — hence their `minX`/`maxX`, so the seat audit judges them on width too
+ * and a build broad in the hip is caught sitting through one.
+ */
+export const ARENA_THRONE_SOLIDS: readonly SeatSolid[] = Object.freeze([
+  Object.freeze({ minY: 0.4, maxY: ARENA_THRONE_SEAT.surface, minZ: -0.28, maxZ: ARENA_THRONE_SEAT.front }),
+  Object.freeze({ minY: ARENA_THRONE_SEAT.surface, maxY: 1.1, minZ: -0.36, maxZ: -0.28 }),
+  ...[-1, 1].map((side) => Object.freeze({
+    minY: ARENA_THRONE_SEAT.surface,
+    maxY: ARENA_THRONE_SEAT.surface + ARENA_THRONE_ARM.rise,
+    minZ: -0.28,
+    maxZ: ARENA_THRONE_SEAT.front,
+    minX: side < 0 ? -ARENA_THRONE_ARM.outer : ARENA_THRONE_ARM.inner,
+    maxX: side < 0 ? -ARENA_THRONE_ARM.inner : ARENA_THRONE_ARM.outer,
+  })),
+]);
 
 export const ARENA_RING_SIGN_TEXT = 'THE RING';
 /** The gate lamp: green while the ring is free, red while a fight holds it. */
@@ -801,11 +879,34 @@ function emperorsBox(bin: GeometryBin): void {
   bin.add(key, boxGeometry(x, floor + 1.55, z, x + 1, floor + 1.68, z + 1), GOLD);
   bin.add(key, prismZ([[x, floor + 1.68], [x + 1, floor + 1.68], [x + 0.5, floor + 1.98]], z, z + 1), PURPLE);
   // The drape on the parapet facing the sand (south, to the camera), and the
-  // closed chair behind it.
+  // throne behind it.
   const face: Face = { normal: 'z+', plane: z + 1 };
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0, x + 0.95, floor + 0.32, 0.03), shade(PURPLE, 0.05));
   bin.add(key, faceBox(face, x + 0.05, floor - 0.62, 0.03, x + 0.95, floor - 0.54, 0.035), GOLD);
-  bin.add(key, boxGeometry(x + 0.3, floor, z + 0.25, x + 0.7, floor + 0.85, z + 0.55), shade(PURPLE, -0.1));
+  // The throne. D-128 drew it as one closed block through the middle of the
+  // tile, which a seated champion stood inside; it is now a seat a body fits
+  // on — a plinth, the pad `ARENA_THRONE_SEAT.surface` tops, and a back behind
+  // the shoulders — drawn from ARENA_THRONE_SOLIDS, which is what the figure
+  // sits on (D-127, amended 2026-10-03).
+  const pad = ARENA_THRONE_SOLIDS[0]!;
+  const rest = ARENA_THRONE_SOLIDS[1]!;
+  const mid = z + 0.5;
+  bin.add(key, boxGeometry(x + 0.22, floor, mid + pad.minZ + 0.05, x + 0.78, floor + pad.minY, mid + pad.maxZ - 0.05), shade(PURPLE, -0.22));
+  bin.add(key, boxGeometry(x + 0.18, floor + pad.minY, mid + pad.minZ, x + 0.82, floor + pad.maxY, mid + pad.maxZ), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.18, floor + rest.minY, mid + rest.minZ, x + 0.82, floor + rest.maxY, mid + rest.maxZ), shade(PURPLE, -0.1));
+  bin.add(key, boxGeometry(x + 0.18, floor + rest.maxY, mid + rest.minZ - 0.01, x + 0.82, floor + rest.maxY + 0.05, mid + rest.maxZ + 0.01), GOLD);
+  // An arm each side, at the height a seated elbow finds. They are what make
+  // the thing read as a chair at the game camera's distance, and they are
+  // solids of the seat (ARENA_THRONE_SOLIDS) rather than decoration, so the
+  // seat audit checks that no look sits through one.
+  for (const arm of ARENA_THRONE_SOLIDS.slice(2)) {
+    const mx = x + 0.5;
+    bin.add(
+      key,
+      boxGeometry(mx + arm.minX!, floor + arm.minY, mid + arm.minZ, mx + arm.maxX!, floor + arm.maxY, mid + arm.maxZ),
+      shade(PURPLE, -0.04),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -822,7 +923,11 @@ function seats(res: ResourceBag): InstancedMesh {
   let geometry: BufferGeometry | null;
   try {
     // Local +Z is outward (the back of the step); the plank and two risers.
-    bin.add('seat', boxGeometry(-0.44, 0.02, 0.08, 0.44, 0.1, 0.4), 0xffffff);
+    // The plank is ARENA_TIER_SOLIDS' first solid, mirrored: its sitter settles
+    // back onto it (`ARENA_TIER_SEAT.back`), so the two describe one plank.
+    const plank = ARENA_TIER_SOLIDS[0]!;
+    const back = ARENA_TIER_SEAT.back ?? 0;
+    bin.add('seat', boxGeometry(-0.44, plank.minY, back - plank.maxZ, 0.44, plank.maxY, back - plank.minZ), 0xffffff);
     bin.add('seat', boxGeometry(-0.36, 0, 0.12, -0.28, 0.02, 0.36), 0xbbbbbb);
     bin.add('seat', boxGeometry(0.28, 0, 0.12, 0.36, 0.02, 0.36), 0xbbbbbb);
     geometry = bin.take('seat');

@@ -16,9 +16,21 @@ import {
   SWING_PIVOT_REACH,
   SWING_RED,
   SWING_STEEL,
+  SWING_EYE_AHEAD,
+  SWING_EYE_HEIGHT,
   buildRoofSwing,
+  swingFrameCentreGap,
   type RoofSwingView,
 } from './roof-swing.js';
+import { cameraOffset } from './camera-rig.js';
+import {
+  SWING_CAMERA_DISTANCE,
+  SWING_CAMERA_REDUCED_DISTANCE,
+  SWING_LOOK_MAX_YAW,
+  SWING_MAX_ANGLE,
+  SWING_REDUCED_MAX_ANGLE,
+  swingCameraShot,
+} from '../roof-swing.js';
 
 /** The roof grid's origin in world units, and the deck's heights. */
 const ORIGIN = { originX: 10, originZ: 20, deckY: 40, ledgeY: 40.3 };
@@ -141,5 +153,119 @@ describe('the pendulum, as geometry (D-133)', () => {
     const { swing } = build();
     expect(() => swing.dispose()).not.toThrow();
     expect(() => swing.dispose()).not.toThrow();
+  });
+});
+
+describe('the ride looks past its own frame (D-133, amended 2026-10-03)', () => {
+  /**
+   * The lead's reviewer: "the ride's black A-frame upright and the rider's
+   * back fill the middle of the frame". They did, because the shot stood
+   * seven units behind the seat and looked back at it. The near-eye shot
+   * looks *out*, and the rule is that no steel may cross the middle third of
+   * the frame at any point of the swing or of the look-around — so this
+   * samples both rather than trusting the one angle that was rendered.
+   */
+  const FOV = 50;
+  const ASPECT = 16 / 9;
+  /** Half the central third, as a fraction of half the frame's width. */
+  const CENTRAL_THIRD = 1 / 3;
+
+  const angles = [-SWING_MAX_ANGLE, -0.6, -0.3, -0.1, 0, 0.1, 0.3, 0.6, SWING_MAX_ANGLE];
+  const yaws = [-SWING_LOOK_MAX_YAW, -0.8, -0.4, 0, 0.4, 0.8, SWING_LOOK_MAX_YAW];
+
+  it('keeps the A-frame out of the central third, at every sampled angle and look', () => {
+    const { swing, bin, res } = build();
+    try {
+      const worst: string[] = [];
+      for (const angle of angles) {
+        for (const yaw of yaws) {
+          const shot = swingCameraShot(angle, false, yaw);
+          const gap = swingFrameCentreGap(
+            swing.frameParts,
+            swing.eyeAt(angle),
+            shot.yaw,
+            shot.pitch,
+            FOV,
+            ASPECT,
+          );
+          if (gap < CENTRAL_THIRD) {
+            worst.push(`angle ${angle.toFixed(2)} look ${yaw.toFixed(2)}: ${gap.toFixed(3)}`);
+          }
+        }
+      }
+      expect(worst).toEqual([]);
+    } finally {
+      swing.dispose();
+      bin.dispose();
+      res.dispose();
+    }
+  });
+
+  it('keeps it out under reduced motion too, where the shot holds still', () => {
+    const { swing, bin, res } = build();
+    try {
+      for (const angle of [-SWING_REDUCED_MAX_ANGLE, 0, SWING_REDUCED_MAX_ANGLE]) {
+        for (const yaw of yaws) {
+          const shot = swingCameraShot(angle, true, yaw);
+          const gap = swingFrameCentreGap(swing.frameParts, swing.eyeAt(angle), shot.yaw, shot.pitch, FOV, ASPECT);
+          expect(gap, `angle ${angle} look ${yaw}`).toBeGreaterThanOrEqual(CENTRAL_THIRD);
+        }
+      }
+    } finally {
+      swing.dispose();
+      bin.dispose();
+      res.dispose();
+    }
+  });
+
+  it('would have failed on the shot it replaced: the check has teeth', () => {
+    // The old shot stood seven units back along the same yaw and pitch and
+    // looked at the seat. Put the lens there and the A-frame is across the
+    // middle — which is the render the reviewer was looking at.
+    const { swing, bin, res } = build();
+    try {
+      const shot = swingCameraShot(0, false, 0);
+      const eye = swing.eyeAt(0);
+      const back = cameraOffset(shot.yaw, shot.pitch, 7);
+      const old = { x: eye.x + back.x, y: eye.y + back.y, z: eye.z + back.z };
+      expect(swingFrameCentreGap(swing.frameParts, old, shot.yaw, shot.pitch, FOV, ASPECT)).toBeLessThan(
+        CENTRAL_THIRD,
+      );
+    } finally {
+      swing.dispose();
+      bin.dispose();
+      res.dispose();
+    }
+  });
+
+  it('puts the lens on the rider, not behind them', () => {
+    // The shot's own numbers: nothing between the eye and the view.
+    expect(SWING_CAMERA_DISTANCE).toBe(0);
+    expect(SWING_CAMERA_REDUCED_DISTANCE).toBe(0);
+    expect(swingCameraShot(0, false, 0).distance).toBe(0);
+    expect(swingCameraShot(0, true, 0).distance).toBe(0);
+  });
+
+  it('hangs the eye in the seat\'s own frame, so the sway is felt', () => {
+    const { swing, bin, res } = build();
+    try {
+      const rest = swing.eyeAt(0);
+      // At rest: head height above the board, a little forward of the axis.
+      expect(rest.y).toBeCloseTo(swing.pivot.y - SWING_HANG + SWING_EYE_HEIGHT, 6);
+      expect(rest.z).toBeCloseTo(swing.pivot.z + SWING_EYE_AHEAD, 6);
+      // Swung out, it travels south and rises, as a point on the arc does.
+      const out = swing.eyeAt(0.6);
+      expect(out.z).toBeGreaterThan(rest.z);
+      expect(out.y).toBeGreaterThan(rest.y);
+      // And it keeps its distance from the pivot: one arc, not a stretch.
+      expect(distance(out, swing.pivot)).toBeCloseTo(distance(rest, swing.pivot), 6);
+      // Never sideways: the swing is in one plane.
+      expect(out.x).toBeCloseTo(rest.x, 9);
+      expect(swing.eyeAt(Number.NaN)).toEqual(rest);
+    } finally {
+      swing.dispose();
+      bin.dispose();
+      res.dispose();
+    }
   });
 });

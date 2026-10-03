@@ -3,6 +3,7 @@ import {
   ARENA_BLOCK_CLIENT_INTERVAL_MS,
   ARENA_BOX_STAND,
   ARENA_DUMMY_TILE,
+  ARENA_INTENT_CLIENT_INTERVAL_MS,
   ARENA_MAX_HP,
   ARENA_RING_RETURN,
   ARENA_RING_RETURN_FACING,
@@ -129,7 +130,7 @@ function fakeChannel(initial: ArenaRingSnapshot | null = ring(), self: GameId | 
 }
 
 function fakeHost(at: { x: number; y: number; facing?: Facing } = APPROACH) {
-  const state = { x: at.x, y: at.y, facing: at.facing ?? ('right' as Facing), reduced: false, suspended: false };
+  const state = { x: at.x, y: at.y, facing: at.facing ?? ('right' as Facing), reduced: false, suspended: false, throned: false };
   const host = {
     position: () => ({ x: state.x, y: state.y, facing: state.facing }),
     leapTo: vi.fn((tile: { x: number; y: number }, facing: Facing) => {
@@ -144,6 +145,10 @@ function fakeHost(at: { x: number; y: number; facing?: Facing } = APPROACH) {
     selectLook: vi.fn(),
     reducedMotion: () => state.reduced,
     inputSuspended: () => state.suspended,
+    // D-128, amended 2026-10-03: the World seats and unseats the avatar.
+    setThroned: vi.fn((seated: boolean) => {
+      state.throned = seated;
+    }),
   } satisfies ArenaSessionHost;
   return { host, state };
 }
@@ -830,6 +835,83 @@ describe('arena session: the emperor’s box (D-128)', () => {
     const session = createArenaSession(fake.channel, host);
     fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
     expect(boxTarget(session)).toBeNull();
+  });
+
+  /*
+   * D-128, amended 2026-10-03: the session tells the World to seat the avatar,
+   * and only ever from the server's own `seated`. The press is not the seat.
+   */
+  it('tells the World to seat the avatar when the server does, and to stand it when the server does', () => {
+    const { fake, host, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(host.setThroned).not.toHaveBeenCalled();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(host.setThroned).toHaveBeenLastCalledWith(true);
+    // A repeat of the same ring does not seat them twice.
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(host.setThroned).toHaveBeenCalledTimes(1);
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(host.setThroned).toHaveBeenLastCalledWith(false);
+    expect(session.onThrone?.()).toBe(false);
+  });
+
+  it('stands the avatar up when the server gives the box to a new champion', () => {
+    const { fake, host } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(host.setThroned).toHaveBeenLastCalledWith(true);
+    // Someone else won the next fight: the throne is theirs, and this client
+    // is put down beside the box without ever pressing anything.
+    fake.push(ring({ phase: 'ended', round: 2, champion: OTHER }));
+    expect(host.setThroned).toHaveBeenLastCalledWith(false);
+  });
+
+  it('leaveThrone asks the server, and keeps asking until the intent floor lets it through', () => {
+    const time = clock();
+    const fake = fakeChannel(ring(), SELF);
+    const { host } = fakeHost(BOX);
+    const session = createArenaSession(fake.channel, host, { now: time.now });
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    // Sitting down spends the floor...
+    expect(boxTarget(session)?.activate()).toBe(true);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    // ...so a stand-up straight after is refused by it, and kept.
+    expect(session.leaveThrone?.()).toBe(true);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+    session.update(16);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+    // Once the floor is out it goes, once, without another press.
+    time.advance(ARENA_INTENT_CLIENT_INTERVAL_MS + 1);
+    session.update(16);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(2);
+    session.update(16);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks nothing when it is not on the throne, and drops a kept request once the server stands them', () => {
+    const time = clock();
+    const fake = fakeChannel(ring(), SELF);
+    const { host } = fakeHost(BOX);
+    const session = createArenaSession(fake.channel, host, { now: time.now });
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    expect(session.leaveThrone?.()).toBe(false);
+    expect(fake.channel.sit).not.toHaveBeenCalled();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(session.leaveThrone?.()).toBe(true);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+    // The server stands them up for its own reasons; the kept request dies.
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF }));
+    time.advance(ARENA_INTENT_CLIENT_INTERVAL_MS + 1);
+    session.update(16);
+    expect(fake.channel.sit).toHaveBeenCalledTimes(1);
+  });
+
+  it('destroy puts the World back on its feet, so a torn-down session leaves nobody frozen', () => {
+    const { fake, host, session } = atBox();
+    fake.push(ring({ phase: 'idle', round: 1, champion: SELF, seated: true }));
+    expect(host.setThroned).toHaveBeenLastCalledWith(true);
+    session.destroy();
+    expect(host.setThroned).toHaveBeenLastCalledWith(false);
   });
 
   it('everyone in the arena sees who is on the throne, spectator or not', () => {

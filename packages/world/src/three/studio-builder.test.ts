@@ -3,6 +3,7 @@ import {
   Box3,
   BoxGeometry,
   BufferGeometry,
+  Color,
   Group,
   InstancedMesh,
   Material,
@@ -13,10 +14,16 @@ import {
   Vector3,
 } from 'three';
 import type { AvatarSpriteKey } from '@strkworld/shared';
-import { AVATAR_STUDIO_DEFINITION, isAvatarStudioSolidAt, studioFigureTargetId } from '../avatar-studio.js';
+import {
+  AVATAR_STUDIO_DEFINITION,
+  gardenNookRect,
+  isAvatarStudioSolidAt,
+  studioFigureTargetId,
+} from '../avatar-studio.js';
 import { avatarSpriteForFigure } from '../avatar-state.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
+import { GARDEN_THEME, mixHex } from './palette.js';
 import { STUDIO_PAD_TOP, buildAvatarStudio } from './studio-builder.js';
 import type { InteriorOccluder } from './room-builder.js';
 import type { AvatarFigure, AvatarFigureFactory, AvatarMotion, StudioView } from './types.js';
@@ -60,6 +67,25 @@ function fakeFigures(options: { failAt?: number; failDisposeAt?: readonly number
   return { factory, created, keys };
 }
 
+/** The meshes the Garden draws, and what they cost to draw. */
+function cost(group: Group): { calls: number; triangles: number; names: string[] } {
+  const names: string[] = [];
+  let triangles = 0;
+  group.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    names.push(object.name);
+    const index = object.geometry.getIndex();
+    triangles += (index ? index.count : object.geometry.getAttribute('position').count) / 3;
+  });
+  return { calls: names.length, triangles: Math.round(triangles), names: names.sort() };
+}
+
+function findMesh(group: Group, name: string): Mesh {
+  const found = group.getObjectByName(name);
+  if (!(found instanceof Mesh)) throw new Error(`No mesh named ${name}`);
+  return found;
+}
+
 /** D-117's floor rings under the figure in reach; D-123 removed them. */
 function floorRings(studio: StudioView): Object3D[] {
   const found: Object3D[] = [];
@@ -72,26 +98,16 @@ describe('buildAvatarStudio', () => {
     const { factory, created, keys } = fakeFigures();
     const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
     const figures = AVATAR_STUDIO_DEFINITION.figures;
-    // One pad per authored figure: the definition has eight (validateAvatarStudioDefinition).
-    expect(figures).toHaveLength(8);
+    // One plinth per authored figure: the Garden has sixteen (D-134).
+    expect(figures).toHaveLength(16);
     expect(floorRings(studio)).toEqual([]);
     expect(keys).toEqual(figures.map((figure) => avatarSpriteForFigure(figure.figure)));
     studio.group.updateMatrixWorld(true);
-    // Same centres as the 2D layer: (144, 176) ... (528, 272) px.
-    const expectedPixels = [
-      [144, 176],
-      [240, 176],
-      [336, 176],
-      [432, 176],
-      [528, 176],
-      [208, 272],
-      [368, 272],
-      [528, 272],
-    ];
     created.forEach((figure, index) => {
+      const def = figures[index]!;
       const position = figure.object.getWorldPosition(new Vector3());
-      expect(position.x).toBeCloseTo(expectedPixels[index]![0]! / 32);
-      expect(position.z).toBeCloseTo(expectedPixels[index]![1]! / 32);
+      expect(position.x).toBeCloseTo(OX + def.x + 0.5);
+      expect(position.z).toBeCloseTo(OZ + def.y + 0.5);
       expect(position.y).toBeCloseTo(STUDIO_PAD_TOP);
       expect(figure.object.rotation.y).toBe(0);
       expect(figure.object.visible).toBe(false);
@@ -106,25 +122,25 @@ describe('buildAvatarStudio', () => {
     expect(shells.ids).toEqual(AVATAR_STUDIO_DEFINITION.figures.map((figure) => studioFigureTargetId(figure.figure)));
     expect(shells.mesh.parent).toBe(studio.group);
     for (const id of shells.ids) expect(shells.isUsable(id)).toBe(true);
-    // Figure 8's shell stands where figure 8 does, as tall as its body.
+    // Figure 16's shell stands where figure 16 does, as tall as its body.
     studio.group.updateMatrixWorld(true);
     const slot = shells.mesh.geometry.getAttribute('aSlot');
     const position = shells.mesh.geometry.getAttribute('position');
     const box = new Box3();
     const vertex = new Vector3();
     for (let i = 0; i < slot.count; i++) {
-      if (slot.getX(i) === 7) box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(shells.mesh.matrixWorld));
+      if (slot.getX(i) === 15) box.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(shells.mesh.matrixWorld));
     }
-    const at = created[7]!.object.getWorldPosition(new Vector3());
+    const at = created[15]!.object.getWorldPosition(new Vector3());
     expect((box.min.x + box.max.x) / 2).toBeCloseTo(at.x);
     expect((box.min.z + box.max.z) / 2).toBeCloseTo(at.z);
     expect(box.max.y).toBeCloseTo(STUDIO_PAD_TOP + 1.6);
     // The figure in reach glows only once the interaction system chooses it.
-    studio.sync({ visible: true, highlightedFigure: 8 });
+    studio.sync({ visible: true, highlightedFigure: 16 });
     expect(floorRings(studio)).toEqual([]);
-    shells.focus(studioFigureTargetId(8));
+    shells.focus(studioFigureTargetId(16));
     shells.update(250);
-    expect(shells.glowLevel(studioFigureTargetId(8))).toBe(1);
+    expect(shells.glowLevel(studioFigureTargetId(16))).toBe(1);
     expect(shells.glowLevel(studioFigureTargetId(1))).toBe(0);
     studio.dispose();
   });
@@ -186,8 +202,8 @@ describe('buildAvatarStudio', () => {
 
     studio.sync({ visible: true, highlightedFigure: 1 });
     studio.sync({ visible: false, highlightedFigure: null });
-    studio.sync({ visible: true, highlightedFigure: 8 });
-    expect(keys).toHaveLength(8);
+    studio.sync({ visible: true, highlightedFigure: 16 });
+    expect(keys).toHaveLength(16);
     expect(created.every((figure) => figure.object.visible)).toBe(true);
 
     studio.dispose();
@@ -224,7 +240,7 @@ describe('buildAvatarStudio', () => {
   });
 
   it('aggregates multiple teardown failures after all attempts', () => {
-    const { factory, created } = fakeFigures({ failDisposeAt: [1, 5] });
+    const { factory, created } = fakeFigures({ failDisposeAt: [1, 9] });
     const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
     expect(() => studio.dispose()).toThrow(AggregateError);
     for (const figure of created) expect(figure.dispose).toHaveBeenCalledTimes(1);
@@ -251,9 +267,11 @@ describe('buildAvatarStudio', () => {
     const { factory, created } = fakeFigures();
     const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory(), origin);
     origin.x = 1;
-    studio.sync({ visible: true, highlightedFigure: 8 });
+    studio.sync({ visible: true, highlightedFigure: 16 });
     studio.group.updateMatrixWorld(true);
-    expect(created[7]!.object.getWorldPosition(new Vector3()).x).toBeCloseTo(528 / 32);
+    expect(created[15]!.object.getWorldPosition(new Vector3()).x).toBeCloseTo(
+      2 + AVATAR_STUDIO_DEFINITION.figures[15]!.x + 0.5,
+    );
     studio.dispose();
   });
 
@@ -284,6 +302,115 @@ describe('buildAvatarStudio', () => {
     const walkable = (x: number, z: number) =>
       !isAvatarStudioSolidAt(definition, Math.floor(x - OX), Math.floor(z - OZ));
     expect(findWalkableIntrusions(studio.group, walkable, figureRoots)).toEqual([]);
+    studio.dispose();
+  });
+
+  it('costs twelve draw calls: the merged garden plus one mesh for the motes (D-134)', () => {
+    const { factory } = fakeFigures();
+    const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
+    // The 18x12 dressing room cost 11 calls and about 4.9k triangles. The
+    // Garden is 30x24 with sixteen dressed nooks and costs one more call —
+    // the drifting motes, which have to move on their own — because every
+    // plant, prop and light decal merges into the shell's own meshes.
+    const full = cost(studio.group);
+    expect(full.names).toEqual([
+      'avatar-studio:apron',
+      'avatar-studio:floor',
+      'avatar-studio:floor-glow',
+      'avatar-studio:light',
+      'avatar-studio:motes',
+      'avatar-studio:south-wall',
+      'avatar-studio:wall-east:body',
+      'avatar-studio:wall-east:lights',
+      'avatar-studio:wall-north:body',
+      'avatar-studio:wall-north:lights',
+      'avatar-studio:wall-west:body',
+      'avatar-studio:wall-west:lights',
+    ]);
+    expect(full.calls).toBe(12);
+    expect(full.triangles).toBeLessThan(40_000);
+    studio.dispose();
+
+    // D-129's coarse-pointer path drops the motes and the per-tile lawn
+    // detail: one call fewer, and a fifth of the triangles gone.
+    const { factory: phoneFactory } = fakeFigures();
+    const phone = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, phoneFactory, createNullLabelFactory(), undefined, {
+      lowDetail: true,
+    });
+    const low = cost(phone.group);
+    expect(low.calls).toBe(11);
+    expect(low.names).not.toContain('avatar-studio:motes');
+    expect(low.triangles).toBeLessThan(full.triangles * 0.85);
+    phone.dispose();
+  });
+
+  it('dresses each nook on its own beds, in its own look’s colours (D-134)', () => {
+    const { factory } = fakeFigures();
+    const studio = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, factory, createNullLabelFactory());
+    studio.group.updateMatrixWorld(true);
+    const glow = findMesh(studio.group, 'avatar-studio:floor-glow');
+    const floor = findMesh(studio.group, 'avatar-studio:floor');
+    const vertex = new Vector3();
+    const colour = new Color();
+    for (const figure of AVATAR_STUDIO_DEFINITION.figures) {
+      const rect = gardenNookRect(figure);
+      const cx = OX + figure.x + 0.5;
+      const cz = OZ + figure.y + 0.5;
+      // The plinth's lit rim carries the look's accent, mixed into the
+      // garden's own warm stone: proof the nook is painted from its figure.
+      const rim = new Color(mixHex(GARDEN_THEME.padRim, figure.palette.accent, 0.45));
+      let rimVertices = 0;
+      const rimPosition = glow.geometry.getAttribute('position');
+      const rimColor = glow.geometry.getAttribute('color');
+      for (let i = 0; i < rimPosition.count; i++) {
+        vertex.fromBufferAttribute(rimPosition, i).applyMatrix4(glow.matrixWorld);
+        if (Math.hypot(vertex.x - cx, vertex.z - cz) > 0.5 || Math.abs(vertex.y - STUDIO_PAD_TOP) > 0.02) continue;
+        colour.fromBufferAttribute(rimColor, i);
+        // The lawn's daisies are lit too, and one can stand on this tile:
+        // the rim is what carries the accent, so count the rim's own ring.
+        if (colour.getHexString() === rim.getHexString()) rimVertices += 1;
+      }
+      expect(rimVertices, `${figure.kind} plinth rim`).toBeGreaterThan(20);
+      // And its props stand on its own planted beds: standing geometry
+      // inside the nook, none of it outside the nook's five-by-three rect.
+      let standing = 0;
+      const position = floor.geometry.getAttribute('position');
+      for (let i = 0; i < position.count; i++) {
+        vertex.fromBufferAttribute(position, i).applyMatrix4(floor.matrixWorld);
+        if (vertex.y < 0.3) continue;
+        const inside =
+          vertex.x >= OX + rect.x && vertex.x <= OX + rect.x + rect.width &&
+          vertex.z >= OZ + rect.y && vertex.z <= OZ + rect.y + rect.height;
+        if (inside) standing += 1;
+      }
+      expect(standing, `${figure.kind} props`).toBeGreaterThan(100);
+    }
+    studio.dispose();
+  });
+
+  it('holds the motes and the lantern light still for reduced motion (D-123)', () => {
+    const { factory } = fakeFigures();
+    let still = false;
+    const studio = buildAvatarStudio(
+      AVATAR_STUDIO_DEFINITION,
+      factory,
+      createNullLabelFactory(),
+      undefined,
+      { reducedMotion: () => still },
+    );
+    const motes = findMesh(studio.group, 'avatar-studio:motes');
+    const material = motes.material as MeshBasicMaterial;
+    studio.sync({ visible: true, highlightedFigure: null });
+    studio.update(16);
+    const moving = [motes.position.y, material.opacity];
+    studio.update(400);
+    expect([motes.position.y, material.opacity]).not.toEqual(moving);
+
+    still = true;
+    studio.update(16);
+    const held = [motes.position.y, material.opacity];
+    studio.update(400);
+    expect([motes.position.y, material.opacity]).toEqual(held);
     studio.dispose();
   });
 

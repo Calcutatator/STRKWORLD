@@ -2,8 +2,7 @@ import { Box3, Mesh, Vector3, type Object3D } from 'three';
 import type { AvatarSpriteKey } from '@strkworld/shared';
 import { AVATAR_SPRITE_KEYS } from '../src/avatar-state.js';
 import { avatarPartBoxes, createAvatarFigure } from '../src/three/avatar-figure.js';
-import { seatedFit } from '../src/three/avatar-seating.js';
-import { SWING_SEAT } from '../src/three/roof-swing.js';
+import { ROOF_SWING_SEAT, SWING_SEAT } from '../src/three/roof-swing.js';
 import { SWING_LOOK_MAX_YAW } from '../src/roof-swing.js';
 import type { AvatarMotion } from '../src/three/types.js';
 
@@ -13,9 +12,11 @@ import type { AvatarMotion } from '../src/three/types.js';
  * and battle-dressed — actually sit *on* the swing?
  *
  * The seat is the one `three/roof-swing.ts` builds (`SWING_SEAT`), and the
- * rider is placed exactly as the presenter places it: the figure's origin
- * `seatedFit(look).hipDrop` below the board's top face, so its hips rest on
- * the board. Everything is measured in the seat's own frame, where the
+ * rider is placed exactly as the presenter places it: on `ROOF_SWING_SEAT`,
+ * the swing's own `SeatPlace` in D-127's seat system, whose surface is the
+ * board's top face. The figure raises itself onto that face by its own
+ * measured seated contact, so what this checks is the **shipped** pose, from
+ * the shipped seat, for all sixteen looks. Everything is measured in the seat's own frame, where the
  * board's top is y = 0 and the hanging axis is z = 0 — which is also the
  * frame the rider rides in, since the figure swings with the seat rather
  * than hanging upright beside it.
@@ -30,10 +31,16 @@ import type { AvatarMotion } from '../src/three/types.js';
  *   named: cloth (a cloak, a robe's bell, a coat's tail) drapes over a seat
  *   rather than stopping at it, and a weapon or a slung bag is carried, not
  *   seated — neither can be re-posed from here, and both read as they should.
- * - **Hands on something.** The hands come to the grab rail or a hanger,
- *   rather than to air.
- * - **Legs in front.** The knees are over the board's front edge and the feet
- *   hang below it, clear of the foot bar.
+ * - **Hands on something.** Each hand comes to rest on a rod of the seat **or
+ *   on the rider's own thigh**. The second is what D-127's seated pose
+ *   actually does, and it is not a concession: with the legs level along the
+ *   seat the lap is where a hand falls, and no rod can be put there that is
+ *   not already inside the hip band. Measured across the sixteen, every
+ *   hand lands within 0.13 of its own thigh.
+ * - **Legs along the seat.** D-127 poses a seated figure with level thighs,
+ *   because a leg here is one rigid box that cannot bend at the knee. So the
+ *   legs must reach out past the hips and the board must be under all of them,
+ *   rather than hanging off its front edge.
  */
 
 /** How far one piece may stand through another before it counts: one pixel, as the clipping check. */
@@ -44,6 +51,11 @@ export const SEAT_CONTACT_TOLERANCE = 0.02;
 export const HAND_REACH = 0.3;
 /** How near the backrest the rider's back has to come to read as sitting back. */
 export const BACK_REACH = 0.42;
+/**
+ * How far a boot may stand out past the board's front edge. A heel over the
+ * lip of a seat reads as sitting; a whole shin over it reads as falling off.
+ */
+export const LEG_OVERHANG = 0.06;
 
 /** Cloth: it drapes over a seat rather than stopping at its surface. */
 const CLOTH: ReadonlySet<string> = new Set([
@@ -96,14 +108,13 @@ export function swingSeatBoxes(): Part[] {
     box('backrest', -S.halfWidth, S.backrestLow, S.backrestBack, -S.backrestGap, S.backrestHigh, S.backrestFront),
     box('backrest', S.backrestGap, S.backrestLow, S.backrestBack, S.halfWidth, S.backrestHigh, S.backrestFront),
     box('rail', -S.halfWidth, S.railLow, S.railBack, S.halfWidth, S.railHigh, S.railFront),
-    box('foot-bar', -S.halfWidth + 0.14, S.barLow, S.barBack, S.halfWidth - 0.14, S.barHigh, S.barFront),
   ];
   for (const side of [-1, 1]) {
     const x = side * S.hangerX;
     parts.push(box('hanger', x - 0.055, 0, -0.055, x + 0.055, 2.5, 0.055));
     const postX = side * (S.halfWidth - 0.06);
     parts.push(box('post', postX - 0.04, 0, S.backrestBack, postX + 0.04, S.backrestHigh, S.backrestFront));
-    parts.push(box('stanchion', postX - 0.04, -S.boardThickness, S.railBack, postX + 0.04, S.railLow, S.boardFront));
+    parts.push(box('stanchion', postX - 0.04, -S.boardThickness, S.railBack, postX + 0.04, S.railLow, S.railFront));
   }
   return parts;
 }
@@ -177,23 +188,36 @@ function fitOnce(
   parts: readonly Part[],
   options: FitOptions = {},
 ): FitFinding[] {
-  const fit = seatedFit(key);
   const figure = createAvatarFigure(key);
   const findings: FitFinding[] = [];
   try {
-    const motion: AvatarMotion = Object.freeze({ moving: false, sprinting: false, seated: true, headYaw });
+    const motion: AvatarMotion = Object.freeze({
+      moving: false,
+      sprinting: false,
+      seated: true,
+      seat: ROOF_SWING_SEAT,
+      headYaw,
+    });
     for (let i = 0; i < SETTLE_FRAMES; i += 1) figure.update(25, motion);
-    // Placed as the presenter places the rider: hips on the board's top face.
-    figure.object.position.set(0, -fit.hipDrop + (options.offsetY ?? 0), 0);
+    // Placed as the presenter places the rider: its own ground plane on the
+    // board's top face, which is this frame's y = 0.
+    figure.object.position.set(0, ROOF_SWING_SEAT.surface + (options.offsetY ?? 0), 0);
     const pieces = piecesOf(figure.object);
     const hips = pieces.filter((piece) => piece.mesh === 'avatar-torso' && piece.tag === HIPS);
     const board = parts.find((part) => part.name === 'board')!;
+    // What takes the rider's weight, which is what has to meet the board.
+    // With D-127's level thighs that is usually a **leg**, not the hip band:
+    // the thighs lie along the seat and the hips sit on top of them. The same
+    // set `avatarSeatedContact()` measures, so the check and the figure agree.
+    const bearing = pieces.filter(
+      (piece) => piece.mesh.startsWith('avatar-leg') || (piece.mesh === 'avatar-torso' && piece.tag === HIPS),
+    );
 
     // 1. On the board: resting on its top face, over its footprint.
-    const lowest = Math.min(...hips.map((piece) => piece.box.min.y));
+    const lowest = Math.min(...bearing.map((piece) => piece.box.min.y));
     if (Math.abs(lowest) > SEAT_CONTACT_TOLERANCE) {
       findings.push({
-        key, pose, check: 'seated', piece: 'avatar-torso:hips', part: 'board',
+        key, pose, check: 'seated', piece: 'avatar-seated-contact', part: 'board',
         depth: Math.abs(lowest), point: at(hips[0]!.box),
       });
     }
@@ -236,14 +260,17 @@ function fitOnce(
       }
     }
 
-    // 3. Hands on something to hold.
+    // 3. Hands on something to rest on: a rod, or the rider's own lap.
     const hands = pieces.filter((piece) => piece.mesh.startsWith('avatar-arm') && HANDS.has(piece.tag));
     const holds = parts.filter((part) => part.name === 'rail' || part.name === 'hanger' || part.name === 'stanchion');
+    const laps = pieces
+      .filter((piece) => piece.mesh.startsWith('avatar-leg'))
+      .map((piece) => ({ name: 'lap', box: piece.box }));
     for (const hand of hands) {
-      const reach = Math.min(...holds.map((part) => gapBetween(hand.box, part.box)));
+      const reach = Math.min(...[...holds, ...laps].map((part) => gapBetween(hand.box, part.box)));
       if (reach > HAND_REACH) {
         findings.push({
-          key, pose, check: 'grip', piece: label(hand), part: 'rail', depth: reach, point: at(hand.box),
+          key, pose, check: 'grip', piece: label(hand), part: 'rail or lap', depth: reach, point: at(hand.box),
         });
       }
     }
@@ -257,18 +284,29 @@ function fitOnce(
         key, pose, check: 'back', piece: 'avatar-torso', part: 'backrest', depth: back, point: at(torso[0]!.box),
       });
     }
+    // The legs lie along the seat (D-127's level thighs), so what matters is
+    // that the board is under all of them: out past the hips, and not off the
+    // front edge into air.
     const legs = pieces.filter((piece) => piece.mesh.startsWith('avatar-leg'));
-    const knee = Math.max(...legs.map((piece) => piece.box.max.z));
+    const toe = Math.max(...legs.map((piece) => piece.box.max.z));
+    const heel = Math.min(...legs.map((piece) => piece.box.min.z));
     const sole = Math.min(...legs.map((piece) => piece.box.min.y));
-    if (knee < board.box.max.z) {
+    if (toe <= Math.max(...hips.map((piece) => piece.box.max.z))) {
       findings.push({
-        key, pose, check: 'legs', piece: 'avatar-leg', part: 'board', depth: board.box.max.z - knee,
-        point: [0, sole, knee],
+        key, pose, check: 'legs', piece: 'avatar-leg', part: 'board',
+        depth: Math.max(...hips.map((piece) => piece.box.max.z)) - toe, point: [0, sole, toe],
       });
     }
-    if (sole > -SWING_SEAT.boardThickness) {
+    if (toe > board.box.max.z + LEG_OVERHANG) {
       findings.push({
-        key, pose, check: 'legs', piece: 'avatar-leg', part: 'board', depth: sole, point: [0, sole, knee],
+        key, pose, check: 'legs', piece: 'avatar-leg', part: 'board', depth: toe - board.box.max.z,
+        point: [0, sole, toe],
+      });
+    }
+    if (heel < board.box.min.z) {
+      findings.push({
+        key, pose, check: 'legs', piece: 'avatar-leg', part: 'board', depth: board.box.min.z - heel,
+        point: [0, sole, heel],
       });
     }
     return findings;

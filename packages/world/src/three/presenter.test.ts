@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Color, Group, InstancedMesh, Mesh, SRGBColorSpace, Vector3, type Material } from 'three';
-import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
+import {
+  ARENA_BOX,
+  SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
+  arenaTileCentre,
+  type AvatarSpriteKey,
+  type GameId,
+} from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
   EXCHANGE_DEGEN_LEVEL,
@@ -16,6 +23,8 @@ import {
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
+import { swingCameraShot } from '../roof-swing.js';
+import { ARENA_SURFACE, ARENA_THRONE_SEAT } from './arena-room.js';
 import { AFFORDANCE_EMBER, affordanceClock } from './affordance.js';
 import { BoxGeometry, MeshBasicMaterial, ShaderMaterial } from 'three';
 import { createRemotePeerSource } from '../remote-peer.js';
@@ -971,6 +980,42 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
     world.presenter.dispose();
   });
 
+  /*
+   * D-128, amended 2026-10-03: the local champion the ring has seated sits on
+   * the throne rather than inside it. The presenter says so by handing the
+   * figure the throne's own `SeatPlace` (D-127): the feet keep the podium the
+   * chair stands on, and the figure lifts itself onto the pad.
+   */
+  it('hands the seated champion the throne\'s seat, and the seated pose', () => {
+    const world = setup();
+    world.view.setStreetVisible(false);
+    world.view.showRoom('arena');
+    const box = arenaTileCentre(ARENA_BOX);
+    world.view.setPlayerPosition(box, true);
+    world.view.setPlayerAvatar('avatar-12');
+    const ring = {
+      phase: 'idle', gate: 'open', dummy: null, challengerId: null, challengerSwings: 0,
+      selfIsChallenger: false, challengerGuarding: false, challengerBlocks: 0,
+      championId: 'aaaa', throneId: 'aaaa', selfIsChampion: true, selfOnThrone: true,
+    } as never;
+    world.view.syncArena(ring);
+    // The height eases like a kerb; run it out.
+    for (let t = 0; t < 60; t += 1) world.presenter.update(16);
+    expect(world.avatar.update.mock.calls.at(-1)?.[1]).toMatchObject({
+      seated: true,
+      seat: ARENA_THRONE_SEAT,
+    });
+    // The kerb is still the floor: the rise onto the pad is the figure's.
+    expect(world.avatar.object.position.y).toBeCloseTo(ARENA_SURFACE.podium, 2);
+    // Deposed, the seat goes with the throne: no seat, no seated pose, and the
+    // podium under the feet throughout — a stand-up is not a drop.
+    world.view.syncArena({ ...(ring as object), throneId: null, selfOnThrone: false } as never);
+    for (let t = 0; t < 60; t += 1) world.presenter.update(16);
+    expect(world.avatar.update.mock.calls.at(-1)?.[1]).toMatchObject({ seated: false, seat: null });
+    expect(world.avatar.object.position.y).toBeCloseTo(ARENA_SURFACE.podium, 2);
+    world.presenter.dispose();
+  });
+
   it('gives a station drawn elsewhere the same cues: registered by id, or carried on its target', () => {
     const world = setup();
     const gate = new Group();
@@ -995,6 +1040,79 @@ describe('the target\'s edge glow and the distant shimmer (D-123)', () => {
     const carried = shells(world.parent, 'affordance:leaderboard:stand');
     expect(carried.mesh.parent).toBe(stand);
     expect(carried.glow('leaderboard:stand')).toBe(1);
+    world.presenter.dispose();
+  });
+});
+
+describe('the roof swing\'s rider and their own lens (D-133, amended 2026-10-03)', () => {
+  /** A rider's frame as the session hands one over. */
+  const riding = (angle: number) => ({
+    angle,
+    busy: true,
+    selfRiding: true,
+    riderId: null,
+    headYaw: 0,
+    shot: swingCameraShot(angle, false, 0),
+  });
+
+  const onTheRoof = () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.view.syncRoofSwing(riding(0));
+    world.presenter.update(16);
+    return world;
+  };
+
+  it('aims the camera at the rider\'s eye, not at the seat', () => {
+    const world = onTheRoof();
+    const seated = world.presenter.player;
+    world.view.syncRoofSwing(null);
+    world.presenter.update(16);
+    // The focus while riding is well above the deck the player stands on: it
+    // is a head height up the swing, which is where the near-eye lens goes.
+    expect(seated.elevation).toBeGreaterThan(world.presenter.player.elevation);
+    world.presenter.dispose();
+  });
+
+  it('hands the rig a shot that stands on that eye', () => {
+    const world = onTheRoof();
+    expect(world.presenter.cameraShot?.distance).toBe(0);
+    expect(world.presenter.cameraShot?.aimHeight).toBe(0);
+    world.presenter.dispose();
+  });
+
+  it('stops drawing the rider for themselves once the lens is inside them', () => {
+    const world = onTheRoof();
+    const eye = world.presenter.player;
+    // The sweep: far off, the rider is still drawn.
+    world.presenter.updateOcclusion(new Vector3(eye.ground.x, eye.elevation + 9, eye.ground.z - 9), 16);
+    expect(world.avatar.object.visible).toBe(true);
+    // Arrived: the lens is on the eye, so they are not.
+    world.presenter.updateOcclusion(new Vector3(eye.ground.x, eye.elevation, eye.ground.z), 16);
+    expect(world.avatar.object.visible).toBe(false);
+    world.presenter.dispose();
+  });
+
+  it('gives the rider back the moment the ride ends', () => {
+    const world = onTheRoof();
+    const eye = world.presenter.player;
+    world.presenter.updateOcclusion(new Vector3(eye.ground.x, eye.elevation, eye.ground.z), 16);
+    expect(world.avatar.object.visible).toBe(false);
+    world.view.syncRoofSwing(null);
+    world.presenter.update(16);
+    world.presenter.updateOcclusion(new Vector3(eye.ground.x, eye.elevation, eye.ground.z), 16);
+    expect(world.avatar.object.visible).toBe(true);
+    expect(world.presenter.cameraShot).toBeNull();
+    world.presenter.dispose();
+  });
+
+  it('never hides anybody for a spectator: it is the rider\'s own lens only', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.view.syncRoofSwing({ ...riding(0), selfRiding: false, riderId: 'peer-1' as GameId, shot: null });
+    world.presenter.update(16);
+    world.presenter.updateOcclusion(new Vector3(24.5, 0, 15.5), 16);
+    expect(world.avatar.object.visible).toBe(true);
     world.presenter.dispose();
   });
 });

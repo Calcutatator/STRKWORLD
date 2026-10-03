@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AVATAR_SPRITE_KEYS } from '../src/avatar-state.js';
-import { disposeAvatarFigureCache } from '../src/three/avatar-figure.js';
-import { seatedFit, resetSeatedFits } from '../src/three/avatar-seating.js';
-import { SWING_HANG, SWING_RIDER_DROP, SWING_SEAT } from '../src/three/roof-swing.js';
+import { avatarSeatedContact } from '../src/three/avatar-figure.js';
+import { ROOF_SWING_SEAT, SWING_HANG, SWING_RIDER_DROP, SWING_SEAT } from '../src/three/roof-swing.js';
 import { findAllSwingFit, findSwingFit, formatFit, swingPoses } from './swing-fit.js';
 
 /**
@@ -10,10 +9,11 @@ import { findAllSwingFit, findSwingFit, formatFit, swingPoses } from './swing-fi
  *
  * The lead's complaint was that they did not: one rider height suited the
  * middle of the sixteen looks and left the small ones sunk and the large ones
- * hovering. The fix is to measure each look (`avatar-seating.ts`) and place
- * the rider from what is measured, and this is the check that it worked —
- * across all sixteen, cosy and battle-dressed, looking straight ahead and at
- * each end of the look-around.
+ * hovering. The fix is D-127's seat system: the swing hands the figure its own
+ * `SeatPlace` and the figure raises itself onto it by its own measured seated
+ * contact. This is the check that it worked — across all sixteen, cosy and
+ * battle-dressed, looking straight ahead and at each end of the look-around,
+ * against the level-thigh seated pose that ships.
  */
 
 const CHECK_TIMEOUT_MS = 120_000;
@@ -33,14 +33,16 @@ describe('every look sits on the swing (D-133)', () => {
   });
 
   it('would catch a rider placed at one height for everybody: the old bug', () => {
-    // The seat used to drop every look the same distance. Measured against
-    // the smallest and largest, that is exactly what this check now refuses.
-    const drops = AVATAR_SPRITE_KEYS.map((key) => seatedFit(key).hipDrop);
-    const spread = Math.max(...drops) - Math.min(...drops);
-    expect(spread).toBeGreaterThan(0.15);
-    // The shipped fallback sits inside the range it stands in for.
-    expect(SWING_RIDER_DROP - SWING_HANG).toBeGreaterThan(Math.min(...drops));
-    expect(SWING_RIDER_DROP - SWING_HANG).toBeLessThan(Math.max(...drops));
+    // The seat used to drop every look the same distance. The spread of what
+    // the sixteen actually need is what made that wrong, and it is still
+    // there — the figure now absorbs it, so the swing does not have to.
+    const contacts = AVATAR_SPRITE_KEYS.map((key) => avatarSeatedContact(key));
+    expect(Math.max(...contacts) - Math.min(...contacts)).toBeGreaterThan(0.03);
+    // Every look's contact is below its own ground plane, which is why the
+    // swing's seat surface can be that plane and still seat all sixteen.
+    for (const contact of contacts) expect(contact).toBeLessThan(ROOF_SWING_SEAT.surface);
+    // The rider's drop is the board's top face, with nothing per-look in it.
+    expect(SWING_RIDER_DROP).toBe(SWING_HANG + ROOF_SWING_SEAT.surface);
   });
 
   it('reports a rider who hovers, and one who is sunk into the board', () => {
@@ -52,39 +54,23 @@ describe('every look sits on the swing (D-133)', () => {
     expect(hovering.some((finding) => finding.check === 'seated')).toBe(true);
     const sunk = findSwingFit(key, { offsetY: -0.15 });
     expect(sunk.some((finding) => finding.check === 'seated')).toBe(true);
-    // Sunk that far, the body is through the plank as well as off it.
-    expect(sunk.some((finding) => finding.check === 'intersect')).toBe(true);
+    // Sunk far enough that something which is *not* allowed to rest on the
+    // board — a hand, rather than the hips or the thighs — is inside it, the
+    // intersection check has teeth too.
+    const buried = findSwingFit(key, { offsetY: -0.5 });
+    expect(buried.some((finding) => finding.check === 'intersect')).toBe(true);
   }, CHECK_TIMEOUT_MS);
 });
 
-describe('what the measurement says about each look (D-133)', () => {
-  it('measures a seated hip height for every look, in a sane range', () => {
-    for (const key of AVATAR_SPRITE_KEYS) {
-      const fit = seatedFit(key);
-      expect(fit.hipDrop, key).toBeGreaterThan(0.05);
-      expect(fit.hipDrop, key).toBeLessThan(0.4);
-      // The legs hang below the hips, and the knees reach out in front.
-      expect(fit.footDrop, key).toBeGreaterThan(fit.hipDrop * 0.5);
-      expect(fit.kneeReach, key).toBeGreaterThan(0.1);
-      // And the head is above the body, not inside it.
-      expect(fit.headTop, key).toBeGreaterThan(0.6);
-    }
-  });
-
-  it('bigger builds sit higher: the measurement follows the body, not the key', () => {
-    // avatar-6 is a small build, avatar-15 a large one (avatar-looks.ts).
-    expect(seatedFit('avatar-6').hipDrop).toBeLessThan(seatedFit('avatar-1').hipDrop);
-    expect(seatedFit('avatar-15').hipDrop).toBeGreaterThan(seatedFit('avatar-1').hipDrop);
-  });
-
-  it('measures each look once and keeps it', () => {
-    resetSeatedFits();
-    const first = seatedFit('avatar-2');
-    expect(seatedFit('avatar-2')).toBe(first);
-    resetSeatedFits();
-    expect(seatedFit('avatar-2')).not.toBe(first);
-    expect(seatedFit('avatar-2').hipDrop).toBeCloseTo(first.hipDrop, 9);
-    disposeAvatarFigureCache();
+describe('the swing is a seat like any other (D-127/D-133)', () => {
+  it('describes the board as a SeatPlace the figure can rise onto', () => {
+    // The surface is the rider's own ground plane: the figure's seated
+    // underside hangs below that plane, so every look lands on the board
+    // without the swing knowing anything about builds.
+    expect(ROOF_SWING_SEAT.surface).toBe(0);
+    expect(ROOF_SWING_SEAT.front).toBe(SWING_SEAT.boardFront);
+    // A seat the sitter is placed on, not one they stand in front of.
+    expect(ROOF_SWING_SEAT.back ?? 0).toBe(0);
   });
 
   it('the seat the check reads is the seat the builder builds', () => {
@@ -94,7 +80,10 @@ describe('what the measurement says about each look (D-133)', () => {
     expect(SWING_SEAT.backrestBack).toBeLessThanOrEqual(SWING_SEAT.boardBack);
     expect(SWING_SEAT.backrestFront).toBeLessThan(0);
     expect(SWING_SEAT.railBack).toBeGreaterThan(SWING_SEAT.boardFront);
-    expect(SWING_SEAT.barHigh).toBeLessThan(-SWING_SEAT.boardThickness);
+    // The board carries the whole of a level-thigh sit, and the rail stands
+    // clear in front of it rather than under a hanging knee.
+    expect(SWING_SEAT.boardFront - SWING_SEAT.boardBack).toBeGreaterThan(0.6);
+    expect(SWING_SEAT.railLow).toBeGreaterThan(0);
     expect(SWING_SEAT.hangerX).toBeGreaterThan(SWING_SEAT.halfWidth);
   });
 });

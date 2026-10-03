@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ARENA_BOX,
+  ARENA_BOX_SEAT_FACING,
+  ARENA_BOX_STAND,
+  ARENA_BOX_STAND_FACING,
   ARENA_DUMMY_TILE,
   ARENA_EXIT,
   ARENA_GATE_APPROACH,
@@ -22,7 +25,7 @@ import type { ArenaChannel, ArenaSessionHost, ArenaViewFrame } from './arena-cha
 import { DOOR_REENTRY_HOLD_MS } from './door-trigger.js';
 import { COLOSSEUM_DOOR, COLOSSEUM_RETURN, COLOSSEUM_RETURN_FACING } from './map/colosseum.js';
 import { TILE_SIZE } from './map/street.js';
-import { FIXED_ROOM_TILE_SIZE } from './fixed-room.js';
+import { ARENA_BOX_LABELS, FIXED_ROOM_TILE_SIZE } from './fixed-room.js';
 import type { MovementInput } from './street-movement.js';
 import { ROOM_ORIGIN } from './world-layout.js';
 import { createWorldSession, type WorldActionKey, type WorldKeyboard, type WorldSessionView } from './world-session.js';
@@ -51,6 +54,8 @@ const ring = vi.hoisted(() => ({
   pressE: false,
   gate: [] as Array<{ id: string; label: string; rect: { x: number; y: number; width: number; height: number }; activate(): unknown }>,
   attacks: 0,
+  /** D-128, amended: how many times the World asked to come off the throne. */
+  throneLeaves: 0,
 }));
 
 vi.mock('./arena-session.js', () => ({
@@ -71,6 +76,10 @@ vi.mock('./arena-session.js', () => ({
         return true;
       },
       frame: () => ring.frame,
+      leaveThrone: () => {
+        ring.throneLeaves += 1;
+        return true;
+      },
       destroy: () => void (ring.destroyed += 1),
       ...(ring.pressE
         ? {
@@ -86,6 +95,25 @@ vi.mock('./arena-session.js', () => ({
 }));
 
 const NO_KEYS: MovementInput = Object.freeze({ left: false, right: false, up: false, down: false });
+
+/** A ring frame the session hands the view; only the fields a test cares about. */
+function frame(over: Partial<ArenaViewFrame>): ArenaViewFrame {
+  return Object.freeze({
+    phase: 'idle',
+    gate: 'open',
+    dummy: null,
+    challengerId: null,
+    challengerSwings: 0,
+    selfIsChallenger: false,
+    challengerGuarding: false,
+    challengerBlocks: 0,
+    championId: null,
+    throneId: null,
+    selfIsChampion: false,
+    selfOnThrone: false,
+    ...over,
+  });
+}
 
 const CHANNEL: ArenaChannel = Object.freeze({
   ring: () => null,
@@ -207,6 +235,7 @@ beforeEach(() => {
   ring.pressE = false;
   ring.gate = [];
   ring.attacks = 0;
+  ring.throneLeaves = 0;
 });
 
 describe('the arena in the session (D-114)', () => {
@@ -436,6 +465,134 @@ describe('the arena in the session (D-114)', () => {
     host.leapTo({ x: 0.5, y: 3 }, 'up');
     host.leapTo({ x: -4, y: 3 }, 'up');
     expect(world.position()).toEqual(arenaTileCentre(ARENA_RING_RETURN));
+  });
+
+  /*
+   * D-128, amended 2026-10-03. The lead's report: pressing E at the box
+   * flipped the chip to "LEAVE THE THRONE" — so the server had seated them —
+   * and the avatar went on standing on the sand. The server already placed
+   * them; nothing on the client moved. These four tests are that gap.
+   */
+  describe('the emperor\'s throne (D-128, amended 2026-10-03)', () => {
+    const boxTile = () => arenaTileCentre(ARENA_BOX);
+    const standTile = () => arenaTileCentre(ARENA_BOX_STAND);
+
+    it('seats the champion on the box\'s own tile, facing south, and stands them back beside it', () => {
+      const world = setup();
+      const host = ring.host!;
+      world.onStreet(COLOSSEUM_DOOR.x, COLOSSEUM_DOOR.y);
+      world.inRoom(ARENA_BOX_STAND.x, ARENA_BOX_STAND.y);
+      const jumps = world.count('playerJump');
+      const from = world.emitted.length;
+      host.setThroned?.(true);
+      // On the throne, facing south over the sand — and placed, not vaulted.
+      expect(world.position()).toEqual(boxTile());
+      expect(world.last('setPlayerFacing')).toEqual([ARENA_BOX_SEAT_FACING]);
+      expect(world.count('playerJump')).toBe(jumps);
+      expect(world.emitted.slice(from).at(-1)).toEqual({
+        event: 'area:moved',
+        payload: { position: boxTile(), facing: ARENA_BOX_SEAT_FACING },
+      });
+      // The client and the server name the same tile.
+      expect(boxTile()).toEqual(world.roomTile(ARENA_BOX.x, ARENA_BOX.y));
+      // And the host agrees about where the player is, so the ring's own
+      // approach check sees them on the box.
+      expect(host.position()).toEqual({ ...boxTile(), facing: ARENA_BOX_SEAT_FACING });
+      host.setThroned?.(false);
+      expect(world.position()).toEqual(standTile());
+      expect(world.last('setPlayerFacing')).toEqual([ARENA_BOX_STAND_FACING]);
+      expect(world.emitted.at(-1)).toEqual({
+        event: 'area:moved',
+        payload: { position: standTile(), facing: ARENA_BOX_STAND_FACING },
+      });
+    });
+
+    it('holds the avatar still while it sits, and opens the box\'s tile to it alone', () => {
+      const world = setup();
+      const host = ring.host!;
+      world.onStreet(COLOSSEUM_DOOR.x, COLOSSEUM_DOOR.y);
+      world.inRoom(ARENA_BOX_STAND.x, ARENA_BOX_STAND.y);
+      host.setThroned?.(true);
+      // Walking into a wall of held keys moves nothing: the seat is the
+      // server's, and the only thing a key does is ask to leave it.
+      world.walk({ left: true }, 400);
+      expect(world.position()).toEqual(boxTile());
+      expect(ring.throneLeaves).toBeGreaterThan(0);
+      // Space asks too, and does not jump.
+      const jumps = world.count('playerJump');
+      const asked = ring.throneLeaves;
+      world.keyboard.press('keydown-Space');
+      expect(ring.throneLeaves).toBe(asked + 1);
+      expect(world.count('playerJump')).toBe(jumps);
+      // Until the server says so, nothing has moved.
+      expect(world.position()).toEqual(boxTile());
+      host.setThroned?.(false);
+      expect(world.position()).toEqual(standTile());
+    });
+
+    it('never seats anyone outside the arena, and drops the hold on the way out', () => {
+      const world = setup();
+      const host = ring.host!;
+      const street = world.position();
+      host.setThroned?.(true);
+      expect(world.position()).toEqual(street);
+      world.onStreet(COLOSSEUM_DOOR.x, COLOSSEUM_DOOR.y);
+      world.inRoom(ARENA_BOX_STAND.x, ARENA_BOX_STAND.y);
+      host.setThroned?.(true);
+      expect(world.position()).toEqual(boxTile());
+      // Out of the arena the hold goes with the room: back on the street the
+      // player walks again.
+      world.inRoom(ARENA_EXIT.x, ARENA_EXIT.y + 1);
+      world.walk({ left: true }, 200);
+      world.onStreet(COLOSSEUM_RETURN.x, COLOSSEUM_RETURN.y);
+      const before = world.position();
+      world.walk({ left: true }, 200);
+      expect(world.position()).not.toEqual(before);
+    });
+
+    it('labels the box from the ring: no champion, a champion, and one on the throne', () => {
+      const world = setup();
+      world.onStreet(COLOSSEUM_DOOR.x, COLOSSEUM_DOOR.y);
+      world.inRoom(20, 10);
+      const labelNow = (): string | undefined => {
+        const args = world.last('renderRoom');
+        const stations = (args?.[1] ?? []) as Array<{ station: string; label: string }>;
+        return stations.find((station) => station.station === 'arena:box')?.label;
+      };
+      ring.frame = frame({ championId: null, throneId: null });
+      world.session.update(16);
+      expect(labelNow()).toBe(ARENA_BOX_LABELS.none);
+      // A champion who is not in the box: the seat is spoken for.
+      ring.frame = frame({ championId: 'aaaa' as never, throneId: null });
+      world.session.update(16);
+      expect(labelNow()).toBe(ARENA_BOX_LABELS.champion);
+      // And on the throne.
+      ring.frame = frame({ championId: 'aaaa' as never, throneId: 'aaaa' as never });
+      world.session.update(16);
+      expect(labelNow()).toBe(ARENA_BOX_LABELS.seated);
+      // No player is ever named on it.
+      for (const label of Object.values(ARENA_BOX_LABELS)) expect(label).not.toContain('aaaa');
+    });
+
+    it('a spectator reads exactly what the champion reads', () => {
+      const champion = setup();
+      const spectator = setup();
+      for (const world of [champion, spectator]) {
+        world.onStreet(COLOSSEUM_DOOR.x, COLOSSEUM_DOOR.y);
+        world.inRoom(20, 10);
+      }
+      const labelOf = (world: ReturnType<typeof setup>): string | undefined => {
+        const stations = (world.last('renderRoom')?.[1] ?? []) as Array<{ station: string; label: string }>;
+        return stations.find((station) => station.station === 'arena:box')?.label;
+      };
+      // The same ring, read by the champion (self) and by someone else.
+      ring.frame = frame({ championId: 'aaaa' as never, throneId: 'aaaa' as never, selfIsChampion: true, selfOnThrone: true });
+      champion.session.update(16);
+      ring.frame = frame({ championId: 'aaaa' as never, throneId: 'aaaa' as never });
+      spectator.session.update(16);
+      expect(labelOf(champion)).toBe(ARENA_BOX_LABELS.seated);
+      expect(labelOf(spectator)).toBe(labelOf(champion));
+    });
   });
 
   it('hands E and a primary click to the arena session only in the arena, while the World owns input', () => {

@@ -58,7 +58,7 @@ import { SKY_HORIZON } from './sky.js';
 /**
  * Where the rock's axis stands, in street world coordinates.
  *
- * The playable map runs x 0 to 111, z 0 to 28, so the centre sits under the
+ * The playable map runs x 0 to 111, z 0 to 33 (D-134), so the centre sits under the
  * street's middle and a little south of it: far enough south to carry the
  * river, the station and the city across it (D-124), far enough north that the
  * backdrop's fields and hills still have ground under them.

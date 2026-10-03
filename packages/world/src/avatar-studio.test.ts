@@ -7,6 +7,7 @@ import {
   avatarStudioFigureAt,
   avatarStudioSpawnToWorld,
   avatarStudioTileColour,
+  avatarStudioTileRole,
   createAvatarStudioPresentation,
   createAvatarStudioController,
   isAvatarStudioSolidAt,
@@ -517,8 +518,8 @@ describe('hidden Avatar Studio', () => {
 
     const injectedFigure = definition.figures[0] as { sprite: AvatarSpriteKey; x: number };
     injectedFigure.sprite = 'avatar-8';
-    injectedFigure.x = 14;
-    controller.update({ x: 2, y: 3 });
+    injectedFigure.x = 24;
+    controller.update({ x: 5, y: 4 });
 
     expect(selection.selected).toBe('avatar-1');
   });
@@ -560,24 +561,19 @@ describe('hidden Avatar Studio', () => {
     expect(port.setPlayerPosition).not.toHaveBeenCalled();
   });
 
-  it('has a fixed 18x12 envelope, eight cosy figures and no building/station seam', () => {
+  it('has a fixed 30x24 envelope, sixteen figures and no building/station seam (D-134)', () => {
     expect(AVATAR_STUDIO_DEFINITION).toMatchObject({
-      width: 18,
-      height: 12,
-      spawn: { x: 9, y: 1 },
-      exit: { x: 8, y: 0, width: 2, height: 1 },
+      width: 30,
+      height: 24,
+      spawn: { x: 15, y: 1 },
+      exit: { x: 14, y: 0, width: 2, height: 1 },
     });
-    expect(AVATAR_STUDIO_DEFINITION.figures).toHaveLength(8);
-    expect(AVATAR_STUDIO_DEFINITION.figures.map((figure) => figure.sprite)).toEqual([
-      'avatar-1',
-      'avatar-2',
-      'avatar-3',
-      'avatar-4',
-      'avatar-5',
-      'avatar-6',
-      'avatar-7',
-      'avatar-8',
-    ]);
+    expect(AVATAR_STUDIO_DEFINITION.figures).toHaveLength(16);
+    expect(AVATAR_STUDIO_DEFINITION.figures.map((figure) => figure.sprite)).toEqual(
+      Array.from({ length: 16 }, (_value, index) => `avatar-${index + 1}`),
+    );
+    // Every nook is dressed as its own vignette, in its own colours.
+    expect(new Set(AVATAR_STUDIO_DEFINITION.figures.map((figure) => figure.kind)).size).toBe(16);
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('building');
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('stations');
     expect(() => validateAvatarStudioDefinition(AVATAR_STUDIO_DEFINITION)).not.toThrow();
@@ -586,31 +582,32 @@ describe('hidden Avatar Studio', () => {
   it('derives the interior pixel spawn from the validated top-opening definition', () => {
     expect(
       avatarStudioSpawnToWorld(AVATAR_STUDIO_DEFINITION, { x: 64, y: 64 }, 32),
-    ).toEqual({ x: 368, y: 112 });
+    ).toEqual({ x: 560, y: 112 });
   });
 
   it('rejects overlapping selector rectangles that would make a later figure unreachable', () => {
     const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
       (figure) => ({ ...figure }),
     );
-    figures[0] = { ...figures[0]!, width: 2 };
-    figures[1] = { ...figures[1]!, x: 3, y: 3 };
+    // Nook one's beds would grow into nook two's.
+    figures[1] = { ...figures[1]!, x: figures[0]!.x + 4 };
 
     expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
-      /figures must not overlap/i,
+      /nooks must not overlap/i,
     );
   });
 
-  it('requires exactly eight well-formed in-bounds selector rectangles', () => {
+  it('requires exactly sixteen well-formed in-bounds figure tiles', () => {
     expect(() =>
       validateAvatarStudioDefinition(authoredDefinition({
-        figures: AVATAR_STUDIO_DEFINITION.figures.slice(0, 7),
+        figures: AVATAR_STUDIO_DEFINITION.figures.slice(0, 15),
       })),
-    ).toThrow(/exactly eight figures/i);
+    ).toThrow(/exactly sixteen figures/i);
 
     for (const malformed of [
       { x: 2.5 },
       { width: 0 },
+      { width: 2 },
       { x: AVATAR_STUDIO_DEFINITION.width },
     ]) {
       const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
@@ -618,16 +615,27 @@ describe('hidden Avatar Studio', () => {
       );
       figures[0] = { ...figures[0]!, ...malformed };
       expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
-        /figures must be in-bounds and off the exit/i,
+        /figures must be single in-bounds tiles off the gate/i,
       );
     }
   });
 
+  it('refuses a nook whose beds would reach the hedge (D-134)', () => {
+    const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
+      (figure) => ({ ...figure }),
+    );
+    // Two tiles in from the west hedge: the nook's west bed would be in it.
+    figures[0] = { ...figures[0]!, x: 2 };
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
+      /nooks must sit strictly inside the hedge/i,
+    );
+  });
+
   it.each([
-    ['left', { x: 0, y: 3 }],
-    ['right', { x: AVATAR_STUDIO_DEFINITION.width - 1, y: 3 }],
-    ['top', { x: 2, y: 0 }],
-    ['bottom', { x: 2, y: AVATAR_STUDIO_DEFINITION.height - 1 }],
+    ['left', { x: 0, y: 4 }],
+    ['right', { x: AVATAR_STUDIO_DEFINITION.width - 1, y: 4 }],
+    ['top', { x: 5, y: 0 }],
+    ['bottom', { x: 5, y: AVATAR_STUDIO_DEFINITION.height - 1 }],
   ])('rejects a selector on the solid %s border', (_border, position) => {
     const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
       (figure) => ({ ...figure }),
@@ -640,33 +648,34 @@ describe('hidden Avatar Studio', () => {
   });
 
   it.each([
-    ['a fractional coordinate', { x: 9.5, y: 1 }],
+    ['a fractional coordinate', { x: 15.5, y: 1 }],
     ['the solid room border', { x: 0, y: 9 }],
-    ['the exit opening', { x: 8, y: 0 }],
-    ['a selector rectangle', { x: 2, y: 3 }],
+    ['the gate opening', { x: 14, y: 0 }],
+    ['a figure tile', { x: 5, y: 4 }],
+    ['a planted bed', { x: 5, y: 3 }],
   ])('rejects a spawn on %s', (_label, spawn) => {
     expect(() => validateAvatarStudioDefinition(authoredDefinition({ spawn }))).toThrow(
-      /spawn must be a walkable interior tile off the exit and figures/i,
+      /spawn must be a walkable interior tile off the gate/i,
     );
   });
 
   it.each([
-    ['one tile sideways from the opening centre', { x: 8, y: 1 }],
-    ['two rows inside the room', { x: 9, y: 2 }],
+    ['one tile sideways from the opening centre', { x: 14, y: 1 }],
+    ['two rows inside the room', { x: 15, y: 2 }],
   ])('rejects a spawn %s', (_label, spawn) => {
     expect(() => validateAvatarStudioDefinition(authoredDefinition({ spawn }))).toThrow(
-      /spawn must be immediately inside the centred top opening/i,
+      /spawn must be immediately inside the centred gate/i,
     );
   });
 
   it.each([
-    ['below the top border', { x: 8, y: 1, width: 2, height: 1 }],
-    ['only one tile wide', { x: 8, y: 0, width: 1, height: 1 }],
-    ['two tiles deep', { x: 8, y: 0, width: 2, height: 2 }],
-    ['off centre', { x: 7, y: 0, width: 2, height: 1 }],
+    ['below the top border', { x: 14, y: 1, width: 2, height: 1 }],
+    ['only one tile wide', { x: 14, y: 0, width: 1, height: 1 }],
+    ['two tiles deep', { x: 14, y: 0, width: 2, height: 2 }],
+    ['off centre', { x: 13, y: 0, width: 2, height: 1 }],
   ])('rejects an exit %s', (_label, exit) => {
     expect(() => validateAvatarStudioDefinition(authoredDefinition({ exit }))).toThrow(
-      /exit must be a centred two-tile top-border opening/i,
+      /gate must be a centred two-tile top-border opening/i,
     );
   });
 
@@ -684,7 +693,7 @@ describe('hidden Avatar Studio', () => {
     expect(controller.state.inRoom).toBe(true);
     expect(events[0]).toEqual({ event: 'avatar-studio:entered', payload: {} });
 
-    const figure = avatarStudioFigureAt(AVATAR_STUDIO_DEFINITION, 14, 6)!;
+    const figure = avatarStudioFigureAt(AVATAR_STUDIO_DEFINITION, 24, 9)!;
     // Standing beside it, or on it, only highlights it and offers the prompt.
     controller.update({ x: figure.x - 1, y: figure.y });
     expect(controller.state.highlightedFigure).toBe(8);
@@ -706,7 +715,7 @@ describe('hidden Avatar Studio', () => {
       payload: { sprite: 'avatar-8' satisfies AvatarSpriteKey },
     });
 
-    controller.update({ x: 8, y: 0 });
+    controller.update({ x: 14, y: 0 });
     expect(controller.state.inRoom).toBe(false);
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
@@ -727,7 +736,7 @@ describe('hidden Avatar Studio', () => {
     });
 
     controller.enter();
-    controller.update({ x: 14, y: 6 });
+    controller.update({ x: 24, y: 9 });
     expect(controller.activate()).toBe(false);
 
     expect(controller.state.inRoom).toBe(false);
@@ -746,13 +755,13 @@ describe('hidden Avatar Studio', () => {
       onChange: (state) => {
         if (!reentered && state.highlightedFigure === 1) {
           reentered = true;
-          controller.update({ x: 5, y: 3 });
+          controller.update({ x: 11, y: 4 });
         }
       },
     });
 
     controller.enter();
-    controller.update({ x: 2, y: 3 });
+    controller.update({ x: 5, y: 4 });
     expect(selection.selected).toBe('avatar-1');
     expect(controller.state.highlightedFigure).toBe(2);
     controller.activate();
@@ -777,7 +786,7 @@ describe('hidden Avatar Studio', () => {
 
     controller.enter();
     snapshots.length = 0;
-    controller.update({ x: 14, y: 6 });
+    controller.update({ x: 24, y: 9 });
     controller.activate();
 
     expect(selection.selected).toBe('avatar-8');
@@ -897,7 +906,7 @@ describe('hidden Avatar Studio', () => {
     expect(controller.state.selected).toBe('avatar-9');
 
     // E at a figure writes through to the shared selection.
-    controller.update({ x: 2, y: 3 });
+    controller.update({ x: 5, y: 4 });
     controller.activate();
     expect(selection.selected).toBe('avatar-1');
     expect(controller.state.selected).toBe('avatar-1');
@@ -908,7 +917,7 @@ describe('hidden Avatar Studio', () => {
 
     // E at the same figure again is not a change and emits nothing.
     const settled = events.length;
-    controller.update({ x: 2, y: 3 });
+    controller.update({ x: 5, y: 4 });
     controller.activate();
     expect(events).toHaveLength(settled);
 
@@ -977,7 +986,7 @@ describe('hidden Avatar Studio', () => {
     });
 
     controller.enter();
-    expect(playerPositions.at(-1)).toEqual({ x: 368, y: 112 });
+    expect(playerPositions.at(-1)).toEqual({ x: 560, y: 112 });
     expect(AVATAR_STUDIO_DEFINITION.spawn.y).toBe(
       AVATAR_STUDIO_DEFINITION.exit.y + AVATAR_STUDIO_DEFINITION.exit.height,
     );
@@ -1014,23 +1023,86 @@ describe('hidden Avatar Studio', () => {
     expect(operations.filter((operation) => operation === 'avatar-studio:entered')).toHaveLength(1);
   });
 
-  it('keeps the room border solid except for the two-tile exit', () => {
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(true);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 8, 0)).toBe(false);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 0)).toBe(false);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 1)).toBe(false);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 11)).toBe(true);
+  it('walks from the gate to all sixteen figures along its own lanes (D-134)', () => {
+    const definition = AVATAR_STUDIO_DEFINITION;
+    // Flood the garden from the spawn, over walkable tiles only.
+    const key = (x: number, y: number) => y * definition.width + x;
+    const seen = new Set<number>([key(definition.spawn.x, definition.spawn.y)]);
+    const queue = [definition.spawn];
+    for (let head = 0; head < queue.length; head += 1) {
+      const { x, y } = queue[head]!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (isAvatarStudioSolidAt(definition, nx, ny) || seen.has(key(nx, ny))) continue;
+        seen.add(key(nx, ny));
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    // Every figure's own tile is walked to, and standing on it is the E
+    // target for exactly that look.
+    for (const figure of definition.figures) {
+      expect(seen.has(key(figure.x, figure.y)), `figure ${figure.figure}`).toBe(true);
+      expect(avatarStudioFigureAt(definition, figure.x, figure.y)).toBe(figure);
+      // And so is the lip of lawn in front of it, where a player walking the
+      // lane first comes into reach.
+      expect(seen.has(key(figure.x, figure.y + 1)), `lip ${figure.figure}`).toBe(true);
+    }
+    // The gate is part of the same walk, and the flood never leaks into a bed.
+    expect(seen.has(key(definition.exit.x, definition.exit.y))).toBe(true);
+    for (const figure of definition.figures) {
+      expect(seen.has(key(figure.x, figure.y - 1)), `bed ${figure.figure}`).toBe(false);
+    }
+    // One connected garden: the flood is every walkable tile there is.
+    let walkable = 0;
+    for (let y = 0; y < definition.height; y += 1) {
+      for (let x = 0; x < definition.width; x += 1) {
+        if (!isAvatarStudioSolidAt(definition, x, y)) walkable += 1;
+      }
+    }
+    expect(seen.size).toBe(walkable);
   });
 
-  it('renders the walkable top exit as an opening rather than a wall', () => {
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 8, 0)).toBe(0x8a7c62);
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 9, 0)).toBe(0x8a7c62);
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(0x39343b);
+  it('keeps the hedge and every planted bed solid, and the gate open (D-134)', () => {
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(true);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 14, 0)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 15, 0)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 15, 1)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 15, 23)).toBe(true);
+    const figure = AVATAR_STUDIO_DEFINITION.figures[0]!;
+    // The figure stands on lawn, between two planted beds, under a back bed.
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, figure.x, figure.y)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, figure.x, figure.y - 1)).toBe(true);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, figure.x - 2, figure.y)).toBe(true);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, figure.x + 2, figure.y)).toBe(true);
+    // And the lip in front of it, where the player stands to press E, is open.
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, figure.x, figure.y + 1)).toBe(false);
+  });
+
+  it('gives each tile its garden role, the gate reading over the hedge (D-134)', () => {
+    const role = (x: number, y: number) => avatarStudioTileRole(AVATAR_STUDIO_DEFINITION, x, y);
+    expect(role(14, 0)).toBe('gate');
+    expect(role(15, 0)).toBe('gate');
+    expect(role(0, 0)).toBe('hedge');
+    const figure = AVATAR_STUDIO_DEFINITION.figures[0]!;
+    expect(role(figure.x, figure.y - 1)).toBe('bed');
+    expect(role(figure.x, figure.y)).toBe('lawn');
+    // The lanes between the nooks are flagged path, in both directions.
+    expect(role(15, figure.y)).toBe('path');
+    expect(role(figure.x, 2)).toBe('path');
+    // The lane against the hedge is a mown verge, not more flagstone — but
+    // the gate's own threshold stays paved.
+    expect(role(1, 11)).toBe('lawn');
+    expect(role(AVATAR_STUDIO_DEFINITION.width - 2, 11)).toBe('lawn');
+    expect(role(5, AVATAR_STUDIO_DEFINITION.height - 2)).toBe('lawn');
+    expect(role(AVATAR_STUDIO_DEFINITION.spawn.x, 1)).toBe('path');
+    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 14, 0)).toBe(0xbba066);
+    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(0x2f4a2c);
   });
 
   it('supports enter/select/exit/re-enter/shutdown through one lifecycle seam', () => {
     const streetBounds = { x: 0, y: 0, width: 48 * 32, height: 28 * 32 };
-    const studioBounds = { x: 64, y: 64, width: 18 * 32, height: 12 * 32 };
+    const studioBounds = { x: 64, y: 64, width: 30 * 32, height: 24 * 32 };
     const studioSpawn = avatarStudioSpawnToWorld(
       AVATAR_STUDIO_DEFINITION,
       { x: 64, y: 64 },
@@ -1155,9 +1227,9 @@ describe('hidden Avatar Studio', () => {
     });
 
     controller.enter();
-    controller.update({ x: 14, y: 6 });
+    controller.update({ x: 24, y: 9 });
     controller.activate();
-    controller.update({ x: 8, y: 0 });
+    controller.update({ x: 14, y: 0 });
 
     expect(lifecycle.groundVisible).toBe(true);
     expect(lifecycle.doorsVisible).toBe(true);
@@ -1170,8 +1242,8 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.cameraBounds).toEqual(streetBounds);
     expect(lifecycle.playerPosition).toEqual(streetReturn);
     expect(lifecycle.resumed).toBe(1);
-    expect(lifecycle.figureCreations).toBe(8);
-    expect(lifecycle.figures.size).toBe(8);
+    expect(lifecycle.figureCreations).toBe(16);
+    expect(lifecycle.figures.size).toBe(16);
     expect(lifecycle.operations).toEqual([
       'velocity:0,0',
       'body:false',
@@ -1215,8 +1287,8 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.worldBounds).toEqual(studioBounds);
     expect(lifecycle.cameraBounds).toEqual(studioBounds);
     expect(lifecycle.playerPosition).toEqual(studioSpawn);
-    expect(lifecycle.figureCreations).toBe(8);
-    expect(lifecycle.figures.size).toBe(8);
+    expect(lifecycle.figureCreations).toBe(16);
+    expect(lifecycle.figures.size).toBe(16);
     expect(lifecycle.operations.slice(-12)).toEqual([
       'velocity:0,0',
       'body:false',
@@ -1234,14 +1306,14 @@ describe('hidden Avatar Studio', () => {
 
     controller.destroy();
     expect(lifecycle.destroyCalls).toBe(1);
-    expect(lifecycle.figureDestructions).toBe(8);
+    expect(lifecycle.figureDestructions).toBe(16);
     expect(lifecycle.figures.size).toBe(0);
     expect(lifecycle.operations.at(-1)).toBe('studio:destroy');
     // destroy is idempotent and does not duplicate the figure set or emit a
     // late lifecycle event after the scene has been torn down.
     controller.destroy();
     expect(lifecycle.destroyCalls).toBe(1);
-    expect(lifecycle.figureDestructions).toBe(8);
+    expect(lifecycle.figureDestructions).toBe(16);
     expect(lifecycle.figures.size).toBe(0);
   });
 

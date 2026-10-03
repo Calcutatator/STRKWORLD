@@ -178,12 +178,12 @@ describe('movement is validated against the area’s own tiles (D-087)', () => {
   it('holds a Studio player to its floor and portal, and refuses a jump through a wall', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
     const id = join(registry, 'dresser', centre(40, 12));
-    registry.enterArea('dresser', { area: 'studio', ...studio(9, 1) }, 1000);
-    expect(registry.move('dresser', studio(9, 0), 1100)).toBe('applied');
-    // From the portal straight to the floor's far west crosses the top wall.
+    registry.enterArea('dresser', { area: 'studio', ...studio(15, 1) }, 1000);
+    expect(registry.move('dresser', studio(15, 0), 1100)).toBe('applied');
+    // From the gate straight to the far west of row one crosses the top hedge.
     expect(registry.move('dresser', { x: studio(1, 1).x, y: studio(1, 1).y - 15 }, 1200)).toBe('rejected');
-    expect(registry.move('dresser', studio(9, -1), 1300)).toBe('rejected');
-    expect(registry.move('dresser', studio(9, 1), 1400)).toBe('applied');
+    expect(registry.move('dresser', studio(15, -1), 1300)).toBe('rejected');
+    expect(registry.move('dresser', studio(15, 1), 1400)).toBe('applied');
     expect(registry.move('dresser', studio(1, 1), 1500)).toBe('applied');
     expect(registry.move('dresser', studio(0, 1), 1600)).toBe('rejected');
     expect(registry.peers.get(id)?.position.toJSON()).toEqual(studio(1, 1));

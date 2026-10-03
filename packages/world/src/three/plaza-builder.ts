@@ -26,6 +26,7 @@ import {
   type PlazaRect,
 } from '../map/plaza.js';
 import type { DistrictMap } from '../map/street.js';
+import { PLAZA_BENCH_PROFILE } from '../seats.js';
 import type { StationId } from '@strkworld/shared';
 import { EMPTY_PLAZA_STATS, normalizePlazaStats, type PlazaStatsPresentation } from '../plaza-stations.js';
 import { createAffordanceShells, type AffordanceSet } from './affordance.js';
@@ -685,16 +686,24 @@ function bench(piece: PlazaFixture, floor: number, bin: GeometryBin): void {
       : boxGeometry(c0, floor + y0, along0, c1, floor + y1, along1);
     bin.add(DECOR, geometry, colour);
   };
-  // Legs at both ends, then the seat slats, then the back.
+  // Legs at both ends, then the seat slats, then the back. The heights and the
+  // seat's edges are PLAZA_BENCH_PROFILE's, which is also what a sitter rests
+  // on (D-127, amended 2026-10-03), so the two cannot drift apart.
+  const seat = PLAZA_BENCH_PROFILE;
   for (const at of [a0 + 0.08, a1 - 0.14]) {
-    box(at, at + 0.06, 0.18, 0.62, 0, 0.4, PLAZA_THEME.iron);
+    box(at, at + 0.06, 0.18, 0.62, 0, seat.underside, PLAZA_THEME.iron);
     box(at, at + 0.06, 0.1, 0.18, 0, 0.9, PLAZA_THEME.iron);
   }
-  for (const [t0, t1] of [[0.2, 0.33], [0.36, 0.49], [0.52, 0.65]] as const) {
-    box(a0, a1, t0, t1, 0.4, 0.45, PLAZA_THEME.wood);
+  // Three slats across the seat, with a finger's gap between them.
+  const slats = 3;
+  const gap = 0.03;
+  const slat = (seat.seatFront - seat.seatBack - gap * (slats - 1)) / slats;
+  for (let i = 0; i < slats; i += 1) {
+    const t0 = seat.seatBack + i * (slat + gap);
+    box(a0, a1, t0, t0 + slat, seat.underside, seat.surface, PLAZA_THEME.wood);
   }
-  box(a0, a1, 0.1, 0.16, 0.55, 0.66, PLAZA_THEME.woodDark);
-  box(a0, a1, 0.1, 0.16, 0.74, 0.86, PLAZA_THEME.woodDark);
+  box(a0, a1, 0.1, seat.restFront ?? 0.16, seat.restBottom ?? 0.55, 0.66, PLAZA_THEME.woodDark);
+  box(a0, a1, 0.1, seat.restFront ?? 0.16, 0.74, seat.restTop ?? 0.86, PLAZA_THEME.woodDark);
 }
 
 /** A park lamp: an iron post with a warm glass globe. */

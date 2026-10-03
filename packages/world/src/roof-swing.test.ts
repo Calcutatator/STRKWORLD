@@ -10,6 +10,8 @@ import { SWING_RIDE_MS } from '@strkworld/shared';
 import {
   SWING_BUILD_MS,
   SWING_CAMERA_PITCH,
+  SWING_CAMERA_AIM_HEIGHT,
+  SWING_CAMERA_DISTANCE,
   SWING_CAMERA_REDUCED_DISTANCE,
   SWING_CAMERA_REDUCED_PITCH,
   SWING_CAMERA_YAW,
@@ -146,6 +148,43 @@ describe('the rider\'s camera (D-133)', () => {
 
   it('returns a frozen shot, so no caller can edit the camera out from under the rig', () => {
     expect(Object.isFrozen(swingCameraShot(0))).toBe(true);
+  });
+
+  it('stands on the rider, not behind them: a near-eye shot (amended 2026-10-03)', () => {
+    // The reviewer's complaint was that the A-frame and the rider's own back
+    // filled the middle of the frame. They did because the lens was seven
+    // units behind the seat looking back at it. It is on the eye now, so the
+    // focus the session hands the rig is already where the lens goes.
+    expect(SWING_CAMERA_DISTANCE).toBe(0);
+    expect(SWING_CAMERA_AIM_HEIGHT).toBe(0);
+    for (const reduced of [false, true]) {
+      for (const angle of [-SWING_MAX_ANGLE, 0, SWING_MAX_ANGLE]) {
+        const shot = swingCameraShot(angle, reduced, 0);
+        expect(shot.distance).toBe(0);
+        expect(shot.aimHeight).toBe(0);
+      }
+    }
+  });
+
+  it('swings no further than a real swing does: 45 degrees (amended 2026-10-03)', () => {
+    // The lead: the seat at the top of the arc "looks odd". It was 54°, which
+    // is past where a swing on chains stays a pendulum. The ride is still the
+    // server's twenty seconds through a smaller arc.
+    expect(SWING_MAX_ANGLE).toBeCloseTo(Math.PI / 4, 9);
+    expect((SWING_MAX_ANGLE * 180) / Math.PI).toBeCloseTo(45, 6);
+    const peak = Math.max(
+      ...Array.from({ length: 2001 }, (_, i) => Math.abs(swingAngleAt((i / 2000) * SWING_RIDE_MS))),
+    );
+    expect(peak).toBeLessThanOrEqual(SWING_MAX_ANGLE);
+    expect((peak * 180) / Math.PI).toBeGreaterThan(40);
+  });
+
+  it('still sways under reduced motion, only less', () => {
+    const gentle = Math.max(
+      ...Array.from({ length: 2001 }, (_, i) => Math.abs(swingAngleAt((i / 2000) * SWING_RIDE_MS, true))),
+    );
+    expect(gentle).toBeGreaterThan(0);
+    expect(gentle).toBeLessThan(SWING_MAX_ANGLE / 4);
   });
 });
 

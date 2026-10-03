@@ -261,6 +261,15 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ### 2026-10-03 — A seat is not one height: the sixteen looks sit 0.07 to 0.25 above their own feet, and the rig hangs its thighs below the hips (D-133)
 
+**Superseded the same day by D-127's seat system.** The measurement below still
+holds — a seat is not one height — but `three/avatar-seating.ts` and its
+`seatedFit()` are **gone**: the one measurement in the World is
+`avatarSeatedContact()` on the figure, handed a `SeatPlace` on the motion, and
+the swing is one of its five seats. The hanging-thigh paragraph below describes
+a pose that no longer ships either; the seated thighs are level now, which is
+the only sit a one-piece leg can hold, and the swing's plank became a bench
+because of it.
+
 The roof swing dropped every rider the same 1.78 below its pivot, so the look
 you happened to be wearing decided whether you sat on the board, in it or over
 it. Verified by measuring, not by eye: a figure is seated
@@ -14413,6 +14422,30 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
+### 2026-10-03 — A tile trigger is not a doorway: entry needs the step, not the tile
+The Garden's street entrance (D-047, D-125) fired on *being* on one of its two
+opening tiles, which is why walking along the bottom of the map pulled you in
+sideways. The fix is not a bigger trigger or a smaller one — it is to read the
+step: `entersAvatarStudio(map, from, to)` requires the destination to be an
+opening tile, the origin not to be one, and `to.y > from.y`. Two traps here.
+**Facing is the wrong input**: it is a presentation value that a camera turn or
+a wall slide changes while the player stands still, so a facing rule would let
+someone be pulled in without moving. The tile they came from cannot change
+under them. **The hold still needs the old predicate**: D-125's re-entry hold
+arms on the *tile*, not on the step, so `isAvatarStudioEntrance` has to keep
+its old meaning and both have to be fed from the same tile report.
+A second, unobvious cost of making the street deeper: anything whose geometry
+was authored as "the height of my square" becomes a way round. Growing the map
+five rows left the pitch's street fence and the sandbox's west wall stopping at
+their squares' south edges, with open grass south of both — walkable straight
+into the pitch. Both now run `max(square, map)` deep, in the map and in the
+builder.
+*Verified:* the eight step cases (through, diagonally through, along the hedge
+from either side, between the two opening tiles, both piers, stepping back
+north) in `packages/world/src/map/street.test.ts`, and the same walk at session
+level — five steps along the bottom row entering nothing, then one step south
+through the opening entering — in `packages/world/src/world-session.test.ts`.
+Full suite (308 files, 6515 tests) and `npm run typecheck` pass.
 ### A roof inside the street scene needs one vista mount, not two — and D-numbers go stale on a long branch
 The Exchange tower's roof is **not** a separate room scene: it is the tower's
 real top, built by `street-builder.ts` and drawn inside the street scene. So a
@@ -14445,6 +14478,44 @@ mount and `arena-room.test.ts` the arena one; the ride renders
 the rider's camera. The number clash came from `git fetch origin` then
 `git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-131 against a
 local file ending at D-123.
+---
+### 2026-10-03 — A seated pose with no seat height is a figure sitting on the floor, and a rigid leg cannot perch
+D-127's benches shipped with sitters sunk through the slats. The pose was
+reused from the arena's tiers (D-114), where it had always been wrong and
+nobody had noticed: `AvatarMotion.seated` lowered the hips and swung the
+thighs, but the figure's root stayed on the ground. A pose is a *shape*; it
+carries no idea of what the body is resting on. Nothing on the seam said how
+high the bench was, so sitting on a 0.45-high bench put the body 0.45 into it.
+The fix is a `SeatPlace` on the motion — surface height, front edge, and an
+optional settle-back — expressed entirely in the sitter's own frame, so one
+description serves a plaza bench, a bleacher plank, the Bridge lounge, an arena
+tier and the throne without any of them knowing where the others are.
+Two traps behind it. **Measure the rise, don't state it.** How far a figure
+has to come up is its own backside's distance from its feet, which differs per
+build and per outfit; and it must be measured only from the parts that take the
+weight (hip band, thighs, boots) — a robe hem or a coat tail hangs lower and
+would hold the figure up off the seat. **A one-piece leg cannot perch.** These
+legs are one rigid box from hip to sole with no knee, so *any* thigh angle that
+still dips drives the shin through the seat within a hand's width of the hips,
+however high you raise the body. Level thighs are the only sit such a leg can
+hold: they lie along the seat and carry the boots past its front edge. That in
+turn needs a lower leg pivot while seated, or the level thigh comes out through
+the front of the hip band; and a long robe's legs must tuck back inside the
+bell, which has no knee to fold over either.
+The third fault was ordinary drift: the bench's drawn numbers lived in the
+builders and the seat's numbers were guessed beside them. Each bench type now
+has one `BenchProfile` (`packages/world/src/seats.ts`) and the builder draws
+from it. D-128's throne was worse than drift — it was one closed block through
+the middle of its tile, so a seated champion stood inside it; it is now a
+plinth, a pad and a back drawn from the same solids the figure sits on.
+*Verified:* a new offline audit, `packages/world/tools/avatar-seat.ts`, in the
+style of the clipping and z-fight ones — all 16 looks × five seat types, each
+asserted to rest within `CLIP_TOLERANCE` of the seat top with no leg or hip box
+inside the seat, the backrest or the step. It pins the bug itself too: a figure
+told nothing about its seat is caught more than 0.4 below the slats, which is
+the sunk screenshot. Renders from the offline rasteriser in the scratchpad
+(game camera, side and overhead, plus a 16-look contact sheet). Full suite
+(310 files, 6528 tests) and `npm run typecheck` pass.
 ---
 ### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
 Making the World a floating rock (D-132) was not mostly modelling — it was
@@ -14491,3 +14562,109 @@ floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
 island's cameras); the sand look is reproducible by putting the cloud bin back
 on the lit material. Not verified on a real GPU — the rasteriser models the
 engine's hemisphere, sun, ACES and sRGB but not its exact shader.
+---
+### 2026-10-03 — The server placed the champion on the throne; the client never did
+The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
+and the avatar went on standing on the sand. Nothing was broken on the server:
+`arena-rules.ts` already emitted a `place` to `ARENA_BOX` and back to
+`ARENA_BOX_STAND`, and `presence.ts` already opened the throne's tile to the
+one session sitting on it. The gap was that **the World only ever moves itself
+for the ring's own teleports** — it reads the ring snapshot, it does not
+consume the server's `place` effects. So a seat the server had granted moved
+nothing a player could see. The fix is to mirror the snapshot's `seated` to the
+host (`ArenaSessionHost.setThroned`) and let the World place the avatar from
+that, never from the press: a deposed champion is then stood up without
+touching anything. Two details that matter. It is a *place*, not a leap, so
+D-087's straight-line step check is not involved and there is no jump — sitting
+down is not a vault. And the stand-up is an intent that shares the claim
+floor, so it has to be kept and re-sent from `update`; dropped, a player who
+asked to get up has to guess when to ask again.
+Two smaller traps in the same area. **A pose nothing checks will clip.** The
+block (Q) was never in `tools/avatar-clipping.ts`'s `arenaPoses`, so its inward
+arm turn had never been run against the 16 looks — it drove hands into coats,
+mantles and pauldrons, and it was also what put a shield across the face at
+-1.45 rad. The block is in the pose list now and the angles chosen are the
+highest that are clipping-free. **A seat needs a declared top.** Drawing a
+seated figure at the floor height of the tile puts every look *inside* the
+furniture. This branch and `claude/benchsit` found that independently and each
+wrote its own height; on the merge the throne was moved onto benchsit's
+(D-127's) seat system and this branch's `ARENA_THRONE_SEAT_TOP`,
+`seatedBaseHeight` and `avatarSeatedHipHeight` were deleted. The lesson is the
+second half: two correct solutions to one problem is still a defect, because
+the two numbers drift. There is now one `SeatPlace` per seat in the World and
+one measured rise per look, and the throne is the fifth seat in the same audit
+the benches use.
+*Verified:* the block's face clearance is asserted as geometry, not by eye —
+nothing on the shield arm may lie between the eyes and the camera (+Z, D-059)
+for any of the 16 looks — and the clipping check runs the block standing, on
+the walk at four phases of the gait, and easing out. The seat height is checked
+by `tools/avatar-seat.ts`, which rests all 16 looks on the throne's own pad and
+admits nothing through its pad, back or arms. The arms are the one seat solid
+in the game that does not run the whole way across its sitter, so `SeatSolid`
+gained an optional `minX`/`maxX` and the audit judges width when it is given:
+their inner edge stands clear of the broadest seated thigh (0.299) and their
+top passes under the hip band, which is broader still (0.353) — the arms this
+branch first drew would have gone straight through the four heavy builds, and
+nothing but the audit would have said so. The seat/stand round trip is driven through the real
+`world-session` host (tile, facing, no jump, held still, keys only asking,
+hold dropped on leaving the arena) and through the real session against a
+snapshot (a new champion standing the old one up, the kept stand-up re-sent
+past the intent floor, `destroy` putting the World back on its feet). Full
+suite (317 files, 6764 tests), `npm run typecheck` and
+`./scripts/check-invariants.sh` pass after the merge with `origin/main`.
+Renders are from the offline rasteriser, not a GPU:
+`renders/arena-block-polish.png`, `arena-box-label-states.png`,
+`arena-throne-merged.png` (game camera, close-up and the chair in
+three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
+browser, and whether the sit-down wants a transition animation.
+---
+### 2026-10-03 — A camera placed *behind* what the player is sitting in is a shot of the ride, not a view from it
+The roof swing's first cut (D-133) put the rider's camera seven units back
+along the shot's yaw and pitch and looked at the seat. Every frame of the
+twenty seconds therefore had the A-frame's black upright and the rider's own
+back down the middle of it, which is the opposite of the lookout the brief
+asked for. The geometry behind it is worth stating plainly, because the same
+mistake is available to every "cinematic" shot in this repo: **a camera placed
+along a yaw and a pitch and pointed back at its focus is already looking down
+that yaw and pitch**, so `distance` changes nothing about the *direction* of
+the view — all it decides is how much of what the player is sitting in stands
+between the lens and what they came to look at. For an interior-feeling shot
+the answer is 0. `CameraShot.distance` of 0 is now a near-eye case in the rig:
+at 0 the lens is on its focus and `lookAt(focus)` is degenerate, so it aims a
+fixed length out along the shot's own direction instead.
+Two traps found doing it. **The lens inside the rider is the rider's own hair
+across the frame.** The local figure is hidden from its own camera by the
+*drawn* camera's distance to the eye, not by "is this player riding", so the
+sweep in keeps them visible until they fill the frame and a cut hides them at
+once; a peer on the swing is always drawn whole, and nobody is ever hidden for
+a spectator. **The A-frame straddles the deck**, so at the swing's northmost
+the rider sits inside its footprint and a hard head-turn looks straight into a
+splayed leg — the eye point had to move forward of where a head really sits
+(0.52 rather than 0.18) before the steel stayed out at every angle.
+A related one from the same review: **two colours are not a gradient.** The
+sky dome crossfaded the brand's warm Horizon straight into its cool Sky, and a
+warm-to-cool crossfade passes through a neutral — measured through the
+engine's own ACES tone mapping, the band from a tenth to a third of the way up
+the dome sat at 0.01–0.06 saturation, which is a grey, and in any shallow shot
+that band is most of the frame. Both endpoints being colourful says nothing
+about the middle. It goes gold → peach → rose → blue now, and the floor of the
+whole sweep is asserted.
+*Verified:* "nothing big and black in the centre" is measured, not eyeballed —
+`swingFrameCentreGap()` projects the A-frame's boxes into the lens's own
+space, clips them at the near plane (so a beam passing *beside* the lens is
+not mistaken for one across it) and reports how near the middle the steel
+comes as a fraction of half the frame; `three/roof-swing.test.ts` sweeps 9
+swing angles × 7 head yaws plus the reduced-motion arc, and pins that the
+seven-unit shot it replaced **fails** the same check, so the test has teeth.
+The sky's floor is checked through `skyColourAt()`, which is the same
+arithmetic the shader runs, against the two-stop crossfade it replaced. The
+rider's own fit is `tools/swing-fit.ts` against D-127's shipped level-thigh
+pose: 0 findings for all 16 looks × 3 head poses, after the seat was rebuilt
+as a bench (a one-piece leg can only sit with its thighs level, so the plank
+the old hanging-leg pose sat on became furniture nobody could sit on, and the
+foot bar went — there are no hanging feet). Full suite (319 files, 6828
+tests), `npm run typecheck` and `./scripts/check-invariants.sh` pass after the
+merge with `origin/main`. Renders are from the offline rasteriser, not a GPU:
+`renders/swing-look-left.png`, `swing-look-centre.png`, `swing-look-right.png`,
+`swing-fit-all-looks.png`, `swing-street-north.png`, `swing-title-check.png`.
+Not verified: a real browser, a GPU or a touch screen.

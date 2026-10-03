@@ -26,8 +26,18 @@ import { SWING_RIDE_MS } from '@strkworld/shared';
 
 /** One full back-and-forth, in ms. */
 export const SWING_PERIOD_MS = 2_600;
-/** The widest arc, in radians from hanging (about 54°). */
-export const SWING_MAX_ANGLE = 0.95;
+/**
+ * The widest arc, in radians from hanging: **45°**.
+ *
+ * It was 0.95 rad (54°), which from the rider's own camera looked wrong — at
+ * the top of the arc the seat is past where a swing on chains behaves like a
+ * pendulum at all, and the horizon tips further than a rider's own neck would
+ * let it. A playground swing ridden hard reaches about 45°; beyond that a real
+ * one starts to go slack and jerk. The ride is still the server's twenty
+ * seconds: the same build, hold and settle over the same timeline, through a
+ * smaller arc.
+ */
+export const SWING_MAX_ANGLE = Math.PI / 4;
 /** How long the arcs take to build to full, and how long they take to settle back. */
 export const SWING_BUILD_MS = 5_000;
 export const SWING_SETTLE_MS = 5_000;
@@ -192,11 +202,25 @@ export const SWING_CAMERA_YAW = Math.PI;
 export const SWING_CAMERA_PITCH = (15 * Math.PI) / 180;
 /** How much of the arc the camera's pitch follows, in radians per radian of swing. */
 export const SWING_CAMERA_TILT = 0.26;
-export const SWING_CAMERA_DISTANCE = 7;
-export const SWING_CAMERA_AIM_HEIGHT = 1.4;
-/** Reduced motion holds one still shot: no tilt, a little further back. */
+/**
+ * **The ride is a near-eye shot** (D-133, amended 2026-10-03): the lens stands
+ * on the rider's own eye and looks out, so `distance` is 0 and `aimHeight` is
+ * 0 too — the focus the session hands the rig is already the eye
+ * (`RoofSwingView.eyeAt`), which hangs in the seat's frame and leans with it.
+ *
+ * It was a seven-unit shot standing behind the seat and looking back at it.
+ * That is a fine shot of a swing and a poor view *from* one: the A-frame's
+ * black upright and the rider's own back filled the middle third of the frame
+ * for the whole twenty seconds, which is the opposite of overlooking anything.
+ * From the eye the frame is the river, the station, the skyline and the two
+ * landmarks, and the ride is felt rather than watched — the pendulum carries
+ * the lens and tips its pitch, and the head turns the yaw.
+ */
+export const SWING_CAMERA_DISTANCE = 0;
+export const SWING_CAMERA_AIM_HEIGHT = 0;
+/** Reduced motion holds one still shot: no tilt, from the same eye. */
 export const SWING_CAMERA_REDUCED_PITCH = (13 * Math.PI) / 180;
-export const SWING_CAMERA_REDUCED_DISTANCE = 8;
+export const SWING_CAMERA_REDUCED_DISTANCE = 0;
 
 /** Where the rider's camera stands this frame, for `CameraRig.update`'s shot. */
 export interface SwingCameraShot {

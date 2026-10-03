@@ -11,6 +11,7 @@ export {
   createStreetMap,
   doorAt,
   isAvatarStudioEntrance,
+  entersAvatarStudio,
   isSolidAt,
   objectLayerToDoors,
   TILE_SIZE,
@@ -63,6 +64,9 @@ export {
   AVATAR_STUDIO_WIDTH,
   avatarStudioFigureAt,
   avatarStudioTileColour,
+  avatarStudioTileRole,
+  gardenNookRect,
+  isGardenNookBed,
   createAvatarStudioPresentation,
   createAvatarStudioController,
   isAvatarStudioExit,
@@ -79,6 +83,9 @@ export type {
   AvatarStudioBounds,
   AvatarStudioPresentation,
   AvatarStudioPresentationPort,
+  GardenNookKind,
+  GardenNookPalette,
+  GardenTileRole,
 } from './avatar-studio.js';
 
 // Tiled object-layer property adapter. The seam a real Tiled export uses; see

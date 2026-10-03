@@ -63,7 +63,7 @@ import { laySouthLandmarks } from './south-landmarks.js';
  * south-vista.test.ts: this module takes no map, because the roof branch
  * mounts it with nothing but `createSouthVista()`.
  */
-export const MAP_SOUTH_EDGE = 28;
+export const MAP_SOUTH_EDGE = 33;
 
 /**
  * The near bank: the water's edge on the district's side, and the line the

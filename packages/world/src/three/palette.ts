@@ -1916,26 +1916,50 @@ export function stationTheme(room: RoomTheme, station: StationId): StationTheme 
   );
 }
 
-/** Avatar Studio accents; floor and wall tones come from `avatarStudioTileColour`. */
-export const STUDIO_THEME = Object.freeze({
-  wallLower: 0x2e2a31,
-  wallTop: 0x241f27,
-  trim: 0x8a7fa0,
-  skirting: 0x241f27,
-  cut: 0x19161b,
-  pad: 0x6a6278,
-  padRim: 0xc4b2ec,
-  highlight: 0xffd66b,
-  portal: 0xffe0a0,
-  mirror: 0xdfe8ff,
-  rug: 0x6c4f7a,
-  rugBorder: 0xb89ad0,
-  rack: 0x2a262d,
-  garments: Object.freeze([0xe57373, 0x64b5f6, 0xffd54f, 0x81c784, 0xba68c8, 0xf4f0e6]),
-  spot: 0xfff1cf,
-  signBackground: '#241f27',
-  signForeground: '#f1e6ff',
-  signAccent: '#c4b2ec',
+/**
+ * D-134: the Garden. Ground tones come from `avatarStudioTileRole`; these are
+ * the things that stand on it — the hedge, the trellis, the stonework, the
+ * lantern light and the planting.
+ */
+export const GARDEN_THEME = Object.freeze({
+  /** The hedge wall the shell builds, lit and shaded. */
+  wallLower: 0x273f24,
+  wallTop: 0x4e7a3c,
+  trim: 0x6b4f2e,
+  skirting: 0x1f3320,
+  cut: 0x16231a,
+  /** The stepping plinth each figure stands on, and its lit rim. */
+  pad: 0x9a9182,
+  padRim: 0xffe6a8,
+  /** The gate back to the street, and the light that spills from it. */
+  gate: 0xffe0a0,
+  gatePost: 0x7a5c36,
+  /** Clipped yew, box and bay. */
+  hedge: 0x335c30,
+  hedgeLight: 0x4d7f3e,
+  hedgeDark: 0x24401f,
+  /** Trellis, stakes, handles and plank. */
+  wood: 0x7a5a32,
+  woodDark: 0x4d3a20,
+  /** Stone: kerbs, plinths, standing stones, troughs. */
+  stone: 0x9a9488,
+  stoneDark: 0x6e6a62,
+  /** Turned earth in the beds, and the gravel of the lanes. */
+  soil: 0x4a3828,
+  gravel: 0xa39a86,
+  /** Metal: tool steel, rails, lantern frames. */
+  iron: 0x5d6168,
+  steel: 0xb4bcc6,
+  brass: 0xc08a3a,
+  /** Lantern flame and the soft light it pools on the ground. */
+  lantern: 0xffd79a,
+  /** Fireflies and motes over the lanes. */
+  mote: 0xcfeaff,
+  /** Generic planting, where a nook does not bring its own colour. */
+  blooms: Object.freeze([0xe8829a, 0xf2c74a, 0xb48ce0, 0xf2f0e2, 0xe8794a, 0x8cc3e8]),
+  signBackground: '#1f3320',
+  signForeground: '#f4f0dc',
+  signAccent: '#ffd79a',
 });
 
 // ---------------------------------------------------------------------------

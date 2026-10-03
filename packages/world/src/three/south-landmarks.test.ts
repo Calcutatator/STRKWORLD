@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Box3, Color, Mesh } from 'three';
 import { GeometryBin } from './palette.js';
 import { createSouthVista } from './south-vista.js';
-import { SKY_HORIZON, SKY_TOP } from './sky.js';
+import { SKY_HORIZON, SKY_TOP, skyColourAt } from './sky.js';
 import { fogRange } from './world-engine.js';
 import { EXCHANGE_ROOF_HEIGHT } from '../fixed-room.js';
 import {
@@ -149,6 +149,42 @@ describe('the view south has colour in it (D-133)', () => {
     const horizon = new Color(SKY_HORIZON);
     expect(top.b).toBeGreaterThan(top.r);
     expect(horizon.r).toBeGreaterThan(horizon.b);
+  });
+
+  it('never passes through grey on the way up (amended 2026-10-03)', () => {
+    // The lead, on the second look: "the upper sky still reads pale
+    // grey-lavender". The two ends were never the problem — the *crossfade*
+    // was. A warm cream mixed straight into a cool blue goes through a
+    // neutral, and that neutral band was most of any shallow shot's frame.
+    // The gradient now goes warm → gold → peach → rose → blue, which is what
+    // a low sun does, and no step of it is a grey.
+    let worst = { height: 0, saturation: 1 };
+    for (let step = 0; step <= 100; step += 1) {
+      const height = step / 100;
+      const value = saturation(skyColourAt(height).getHex());
+      if (value < worst.saturation) worst = { height, saturation: value };
+    }
+    expect(worst.saturation, `at h=${worst.height}`).toBeGreaterThan(0.2);
+    // The straight two-stop crossfade it replaced does not clear that bar:
+    // it bottoms out six times lower, which is the grey the lead saw.
+    let before = 1;
+    for (let step = 0; step <= 100; step += 1) {
+      const mixed = new Color(SKY_HORIZON).lerp(new Color(SKY_TOP), Math.pow(step / 100, 0.55));
+      before = Math.min(before, saturation(mixed.getHex()));
+    }
+    expect(before).toBeLessThan(worst.saturation / 4);
+  });
+
+  it('is gold at the horizon and a real blue overhead', () => {
+    const low = skyColourAt(0.02);
+    const high = skyColourAt(1);
+    expect(low.r).toBeGreaterThan(low.b);
+    expect(high.b).toBeGreaterThan(high.r);
+    // Straight up is the brand's Sky itself, so the game and the title screen
+    // stand under the same sky (D-113).
+    expect(high.getHex()).toBe(new Color(SKY_TOP).getHex());
+    // And below the horizon is still the cloud sea, not a second blue.
+    expect(skyColourAt(-0.8).b).toBeLessThan(skyColourAt(-0.8).r);
   });
 });
 

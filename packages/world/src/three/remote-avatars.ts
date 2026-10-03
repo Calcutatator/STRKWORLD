@@ -12,13 +12,15 @@ import {
   type RemotePeerSource,
 } from '../remote-peer.js';
 import { avatarFigureHeight } from './avatar-figure.js';
-import { seatedFit } from './avatar-seating.js';
 import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coords.js';
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow, type JumpShadow } from './jump-shadow.js';
 import { createSeatTracker, createSwingClock, type SeatTracker, type SwingClock } from '../arena-swing.js';
-import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
+import type { AvatarFigure, AvatarFigureFactory, AvatarMotion, SeatPlace } from './types.js';
+import { ARENA_THRONE_SEAT, ARENA_TIER_SEAT } from './arena-room.js';
+import { streetSeatPlaceAt } from '../seats.js';
+import { ROOF_SWING_SEAT } from './roof-swing.js';
 
 /**
  * Time constant of the critically damped follow of the latest snapshot
@@ -587,6 +589,9 @@ export function createRemoteAvatarLayer3D({
     // D-127: a bench sitter sits because the room says so — no idle timer, and
     // it holds while the figure eases onto the seat.
     let seated = avatar.benchSeat !== null && !jump;
+    // D-127 (amended 2026-10-03): the seat the sitter rests on, so a peer rises
+    // onto the bench or the plank rather than sinking into it.
+    let seat: SeatPlace | null = seated ? streetSeatPlaceAt(avatar.benchSeat) : null;
     if (seatAt && !seated) {
       let onSeat = false;
       try {
@@ -595,16 +600,24 @@ export function createRemoteAvatarLayer3D({
         onSeat = false;
       }
       seated = avatar.seat.step(dt, moving || jump != null, onSeat);
+      if (seated) seat = ARENA_TIER_SEAT;
     }
     // D-128: the champion sits the moment the server says so, without the
     // tiers' idle wait: the server put them on the throne, so they are on it.
-    if (throned === avatar.id) seated = true;
+    if (throned === avatar.id) {
+      seated = true;
+      seat = ARENA_THRONE_SEAT;
+    }
     const guard = fighter === avatar.id;
-    // D-133: a peer on the swing sits in it, whatever the floor under them says.
-    if (rider === avatar.id && riderSeat !== null) seated = true;
+    // D-133: a peer on the swing sits in it, whatever the floor under them
+    // says, and on the swing's own seat (D-127's seat system, adopted here).
+    if (rider === avatar.id && riderSeat !== null) {
+      seated = true;
+      seat = ROOF_SWING_SEAT;
+    }
     const blocking = blocker === avatar.id;
     if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
-    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking };
+    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking, seat };
   };
 
   return {
@@ -662,15 +675,11 @@ export function createRemoteAvatarLayer3D({
         // D-133: the swing's rider is drawn on its seat, facing south out
         // over the edge, wherever the lobby holds them on the ledge.
         if (rider === avatar.id && riderSeat !== null) {
-          // The seat point is the board's top face; this look's own seated
-          // hips go on it (D-133, 2026-10-03), and the figure leans with the
-          // pendulum rather than hanging upright beside it.
-          const drop = seatedFit(avatar.look).hipDrop;
-          avatar.figure.object.position.set(
-            riderSeat.x,
-            riderSeat.y - drop * Math.cos(riderAngle),
-            riderSeat.z + drop * Math.sin(riderAngle),
-          );
+          // The seat point *is* where the figure goes: the board's top face,
+          // which `ROOF_SWING_SEAT` says is the rider's own ground plane, so
+          // every look lands on the board. It leans with the pendulum rather
+          // than hanging upright beside it.
+          avatar.figure.object.position.set(riderSeat.x, riderSeat.y, riderSeat.z);
           avatar.figure.object.rotation.set(-riderAngle, 0, 0);
         } else if (avatar.figure.object.rotation.x !== 0) {
           avatar.figure.object.rotation.x = 0;

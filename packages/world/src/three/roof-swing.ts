@@ -9,6 +9,8 @@ import {
   shade,
   standardMaterial,
 } from './palette.js';
+import type { SeatPlace } from './types.js';
+import { cameraOffset } from './camera-rig.js';
 
 /**
  * The lookout swing on the Exchange tower's roof deck (D-133).
@@ -46,16 +48,6 @@ export const SWING_PIVOT_REACH = 1.9;
 export const SWING_FOOT_REACH = 0.8;
 /** Hanger length: pivot to the seat's top face. */
 export const SWING_HANG = 1.7;
-/**
- * How far below the pivot a rider's hips rest — the seat board's top face —
- * and the fallback drop for a look whose own seated height is not known.
- *
- * The rider's figure is placed `SWING_HANG + seatedFit(look).hipDrop` below
- * the pivot, so every look's hips land on the board rather than every look
- * standing at one height that suits none of them (D-133, 2026-10-03). The
- * fallback is the middle of the sixteen.
- */
-export const SWING_RIDER_DROP = SWING_HANG + 0.17;
 
 /**
  * The seat, in the swinging group's own frame: x across, **y measured from
@@ -72,14 +64,19 @@ export const SWING_SEAT = Object.freeze({
   /** Where the hanger bars come down, each side. */
   hangerX: 0.76,
   /**
-   * The board: a plank, as a swing seat is, set back from the hanging axis.
-   * Its front edge is where it is because of how the figures are rigged —
-   * their legs turn about a point below the hip band, so the thighs lie over
-   * the plank's front edge and hang down in front of it. A deeper board would
-   * be a bench the legs came out of the bottom of.
+   * The board, and why it is a bench rather than a plank.
+   *
+   * A seated figure here sits the way D-127's seat system poses one: its legs
+   * are one rigid box each from hip to sole, so they cannot bend at the knee,
+   * and a sit a one-piece leg can hold is **thighs level along the seat**.
+   * Measured across the sixteen, that lays the legs from 0.10 behind the
+   * hanging axis to 0.32 in front of it and puts the hip band on top of them,
+   * so the board has to carry all of that or the rider is sitting on air.
+   * (It used to be a 0.48 plank for a pose whose legs hung off the front; that
+   * pose is gone, and so is the plank.)
    */
-  boardBack: -0.42,
-  boardFront: 0.06,
+  boardBack: -0.34,
+  boardFront: 0.4,
   boardThickness: 0.09,
   /**
    * The backrest bar, on a post at each back corner: close enough behind the
@@ -88,21 +85,166 @@ export const SWING_SEAT = Object.freeze({
    */
   backrestBack: -0.46,
   backrestFront: -0.38,
-  backrestLow: 0.18,
-  backrestHigh: 0.34,
+  backrestLow: 0.2,
+  backrestHigh: 0.44,
   /** How far either side of the middle the two backrests stop: the seats' division. */
   backrestGap: 0.09,
-  /** The grab rail, at the height a seated hand falls to, just in front of the longest reach. */
-  railBack: 0.34,
-  railFront: 0.42,
-  railLow: 0.02,
-  railHigh: 0.1,
-  /** The foot bar, under the board, just below where the longest legs hang. */
-  barBack: 0.18,
-  barFront: 0.3,
-  barLow: -0.5,
-  barHigh: -0.44,
+  /**
+   * The grab rail: a bar across the front at the height a seated hand falls
+   * to, clear of the longest legs lying on the board. With the legs out along
+   * the seat this is the lap bar of a chairlift rather than a rail under the
+   * knees, which is the only place a hand can reach that the legs are not.
+   */
+  railBack: 0.42,
+  railFront: 0.5,
+  railLow: 0.2,
+  railHigh: 0.3,
 });
+
+/**
+ * The swing's board as a seat, in the one form every seat in the World uses
+ * (D-127, adopted here 2026-10-03).
+ *
+ * `surface` is **0**: the rider's figure is placed with its own ground plane on
+ * the board's top face, and the figure raises itself onto the board from
+ * there, because `avatarSeatedContact()` is negative for every look — a
+ * seated figure's weight-bearing underside hangs a little below the plane its
+ * feet otherwise stand on, and by how much is the look's own business.
+ *
+ * This replaces the drop this branch measured for itself. One seat system now
+ * seats the plaza bench, the arena tiers, the throne and the swing, and the
+ * sixteen looks' spread is handled once, in the figure, instead of twice.
+ */
+export const ROOF_SWING_SEAT: SeatPlace = Object.freeze({
+  surface: 0,
+  front: SWING_SEAT.boardFront,
+});
+
+/**
+ * How far below the pivot the rider's figure is placed: the board's top face,
+ * which with `ROOF_SWING_SEAT.surface` of 0 is where the rider's own ground
+ * plane goes. Every look gets the same drop and lands on the board.
+ */
+export const SWING_RIDER_DROP = SWING_HANG + ROOF_SWING_SEAT.surface;
+
+/**
+ * Where the rider's eye is, in the seat's own frame (D-133, amended
+ * 2026-10-03): `y` above the board's top face, `z` south of the hanging axis.
+ *
+ * It is the ride's camera. Head height, and forward of where a head sits, so
+ * the lens looks out over the rail rather than through the rider — and
+ * because it lives in the *seat's* frame it leans and travels with the
+ * pendulum, which is what keeps the sway in the shot.
+ *
+ * `SWING_EYE_AHEAD` is what it is for a measured reason. The A-frame straddles
+ * the deck, so when the swing is back at its northmost the rider is **inside**
+ * the frame's footprint, and a head turned hard over then looks straight into
+ * a splayed leg. At 0.18 — a real head's place — that leg crosses the middle
+ * of the frame; from 0.5 forward it never comes nearer the centre than half
+ * the way out, which is the edge framing the lead allowed. 0.52, with the
+ * margin (`roof-swing.test.ts` samples the whole arc against the whole look).
+ *
+ * The height is a compromise across sixteen looks whose seated heads top out
+ * anywhere from 1.0 to 1.7 above the board; the rider's own figure is hidden
+ * from this camera when the lens is inside it (`presenter.ts`), so the
+ * compromise costs a view of their own hair rather than a clipped face.
+ */
+export const SWING_EYE_HEIGHT = 1.18;
+export const SWING_EYE_AHEAD = 0.52;
+
+/**
+ * How near the middle of the ride's frame the A-frame's steel comes, as a
+ * fraction of half the frame's width: 0 is dead centre, 1 is the edge, and
+ * anything at or past 1 is off screen altogether (D-133, amended 2026-10-03).
+ *
+ * This is the lead's actual complaint, measured: in the first cut of the ride
+ * the camera stood seven units behind the seat, so the black upright ran
+ * straight down the middle of every frame. The near-eye shot puts the whole
+ * frame behind the lens instead, and this is what proves it — for sampled
+ * swing angles and head yaws, not just the one that was rendered.
+ *
+ * `parts` are the A-frame's world-space boxes (`RoofSwingView.frameParts`),
+ * `eye` the lens (`eyeAt`), and `yaw`/`pitch` the shot's own angles, read the
+ * same way `cameraOffset` reads them. Returns `Infinity` when no steel is in
+ * front of the lens at all, which is the usual answer.
+ */
+export function swingFrameCentreGap(
+  parts: readonly SwingSeatPart[],
+  eye: SwingPoint,
+  yaw: number,
+  pitch: number,
+  fovDegrees: number,
+  aspect: number,
+): number {
+  // The lens basis: forward is the negative of the rig's own camera offset,
+  // right is forward turned a quarter turn in the ground plane.
+  const back = cameraOffset(yaw, pitch, 1);
+  const forward = { x: -back.x, y: -back.y, z: -back.z };
+  const flat = Math.hypot(forward.x, forward.z) || 1;
+  const right = { x: forward.z / flat, y: 0, z: -forward.x / flat };
+  // Up completes the basis: right × forward.
+  const up = {
+    x: right.y * forward.z - right.z * forward.y,
+    y: right.z * forward.x - right.x * forward.z,
+    z: right.x * forward.y - right.y * forward.x,
+  };
+  const halfHeight = Math.tan((fovDegrees * Math.PI) / 360);
+  const halfWidth = halfHeight * aspect;
+  /** A point in lens space: depth along the view, and offsets across and up it. */
+  const look = (x: number, y: number, z: number): { depth: number; across: number; rise: number } => {
+    const dx = x - eye.x;
+    const dy = y - eye.y;
+    const dz = z - eye.z;
+    return {
+      depth: dx * forward.x + dy * forward.y + dz * forward.z,
+      across: dx * right.x + dy * right.y + dz * right.z,
+      rise: dx * up.x + dy * up.y + dz * up.z,
+    };
+  };
+  const NEAR = 1e-3;
+  let gap = Infinity;
+  for (const part of parts) {
+    const corners: Array<{ depth: number; across: number; rise: number }> = [];
+    for (const x of [part.min[0], part.max[0]]) {
+      for (const y of [part.min[1], part.max[1]]) {
+        for (const z of [part.min[2], part.max[2]]) corners.push(look(x, y, z));
+      }
+    }
+    // Only what is in front of the lens can be in the frame. A box with
+    // corners on both sides is clipped at the near plane along each of its
+    // twelve edges, so a beam passing beside the lens is not mistaken for one
+    // across it.
+    const seen = corners.filter((corner) => corner.depth > NEAR);
+    if (seen.length === 0) continue;
+    const points = [...seen];
+    if (seen.length < corners.length) {
+      for (let a = 0; a < corners.length; a += 1) {
+        for (let b = a + 1; b < corners.length; b += 1) {
+          const from = corners[a]!;
+          const to = corners[b]!;
+          if (from.depth > NEAR === to.depth > NEAR) continue;
+          const t = (NEAR - from.depth) / (to.depth - from.depth);
+          points.push({
+            depth: NEAR,
+            across: from.across + (to.across - from.across) * t,
+            rise: from.rise + (to.rise - from.rise) * t,
+          });
+        }
+      }
+    }
+    // Steel above or below the frame is not in it, however wide it is.
+    const rises = points.map((point) => point.rise / (point.depth * halfHeight));
+    if (Math.min(...rises) > 1 || Math.max(...rises) < -1) continue;
+    let lowest = Infinity;
+    for (const point of points) lowest = Math.min(lowest, Math.abs(point.across) / (point.depth * halfWidth));
+    // A box with steel on both sides of the centre line covers it, whatever
+    // its corners measure on their own.
+    const left = points.some((point) => point.across < 0);
+    const rightward = points.some((point) => point.across > 0);
+    gap = Math.min(gap, left && rightward ? 0 : lowest);
+  }
+  return gap;
+}
 
 export interface RoofSwingOptions {
   /** The roof grid's tile (0, 0) in world units (x east, z south). */
@@ -139,11 +281,17 @@ export interface RoofSwingView {
   setAngle(radians: number): void;
   /**
    * Where the rider's figure stands at an angle, in world units: the point
-   * its own origin (the soles of its standing feet) goes to. `drop` is how
-   * far below the pivot that is — `SWING_HANG` plus the look's own seated hip
-   * height, so its hips land on the board (see `avatar-seating.ts`).
+   * its own origin goes to. `drop` is how far below the pivot that is, which
+   * for a rider is `SWING_RIDER_DROP` — the board's top face — because the
+   * figure raises itself onto the seat from there (`ROOF_SWING_SEAT`).
    */
   riderAt(radians: number, drop?: number): SwingPoint;
+  /**
+   * Where the rider's eye is at an angle, in world units: the ride's own
+   * camera. It hangs in the seat's frame, so it leans and travels with the
+   * pendulum (`SWING_EYE_HEIGHT`, `SWING_EYE_AHEAD`).
+   */
+  eyeAt(radians: number): SwingPoint;
   /** The pivot the whole thing hangs from, in world units. */
   readonly pivot: SwingPoint;
   /** The seat's boxes, for the offline fit check. */
@@ -308,17 +456,11 @@ export function buildRoofSwing(
       part('post', x - 0.04, 0, S.backrestBack, x + 0.04, S.backrestHigh, S.backrestFront, shade(SWING_RED, -0.05));
     }
     // The grab rail across the front, at the height a seated hand falls to,
-    // on two short stanchions off the board's front corners.
+    // on two stanchions standing off the board's front corners.
     part('rail', -S.halfWidth, S.railLow, S.railBack, S.halfWidth, S.railHigh, S.railFront, shade(SWING_RED, 0.14));
     for (const side of [-1, 1] as const) {
       const x = side * (S.halfWidth - 0.06);
-      part('stanchion', x - 0.04, -S.boardThickness, S.railBack, x + 0.04, S.railLow, S.boardFront, shade(SWING_RED, -0.05));
-    }
-    // The foot bar, under the board where hanging shoes come to.
-    part('foot-bar', -S.halfWidth + 0.14, S.barLow, S.barBack, S.halfWidth - 0.14, S.barHigh, S.barFront, shade(SWING_RED, -0.12));
-    for (const side of [-1, 1] as const) {
-      const x = side * (S.halfWidth - 0.14);
-      part('foot-hanger', x - 0.035, S.barLow, S.barBack + 0.01, x + 0.035, -S.boardThickness, S.barFront - 0.01, shade(SWING_RED, -0.05));
+      part('stanchion', x - 0.04, -S.boardThickness, S.railBack, x + 0.04, S.railLow, S.railFront, shade(SWING_RED, -0.05));
     }
     const material = res.material(standardMaterial({ roughness: 0.55, metalness: 0.1 }));
     flushBin(seat, SEAT, material, res, group, { name: 'roof:swing:seat', cast: true, receive: true });
@@ -344,6 +486,21 @@ export function buildRoofSwing(
         x: centreX,
         y: pivotY - reach * Math.cos(angle),
         z: pivotZ + reach * Math.sin(angle),
+      });
+    },
+    eyeAt(radians: number): SwingPoint {
+      const angle = Number.isFinite(radians) ? radians : 0;
+      // The eye in the seat's frame, carried round the pivot with it: the
+      // group turns about +X by -angle, so (y, z) goes to
+      // (y cos a + z sin a, -y sin a + z cos a).
+      const y = SWING_EYE_HEIGHT - SWING_HANG;
+      const z = SWING_EYE_AHEAD;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      return Object.freeze({
+        x: centreX,
+        y: pivotY + y * cos + z * sin,
+        z: pivotZ - y * sin + z * cos,
       });
     },
     dispose(): void {

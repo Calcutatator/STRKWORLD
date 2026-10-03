@@ -11,6 +11,7 @@ import {
   type PitchFixture,
 } from '../map/pitch.js';
 import type { DistrictMap } from '../map/street.js';
+import { BLEACHER_PROFILE } from '../seats.js';
 import {
   GeometryBin,
   PITCH_THEME,
@@ -127,7 +128,7 @@ export function buildPitch(map: DistrictMap, labels: LabelFactory, res: Resource
     }
     const hasGate = gatePosts(map) !== null;
     streetFence(map, bin);
-    perimeterFence(bin);
+    perimeterFence(map, bin);
 
     const groundMaterial = res.material(standardMaterial({ roughness: 0.95 }));
     const decorMaterial = res.material(standardMaterial({ roughness: 0.78 }));
@@ -521,11 +522,17 @@ function stand(piece: PitchFixture, bin: GeometryBin): void {
 function bleacher(piece: PitchFixture, bin: GeometryBin): void {
   const x0 = piece.x + 0.1;
   const x1 = piece.x + piece.width - 0.1;
+  // The step and the plank on it are BLEACHER_PROFILE's: the front row's plank
+  // is what a sitter rests on (D-127, amended 2026-10-03), so the drawn bench
+  // and the seat under a seated figure are the same numbers.
+  const seat = BLEACHER_PROFILE;
+  const plank = seat.surface - seat.underside;
   for (let i = 0; i < piece.height; i++) {
     const za = piece.y + i;
-    const top = 0.3 * (i + 1);
+    const top = seat.underside * (i + 1);
     bin.add(DECOR, boxGeometry(x0, 0, za, x1, top, za + 1), i === 0 ? PITCH_THEME.concrete : shade(PITCH_THEME.concrete, -0.03));
-    bin.add(DECOR, boxGeometry(x0 + 0.05, top, za + 0.2, x1 - 0.05, top + 0.08, za + 0.62), PLAZA_THEME.wood);
+    // Measured from the row's south edge, which is the back of a north-facing run.
+    bin.add(DECOR, boxGeometry(x0 + 0.05, top, za + 1 - seat.seatFront, x1 - 0.05, top + plank, za + 1 - seat.seatBack), PLAZA_THEME.wood);
     for (let x = x0 + 0.4; x < x1 - 0.2; x += 1.6) {
       bin.add(DECOR, boxGeometry(x, top, za + 0.3, x + 0.08, top + 0.02, za + 0.52), PLAZA_THEME.woodDark);
     }
@@ -617,10 +624,13 @@ function streetFence(map: DistrictMap, bin: GeometryBin): void {
  * south edges: posts and rails, tall behind the stand and low on the south,
  * nearest the camera. Outside the map, so never in anyone's way.
  */
-function perimeterFence(bin: GeometryBin): void {
-  const { x: x0, y: z0, width, height } = PITCH_AREA;
+function perimeterFence(map: DistrictMap, bin: GeometryBin): void {
+  const { x: x0, y: z0, width } = PITCH_AREA;
   const x1 = x0 + width;
-  const z1 = z0 + height;
+  // The south run follows the map's edge, not the square's: since D-134 the
+  // district is deeper than the square, and a fence on the square's own south
+  // edge would stand across the grass inside it.
+  const z1 = Math.max(z0 + PITCH_AREA.height, map.height);
   const run = (xa: number, za: number, xb: number, zb: number, h: number): void => {
     const alongX = Math.abs(xb - xa) >= Math.abs(zb - za);
     const length = alongX ? Math.abs(xb - xa) : Math.abs(zb - za);
