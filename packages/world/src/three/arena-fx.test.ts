@@ -25,6 +25,13 @@ function frame(over: Partial<Omit<ArenaViewFrame, 'dummy'>> & { hp?: number; hit
     challengerId: phase === 'idle' ? null : over.challengerId ?? FIGHTER,
     challengerSwings: over.challengerSwings ?? 0,
     selfIsChallenger: over.selfIsChallenger ?? false,
+    // D-128.
+    challengerGuarding: over.challengerGuarding ?? false,
+    challengerBlocks: over.challengerBlocks ?? 0,
+    championId: over.championId ?? null,
+    throneId: over.throneId ?? null,
+    selfIsChampion: over.selfIsChampion ?? false,
+    selfOnThrone: over.selfOnThrone ?? false,
   };
 }
 
@@ -131,9 +138,9 @@ describe('arena fx: hits come from server state', () => {
     fx.sync(frame(), null);
     fx.sync(frame({ hp: 90, hits: 1 }), null);
     run(48);
-    expect(Math.abs(pivot().rotation.x)).toBeGreaterThan(0.01);
+    expect(Math.abs(pivot().rotation.z)).toBeGreaterThan(0.01);
     run(3000);
-    expect(Math.abs(pivot().rotation.x)).toBeLessThan(0.001);
+    expect(Math.abs(pivot().rotation.z)).toBeLessThan(0.001);
   });
 
   it('knockout topples the dummy over 500 ms; a new fight stands it back up', () => {
@@ -141,19 +148,19 @@ describe('arena fx: hits come from server state', () => {
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     run(ARENA_FX_TOPPLE_MS / 2);
-    const halfway = pivot().rotation.x;
+    const halfway = pivot().rotation.z;
     expect(halfway).toBeLessThan(-0.3);
     expect(halfway).toBeGreaterThan(-Math.PI / 2);
     run(ARENA_FX_TOPPLE_MS);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     fx.sync(frame({ phase: 'idle' }), null);
-    expect(pivot().rotation.x).toBeCloseTo(0, 5);
+    expect(pivot().rotation.z).toBeCloseTo(0, 5);
   });
 
   it('joining after a knockout shows the dummy already down', () => {
     const { fx, pivot } = setup();
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 3);
   });
 });
 
@@ -167,7 +174,7 @@ describe('arena fx: reduced motion', () => {
     const number = shownNumbers()[0]!;
     const startY = number.position.y;
     run(ARENA_FX_REDUCED_NUMBER_MS - 20, 10);
-    expect(pivot().rotation.x).toBe(-0);
+    expect(pivot().rotation.z).toBe(-0);
     expect(number.position.y).toBe(startY);
     expect(find('arena:straw').visible).toBe(false);
     run(40, 10);
@@ -178,7 +185,7 @@ describe('arena fx: reduced motion', () => {
     const { fx, pivot, dummyMaterial, find } = setup(true);
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
-    expect(pivot().rotation.x).toBeCloseTo(-Math.PI / 2, 5);
+    expect(pivot().rotation.z).toBeCloseTo(-Math.PI / 2, 5);
     expect(dummyMaterial().color.r).toBeLessThan(0.7);
     expect(find('arena:straw').visible).toBe(false);
   });
@@ -186,7 +193,7 @@ describe('arena fx: reduced motion', () => {
 
 describe('arena fx: spectators see the fighter swing', () => {
   function port() {
-    return { playSwing: vi.fn(), setFighter: vi.fn() } satisfies RemoteSwingPort;
+    return { playSwing: vi.fn(), setFighter: vi.fn(), setBlocker: vi.fn(), setThroned: vi.fn() } satisfies RemoteSwingPort;
   }
 
   it('plays a peer’s swing when the server’s swing counter moves', () => {
@@ -217,6 +224,51 @@ describe('arena fx: spectators see the fighter swing', () => {
     expect(remote.playSwing).not.toHaveBeenCalled();
   });
 
+  it('a blocked hit sparks and says BLOCK, with no damage number and no flash (D-128)', () => {
+    const { fx, shownNumbers, find, dummyMaterial } = setup();
+    const remote = port();
+    const spark = () => find('arena:block-spark');
+    fx.sync(frame({ challengerBlocks: 2 }), remote);
+    expect(spark().visible).toBe(false);
+    const before = dummyMaterial().color.getHex();
+    fx.sync(frame({ challengerBlocks: 3 }), remote);
+    expect(spark().visible).toBe(true);
+    // One word shows — BLOCK, which rides the same mesh pool as the damage
+    // numbers — and nothing took damage, so the dummy does not flash.
+    expect(shownNumbers()).toHaveLength(1);
+    expect(dummyMaterial().color.getHex()).toBe(before);
+    // The counter wraps at 256 and is still a block, not a reset.
+    fx.sync(frame({ challengerBlocks: 0 }), remote);
+    expect(spark().visible).toBe(true);
+  });
+
+  it('a new challenger’s block counter is a baseline, not a spark (D-128)', () => {
+    const { fx, find } = setup();
+    const remote = port();
+    fx.sync(frame({ challengerBlocks: 9 }), remote);
+    fx.sync(frame({ challengerId: 'g-next' as GameId, challengerBlocks: 0, phase: 'countdown' }), remote);
+    expect(find('arena:block-spark').visible).toBe(false);
+  });
+
+  it('tells the remote layer who is guarding and who is on the throne (D-128)', () => {
+    const { fx } = setup();
+    const remote = port();
+    fx.sync(frame({ phase: 'fighting' }), remote);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    expect(remote.setThroned).toHaveBeenLastCalledWith(null);
+    fx.sync(frame({ phase: 'fighting', challengerGuarding: true }), remote);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(FIGHTER);
+    // The throne is anyone in the arena, fighter or not.
+    fx.sync(frame({ phase: 'fighting', throneId: 'g-champ' as GameId }), remote);
+    expect(remote.setThroned).toHaveBeenLastCalledWith('g-champ');
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    // An idle ring guards nobody; the throne outlives the fight.
+    fx.sync(frame({ phase: 'idle', throneId: 'g-champ' as GameId }), remote);
+    expect(remote.setFighter).toHaveBeenLastCalledWith(null);
+    expect(remote.setBlocker).toHaveBeenLastCalledWith(null);
+    expect(remote.setThroned).toHaveBeenLastCalledWith('g-champ');
+  });
+
   it('marks the fighter for the battle stance while the ring is busy', () => {
     const { fx } = setup();
     const remote = port();
@@ -232,7 +284,7 @@ describe('arena fx: lifecycle', () => {
     const { fx, find, pivot } = setup(true);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     fx.sync(null, null);
-    expect(pivot().rotation.x).toBeCloseTo(0, 5);
+    expect(pivot().rotation.z).toBeCloseTo(0, 5);
     expect(find('arena-hp-bar').visible).toBe(false);
     fx.dispose();
     expect(fx.group.children).toHaveLength(0);
@@ -265,10 +317,10 @@ describe('arena fx: the room’s own dummy', () => {
     expect(shared.emissive.getHex()).toBe(0);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     for (let t = 0; t < 600; t += 16) fx.update(16);
-    expect(dummy.rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(dummy.rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     fx.dispose();
     expect(body.material).toBe(shared);
-    expect(dummy.rotation.x).toBe(0);
+    expect(dummy.rotation.z).toBe(0);
   });
 });
 
@@ -293,7 +345,7 @@ describe('arena fx: finding the room’s dummy once mounted', () => {
     fx.sync(frame({ hp: 10, hits: 9 }), null);
     fx.sync(frame({ phase: 'ended', hp: 0, hits: 10, down: true }), null);
     for (let t = 0; t < 600; t += 16) fx.update(16);
-    expect(dummy.rotation.x).toBeCloseTo(-Math.PI / 2, 3);
+    expect(dummy.rotation.z).toBeCloseTo(-Math.PI / 2, 3);
     expect(shared.emissive.getHex()).toBe(0);
     fx.dispose();
     expect((dummy.children[0] as Mesh).material).toBe(shared);

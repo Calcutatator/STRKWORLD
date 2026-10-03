@@ -271,6 +271,25 @@ export const COPY = freezeCopy({
     priceCheckedAbove: "At or above Pragma's oracle price.",
     priceUnchecked:
       "No independent price check: Pragma's oracle has no price for at least one of these tokens, so nothing but avnu's quote says this rate is fair. The protected minimum only guards against the price moving after this quote.",
+    /**
+     * D-126: the oracle guard refused this quote, so no wallet was asked and
+     * nothing was sent. Said in the panel, in the player's words, with the
+     * figure that caused it — never silently, which is what the Exchange did
+     * before and which read as the button doing nothing.
+     */
+    priceGuardRefused:
+      "avnu's price for {symbol} is {shortfall}% worse than the market price, so this swap was stopped to protect you. Nothing was sent, and your wallet was not asked.",
+    /** D-126: added downstairs only, where the thin token has a floor that would take it. */
+    priceGuardDegenFloor: 'Thin tokens trade on the degen floor upstairs, which allows bigger price gaps.',
+    /** D-126: the degen floor's own refusal, past its own wider cap. */
+    priceGuardRefusedDegen:
+      "avnu's price for {symbol} is {shortfall}% worse than the market price, more than the {bound}% the degen floor allows, so this swap was stopped. Nothing was sent, and your wallet was not asked.",
+    /**
+     * D-126: within the cap, so the swap goes ahead as usual — a small line in
+     * the review, not a modal and not a second button. It states the gap and
+     * why, and claims nothing about the token.
+     */
+    priceBelowMarket: 'Price is {shortfall}% below market: thin liquidity.',
     acknowledgeUnchecked: 'I understand this swap has no independent price check.',
     acknowledgeFirst: 'Tick the box to confirm a swap with no independent price check.',
     /**
@@ -804,6 +823,13 @@ export const COPY = freezeCopy({
       check: 'Check privately',
       again: 'Check again',
       checking: 'Counting your receipts…',
+      /**
+       * Shown in the waiting state only when the wallet is about to ask for
+       * the season commitment — the one prompt a check can make (D-122,
+       * amended 2026-10-03). A second check in the same session reuses what
+       * the wallet already shared, prompts nothing, and so says nothing.
+       */
+      walletPrompt: 'Your wallet will ask to share your season ID',
       top: (percent: number) => `Top ${percent}%`,
       rank: (rank: number, total: number) => `Rank about ${rank} of ${total}`,
       count: (count: number) => (count === 1 ? '1 private action' : `${count} private actions`),
@@ -854,6 +880,8 @@ export const COPY = freezeCopy({
     unavailable: 'The Bridge planner is unavailable, so this route stays locked.',
     plannerUnavailable: 'Shield planning is not available in this build, so funding instructions stay hidden.',
     recoveryUnavailable: 'Saved Bridge recovery is unavailable in this browser. Your wallet and the rest of the city are unaffected.',
+    /** The optional terminal runtime is still arriving; it is not a failure yet. */
+    arriving: 'The Bridge terminal is still starting up. This takes a moment the first time you come in.',
     accountRequired: 'Connect the account that should receive this deposit before creating a quote.',
     accountChanged: 'The active account changed. This record remains bound to its original recipient; reconnect that account before continuing.',
     noRecord: 'No bridge deposit is saved on this device.',
@@ -929,6 +957,8 @@ export const COPY = freezeCopy({
     timeLeft: 'Time left',
     fight: 'FIGHT!',
     strike: 'STRIKE',
+    /** D-128: the block, held on Q or on the touch button beside STRIKE. */
+    block: 'BLOCK',
     leave: 'LEAVE RING',
     victory: 'VICTORY',
     /** Followed by the client-timed seconds, e.g. "Dummy down in 12.4 s". */
@@ -986,7 +1016,7 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you.' },
+      { input: 'Space', effect: 'Jump. Works anywhere you can walk, standing, walking or sprinting; not while a counter or Menu Mode is open. Jump to climb onto a block one higher than you: walking into it just stops you. A running jump carries you over the football without kicking it.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'Use what you stand at when its E prompt shows: a counter, the Privacy Plaza\'s monument or table, an outfit in the Avatar Studio. Walking up never opens anything by itself, and on a touch screen you tap the prompt instead. In the sandbox, pick up the block in front of you, and press E again to put it down. On the football pitch, kick the ball when E · KICK shows.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
@@ -1151,6 +1181,14 @@ export const COPY = freezeCopy({
      */
     'shadow-accounts-unsupported':
       "Your wallet doesn't support shadow accounts yet, and the Vault and the Exchange need one. Nothing was sent, and every other building works as before.",
+    /**
+     * D-126: the swap's oracle guard refused the quote before the wallet was
+     * asked. The Exchange and the degen floor replace this with the figures
+     * (`exchange.priceGuard*`); this is the fallback for anywhere that only
+     * knows the kind, so a refusal is never silent.
+     */
+    'price-guard':
+      "avnu's price for this swap is too far below the market price, so it was stopped to protect you. Nothing was sent, and your wallet was not asked.",
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 

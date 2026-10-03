@@ -1,5 +1,5 @@
 import type { SwapPriceCheck } from './operations.js';
-import { PrivacyError, type Address } from './types.js';
+import { PrivacyError, SwapPriceGuardError, type Address } from './types.js';
 
 /**
  * The swap's independent price check (D-084). avnu's quote fixes the floor
@@ -9,8 +9,13 @@ import { PrivacyError, type Address } from './types.js';
  * output is held against Pragma's on-chain spot prices, read by the browser
  * over the wallet's own RPC, never through STRKWORLD's backend or avnu.
  *
+ * D-126 gives the degen floor its own, wider pair of limits
+ * (`SWAP_DEGEN_PRICE_BOUND_BPS`, `SWAP_DEGEN_MAX_SLIPPAGE_BPS`), passed in by
+ * the caller. Everything below is otherwise unchanged, and the Exchange's
+ * numbers are the defaults.
+ *
  * - Both tokens have a pinned feed: the expected output's USD value may fall
- *   at most `SWAP_PRICE_BOUND_BPS` below the sell amount's, and the floor the
+ *   at most `boundBps` below the sell amount's, and the floor the
  *   chain enforces (`minAmountOut`) at most the bound plus the slippage, or
  *   the swap is refused before the review. The floor is what a hostile route
  *   can actually deliver, so it is checked itself, not only the quote. A pinned feed that cannot be read, is stale or
@@ -41,6 +46,30 @@ export const SWAP_PRICE_BOUND_BPS = 300;
  * the chain enforces is never more than 6% below the oracle value.
  */
 export const SWAP_MAX_SLIPPAGE_BPS = 300;
+
+/**
+ * D-126: the degen floor's own oracle bound, 12%. Its tokens are the thin,
+ * illiquid ones the ground floor does not list, and routed liquidity there is
+ * genuinely worse than Pragma's median — a 3% bound refused every real LORDS
+ * quote before the wallet was ever asked. The guard is not removed upstairs,
+ * only widened, and the review says in plain words how far below market the
+ * quote sits whenever it passes 3%.
+ */
+export const SWAP_DEGEN_PRICE_BOUND_BPS = 1_200;
+
+/**
+ * D-126: the widest slippage a degen swap may use, 8%. With the 12% bound the
+ * floor the chain enforces upstairs is never more than 20% below the oracle
+ * value — wide, and deliberately so: the ground floor's 6% is unchanged.
+ */
+export const SWAP_DEGEN_MAX_SLIPPAGE_BPS = 800;
+
+/**
+ * D-126: past this, a quote that still passes its floor's bound is shown with
+ * a small warning line in the review. 3% on both floors, so the ground floor's
+ * old refusal threshold becomes the degen floor's warning threshold.
+ */
+export const SWAP_PRICE_WARN_BPS = 300;
 
 /** A Pragma price older than this is stale, in seconds. */
 export const PRAGMA_MAX_AGE_S = 1_800;
@@ -112,7 +141,17 @@ export function checkSwapPrice(input: {
   readonly slippageBps: number;
   readonly prices: readonly PragmaPrice[] | null;
   readonly nowMs: number;
+  /**
+   * D-126: how far below the oracle value this floor lets the expected output
+   * sit. The Exchange's `SWAP_PRICE_BOUND_BPS` unless the degen floor passes
+   * its own, wider one; never above `SWAP_DEGEN_PRICE_BOUND_BPS`.
+   */
+  readonly boundBps?: number;
+  /** D-126: the widest slippage this floor allows, `SWAP_MAX_SLIPPAGE_BPS` by default. */
+  readonly maxSlippageBps?: number;
 }): SwapPriceCheck {
+  const boundBps = ownBound(input.boundBps, SWAP_PRICE_BOUND_BPS, SWAP_DEGEN_PRICE_BOUND_BPS);
+  const maxSlippageBps = ownBound(input.maxSlippageBps, SWAP_MAX_SLIPPAGE_BPS, SWAP_DEGEN_MAX_SLIPPAGE_BPS);
   const sellFeed = priceFeed(input.sellToken);
   const buyFeed = priceFeed(input.buyToken);
   const value = (feed: PriceFeed, amount: bigint): bigint => {
@@ -130,7 +169,7 @@ export function checkSwapPrice(input: {
     const expectedBuyUsd = tryValue(buyFeed, input.buyAmount);
     return Object.freeze({
       status: 'unchecked',
-      boundBps: SWAP_PRICE_BOUND_BPS,
+      boundBps,
       ...(sellUsd !== undefined ? { sellUsd } : {}),
       ...(expectedBuyUsd !== undefined ? { expectedBuyUsd } : {}),
     });
@@ -138,8 +177,8 @@ export function checkSwapPrice(input: {
   if (input.prices === null) {
     throw new PrivacyError('unreachable', 'The swap could not read the oracle price to check this quote, so nothing was sent.');
   }
-  if (!Number.isSafeInteger(input.slippageBps) || input.slippageBps <= 0 || input.slippageBps > SWAP_MAX_SLIPPAGE_BPS) {
-    throw new PrivacyError('unknown', `A swap's slippage may be at most ${SWAP_MAX_SLIPPAGE_BPS / 100}%.`);
+  if (!Number.isSafeInteger(input.slippageBps) || input.slippageBps <= 0 || input.slippageBps > maxSlippageBps) {
+    throw new PrivacyError('unknown', `A swap's slippage may be at most ${maxSlippageBps / 100}%.`);
   }
   const sellUsd = value(sellFeed, input.sellAmount);
   const expectedBuyUsd = value(buyFeed, input.buyAmount);
@@ -148,22 +187,34 @@ export function checkSwapPrice(input: {
     throw new PrivacyError('unknown', 'This amount is too small to check against the oracle price.');
   }
   const shortfallBps = Number(((sellUsd - expectedBuyUsd) * 10_000n) / sellUsd);
-  if (shortfallBps > SWAP_PRICE_BOUND_BPS) {
-    throw new PrivacyError(
-      'unknown',
-      `avnu's quote is ${(shortfallBps / 100).toFixed(2)}% below the oracle price, more than the ${SWAP_PRICE_BOUND_BPS / 100}% allowed, so it was refused.`,
+  if (shortfallBps > boundBps) {
+    throw new SwapPriceGuardError(
+      `avnu's quote is ${(shortfallBps / 100).toFixed(2)}% below the oracle price, more than the ${boundBps / 100}% allowed, so it was refused.`,
+      { shortfallBps, boundBps },
     );
   }
   // The floor itself: what the chain lets a route deliver. Refused unless
   // minAmountOut ≥ oracle value × (1 − bound − slippage).
-  const floorAllowanceBps = BigInt(SWAP_PRICE_BOUND_BPS + input.slippageBps);
+  const floorAllowanceBps = BigInt(boundBps + input.slippageBps);
   if (floorUsd * 10_000n < sellUsd * (10_000n - floorAllowanceBps)) {
-    throw new PrivacyError(
-      'unknown',
+    throw new SwapPriceGuardError(
       `The swap's minimum output is more than ${Number(floorAllowanceBps) / 100}% below the oracle price, so it was refused.`,
+      { shortfallBps: Number(((sellUsd - floorUsd) * 10_000n) / sellUsd), boundBps: Number(floorAllowanceBps) },
     );
   }
-  return Object.freeze({ status: 'checked', boundBps: SWAP_PRICE_BOUND_BPS, sellUsd, expectedBuyUsd, shortfallBps });
+  return Object.freeze({ status: 'checked', boundBps, sellUsd, expectedBuyUsd, shortfallBps });
+}
+
+/**
+ * D-126: a floor's own bound, defaulting to the Exchange's. A caller may only
+ * widen it as far as the degen floor's cap; anything else (a malformed number,
+ * a zero, a value past the cap) falls back to the Exchange's, so a misread
+ * config can never loosen the guard.
+ */
+function ownBound(value: number | undefined, fallback: number, cap: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || value <= 0 || value > cap) return fallback;
+  return value;
 }
 
 function usablePrice(prices: readonly PragmaPrice[], pair: string, nowMs: number): PragmaPrice {

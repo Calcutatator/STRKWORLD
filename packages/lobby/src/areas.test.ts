@@ -161,27 +161,27 @@ describe('extra walkable rects (D-114)', () => {
   });
 
   it('adds the ring interior to the arena grid only for a caller that passes it', () => {
-    const ring = arena(20, 14);
+    const ring = arena(17, 16);
     expect(isAreaWalkable('arena', ring.x, ring.y)).toBe(false);
     expect(isAreaWalkable('arena', ring.x, ring.y, ARENA_RING_WALKABLE)).toBe(true);
     // The dummy is never walkable, extra rects or not.
-    const dummy = arena(20, 18);
+    const dummy = arena(21, 16);
     expect(isAreaWalkable('arena', dummy.x, dummy.y, ARENA_RING_WALKABLE)).toBe(false);
     // The sand outside the fence stays walkable either way.
-    const sand = arena(20, 10);
+    const sand = arena(13, 16);
     expect(isAreaWalkable('arena', sand.x, sand.y)).toBe(true);
     expect(isAreaWalkable('arena', sand.x, sand.y, ARENA_RING_WALKABLE)).toBe(true);
   });
 
   it('path-checks a step against the extra rects too: in the ring, not out through the gate', () => {
     // Inside the ring, a step between interior tiles is fine with the rects.
-    expect(isAreaStepAllowed('arena', arena(20, 14), arena(20, 13), ARENA_RING_WALKABLE)).toBe(true);
-    expect(isAreaStepAllowed('arena', arena(20, 14), arena(20, 13))).toBe(false);
-    // Out through the gate row: the gate is solid for everyone.
-    expect(isAreaStepAllowed('arena', arena(20, 13), arena(20, 11), ARENA_RING_WALKABLE)).toBe(false);
+    expect(isAreaStepAllowed('arena', arena(17, 16), arena(16, 16), ARENA_RING_WALKABLE)).toBe(true);
+    expect(isAreaStepAllowed('arena', arena(17, 16), arena(16, 16))).toBe(false);
+    // Out through the gate column: the gate is solid for everyone.
+    expect(isAreaStepAllowed('arena', arena(16, 16), arena(14, 16), ARENA_RING_WALKABLE)).toBe(false);
     // In from the approach, likewise.
-    expect(isAreaStepAllowed('arena', arena(20, 11), arena(20, 13), ARENA_RING_WALKABLE)).toBe(false);
+    expect(isAreaStepAllowed('arena', arena(14, 16), arena(16, 16), ARENA_RING_WALKABLE)).toBe(false);
     // Through the dummy.
-    expect(isAreaStepAllowed('arena', arena(20, 19), arena(20, 17), ARENA_RING_WALKABLE)).toBe(false);
+    expect(isAreaStepAllowed('arena', arena(23, 16), arena(19, 16), ARENA_RING_WALKABLE)).toBe(false);
   });
 });

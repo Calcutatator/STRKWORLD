@@ -335,6 +335,79 @@ describe('the independent price check (D-084)', () => {
   });
 });
 
+/**
+ * D-126: the degen floor's own, wider pair of limits. Its tokens are the thin
+ * ones, where avnu's routed price really does sit further from Pragma's median
+ * than the Exchange's 3% bound allows — which refused every real LORDS quote
+ * before the wallet was ever asked. Widened upstairs, never removed, and the
+ * ground floor keeps 3% and 3% throughout.
+ */
+describe('the degen floor\'s own swap limits (D-126)', () => {
+  /** 10 STRK ($0.431) for LORDS at $0.02: 21.55 LORDS is fair. */
+  const lords = (shortfallBps: number) => (2_155n * 10n ** 16n * BigInt(10_000 - shortfallBps)) / 10_000n;
+  const upstairs = (overrides: Partial<NonNullable<WalletRoutePolicy['swap']>> = {}, buyAmounts?: readonly bigint[]) =>
+    seam({ policy: policy({ degen: true, ...overrides }), ...(buyAmounts ? { buyAmounts } : {}) });
+  const DEGEN_SWAP: Intent = { ...SWAP, tokenOut: DEGEN, degen: true };
+
+  it('refuses a degen swap in a build with no degen floor, before asking avnu', async () => {
+    const { ops, quotes } = seam();
+    await expect(ops.prepare([DEGEN_SWAP])).rejects.toThrow(/no degen floor/);
+    // And only a boolean marks one, so a truthy value is not a degen swap.
+    await expect(ops.prepare([{ ...SWAP, degen: 'yes' } as unknown as Intent])).rejects.toThrow(/no degen floor/);
+    expect(quotes.requests).toEqual([]);
+  });
+
+  it('passes a 4% LORDS quote the Exchange refuses, and reports the degen floor\'s own bound', async () => {
+    // The same build, the same token, the same quote: only the floor differs.
+    const ground = seam({ policy: policy({ degen: true }), buyAmounts: [lords(400)] });
+    await expect(ground.ops.prepare([{ ...SWAP, tokenOut: DEGEN }])).rejects.toMatchObject({
+      kind: 'price-guard', boundBps: 300,
+    });
+
+    const degen = upstairs({}, [lords(400)]);
+    const batch = await degen.ops.prepare([DEGEN_SWAP]);
+    expect(batch.swapReview?.priceCheck).toMatchObject({ status: 'checked', boundBps: 1_200, shortfallBps: 400 });
+  });
+
+  it('still refuses past 12% upstairs, as a price-guard carrying both figures', async () => {
+    const { ops, invoked } = upstairs({}, [lords(1_300)]);
+    await expect(ops.prepare([DEGEN_SWAP])).rejects.toMatchObject({
+      kind: 'price-guard', shortfallBps: 1_300, boundBps: 1_200,
+    });
+    expect(invoked).toEqual([]);
+  });
+
+  it('quotes a degen swap with no slippage of its own at 8%, and the Exchange\'s at its own 1%', async () => {
+    const degen = upstairs({}, [lords(0)]);
+    await degen.ops.prepare([DEGEN_SWAP]);
+    expect(degen.quotes.requests[0]).toMatchObject({ slippageBps: 800 });
+
+    const ground = seam({ policy: policy({ degen: true }) });
+    await ground.ops.prepare([SWAP]);
+    expect(ground.quotes.requests[0]).toMatchObject({ slippageBps: 100 });
+  });
+
+  it('admits a player slippage up to 8% upstairs and 3% downstairs', async () => {
+    const degen = upstairs({ degenSlippageBps: 800 }, [lords(0), lords(0)]);
+    await expect(degen.ops.prepare([{ ...DEGEN_SWAP, slippageBps: 800 }])).resolves.toBeDefined();
+    await expect(degen.ops.prepare([{ ...DEGEN_SWAP, slippageBps: 801 }])).rejects.toThrow(/outside what this build allows/);
+    // The ground floor is held to its own policy ceiling, not the degen one.
+    const ground = seam({ policy: policy({ degen: true, slippageBps: 100 }) });
+    await expect(ground.ops.prepare([{ ...SWAP, slippageBps: 300 }])).rejects.toThrow(/outside what this build allows/);
+  });
+
+  it('honours a narrower build value, and ignores one past the degen cap', async () => {
+    const narrow = upstairs({ degenSlippageBps: 400, degenOracleBps: 600 }, [lords(700)]);
+    await expect(narrow.ops.prepare([DEGEN_SWAP])).rejects.toMatchObject({ kind: 'price-guard', boundBps: 600 });
+    expect(narrow.quotes.requests[0]).toMatchObject({ slippageBps: 400 });
+
+    // A build asking for more than the cap gets the cap, never more.
+    const greedy = upstairs({ degenSlippageBps: 5_000, degenOracleBps: 9_000 }, [lords(1_300)]);
+    await expect(greedy.ops.prepare([DEGEN_SWAP])).rejects.toMatchObject({ kind: 'price-guard', boundBps: 1_200 });
+    expect(greedy.quotes.requests[0]).toMatchObject({ slippageBps: 800 });
+  });
+});
+
 describe('leaderboard phase 1: the swap stand-in ticks the ledger (DeFi mode)', () => {
   const LEDGER = '0x1ed6e7';
 

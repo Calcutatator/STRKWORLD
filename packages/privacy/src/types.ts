@@ -117,6 +117,15 @@ export type PrivacyErrorKind =
    * the Vault needs one; every other route is unaffected.
    */
   | 'shadow-accounts-unsupported'
+  /**
+   * D-126: the swap's oracle guard refused the quote before the wallet was
+   * asked. avnu's expected output, or the floor the chain would enforce, sits
+   * further below Pragma's price than the floor allows (3% on the Exchange,
+   * the degen floor's wider cap upstairs). Nothing was sent, and no wallet was
+   * prompted. The throw is a `SwapPriceGuardError`, which carries the figures
+   * the counter needs to say so in plain words.
+   */
+  | 'price-guard'
   /** Anything unmapped. Log it, then add a case. */
   | 'unknown';
 
@@ -128,6 +137,28 @@ export class PrivacyError extends Error {
   ) {
     super(message);
     this.name = 'PrivacyError';
+  }
+}
+
+/**
+ * D-126: the swap's oracle guard refused a quote before the wallet was asked.
+ * A `PrivacyError` of kind `price-guard`, with the two figures a counter needs
+ * to explain itself: how far below Pragma's price the quote sits, and the cap
+ * that floor allows. Both are own data properties, so a shell that holds no
+ * value import of this package can still read them off the throw.
+ *
+ * It carries no address, no amount and no token: the counter already knows
+ * which pair it asked about.
+ */
+export class SwapPriceGuardError extends PrivacyError {
+  readonly shortfallBps: number;
+  readonly boundBps: number;
+
+  constructor(message: string, figures: { shortfallBps: number; boundBps: number }) {
+    super('price-guard', message);
+    this.name = 'SwapPriceGuardError';
+    this.shortfallBps = figures.shortfallBps;
+    this.boundBps = figures.boundBps;
   }
 }
 

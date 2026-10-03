@@ -27,7 +27,8 @@ import type { ArenaChannel } from '@strkworld/world';
  *
  * The HUD reads the same channel, plus `strike()` (its STRIKE button, which
  * the World's session takes through its own click path when it is
- * listening) and `inArena()`.
+ * listening), D-128's `guard(down)` (its BLOCK button, the same way through
+ * the World's own Q path) and `inArena()`.
  */
 
 /** The subset of `LobbyClient` the arena needs (B's client API, D-114 §7.3). */
@@ -37,6 +38,9 @@ export interface ArenaLobbyClient {
   arenaClaim(): boolean;
   arenaAttack(): boolean;
   arenaLeave(): boolean;
+  /** D-128: raise or lower the guard, and the champion's press at the box. */
+  arenaBlock(down: boolean): boolean;
+  arenaSit(): boolean;
   onStatus(listener: (event: { readonly status: string }) => void): () => void;
   readonly gameId: GameId | null;
 }
@@ -60,6 +64,12 @@ export interface SoloArenaAuthority {
     now: number,
   ): string;
   attack(key: string, now: number, locate: (key: string) => SoloArenaStance | null): string;
+  /** D-128: the solo player's guard, and their press at the emperor's box. */
+  block(key: string, down: boolean, now: number): string;
+  seat(
+    claimant: { readonly key: string; readonly gameId: GameId; readonly area: PresenceArea | null; readonly x: number; readonly y: number },
+    now: number,
+  ): string;
   leave(key: string, now: number): string;
   gone(key: string, reason: 'left' | 'disconnect', now: number): boolean;
   advance(now: number): ReadonlyArray<{ readonly kind: string; readonly key: string; readonly tile: ArenaTile; readonly facing: Facing }>;
@@ -69,6 +79,11 @@ export interface SoloArenaAuthority {
 export interface ArenaShellChannel extends ArenaChannel {
   /** The HUD's STRIKE: through the World's click path when it listens, else straight to the authority. */
   strike(): void;
+  /**
+   * D-128: the HUD's touch BLOCK, the same way — through the World's own Q
+   * path when it listens, else straight to the authority.
+   */
+  guard(down: boolean): void;
   /** Whether the local player is in the arena (the HUD shows nothing elsewhere). */
   inArena(): boolean;
 }
@@ -106,6 +121,9 @@ function isArenaClient(value: unknown): value is ArenaLobbyClient {
     typeof c.arenaClaim === 'function' &&
     typeof c.arenaAttack === 'function' &&
     typeof c.arenaLeave === 'function' &&
+    // D-128: a client without the block and the box is not one the arena can adopt.
+    typeof c.arenaBlock === 'function' &&
+    typeof c.arenaSit === 'function' &&
     typeof c.onStatus === 'function'
   );
 }
@@ -115,9 +133,11 @@ function sameRing(a: ArenaRingSnapshot | null, b: ArenaRingSnapshot | null): boo
   if (a === b) return true;
   if (a === null || b === null) return false;
   const slot = (x: ArenaRingSnapshot['challenger'], y: ArenaRingSnapshot['challenger']) =>
-    x.kind === y.kind && x.gameId === y.gameId && x.hp === y.hp && x.swings === y.swings && x.hits === y.hits;
+    x.kind === y.kind && x.gameId === y.gameId && x.hp === y.hp && x.swings === y.swings && x.hits === y.hits &&
+    x.guarding === y.guarding && x.blocks === y.blocks;
   return (
     a.phase === b.phase && a.round === b.round && a.secondsLeft === b.secondsLeft &&
+    a.champion === b.champion && a.seated === b.seated &&
     slot(a.challenger, b.challenger) && slot(a.opponent, b.opponent) &&
     (a.outcome?.reason ?? null) === (b.outcome?.reason ?? null) &&
     (a.outcome?.winner ?? null) === (b.outcome?.winner ?? null)
@@ -139,6 +159,8 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
   const authority: SoloArenaAuthority | null = options.solo ? options.solo() : null;
   const listeners = new Set<(ring: ArenaRingSnapshot | null) => void>();
   const strikeListeners = new Set<() => void>();
+  /** D-128: the World's listeners for the HUD's touch BLOCK. */
+  const blockListeners = new Set<(down: boolean) => void>();
   let destroyed = false;
   let inArena = false;
   let here: SoloArenaStance | null = null;
@@ -267,6 +289,18 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
     });
   };
 
+  /** D-128: the block, to the lobby when it is the authority and to the solo ring otherwise. */
+  const block = (down: boolean): void => {
+    if (destroyed) return;
+    if (lobby) {
+      lobby.client.arenaBlock(down === true);
+      return;
+    }
+    soloAct((auth, now) => {
+      auth.block(SOLO_KEY, down === true, now);
+    });
+  };
+
   const channel: ArenaShellChannel = Object.freeze({
     ring(): ArenaRingSnapshot | null {
       if (destroyed) return null;
@@ -304,10 +338,28 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
         auth.leave(SOLO_KEY, now);
       });
     },
+    block,
+    sit(): void {
+      if (destroyed) return;
+      if (lobby) {
+        lobby.client.arenaSit();
+        return;
+      }
+      soloAct((auth, now) => {
+        if (here === null) return;
+        auth.seat({ key: SOLO_KEY, gameId: SOLO_ARENA_ID, area: 'arena', x: here.x, y: here.y }, now);
+      });
+    },
     subscribeStrikes(listener: () => void): () => void {
       strikeListeners.add(listener);
       return () => {
         strikeListeners.delete(listener);
+      };
+    },
+    subscribeBlocks(listener: (down: boolean) => void): () => void {
+      blockListeners.add(listener);
+      return () => {
+        blockListeners.delete(listener);
       };
     },
     strike(): void {
@@ -321,6 +373,20 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
           listener();
         } catch {
           // One failing listener does not stop the strike reaching the rest.
+        }
+      }
+    },
+    guard(down: boolean): void {
+      if (destroyed) return;
+      if (blockListeners.size === 0) {
+        block(down === true);
+        return;
+      }
+      for (const listener of [...blockListeners]) {
+        try {
+          listener(down === true);
+        } catch {
+          // As with STRIKE: one failing listener does not stop the rest.
         }
       }
     },
@@ -390,6 +456,7 @@ export function createArenaController(options: ArenaControllerOptions = {}): Are
       adopted.clear();
       listeners.clear();
       strikeListeners.clear();
+      blockListeners.clear();
     },
   };
 }

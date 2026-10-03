@@ -959,11 +959,36 @@ describe('production swap admission (D-084)', () => {
   });
 
   it('opens the degen floor only on the literal switch', () => {
+    // D-126: the degen floor carries its own two limits, defaulted here.
     expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: 'true' })).swap).toEqual({
       expectedChainId: '0x534e5f4d41494e', slippageBps: 50, degen: true,
+      degenSlippageBps: 800, degenOracleBps: 1200,
     });
     for (const value of ['false', 'TRUE', '1', undefined]) {
-      expect(parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: value })).swap, String(value)).not.toHaveProperty('degen');
+      const policy = parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: value })).swap;
+      expect(policy, String(value)).not.toHaveProperty('degen');
+      // With no degen floor neither of its limits is published at all.
+      expect(policy, String(value)).not.toHaveProperty('degenSlippageBps');
+      expect(policy, String(value)).not.toHaveProperty('degenOracleBps');
+    }
+  });
+
+  /**
+   * D-126: the degen floor's own limits. Optional, defaulted to its ceilings,
+   * and never above them — including when a build sets something absurd, which
+   * takes the ceiling rather than locking a thin floor's swap.
+   */
+  it('reads the degen floor\'s own slippage and oracle limits, at most their ceilings', () => {
+    const degen = (extra: Record<string, string>) => parseRoutePolicy(swap({ VITE_STRK20_SWAP_DEGEN_ENABLED: 'true', ...extra })).swap;
+    expect(degen({ VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS: '500', VITE_STRK20_SWAP_DEGEN_ORACLE_BPS: '900' }))
+      .toMatchObject({ degenSlippageBps: 500, degenOracleBps: 900 });
+    expect(degen({ VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS: '800', VITE_STRK20_SWAP_DEGEN_ORACLE_BPS: '1200' }))
+      .toMatchObject({ degenSlippageBps: 800, degenOracleBps: 1200 });
+    for (const bad of ['801', '5000', '0', '-1', 'wide', '']) {
+      expect(degen({ VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS: bad }), bad).toMatchObject({ degenSlippageBps: 800 });
+    }
+    for (const bad of ['1201', '10000', '0', '-1', 'wide', '']) {
+      expect(degen({ VITE_STRK20_SWAP_DEGEN_ORACLE_BPS: bad }), bad).toMatchObject({ degenOracleBps: 1200 });
     }
   });
 
@@ -1011,7 +1036,12 @@ describe('production swap admission (D-084)', () => {
 
   it('declares every swap variable as a Docker build argument, so Railway can pass them', () => {
     const dockerfile = readFileSync(new URL('../../../../deploy/fly/Dockerfile', import.meta.url), 'utf8');
-    for (const name of ['VITE_STRK20_SWAP_ENABLED', 'VITE_STRK20_SWAP_ALLOWED_TOKENS', 'VITE_STRK20_SWAP_SLIPPAGE_BPS', 'VITE_STRK20_SWAP_DEGEN_ENABLED']) {
+    for (const name of [
+      'VITE_STRK20_SWAP_ENABLED', 'VITE_STRK20_SWAP_ALLOWED_TOKENS', 'VITE_STRK20_SWAP_SLIPPAGE_BPS',
+      'VITE_STRK20_SWAP_DEGEN_ENABLED',
+      // D-126: the degen floor's own two limits.
+      'VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS', 'VITE_STRK20_SWAP_DEGEN_ORACLE_BPS',
+    ]) {
       expect(dockerfile, name).toMatch(new RegExp(`^ARG ${name}$`, 'm'));
     }
   });

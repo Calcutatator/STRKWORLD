@@ -9,7 +9,9 @@ import type { ArenaShellChannel } from './arena-controller.js';
  *
  * - **The fighter** sees the dummy's HP (`TRAINING DUMMY 70/100`), the fight
  *   timer, the countdown (`3 · 2 · 1 · FIGHT!`), a LEAVE RING button (or Esc)
- *   and, on a touch screen only, a STRIKE button.
+ *   and, on a touch screen only, STRIKE and BLOCK buttons. On a keyboard
+ *   they read the two combat keys instead, "E STRIKE" and "Q BLOCK"
+ *   (D-128), as key chips in the brand style.
  * - **Spectators** see a slim top bar (`TRAINING BOUT · 0:42`) with the HP.
  * - **Results** are a banner: VICTORY with the client-timed knockout, TIME, or
  *   what happened for spectators.
@@ -155,6 +157,9 @@ export function ArenaHud({
 
   if (!arena || ring === null || ring.phase === 'idle') return null;
 
+  const touch = coarsePointer();
+  // D-128: the server's own guard, so the hint and the button light with the stance.
+  const guarding = fighter && ring.challenger.guarding;
   const dummy = ring.opponent.kind === 'dummy' ? ring.opponent : null;
   const hp = dummy ? dummy.hp : 0;
   const hpShare = Math.max(0, Math.min(1, hp / ARENA_MAX_HP));
@@ -218,9 +223,43 @@ export function ArenaHud({
         </div>
       ) : null}
 
+      {fighter && ring.phase === 'fighting' && !touch ? (
+        // D-128: what the two combat keys do, in the brand's key-chip style
+        // (D-119/D-121 tokens). Shown on a keyboard only; on a touch screen
+        // the STRIKE and BLOCK buttons below say it instead.
+        <div className="arena-hud-hints" data-testid="arena-hints">
+          <span className="arena-hud-hint">
+            <kbd className="arena-hud-key">E</kbd>
+            <span className="arena-hud-hint-text">{COPY.arena.strike}</span>
+          </span>
+          <span className="arena-hud-hint" data-state={guarding ? 'held' : 'idle'}>
+            <kbd className="arena-hud-key">Q</kbd>
+            <span className="arena-hud-hint-text">{COPY.arena.block}</span>
+          </span>
+        </div>
+      ) : null}
+
       {canLeave ? (
         <div className="arena-hud-actions">
-          {ring.phase === 'fighting' && coarsePointer() ? (
+          {ring.phase === 'fighting' && touch ? (
+            <button
+              type="button"
+              className="arena-hud-button arena-hud-block"
+              data-state={guarding ? 'held' : 'idle'}
+              aria-pressed={guarding}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                arena.guard(true);
+              }}
+              onPointerUp={() => arena.guard(false)}
+              onPointerCancel={() => arena.guard(false)}
+              onPointerLeave={() => arena.guard(false)}
+              onLostPointerCapture={() => arena.guard(false)}
+            >
+              {COPY.arena.block}
+            </button>
+          ) : null}
+          {ring.phase === 'fighting' && touch ? (
             <button type="button" className="arena-hud-button arena-hud-strike" onClick={() => arena.strike()}>
               {COPY.arena.strike}
             </button>

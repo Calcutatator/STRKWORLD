@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PRAGMA_ORACLE, PRICE_FEEDS, SWAP_MAX_SLIPPAGE_BPS, SWAP_PRICE_BOUND_BPS, checkSwapPrice, priceFeed, type PragmaPrice } from './swap-prices.js';
+import {
+  PRAGMA_ORACLE,
+  PRICE_FEEDS,
+  SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+  SWAP_DEGEN_PRICE_BOUND_BPS,
+  SWAP_MAX_SLIPPAGE_BPS,
+  SWAP_PRICE_BOUND_BPS,
+  SWAP_PRICE_WARN_BPS,
+  checkSwapPrice,
+  priceFeed,
+  type PragmaPrice,
+} from './swap-prices.js';
 import { PragmaPriceReader } from './wallet-api/pragma-prices.js';
 
 /** D-084: the swap's independent oracle check, and the reader that feeds it. */
@@ -80,6 +91,81 @@ describe('checkSwapPrice', () => {
     expect(check(5n, [], UNPRICED)).toEqual({ status: 'unchecked', boundBps: 300 });
     expect(checkSwapPrice({ sellToken: UNPRICED, buyToken: '0x0777', sellAmount: 1n, buyAmount: 1n, minAmountOut: 1n, slippageBps: 100, prices: PRICES, nowMs: NOW }))
       .toEqual({ status: 'unchecked', boundBps: 300 });
+  });
+});
+
+/**
+ * D-126: the degen floor's own, wider pair of limits. Its tokens are the thin
+ * ones, where routed liquidity is genuinely worse than Pragma's median: the
+ * Exchange's 3% bound refused every real LORDS quote before the wallet was
+ * ever asked. The guard is widened upstairs, never removed, and nothing here
+ * touches the ground floor's figures.
+ */
+describe('checkSwapPrice on the degen floor', () => {
+  /** The degen floor's call: the same check with that floor's two limits. */
+  const degen = (
+    buyAmount: bigint,
+    minAmountOut = buyAmount - (buyAmount * 100n) / 10_000n,
+    slippageBps = 100,
+  ) => checkSwapPrice({
+    sellToken: STRK, buyToken: USDC, sellAmount: 10n ** 19n, buyAmount, minAmountOut, slippageBps,
+    prices: PRICES, nowMs: NOW,
+    boundBps: SWAP_DEGEN_PRICE_BOUND_BPS, maxSlippageBps: SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+  });
+
+  it('pins the degen floor at 12% and 8%, and the warning line at 3% on both floors', () => {
+    expect(SWAP_DEGEN_PRICE_BOUND_BPS).toBe(1_200);
+    expect(SWAP_DEGEN_MAX_SLIPPAGE_BPS).toBe(800);
+    expect(SWAP_PRICE_WARN_BPS).toBe(300);
+    // The ground floor is untouched by any of it.
+    expect(SWAP_PRICE_BOUND_BPS).toBe(300);
+    expect(SWAP_MAX_SLIPPAGE_BPS).toBe(300);
+  });
+
+  it('passes the 3.96% LORDS quote the Exchange refuses, and reports it as a 3.96% shortfall', () => {
+    // 431,017 base units is the fair output; 3.96% under it is 413,949.
+    const fair = 431_017n;
+    const shy = fair - (fair * 396n) / 10_000n;
+    expect(() => check(shy)).toThrow(/3\.9[0-9]% below the oracle price, more than the 3% allowed/);
+    expect(degen(shy)).toMatchObject({ status: 'checked', boundBps: 1_200, shortfallBps: 395 });
+  });
+
+  it('accepts exactly 12% and refuses past it, with the figures the counter says so with', () => {
+    const fair = 431_017n;
+    expect(degen(fair - (fair * 1_200n) / 10_000n)).toMatchObject({ status: 'checked', shortfallBps: 1_200 });
+    expect(() => degen(fair - (fair * 1_300n) / 10_000n)).toThrow(/13\.0[0-9]% below the oracle price, more than the 12% allowed/);
+    expect(() => degen(fair - (fair * 1_300n) / 10_000n)).toThrow(expect.objectContaining({
+      kind: 'price-guard', boundBps: 1_200,
+    }));
+  });
+
+  it('admits a slippage up to 8%, and refuses past it, while the Exchange keeps 3%', () => {
+    expect(degen(431_017n, 400_000n, 800)).toMatchObject({ status: 'checked' });
+    expect(() => degen(431_017n, 400_000n, 801)).toThrow(/at most 8%/);
+    expect(() => check(431_017n, PRICES, USDC, 400_000n, 400)).toThrow(/at most 3%/);
+  });
+
+  it('checks the floor the chain enforces against its own wider allowance: at most 12% + slippage', () => {
+    // 12% + 8% = 20% under the oracle value is the widest floor upstairs.
+    const fair = 431_017n;
+    expect(degen(fair, (fair * 8_001n) / 10_000n, 800)).toMatchObject({ status: 'checked' });
+    expect(() => degen(fair, (fair * 7_900n) / 10_000n, 800)).toThrow(/minimum output is more than 20% below the oracle price/);
+    // The ground floor's widest is still 6%, so the same floor is refused there.
+    expect(() => check(fair, PRICES, USDC, (fair * 8_001n) / 10_000n, 300)).toThrow(/more than 6% below/);
+  });
+
+  it('ignores a caller limit past the degen cap, or a malformed one, rather than honouring it', () => {
+    const fair = 431_017n;
+    const past = (boundBps: number) => checkSwapPrice({
+      sellToken: STRK, buyToken: USDC, sellAmount: 10n ** 19n,
+      buyAmount: fair - (fair * 1_300n) / 10_000n, minAmountOut: 1n, slippageBps: 100,
+      prices: PRICES, nowMs: NOW, boundBps,
+    });
+    // 13% under is refused whatever the caller asked for: past the cap falls
+    // back to the Exchange's 3%, so a misread config can only ever narrow.
+    for (const boundBps of [1_201, 9_000, 0, -1, 12.5, Number.NaN]) {
+      expect(() => past(boundBps), String(boundBps)).toThrow(/more than the 3% allowed/);
+    }
   });
 });
 

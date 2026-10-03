@@ -1,5 +1,6 @@
 import {
   PrivacyError,
+  SwapPriceGuardError,
   type Address,
   type OperationProgress,
   type PrivacyErrorKind,
@@ -43,7 +44,12 @@ import type {
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { shieldDeposits } from '../shield-deposit.js';
-import { SWAP_MAX_SLIPPAGE_BPS } from '../swap-prices.js';
+import {
+  SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+  SWAP_DEGEN_PRICE_BOUND_BPS,
+  SWAP_MAX_SLIPPAGE_BPS,
+  SWAP_PRICE_BOUND_BPS,
+} from '../swap-prices.js';
 import {
   ENDUR_OBSERVED_CLAIM_DELAY_SECONDS,
   ENDUR_XSTRK,
@@ -263,6 +269,14 @@ export interface FakeConfig {
     strkHeld?: bigint;
     xstrkHeld?: bigint;
   };
+  /**
+   * Leaderboard phase 1 (D-122, amended 2026-10-02): mark every prepared batch
+   * as carrying a receipt or a DeFi tick, the way the Wallet API adapter does
+   * in a probing tab with a ledger configured. Off by default, so a build
+   * without the leaderboard reads exactly as it did. It only sets the review
+   * flag; the demo composes no ledger call and writes nothing on chain.
+   */
+  placementReceipts?: boolean;
 }
 
 /**
@@ -426,8 +440,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
   private endurNow = DEMO_ENDUR_CHAIN_TIME;
   private endurDeployed = false;
   private endurCommitted = false;
+  /** D-122: whether every prepared batch claims a placement receipt. */
+  private readonly placementReceipts: boolean;
 
   constructor(config: FakeConfig = {}) {
+    this.placementReceipts = config.placementReceipts === true;
     const balances = config.balances ?? {};
     for (const token of Object.keys(balances)) {
       const descriptor = Object.getOwnPropertyDescriptor(balances, token);
@@ -738,9 +755,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
         throw new PrivacyError('unknown', 'Minimum output must be positive.');
       }
+      // D-126: the degen floor's ceiling upstairs, the Exchange's downstairs.
+      const slippageCeiling = intent.kind === 'swap' && intent.degen === true
+        ? SWAP_DEGEN_MAX_SLIPPAGE_BPS
+        : SWAP_MAX_SLIPPAGE_BPS;
       if (
         intent.kind === 'swap' && intent.slippageBps !== undefined
-        && (!Number.isSafeInteger(intent.slippageBps) || intent.slippageBps <= 0 || intent.slippageBps > SWAP_MAX_SLIPPAGE_BPS)
+        && (!Number.isSafeInteger(intent.slippageBps) || intent.slippageBps <= 0 || intent.slippageBps > slippageCeiling)
       ) {
         throw new PrivacyError('unknown', "The swap's slippage is outside what this build allows.");
       }
@@ -875,6 +896,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       warnings: publishedWarnings,
       promptCount,
       ...(swapReview === undefined ? {} : { swapReview }),
+      ...(this.placementReceipts ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, signal: sig, acknowledgeUncheckedPrice }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
@@ -1461,6 +1483,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       totalCost: feeAtPrepare,
       warnings: Object.freeze([]),
       promptCount: 1,
+      ...(this.placementReceipts ? { countsTowardPlacement: true as const } : {}),
       async confirm({ feeCeiling, onProgress, onStage, onSubmitted, signal }: Parameters<PreparedVaultBatch['confirm']>[0]) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFeeCeilingInput(feeCeiling);
@@ -1525,6 +1548,26 @@ export class FakePrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }
     const canonicalIntent: Intent = Object.freeze({ ...intent, minAmountOut: protectedMinimum });
+    // D-126: the bound in the review is the floor's own — the degen floor's
+    // wider 12% upstairs, the Exchange's 3% downstairs — and a fixture may
+    // only widen it further, never narrow it, so no fixture can pretend the
+    // Exchange allows more than it does.
+    const fixture = configured.priceCheck ?? FAKE_PRICE_CHECK;
+    const floorBoundBps = intent.degen === true ? SWAP_DEGEN_PRICE_BOUND_BPS : SWAP_PRICE_BOUND_BPS;
+    const priceCheck: SwapPriceCheck = Object.freeze({
+      ...fixture,
+      boundBps: Math.max(fixture.boundBps, floorBoundBps),
+    });
+    // The fake has no oracle, but it refuses exactly where the adapter does —
+    // a fixture whose shortfall passes its floor's bound never reaches a
+    // review, so a counter's refusal path is exercised the same way here.
+    if (priceCheck.status === 'checked' && (priceCheck.shortfallBps ?? 0) > priceCheck.boundBps) {
+      const shortfallBps = priceCheck.shortfallBps ?? 0;
+      throw new SwapPriceGuardError(
+        `avnu's quote is ${(shortfallBps / 100).toFixed(2)}% below the oracle price, more than the ${priceCheck.boundBps / 100}% allowed, so it was refused.`,
+        { shortfallBps, boundBps: priceCheck.boundBps },
+      );
+    }
     return {
       intents: Object.freeze([canonicalIntent]),
       swapReview: Object.freeze({
@@ -1532,7 +1575,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
         minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps,
         expiresAt: configured.expiresAt,
-        priceCheck: Object.freeze({ ...(configured.priceCheck ?? FAKE_PRICE_CHECK) }),
+        priceCheck,
       }),
     };
   }

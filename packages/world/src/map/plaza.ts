@@ -101,15 +101,22 @@ export const PLAZA_STATIONS: readonly PlazaStation[] = Object.freeze([
 ]);
 
 /**
- * Leaderboard phase 1: the placement stand, a scoreboard kiosk on its own
- * paved apron on the plaza's open east lawn, beside the shell-game table and
- * inside the plaza's camera frame (`PLAZA_NEARBY`). Two tiles wide, facing the
- * camera (south). Its approach ring (x 11-14, y 21-23) touches no other
- * station's, so E is never ambiguous.
+ * Leaderboard phase 1: the placement stand, a small pedestal out on the
+ * plaza's open east lawn, where the lead marked it (D-122, amended
+ * 2026-10-02). One tile at the street's x 15, y 23 — the last column of the
+ * plaza's camera frame (`PLAZA_NEARBY`), well west of the Avatar Studio's
+ * path and of the gladiator pit beyond it — facing the camera (south). Its
+ * approach ring (x 14-16, y 22-24) touches no other station's, so E is never
+ * ambiguous: the shell-game table's ring ends at x 10.
  */
-export const PLACEMENT_STAND: PlazaRect = Object.freeze({ x: at(12), y: 22, width: 2, height: 1 });
-/** The stand's apron: plaza paving round the stand, so it reads as part of the square. */
-export const PLACEMENT_APRON: PlazaRect = Object.freeze({ x: at(11), y: 21, width: 4, height: 3 });
+export const PLACEMENT_STAND: PlazaRect = Object.freeze({ x: at(15), y: 23, width: 1, height: 1 });
+/**
+ * The way to it: one tile of plaza paving per step, running straight east
+ * from the plaza's east edge to the pedestal, so the lawn keeps its open
+ * middle and the walk reads as part of the square. Its last tile (x 14) is
+ * the pedestal's west approach, so the path ends in the ring where E works.
+ */
+export const PLACEMENT_PATH: PlazaRect = Object.freeze({ x: at(11), y: 23, width: 4, height: 1 });
 /** The World's own prompt over the stand: "E · CHECK PLACEMENT". */
 export const PLACEMENT_STAND_LABEL = 'CHECK PLACEMENT';
 
@@ -137,7 +144,7 @@ export function paintPlaza(tiles: TileKind[][], options?: PlazaOptions): void {
   fillTiles(tiles, PLAZA_AREA, 'plaza');
   for (const piece of PLAZA_FIXTURES) fillTiles(tiles, piece, 'plinth');
   if (options?.placementStand === true) {
-    fillTiles(tiles, PLACEMENT_APRON, 'plaza');
+    fillTiles(tiles, PLACEMENT_PATH, 'plaza');
     fillTiles(tiles, PLACEMENT_STAND, 'plinth');
   }
 }

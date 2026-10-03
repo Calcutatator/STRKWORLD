@@ -202,13 +202,14 @@ describe('the Privacy Plaza in the session (D-076)', () => {
 });
 
 describe('the placement stand by the plaza (leaderboard phase 1)', () => {
-  // The stand is two tiles at the street's x 12-13, y 22; its approach ring is x 11-14, y 21-23.
+  // The pedestal is one tile at the street's x 15, y 23; its approach ring is
+  // x 14-16, y 22-24, and the paved path ends on x 14 (D-122, amended 2026-10-02).
   const standX = PLACEMENT_STAND.x - STREET_ORIGIN_X;
 
   it('opens with E from its approach, like the plaza\'s other stations, when the Shell stands it', () => {
     const world = setup({ placementStand: true, claim: true });
-    standAt(world, standX, 24);
-    standAt(world, standX, 23);
+    standAt(world, standX - 2, 23);
+    standAt(world, standX - 1, 23);
     // D-117: the shared prompt, over the stand's centre.
     expect(world.last('setInteractionPrompt')).toEqual([{
       id: PLAZA_PLACEMENT_STATION,
@@ -227,7 +228,7 @@ describe('the placement stand by the plaza (leaderboard phase 1)', () => {
 
   it('does not exist without the switch: E on its lawn does nothing', () => {
     const world = setup();
-    standAt(world, standX, 23);
+    standAt(world, standX - 1, 23);
     world.keyboard.press('keydown-E');
     expect(world.events('station:activated')).toEqual([]);
     expect(world.last('setInteractionPrompt') ?? [null]).toEqual([null]);

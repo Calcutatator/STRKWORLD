@@ -14,7 +14,14 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import { CLIMB_WINDOW_MS, SANDBOX_STEP_HEIGHT, arenaTileCentre } from '@strkworld/shared';
+import {
+  CLIMB_WINDOW_MS,
+  JUMP_PASS_WINDOW_MS,
+  NO_SEAT,
+  SANDBOX_STEP_HEIGHT,
+  arenaTileCentre,
+  isAtStreetSeat,
+} from '@strkworld/shared';
 import type {
   ArenaRingSnapshot,
   Facing,
@@ -46,10 +53,14 @@ import type { BallState, FootballEvent, FootballPlayer } from './football-rules.
 import { LobbyArena } from './arena.js';
 import {
   ARENA_CHALLENGER_WALKABLE,
+  ARENA_THRONE_WALKABLE,
+  isOnArenaThrone,
   type ArenaAttackOutcome,
+  type ArenaBlockOutcome,
   type ArenaClaimOutcome,
   type ArenaEvent,
   type ArenaLeaveOutcome,
+  type ArenaSeatOutcome,
   type ArenaStance,
 } from './arena-rules.js';
 import {
@@ -83,11 +94,19 @@ export interface AreaRequest extends PlacementRequest {
   area?: unknown;
 }
 
-/** What a client may offer on the high-rate path. */
+/**
+ * What a client may offer on the high-rate path.
+ *
+ * D-127: `seat` rides along on the move rather than having a message of its
+ * own, because sitting down *is* a move — onto the seat's own spot — and the
+ * message budget had no room to spare. Absent, -1, or anything the seat rule
+ * refuses means standing.
+ */
 export interface MoveRequest {
   x?: unknown;
   y?: unknown;
   facing?: unknown;
+  seat?: unknown;
 }
 
 export type AdmitRejection =
@@ -221,11 +240,13 @@ export class LobbyPresence {
   /** D-097: the jump floor, strict and per session. */
   readonly #jumpThrottle = new UpdateThrottle(JUMP_MIN_INTERVAL_MS);
   /**
-   * D-106: each session's climb window — when its last accepted jump arrived,
-   * and whether that jump has already stepped up. Server-side only; gone on
+   * D-106: each session's jump window — when its last accepted jump arrived,
+   * and whether that jump has already stepped up. The same record times
+   * D-130's airborne pass (`#airborne`), which does not spend `used`: a jump
+   * that has climbed still passes over the ball. Server-side only; gone on
    * suspend, area change and leave.
    */
-  readonly #climbs = new Map<string, { readonly at: number; used: boolean }>();
+  readonly #jumps = new Map<string, { readonly at: number; used: boolean }>();
   /** D-106: at most one resync a session per `RESYNC_MIN_INTERVAL_MS`, however many moves are refused. */
   readonly #resyncThrottle = new UpdateThrottle(RESYNC_MIN_INTERVAL_MS);
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
@@ -361,7 +382,14 @@ export class LobbyPresence {
     // D-087: a shared room holds its players to its own walkable tiles. The
     // street keeps its rule, a clamp to the world.
     // D-114: the arena's challenger also walks the ring's interior.
-    const extra = session.area === 'arena' && this.#arena.holdsRing(sessionKey) ? ARENA_CHALLENGER_WALKABLE : undefined;
+    // D-128: the seated champion holds the emperor's box's own tile.
+    const extra = session.area !== 'arena'
+      ? undefined
+      : this.#arena.holdsRing(sessionKey)
+        ? ARENA_CHALLENGER_WALKABLE
+        : this.#arena.holdsSeat(sessionKey)
+          ? ARENA_THRONE_WALKABLE
+          : undefined;
     if (session.area !== 'street' && !isAreaStepAllowed(session.area, entry.position, { x, y }, extra)) {
       this.#rejected += 1;
       return 'rejected';
@@ -390,8 +418,36 @@ export class LobbyPresence {
     entry.position.x = x;
     entry.position.y = y;
     entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+    // D-127: the seat is judged from the position just written, so a claim can
+    // only ever mean "I am sitting where this seat is".
+    entry.seat = this.#seatClaim(session, entry.gameId, ownDataField(request, 'seat'), x, y);
     this.#movedAt.set(sessionKey, now);
+    // D-128: a champion who walks off the throne's tile is no longer sitting
+    // on it, so nobody is drawn seated in mid-air on the sand.
+    if (session.area === 'arena' && !isOnArenaThrone(x, y)) this.#arena.unseat(sessionKey, now);
     return 'applied';
+  }
+
+  /**
+   * D-127: the seat a move may claim, or -1.
+   *
+   * Four rules, all of them the server's: the session is live on the street
+   * (the only presence area with benches); the index names a real seat in
+   * `STREET_SEATS`; the position the room just wrote is that seat's own spot;
+   * and no other live entry holds it. A claim that fails any of them is simply
+   * standing — the move itself still applies, and the state is the only answer,
+   * as with every other refusal here.
+   */
+  #seatClaim(session: Session, gameId: string, raw: unknown, x: number, y: number): number {
+    if (session.area !== 'street') return NO_SEAT;
+    if (!isAtStreetSeat(raw, x, y)) return NO_SEAT;
+    const claimed = raw as number;
+    for (const other of this.#sessions.values()) {
+      if (other === session || other.suspended) continue;
+      if (other.gameId === gameId) continue;
+      if (this.peers.get(other.gameId)?.seat === claimed) return NO_SEAT;
+    }
+    return claimed;
   }
 
   /**
@@ -401,7 +457,7 @@ export class LobbyPresence {
    */
   #climbWindow(sessionKey: string, rise: number, now: number): { readonly at: number; used: boolean } | null {
     if (rise > SANDBOX_STEP_HEIGHT) return null;
-    const window = this.#climbs.get(sessionKey);
+    const window = this.#jumps.get(sessionKey);
     if (window === undefined || window.used) return null;
     const since = now - window.at;
     if (!(since >= 0 && since <= CLIMB_WINDOW_MS)) return null;
@@ -460,7 +516,7 @@ export class LobbyPresence {
     // Off the street, off the pitch: the ball stops following them (D-078).
     this.#football.lose(sessionKey);
     this.#movedAt.delete(sessionKey);
-    this.#climbs.delete(sessionKey);
+    this.#jumps.delete(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -578,6 +634,10 @@ export class LobbyPresence {
       entry.position.x = x;
       entry.position.y = y;
       entry.facing = normalizeFacing(ownDataField(request, 'facing'));
+      // D-127: an area request is a teleport or a look change, never a sit, so
+      // the seat is given up here — including on a refresh within the street,
+      // which is how a bench is freed without waiting for the next move.
+      entry.seat = NO_SEAT;
       entry.sprite = normalizeSprite(
         ownDataField(request, 'sprite'),
         this.#spriteKeys,
@@ -586,7 +646,7 @@ export class LobbyPresence {
     }
     if (session.area !== area) {
       this.#areaSwitches += 1;
-      this.#climbs.delete(sessionKey);
+      this.#jumps.delete(sessionKey);
     }
     session.area = area;
     this.#movedAt.set(sessionKey, now);
@@ -619,7 +679,7 @@ export class LobbyPresence {
     this.#throttle.forget(sessionKey);
     this.#jumpThrottle.forget(sessionKey);
     this.#resyncThrottle.forget(sessionKey);
-    this.#climbs.delete(sessionKey);
+    this.#jumps.delete(sessionKey);
     this.#announce(this.#sandbox.forget(sessionKey, players));
     this.#football.forget(sessionKey);
     this.#movedAt.delete(sessionKey);
@@ -737,8 +797,9 @@ export class LobbyPresence {
    * which reaches exactly the observers whose view already holds the entry —
    * so only peers in the same presence area, inside the interest radius. Live
    * in any shared area, the Studio (D-111) and the bunker (D-112) included; a suspended session has
-   * no entry. Throttled strictly; every refusal is silent. An accepted jump opens the session's climb window (D-106); a
-   * throttled one does not.
+   * no entry. Throttled strictly; every refusal is silent. An accepted jump
+   * opens the session's climb window (D-106) and its airborne window (D-130,
+   * over the ball); a throttled one opens neither.
    */
   jump(sessionKey: string, now: number): JumpOutcome {
     const session = this.#sessions.get(sessionKey);
@@ -747,7 +808,7 @@ export class LobbyPresence {
     if (entry === undefined) return 'absent';
     if (!this.#jumpThrottle.accept(sessionKey, now)) return 'throttled';
     entry.jumps = ((entry.jumps ?? 0) + 1) & 0xff;
-    this.#climbs.set(sessionKey, { at: now, used: false });
+    this.#jumps.set(sessionKey, { at: now, used: false });
     return 'applied';
   }
 
@@ -769,12 +830,12 @@ export class LobbyPresence {
    * step timer to match.
    */
   keepFootballRunning(now: number): boolean {
-    return this.#football.keepRunning(this.#footballPlayers(), now);
+    return this.#football.keepRunning(this.#footballPlayers(now), now);
   }
 
   /** Every whole simulation step up to `now`, and what happened in them. Nothing while the ball is at rest. */
   footballTick(now: number): FootballEvent[] {
-    return this.#football.advance(now, this.#footballPlayers());
+    return this.#football.advance(now, this.#footballPlayers(now));
   }
 
   /** Whether the ball is running. */
@@ -787,16 +848,40 @@ export class LobbyPresence {
     return this.#football.snapshot();
   }
 
-  /** Every street entry as someone the ball meets, with when they last moved. */
-  #footballPlayers(): FootballPlayer[] {
+  /**
+   * Every street entry as someone the ball meets, with when they last moved
+   * and (D-130) whether the room has them in the air at `now`.
+   */
+  #footballPlayers(now: number): FootballPlayer[] {
     const players: FootballPlayer[] = [];
     for (const [key, session] of this.#sessions) {
       if (session.suspended || session.area !== 'street') continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
-      players.push({ key, x: entry.position.x, y: entry.position.y, at: this.#movedAt.get(key) ?? 0 });
+      const player: FootballPlayer = {
+        key,
+        x: entry.position.x,
+        y: entry.position.y,
+        at: this.#movedAt.get(key) ?? 0,
+      };
+      players.push(this.#airborne(key, now) ? { ...player, airborne: true } : player);
     }
     return players;
+  }
+
+  /**
+   * D-130: whether the room has a session in the air at `now`: it sent a jump
+   * the room accepted no more than `JUMP_PASS_WINDOW_MS` ago. Timed from the
+   * room's own clock on its own record, so a client cannot claim to be
+   * airborne — the only way over the ball is to actually jump, and the jump
+   * floor (`JUMP_MIN_INTERVAL_MS`, the whole air time) bounds how much of the
+   * time anyone can be. A jump that has already climbed (D-106) still counts.
+   */
+  #airborne(sessionKey: string, now: number): boolean {
+    const window = this.#jumps.get(sessionKey);
+    if (window === undefined) return false;
+    const since = now - window.at;
+    return since >= 0 && since <= JUMP_PASS_WINDOW_MS;
   }
 
   /** Every street entry as a sandbox player, optionally leaving one session out. */
@@ -847,6 +932,38 @@ export class LobbyPresence {
   arenaAttack(sessionKey: string, now: number): ArenaAttackOutcome {
     this.#seen(now);
     const outcome = this.#arena.attack(sessionKey, now, (key) => this.#arenaStance(key));
+    this.#applyArenaEvents(this.#arena.advance(now), now);
+    return outcome;
+  }
+
+  /**
+   * D-128: raise (`down`) or lower a session's guard. The message carries
+   * nothing; the ring decides whether the sender holds a fighting slot.
+   */
+  arenaBlock(sessionKey: string, down: boolean, now: number): ArenaBlockOutcome {
+    this.#seen(now);
+    return this.#arena.block(sessionKey, down, now);
+  }
+
+  /**
+   * D-128: the champion pressed E at the emperor's box, judged from the
+   * position the registry holds. An accepted press moves them onto the
+   * throne (or back down beside it); refusals are silent.
+   */
+  arenaSit(sessionKey: string, now: number): ArenaSeatOutcome {
+    this.#seen(now);
+    const session = this.#sessions.get(sessionKey);
+    const entry = session === undefined || session.suspended ? undefined : this.peers.get(session.gameId);
+    const outcome = this.#arena.seat(
+      {
+        key: sessionKey,
+        gameId: session?.gameId ?? ('' as GameId),
+        area: entry === undefined ? null : (session as Session).area,
+        x: entry?.position.x ?? Number.NaN,
+        y: entry?.position.y ?? Number.NaN,
+      },
+      now,
+    );
     this.#applyArenaEvents(this.#arena.advance(now), now);
     return outcome;
   }
@@ -994,7 +1111,9 @@ export class LobbyPresence {
       if (entry === undefined) continue;
       if (session.area === observer.area) {
         same.push(entry);
-        if (arenaView && this.#arena.holdsRing(key)) pinned.add(entry);
+        // D-128: the champion on the throne is pinned beside the fighter, so
+        // everyone in the arena sees the box taken however far away they are.
+        if (arenaView && (this.#arena.holdsRing(key) || this.#arena.holdsSeat(key))) pinned.add(entry);
       } else if (
         roofView &&
         session.area === 'street' &&

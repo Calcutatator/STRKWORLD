@@ -133,6 +133,22 @@ describe('strict production backend environment', () => {
     }))).not.toThrow();
   });
 
+  /**
+   * D-126: the degen floor's own slippage ceiling for the quote proxy. Unset
+   * is 8%, the degen default, not the Exchange's 3% — the thin tokens it
+   * admits are the whole reason the floor exists.
+   */
+  it('defaults the degen swap slippage ceiling to 8%, and admits a narrower one', () => {
+    const defaulted = parseBackendEnvironment(validEnvironment());
+    expect(defaulted.backend.routes.swap).toMatchObject({ maxSlippageBps: 50, degenMaxSlippageBps: 800 });
+    const empty = parseBackendEnvironment(validEnvironment({ BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS: '' }));
+    expect(empty.backend.routes.swap.degenMaxSlippageBps).toBe(800);
+    const narrowed = parseBackendEnvironment(validEnvironment({ BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS: '500' }));
+    expect(narrowed.backend.routes.swap.degenMaxSlippageBps).toBe(500);
+    // It never narrows the Exchange's own ceiling, whatever it is set to.
+    expect(narrowed.backend.routes.swap.maxSlippageBps).toBe(50);
+  });
+
   it('rejects a queue delay the request deadline cannot outlast, which would 504 after approval', () => {
     // The audit's case: a 45 s delay inside a 20 s deadline submits nothing.
     for (const route of ['TRANSFER', 'UNSHIELD']) {
@@ -164,6 +180,11 @@ describe('strict production backend environment', () => {
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['negative transfer queue delay', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '-1' }],
     ['swap slippage above 3%', { BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS: '301' }],
+    // D-126: the degen ceiling is optional, but a value the operator typed is
+    // never quietly replaced by its default.
+    ['degen swap slippage above 8%', { BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS: '801' }],
+    ['malformed degen swap slippage', { BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS: 'wide' }],
+    ['zero degen swap slippage', { BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS: '0' }],
     ['non-https pool value URL', { PLAZA_POOL_VALUE_URL: 'http://strkprice.example/api/pool' }],
     ['placeholder pool value URL', { PLAZA_POOL_VALUE_URL: 'https://REPLACE_ME.example/api/pool' }],
   ])('rejects %s', (_label, override) => {

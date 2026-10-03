@@ -13,10 +13,15 @@ import { matchMaker } from '@colyseus/core';
 import { Room as SdkRoom } from '@colyseus/sdk';
 import {
   ARENA_ATTACK_CLIENT_INTERVAL_MS,
+  ARENA_BLOCK_CLIENT_INTERVAL_MS,
+  ARENA_BOX,
+  ARENA_BOX_STAND,
+  ARENA_GUARD_RECOVERY_MS,
   ARENA_INTENT_CLIENT_INTERVAL_MS,
   ARENA_MAX_HP,
   arenaTileCentre,
   type ArenaRingSnapshot,
+  type ArenaTile,
 } from '@strkworld/shared';
 import { LobbyClient } from './client';
 import {
@@ -54,11 +59,34 @@ async function joined(): Promise<LobbyClient> {
   return client;
 }
 
-async function inArena(tile = { x: 20, y: 10 }): Promise<LobbyClient> {
+async function inArena(tile = { x: 13, y: 16 }): Promise<LobbyClient> {
   const client = await joined();
   client.enterArea('arena', { ...at(tile.x, tile.y), facing: 'down' }, 'avatar-3');
   await waitFor(() => client.arena(), (ring) => ring !== null, 'the ring');
   return client;
+}
+
+/**
+ * Walk a client tile by tile, waiting for the room to hold each step. The
+ * server validates every move against the area's walkable tiles and the
+ * straight line between them (D-087), so a test may not jump the ring's
+ * fence: it walks round it like a player does.
+ */
+async function walk(client: LobbyClient, path: readonly ArenaTile[]): Promise<void> {
+  const room = await roomOf(client);
+  const held = () => room.state.peers.get(client.gameId as string);
+  for (const tile of path) {
+    const target = at(tile.x, tile.y);
+    await waitFor(
+      () => {
+        client.updatePosition(target.x, target.y, 'up');
+        return held()?.position;
+      },
+      (position) => position?.x === target.x && position?.y === target.y,
+      `the step to ${tile.x},${tile.y}`,
+    );
+    await sleep(MIN_CLIENT_SEND_INTERVAL_MS + 10);
+  }
 }
 
 async function roomOf(client: LobbyClient): Promise<PresenceRoom> {
@@ -142,12 +170,12 @@ describe('the arena intents (D-114)', () => {
     const room = await roomOf(client);
     const held = () => room.state.peers.get(client.gameId as string);
     // Beside the dummy, facing away from it.
-    client.updatePosition(at(20, 17).x, at(20, 17).y, 'up');
-    await waitFor(() => held()?.facing, (facing) => facing === 'up' && held()?.position.y === at(20, 17).y, 'facing away');
+    client.updatePosition(at(20, 16).x, at(20, 16).y, 'left');
+    await waitFor(() => held()?.facing, (facing) => facing === 'left' && held()?.position.x === at(20, 16).x, 'facing away');
     await waitFor(() => client.arena(), (ring) => ring?.phase === 'fighting', 'the fight', 5000);
     const send = vi.spyOn(SdkRoom.prototype, 'send');
     // Turn to face it and swing in the same frame.
-    client.updatePosition(at(20, 17).x, at(20, 17).y, 'down');
+    client.updatePosition(at(20, 16).x, at(20, 16).y, 'right');
     expect(client.arenaAttack()).toBe(true);
     const ring = await waitFor(() => client.arena(), (value) => (value?.challenger.swings ?? 0) >= 1, 'the swing');
     const order = send.mock.calls.map(([type]) => type).filter((type) => type === MESSAGE.move || type === MESSAGE.arenaAttack);
@@ -214,8 +242,122 @@ describe('the message budget (D-114)', () => {
       perSecond(FOOTBALL_CLIENT_KICK_INTERVAL_MS) + // kicks: 3.3
       perSecond(JUMP_CLIENT_INTERVAL_MS) + // jumps: 1.2
       perSecond(ARENA_ATTACK_CLIENT_INTERVAL_MS) + // attacks: 2.2
-      perSecond(ARENA_INTENT_CLIENT_INTERVAL_MS); // claim/leave: 1
-    expect(budget).toBeCloseTo(32.7, 1);
+      perSecond(ARENA_INTENT_CLIENT_INTERVAL_MS) + // claim/leave/sit: 1
+      // D-128: a block start on its floor, and at most one release per start.
+      2 * perSecond(ARENA_BLOCK_CLIENT_INTERVAL_MS); // block + unblock: 4
+    expect(budget).toBeCloseTo(36.7, 1);
     expect(budget).toBeLessThan(MAX_MESSAGES_PER_SECOND);
+    // D-127: sitting on a bench added no message type at all — the seat rides
+    // on the move. D-128 adds the block pair and the throne's sit, all counted
+    // above, so the budget is still the whole of it.
+    expect(Object.values(MESSAGE)).toEqual([
+      'move', 'suspend', 'resume', 'area',
+      'sandbox:pick', 'sandbox:place', 'football:kick', 'jump',
+      'arena:claim', 'arena:attack', 'arena:leave',
+      'arena:block', 'arena:unblock', 'arena:sit',
+    ]);
   });
+});
+
+describe('the block and the emperor’s box (D-128)', () => {
+  it('send nothing unless live in the arena', async () => {
+    const idle = new LobbyClient({ endpoint: server.endpoint, start: { x: 100, y: 100 } });
+    expect(idle.arenaBlock(true)).toBe(false);
+    expect(idle.arenaBlock(false)).toBe(false);
+    expect(idle.arenaSit()).toBe(false);
+    const walker = await joined();
+    const send = vi.spyOn(SdkRoom.prototype, 'send');
+    expect(walker.arenaBlock(true)).toBe(false);
+    expect(walker.arenaSit()).toBe(false);
+    expect(send.mock.calls.filter(([type]) => String(type).startsWith('arena:'))).toEqual([]);
+  }, WIRE_TIMEOUT_MS);
+
+  it('hold a block start to its floor, send a release only after a start, and carry no payload', async () => {
+    const client = await inArena({ x: 12, y: 16 });
+    const send = vi.spyOn(SdkRoom.prototype, 'send');
+    // Nothing was raised, so there is nothing to release.
+    expect(client.arenaBlock(false)).toBe(false);
+    expect(client.arenaBlock(true)).toBe(true);
+    // Inside the floor: dropped, never queued.
+    expect(client.arenaBlock(true)).toBe(false);
+    expect(sent(send, MESSAGE.arenaBlock)).toBe(1);
+    // The release always goes, floor or no floor — a guard must never stick.
+    expect(client.arenaBlock(false)).toBe(true);
+    expect(sent(send, MESSAGE.arenaUnblock)).toBe(1);
+    expect(client.arenaBlock(false)).toBe(false);
+    expect(sent(send, MESSAGE.arenaUnblock)).toBe(1);
+    await sleep(ARENA_BLOCK_CLIENT_INTERVAL_MS + 20);
+    expect(client.arenaBlock(true)).toBe(true);
+    expect(sent(send, MESSAGE.arenaBlock)).toBe(2);
+    for (const [type, payload] of send.mock.calls) {
+      if (String(type).startsWith('arena:')) expect(payload).toBeUndefined();
+    }
+  }, WIRE_TIMEOUT_MS);
+
+  it('the server raises and lowers the guard, and a guarding fighter cannot swing', async () => {
+    const client = await inArena();
+    expect(client.arenaClaim()).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.phase === 'fighting', 'the fight', 6000);
+    client.updatePosition(at(20, 16).x, at(20, 16).y, 'right');
+    expect(client.arenaBlock(true)).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.challenger.guarding === true, 'the guard');
+    // Guarding: a swing is refused outright, so the swing counter never moves.
+    await sleep(ARENA_ATTACK_CLIENT_INTERVAL_MS + 20);
+    expect(client.arenaAttack()).toBe(true);
+    await sleep(300);
+    expect(client.arena()?.challenger.swings).toBe(0);
+    expect(client.arena()?.opponent.hp).toBe(ARENA_MAX_HP);
+    expect(client.arenaBlock(false)).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.challenger.guarding === false, 'the guard down');
+    // Out of the recovery, the swing lands again.
+    await sleep(ARENA_GUARD_RECOVERY_MS + ARENA_ATTACK_CLIENT_INTERVAL_MS);
+    expect(client.arenaAttack()).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.opponent.hp === ARENA_MAX_HP - 10, 'the hit');
+    expect(client.arenaLeave()).toBe(true);
+  }, WIRE_TIMEOUT_MS);
+
+  it('a knockout crowns the winner, who may then take the throne; the box moves them there', async () => {
+    const client = await inArena();
+    expect(client.arena()?.champion).toBeNull();
+    expect(client.arenaClaim()).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.phase === 'fighting', 'the fight', 6000);
+    client.updatePosition(at(20, 16).x, at(20, 16).y, 'right');
+    for (let hit = 0; hit < ARENA_MAX_HP / 10; hit += 1) {
+      client.arenaAttack();
+      await sleep(ARENA_ATTACK_CLIENT_INTERVAL_MS + 20);
+    }
+    const won = await waitFor(() => client.arena(), (ring) => ring?.champion === client.gameId, 'the crown');
+    expect(won?.outcome).toEqual({ reason: 'knockout', winner: 'challenger' });
+    expect(won?.seated).toBe(false);
+    // Out of the ring, walk north round the fence to the box and press E there.
+    await waitFor(() => client.arena(), (ring) => ring?.phase === 'idle', 'idle again', 6000);
+    const room = await roomOf(client);
+    const held = () => room.state.peers.get(client.gameId as string);
+    await walk(client, [{ x: 13, y: 11 }, { x: ARENA_BOX.x, y: 11 }, ARENA_BOX_STAND]);
+    expect(held()?.position.y).toBe(at(ARENA_BOX_STAND.x, ARENA_BOX_STAND.y).y);
+    await sleep(ARENA_INTENT_CLIENT_INTERVAL_MS);
+    expect(client.arenaSit()).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.seated === true, 'the throne');
+    // The server put them on the box's own tile, facing south over the sand.
+    await waitFor(() => held()?.position.y, (y) => y === at(ARENA_BOX.x, ARENA_BOX.y).y, 'on the throne');
+    expect(held()?.facing).toBe('down');
+  }, WIRE_TIMEOUT_MS);
+
+  it('clears the champion when they leave the arena', async () => {
+    const client = await inArena();
+    expect(client.arenaClaim()).toBe(true);
+    await waitFor(() => client.arena(), (ring) => ring?.phase === 'fighting', 'the fight', 6000);
+    client.updatePosition(at(20, 16).x, at(20, 16).y, 'right');
+    for (let hit = 0; hit < ARENA_MAX_HP / 10; hit += 1) {
+      client.arenaAttack();
+      await sleep(ARENA_ATTACK_CLIENT_INTERVAL_MS + 20);
+    }
+    await waitFor(() => client.arena(), (ring) => ring?.champion === client.gameId, 'the crown');
+    client.enterArea('street', { x: 100, y: 100, facing: 'down' });
+    await sleep(200);
+    client.enterArea('arena', { ...at(12, 16), facing: 'down' });
+    const back = await waitFor(() => client.arena(), (ring) => ring !== null, 'the ring again');
+    expect(back?.champion).toBeNull();
+    expect(back?.seated).toBe(false);
+  }, WIRE_TIMEOUT_MS);
 });

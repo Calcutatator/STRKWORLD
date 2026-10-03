@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { STRK20_ACTION } from 'starknet';
 import {
   ENDUR_XSTRK,
   ENDUR_XSTRK_ASSET,
   VAULT_MARKETS,
   WalletApiPrivacyOperations,
+  setLeaderboardNoticeSink,
   type EndurReadClient,
+  type LeaderboardNotice,
   type EndurUnstakeRead,
   type Intent,
   type LeaderboardReadClient,
@@ -332,24 +334,116 @@ describe('leaderboard on: DeFi mode (the feature shadow ticks)', () => {
   });
 });
 
+/**
+ * D-069's channel, added 2026-10-02: receipts fail open and silently, and that
+ * silence is what made the first probe deploy unreadable. Every decision now
+ * reports itself as a reason code — and only as a reason code. The season
+ * partial commitment `p` is the one secret here, so nothing that reaches the
+ * sink may contain it, nor a feature commitment, a shadow address, the
+ * account, a nonce or a transaction hash.
+ */
+describe('what the placement reports on the debug channel', () => {
+  const notices: LeaderboardNotice[] = [];
+
+  beforeEach(() => {
+    notices.length = 0;
+    setLeaderboardNoticeSink((notice) => void notices.push(notice));
+  });
+  afterEach(() => {
+    setLeaderboardNoticeSink(null);
+  });
+
+  /** Nothing written may carry a secret, an address or a hash. */
+  function expectCodesOnly(): void {
+    const written = JSON.stringify(notices);
+    for (const secret of [...Object.values(PARTIALS), PLAYER, LEDGER, TX, BOB]) {
+      expect(written, secret).not.toContain(secret);
+      expect(written, secret).not.toContain(secret.slice(2));
+    }
+    for (const notice of notices) {
+      expect(Object.keys(notice).sort()).toEqual(
+        notice.event === 'tick' ? ['event', 'feature'] : notice.attached ? ['attached', 'event'] : ['attached', 'event', 'reason'],
+      );
+    }
+  }
+
+  it.each([['shield', SHIELD], ['unshield', UNSHIELD], ['send', SEND]] as const)(
+    'reports the receipt %s carries, and nothing about it',
+    async (_label, intent) => {
+      const f = fixture();
+      await run(f.operations, intent);
+      expect(notices).toEqual([{ event: 'receipt', attached: true }]);
+      expectCodesOnly();
+    },
+  );
+
+  it.each([
+    ['no-ledger', { leaderboard: false }, () => undefined],
+    ['no-reads', { withLeaderboardReads: false }, () => undefined],
+    ['unsupported-route', { versions: ['0.10.3'] }, () => undefined],
+    ['scan-failed', {}, (f: ReturnType<typeof fixture>) => { f.state.shadowsFail = true; }],
+    ['scan-failed', { refuse: ['strkworld-lb-s1'] }, () => undefined],
+  ] as const)('reports a skipped receipt as reason=%s', async (reason, options, arrange) => {
+    const f = fixture(options);
+    arrange(f);
+    await run(f.operations, SEND);
+    expect(notices).toEqual([{ event: 'receipt', attached: false, reason }]);
+    expectCodesOnly();
+  });
+
+  it('reports a DeFi tick by its counter, and the Vault and Endur separately', async () => {
+    const f = fixture();
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    await (await f.operations.prepareEndurUnstake(ONE)).confirm({ feeCeiling: POOL_FEE });
+    expect(notices).toEqual([{ event: 'tick', feature: 'vault' }, { event: 'tick', feature: 'unstake' }]);
+    expectCodesOnly();
+  });
+
+  it('reports a DeFi counter with the leaderboard off as reason=no-ledger', async () => {
+    const f = fixture({ leaderboard: false });
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    expect(notices).toEqual([{ event: 'receipt', attached: false, reason: 'no-ledger' }]);
+    expectCodesOnly();
+  });
+
+  it('cannot be disturbed by a sink that throws, and says nothing once detached', async () => {
+    setLeaderboardNoticeSink(() => { throw new Error('the logger broke'); });
+    const f = fixture();
+    const batch = await run(f.operations, SHIELD);
+    expect(batch.countsTowardPlacement).toBe(true);
+    expect(f.invoked[0]!.at(-1)).toEqual(receipt(0n));
+
+    setLeaderboardNoticeSink(null);
+    setLeaderboardNoticeSink((notice) => void notices.push(notice));
+    setLeaderboardNoticeSink(null);
+    await run(fixture().operations, SHIELD);
+    expect(notices).toEqual([]);
+  });
+});
+
 describe('the placement check', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  it('counts receipts and DeFi ticks on-chain, checks in with p alone, and reads the histogram', async () => {
+  it('counts receipts and the DeFi ticks of the counters used this session, checks in with p alone, and reads the histogram', async () => {
     const f = fixture();
     f.state.deployed = new Set([0, 1, 2]);
     for (const nonce of [0n, 1n, 2n]) f.state.counts.set(BigInt(shadowCommitment(LB_PARTIAL, nonce)), 1n);
     f.state.counts.set(BigInt(shadowCommitment(PARTIALS['strkworld-vault']!, '0x0')), 2n);
     f.state.counts.set(BigInt(shadowCommitment(PARTIALS['strkworld-swap']!, '0x0')), 1n);
     f.state.verified = 3n;
+    // The Vault was used this session, so its commitment is cached; the swap,
+    // Borrow and unstaking were not, and a check never asks for them.
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    f.commitments.length = 0;
     const check = await f.operations.checkPlacement();
     expect(check).toEqual({
       season: 's1',
       receipts: 3,
-      defi: 3,
+      // The Vault's 2, and nothing for the three counters not used this session.
+      defi: 2,
       verified: 3,
       histogram: { season: 's1', total: 3, buckets: [{ count: 1, players: 1 }, { count: 3, players: 1 }, { count: 9, players: 1 }] },
       // Ranked on the verified count, on the device: one player has more.
@@ -359,11 +453,12 @@ describe('the placement check', () => {
     });
     // The tally gets the season and p: no address, no signature, nothing else.
     expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual(['s1', LB_PARTIAL]);
-    expect(f.commitments).toEqual(['strkworld-lb-s1', 'strkworld-vault', 'strkworld-borrow', 'strkworld-endur', 'strkworld-swap']);
+    // One prompt for the whole check: the season commitment, and nothing else.
+    expect(f.commitments).toEqual(['strkworld-lb-s1']);
   });
 
-  it('still answers when a DeFi commitment is refused, the tally is down, or the histogram is malformed', async () => {
-    const f = fixture({ refuse: ['strkworld-borrow'] });
+  it('still answers when the tally is down or the histogram is malformed', async () => {
+    const f = fixture();
     f.state.verified = new Error('tally down');
     f.state.histogram = { season: 's1', total: 9, buckets: [] };
     await expect(f.operations.checkPlacement()).resolves.toEqual({
@@ -472,15 +567,30 @@ describe('ranking DeFi, only when the tally opts in (BACKEND_LEADERBOARD_RANK_DE
     expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual(['s1', LB_PARTIAL]);
   });
 
-  it('on: the check-in adds the four feature partials, and the verified count (with DeFi) is ranked', async () => {
+  it('on: the check-in adds the feature partials this session already shared, and the verified count is ranked', async () => {
     const f = fixture();
     f.state.rankDefi = true;
     f.state.verified = 9n;
+    // The Vault and unstaking were used; Borrow and the swap were not.
+    await (await f.operations.prepareVaultSupply(STRK, 2n * ONE)).confirm({ feeCeiling: POOL_FEE });
+    await (await f.operations.prepareEndurUnstake(ONE)).confirm({ feeCeiling: POOL_FEE });
+    f.commitments.length = 0;
     const check = await f.operations.checkPlacement();
     expect(check.rankDefi).toBe(true);
     expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual([
-      's1', LB_PARTIAL, [PARTIALS['strkworld-vault'], PARTIALS['strkworld-borrow'], PARTIALS['strkworld-endur'], PARTIALS['strkworld-swap']],
+      's1', LB_PARTIAL, [PARTIALS['strkworld-vault'], PARTIALS['strkworld-endur']],
     ]);
     expect(check.ranked).toBe(9);
+    // Still one prompt: the season commitment. Ranking DeFi adds none.
+    expect(f.commitments).toEqual(['strkworld-lb-s1']);
+  });
+
+  it('on, with no counter used this session: p alone goes out, and nothing is asked for the features', async () => {
+    const f = fixture();
+    f.state.rankDefi = true;
+    f.state.verified = 4n;
+    await f.operations.checkPlacement();
+    expect(f.lbCalls.find((call) => call.method === 'check-in')!.args).toEqual(['s1', LB_PARTIAL]);
+    expect(f.commitments).toEqual(['strkworld-lb-s1']);
   });
 });

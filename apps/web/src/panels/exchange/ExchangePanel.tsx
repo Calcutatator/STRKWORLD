@@ -51,8 +51,11 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
     ...(catalog ? { catalog } : {}),
     // D-090: quote while the player types, and offer slippage up to the build's own ceiling.
     liveQuoteDelayMs: LIVE_QUOTE_DELAY_MS,
-    ...slippageCeiling(),
-  }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register, catalog]);
+    ...slippageCeiling(degen),
+    // D-126: upstairs runs under the degen floor's own, wider limits;
+    // downstairs a refusal may point at that floor when this build has one.
+    ...(degen ? { degen: true } : degenFloorOpen() ? { degenFloorOpen: true } : {}),
+  }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register, catalog, degen]);
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertainty = useStore(submissionUncertainty.store);
@@ -78,19 +81,30 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', m
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :
         state.flow.name === 'submitted' ? <div className="flow-done"><p>{state.flow.restored ? COPY.flow.receiptWaiting : COPY.flow.submitted} <code>{state.flow.transactionHash}</code></p><button type="button" onClick={() => panel.acknowledge()}>{COPY.flow.back}</button></div> :
         blocked ? null : committing ? <Review state={state} onConfirm={() => void panel.confirm()} onCancel={() => panel.cancelPrepared()} onAcknowledge={(value) => panel.acknowledgeUncheckedPrice(value)} /> :
-        state.flow.name === 'failed' && state.flow.recovery === 'close' ? <p role="alert">{state.flow.message}</p> :
+        state.flow.name === 'failed' && state.flow.recovery === 'close' ? <div role="alert"><p>{state.flow.message}</p>{state.flow.hint ? <p className="exchange-price-warning">{state.flow.hint}</p> : null}</div> :
         degen ? <DegenCompose state={state} onRetry={() => void panel.reloadCatalog()}>{compose}</DegenCompose> :
         compose}
       {state.notice ? <p className="panel-notice" role="status">{state.notice}</p> : null}
-      {state.flow.name === 'failed' && state.flow.recovery === 'prepare-again' ? <div role="alert"><p>{state.flow.message}</p><button type="button" onClick={() => panel.cancelPrepared()}>{COPY.flow.back}</button></div> : null}
+      {/* D-126: a refusal always says why, and the ground floor's points upstairs when there is a floor there. */}
+      {state.flow.name === 'failed' && state.flow.recovery === 'prepare-again' ? <div role="alert"><p>{state.flow.message}</p>{state.flow.hint ? <p className="exchange-price-warning">{state.flow.hint}</p> : null}<button type="button" onClick={() => panel.cancelPrepared()}>{COPY.flow.back}</button></div> : null}
     </PanelFrame>
   </div>;
 }
 
-/** The build's own slippage ceiling (D-090), where this build has a swap policy. */
-function slippageCeiling(): { slippageCeilingBps?: number } {
-  const ceiling = detectRoutePolicy()?.swap?.slippageBps;
+/**
+ * The build's own slippage ceiling (D-090), where this build has a swap
+ * policy. D-126: the degen floor reads its own, wider one; absent, the machine
+ * falls back to that floor's cap rather than the ground floor's.
+ */
+function slippageCeiling(degen: boolean): { slippageCeilingBps?: number } {
+  const swap = detectRoutePolicy()?.swap;
+  const ceiling = degen ? swap?.degenSlippageBps : swap?.slippageBps;
   return ceiling === undefined ? {} : { slippageCeilingBps: ceiling };
+}
+
+/** D-126: whether this build has a degen floor an Exchange refusal can point at. */
+function degenFloorOpen(): boolean {
+  return detectRoutePolicy()?.swap?.degen === true;
 }
 
 /**
@@ -316,6 +330,8 @@ function Review({ state, onConfirm, onCancel, onAcknowledge }: { state: Exchange
     />
   </div>
   {unchecked ? <p className="exchange-price-check" data-status={review.priceCheck} role="note">{review.priceCheckNote}</p> : null}
+  {/* D-126: within the cap, so this is a line and not a gate — no second button, no modal. */}
+  {review.priceWarning ? <p className="exchange-price-warning" role="note">{review.priceWarning}</p> : null}
   <details className="exchange-review-details"><summary>{COPY.exchange.details}</summary><DetailRows rows={rows} label={COPY.exchange.details} /></details>
   {unchecked ? <label className="exchange-acknowledge" role="alert"><input type="checkbox" checked={state.priceAcknowledged} disabled={flow.name === 'submitting'} onChange={(event) => onAcknowledge(event.target.checked)} /> {COPY.exchange.acknowledgeUnchecked}</label> : null}</ConfirmGate></div>;
 }

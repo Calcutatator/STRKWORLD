@@ -12,6 +12,7 @@ import {
   describeConnectState,
   describeFailure,
   describeGateState,
+  describeLeaderboardStep,
   describePlazaShells,
   describeSandboxTile,
   describeValue,
@@ -41,8 +42,9 @@ import { attachDebugTap } from './debug-tap.js';
  * snapshots, building and station events, panel opens and closes, the Bank's
  * mode switches, refused adds, prepares and confirm stages (codes and intent
  * kinds only, D-070), sandbox bursts (the tile only, D-071), the entry gate's
- * transitions (state names only, D-072), and failed `/api` responses (path,
- * status and body code only). Entries go to the
+ * transitions (state names only, D-072), the private placement's probe switch,
+ * receipts and DeFi ticks (reason codes only, D-122), and failed `/api`
+ * responses (path, status and body code only). Entries go to the
  * backend's `/api/v1/debug/logs` every 3 s, and by `sendBeacon` when the page
  * is hidden for good. The session id is random for this browser session:
  * never the lobby id, never derived from the wallet.
@@ -459,6 +461,12 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
     // D-078: the football's kicks, goals and full time, by side at most.
     football: (step) => {
       const entry = describeFootball(step);
+      if (entry) record(entry.level, entry.event, entry.detail);
+    },
+    // D-122: the private placement's probe switch, receipts and DeFi ticks, by
+    // reason code only. Never `p`, a commitment, a shadow address or the account.
+    leaderboard: (step) => {
+      const entry = describeLeaderboardStep(step);
       if (entry) record(entry.level, entry.event, entry.detail);
     },
   });

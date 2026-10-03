@@ -39,6 +39,10 @@
  * the player's body as off a moving wall, with a little bounce, so a player
  * walking into a still ball sends it on ahead of them.
  *
+ * D-130: a player whose caller marks them `airborne` is not a body the ball
+ * meets, so a running jump carries them over it and leaves it where it was.
+ * Their movement is still followed, so they land pushing it as usual.
+ *
  * ## Anonymity
  *
  * The ball, the score and the phase carry nothing about anyone. The `key` of
@@ -164,6 +168,14 @@ export interface FootballPlayer {
   readonly x: number;
   readonly y: number;
   readonly at: number;
+  /**
+   * D-130: their feet are off the ground — mid-jump, above knee height — so
+   * the ball passes under them: they are not a body it meets this step. They
+   * are still followed, so the speed they land with pushes it as always. The
+   * caller decides it: the room from the jump it timed, the Shell from its own
+   * jump state. Absent means standing.
+   */
+  readonly airborne?: boolean;
 }
 
 /** What one step of play produced. A goal names its side and nothing else. */
@@ -593,7 +605,12 @@ class Authority implements FootballAuthority {
     }
   }
 
-  /** Every locatable player as a body, moving at the speed read from their recent positions. */
+  /**
+   * Every locatable player as a body, moving at the speed read from their
+   * recent positions. D-130: an airborne player is followed like any other —
+   * so they land moving at the speed they were — but is not handed to the
+   * physics, and the ball rolls on under them.
+   */
   #pushers(players: readonly FootballPlayer[], now: number): FootballPusher[] {
     const seen = new Set<string>();
     const pushers: FootballPusher[] = [];
@@ -608,6 +625,7 @@ class Authority implements FootballAuthority {
         if (track.samples.length > 4) track.samples.shift();
       }
       this.#tracks.set(player.key, track);
+      if (player.airborne === true) continue;
       pushers.push({ x: player.x, y: player.y, ...speedOf(track, now) });
     }
     for (const key of [...this.#tracks.keys()]) if (!seen.has(key)) this.#tracks.delete(key);
@@ -647,12 +665,14 @@ function speedOf(track: Track, now: number): { vx: number; vy: number } {
 function readPlayer(value: unknown): FootballPlayer | null {
   if (value === null || typeof value !== 'object') return null;
   try {
-    const { key, x, y, at } = value as Partial<Record<keyof FootballPlayer, unknown>>;
+    const { key, x, y, at, airborne } = value as Partial<Record<keyof FootballPlayer, unknown>>;
     if (typeof key !== 'string') return null;
     if (typeof x !== 'number' || !Number.isFinite(x)) return null;
     if (typeof y !== 'number' || !Number.isFinite(y)) return null;
     if (typeof at !== 'number' || !Number.isFinite(at)) return null;
-    return { key, x, y, at };
+    // Anything but exactly true is standing: a malformed flag never lifts a
+    // player off the ground.
+    return airborne === true ? { key, x, y, at, airborne: true } : { key, x, y, at };
   } catch {
     return null;
   }

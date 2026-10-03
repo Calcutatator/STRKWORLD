@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldEvents } from '@strkworld/shared';
 import { createDoorTrigger, DOOR_REENTRY_HOLD_MS } from './door-trigger.js';
-import { ARENA_PIT_DOOR, ARENA_PIT_RETURN } from './map/arena-pit.js';
+import { COLOSSEUM_DOOR, COLOSSEUM_RETURN } from './map/colosseum.js';
 import { createStreetMap, type DoorZone } from './map/street.js';
 
 /**
@@ -204,8 +204,8 @@ describe('door triggers', () => {
 });
 
 describe('the re-entry hold after a room exit (D-114, 2026-10-02)', () => {
-  const ARCH = { x: ARENA_PIT_DOOR.x, y: ARENA_PIT_DOOR.y };
-  const PATH = { x: ARENA_PIT_RETURN.x, y: ARENA_PIT_RETURN.y };
+  const ARCH = { x: COLOSSEUM_DOOR.x, y: COLOSSEUM_DOOR.y };
+  const PATH = { x: COLOSSEUM_RETURN.x, y: COLOSSEUM_RETURN.y };
 
   it('never fires while the player stands where the exit put them, however long', () => {
     const bus = fakeBus();
@@ -229,7 +229,8 @@ describe('the re-entry hold after a room exit (D-114, 2026-10-02)', () => {
     // A key held through the handoff carries them straight back onto the arch.
     trigger.advance(DOOR_REENTRY_HOLD_MS - 1);
     trigger.update(ARCH);
-    trigger.update({ x: ARCH.x + 1, y: ARCH.y });
+    // Sliding along the arch's three-tile threshold is never stepping off it.
+    trigger.update({ x: ARCH.x, y: ARCH.y + 1 });
     // The hold runs out while they are still on it: it stays shut.
     trigger.advance(1_000);
     trigger.update(ARCH);

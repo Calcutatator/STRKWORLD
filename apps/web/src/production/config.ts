@@ -51,6 +51,16 @@ export const MAX_SWAP_TOKENS = 16;
  * the enforced floor is never more than 6% below the oracle value.
  */
 export const MAX_SWAP_SLIPPAGE_BPS = 300;
+/**
+ * D-126: the degen floor's own pair of ceilings, matching the privacy
+ * package's `SWAP_DEGEN_MAX_SLIPPAGE_BPS` and `SWAP_DEGEN_PRICE_BOUND_BPS`.
+ * Its tokens are the thin ones the ground floor does not list, where routed
+ * liquidity is genuinely worse than Pragma's median: a 3% oracle bound refused
+ * every real LORDS quote before the wallet was ever asked. These are the
+ * defaults when the build sets neither key, and the most a build may set.
+ */
+export const MAX_SWAP_DEGEN_SLIPPAGE_BPS = 800;
+export const MAX_SWAP_DEGEN_ORACLE_BPS = 1_200;
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 
@@ -263,7 +273,15 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
           swap: Object.freeze({
             expectedChainId: MAINNET_CHAIN_ID,
             slippageBps: swap.slippageBps,
-            ...(swap.degen ? { degen: true } : {}),
+            ...(swap.degen
+              ? {
+                  degen: true as const,
+                  // D-126: the degen floor's own limits, present only with
+                  // that floor on, so neither can ever widen the ground floor.
+                  degenSlippageBps: swap.degenSlippageBps,
+                  degenOracleBps: swap.degenOracleBps,
+                }
+              : {}),
           }),
         }
       : {}),
@@ -319,8 +337,22 @@ export function detectPlacementStand(): boolean {
  * malformed, partial or disabled value keeps the swap locked, whole, without
  * touching any other route; enabling it enables nothing else. The backend's
  * BACKEND_ROUTE_SWAP_* block gates its quotes separately.
+ *
+ * D-126: with the degen floor on, `VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS` and
+ * `VITE_STRK20_SWAP_DEGEN_ORACLE_BPS` set that floor's own two limits. Both
+ * are optional and default to the degen ceilings (800 and 1200 bps); a value
+ * above its ceiling, or a malformed one, falls back to the ceiling rather than
+ * locking the swap, because neither can loosen the ground floor and a thin
+ * floor is not a reason to shut the city. Read only when the degen switch is
+ * on; the Exchange keeps 3% and 3% either way.
  */
-function parseSwapRoute(environment: WalletEnvironment): { allowedTokens: string[]; slippageBps: number; degen: boolean } | null {
+function parseSwapRoute(environment: WalletEnvironment): {
+  allowedTokens: string[];
+  slippageBps: number;
+  degen: boolean;
+  degenSlippageBps: number;
+  degenOracleBps: number;
+} | null {
   if (environment.VITE_STRK20_SWAP_ENABLED !== 'true') return null;
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_SWAP_ALLOWED_TOKENS);
   const slippageBps = parsePositiveSafeInteger(environment.VITE_STRK20_SWAP_SLIPPAGE_BPS);
@@ -334,7 +366,25 @@ function parseSwapRoute(environment: WalletEnvironment): { allowedTokens: string
   ) {
     return null;
   }
-  return { allowedTokens, slippageBps, degen: environment.VITE_STRK20_SWAP_DEGEN_ENABLED === 'true' };
+  return {
+    allowedTokens,
+    slippageBps,
+    degen: environment.VITE_STRK20_SWAP_DEGEN_ENABLED === 'true',
+    degenSlippageBps: degenLimit(environment.VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS, MAX_SWAP_DEGEN_SLIPPAGE_BPS),
+    degenOracleBps: degenLimit(environment.VITE_STRK20_SWAP_DEGEN_ORACLE_BPS, MAX_SWAP_DEGEN_ORACLE_BPS),
+  };
+}
+
+/**
+ * D-126: one of the degen floor's two limits, at or under its ceiling. Unset,
+ * malformed or above the ceiling all give the ceiling: these only ever widen
+ * the degen floor, never the ground floor, so there is nothing to fail closed
+ * about, and defaulting keeps a thin token tradable rather than silently
+ * refused.
+ */
+function degenLimit(value: string | boolean | undefined, ceiling: number): number {
+  const parsed = parsePositiveSafeInteger(value);
+  return parsed === null || parsed > ceiling ? ceiling : parsed;
 }
 
 function admitsStrkToken(tokens: readonly string[]): boolean {

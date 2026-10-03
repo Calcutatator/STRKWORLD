@@ -12,16 +12,26 @@ import {
 const SELF = 'g-self' as GameId;
 const APPROACH = arenaTileCentre({ x: 20, y: 11 });
 
-function ring(phase: ArenaRingSnapshot['phase'] = 'idle', over: Partial<{ round: number; hp: number; gameId: GameId; seconds: number }> = {}): ArenaRingSnapshot {
+const EMPTY_SLOT = { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0, guarding: false, blocks: 0 } as const;
+
+function ring(
+  phase: ArenaRingSnapshot['phase'] = 'idle',
+  over: Partial<{ round: number; hp: number; gameId: GameId; seconds: number; guarding: boolean; champion: GameId | null; seated: boolean }> = {},
+): ArenaRingSnapshot {
   const busy = phase !== 'idle';
   const hp = over.hp ?? ARENA_MAX_HP;
+  const champion = over.champion ?? null;
   return {
     phase,
     round: over.round ?? 0,
-    challenger: busy ? { kind: 'player', gameId: over.gameId ?? SELF, hp: ARENA_MAX_HP, swings: 0, hits: 0 } : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
-    opponent: busy ? { kind: 'dummy', gameId: null, hp, swings: 0, hits: 0 } : { kind: 'empty', gameId: null, hp: 0, swings: 0, hits: 0 },
+    challenger: busy
+      ? { kind: 'player', gameId: over.gameId ?? SELF, hp: ARENA_MAX_HP, swings: 0, hits: 0, guarding: over.guarding === true, blocks: 0 }
+      : EMPTY_SLOT,
+    opponent: busy ? { kind: 'dummy', gameId: null, hp, swings: 0, hits: 0, guarding: false, blocks: 0 } : EMPTY_SLOT,
     secondsLeft: over.seconds ?? 0,
     outcome: phase === 'ended' ? { reason: 'knockout', winner: 'challenger' } : null,
+    champion,
+    seated: champion !== null && over.seated === true,
   };
 }
 
@@ -39,6 +49,9 @@ function fakeClient(gameId: GameId | null = SELF) {
     arenaClaim: vi.fn(() => true),
     arenaAttack: vi.fn(() => true),
     arenaLeave: vi.fn(() => true),
+    // D-128.
+    arenaBlock: vi.fn((_down: boolean) => true),
+    arenaSit: vi.fn(() => true),
     onStatus(listener: (event: { status: string }) => void) {
       statusListeners.add(listener);
       return () => statusListeners.delete(listener);
@@ -194,6 +207,15 @@ describe('arena controller: solo play runs the injected authority', () => {
         calls.push(`attack ${key} ${locate(key)?.facing}`);
         hp -= 10;
         return 'hit';
+      },
+      // D-128.
+      block(key, down) {
+        calls.push(`block ${key} ${down}`);
+        return 'applied';
+      },
+      seat(claimant) {
+        calls.push(`seat ${claimant.key} ${claimant.area} ${claimant.x},${claimant.y}`);
+        return 'applied';
       },
       leave(key) {
         calls.push(`leave ${key}`);
