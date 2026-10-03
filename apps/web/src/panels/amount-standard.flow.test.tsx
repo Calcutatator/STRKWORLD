@@ -295,3 +295,84 @@ describe('REPAY\'s Max leaves the pool fee aside (D-103)', () => {
     expect(container!.querySelector('.ui-amount-hint')?.textContent).toBe(COPY.borrow.form.repayAllLine);
   });
 });
+
+/**
+ * D-131: a press on the figure the balance line shows fills the amount with
+ * it, in the token's own decimals, and the review then totals that same
+ * figure with the fee on top — the amount standard, filled in for you. Where
+ * the pool fee comes out of the very asset the line shows, the press keeps it
+ * aside, exactly as a Max does, and the field says what it kept.
+ */
+describe('a press on the balance line fills the amount (D-131)', () => {
+  const figure = () => container!.querySelector<HTMLButtonElement>('button.ui-balance-fill')!;
+  const filled = () => container!.querySelector<HTMLInputElement>('input[name="amount"]')!.value;
+  const keptAside = (amount: string) => COPY.kit.feeKeptAside.replace('{amount}', amount);
+
+  it('the Bank, SHIELD: the wallet balance less the pool fee, and the wallet pays the whole of it', async () => {
+    const operations = bank();
+    await open(operations, 'bank', 'bank:shielding');
+    expect(figure().textContent).toBe('120 STRK');
+    expect(figure().getAttribute('aria-label')).toBe('Use 114 STRK, keeping the 6 STRK fee aside');
+    await click(figure());
+    expect(filled()).toBe('114');
+    expect(container!.querySelector('.ui-amount-hint')?.textContent).toBe(keptAside('6 STRK'));
+    expect(totalOf('.panel-compose', COPY.bank.youShield, [COPY.bank.poolFee])).toBe('120 STRK');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(totalOf('.panel-review', COPY.bank.youShield, [COPY.bank.poolFee])).toBe('120 STRK');
+    await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 114n * E18 }]]);
+  });
+
+  it('the Post Office: the pool balance less the pool fee, and the pool pays the whole of it', async () => {
+    const operations = bank();
+    await open(operations, 'post-office', 'post-office:transfer');
+    await click(button(COPY.balance.refresh));
+    await type('recipient', BOB);
+    await click(figure());
+    expect(filled()).toBe('244');
+    expect(container!.querySelector('.ui-amount-hint')?.textContent).toBe(keptAside('6 STRK'));
+    await click(button(COPY.gameMode.reviewAction));
+    expect(totalOf('.panel-review', COPY.bank.youSend, [COPY.bank.poolFee])).toBe('250 STRK');
+    await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.submitted).toEqual([[{ kind: 'transfer', token: STRK, amount: 244n * E18, recipient: BOB }]]);
+  });
+
+  it('the Vault, SUPPLY: the pool balance less the pool fee', async () => {
+    const operations = vault();
+    await open(operations, 'vault', 'vault:supply');
+    await click(button(COPY.vault.form.showBalance));
+    await click(figure());
+    expect(filled()).toBe('114');
+    expect(container!.querySelector('.ui-amount-hint')?.textContent).toBe(keptAside('6 STRK'));
+    await click(button(COPY.gameMode.reviewAction));
+    expect(totalOf('.panel-review', COPY.vault.review.supply, [COPY.bank.poolFee])).toBe('120 STRK');
+    await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: STRK, amount: 114n * E18 }]);
+  });
+
+  it('the Vault, REDEEM: the whole figure supplied, which the pool fee never comes out of', async () => {
+    const operations = vault();
+    await open(operations, 'vault', 'vault:redeem');
+    await click(button(COPY.vault.position.show));
+    expect(figure().getAttribute('aria-label')).toBe('Use full balance: 40.8 STRK');
+    await click(figure());
+    expect(filled()).toBe('40.8');
+    await click(button(COPY.gameMode.reviewAction));
+    // The whole position, so the review names it as everything.
+    expect(totalOf('.panel-review', COPY.vault.review.redeemAll, [COPY.bank.poolFee])).toBe('6 STRK');
+    await click(container!.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.vaultSubmitted.at(-1)).toMatchObject({ kind: 'redeem', token: STRK, amount: 40n * E18 + 8n * 10n ** 17n });
+  });
+
+  it('the Vault, BORROW: the collateral field fills from the pool balance less the fee', async () => {
+    const operations = vault();
+    await open(operations, 'vault', 'vault:borrow');
+    await choose('debt', USDC);
+    await click(figure());
+    expect(container!.querySelector<HTMLInputElement>('input[name="collateral-amount"]')!.value).toBe('114');
+    await type('amount', '20');
+    expect(totalOf('.panel-compose', COPY.borrow.review.collateral, [COPY.bank.poolFee])).toBe('120 STRK');
+    await click(button(COPY.gameMode.reviewAction));
+    expect(totalOf('.panel-review', COPY.borrow.review.collateral, [COPY.bank.poolFee])).toBe('120 STRK');
+  });
+});

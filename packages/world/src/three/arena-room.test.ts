@@ -29,6 +29,7 @@ import {
   torchTiles,
   type ArenaRoomView,
 } from './arena-room.js';
+import { COLOSSEUM_ATTIC_TOP, COLOSSEUM_WALL_TOP } from './colosseum-style.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter, roomSurfaceHeightAt } from './presenter.js';
 import { ARENA_SEAT_IDLE_MS, attackPoseAt } from '../arena-swing.js';
@@ -306,6 +307,23 @@ describe('the arena in 3D (D-114)', () => {
     expect(headroomIntrusions(room.group)).toEqual([]);
     room.dispose();
   }, 30_000);
+
+  it('carries its attic colonnade to the street building\'s own wall top (D-129, amended 2026-10-03)', () => {
+    const room = build();
+    // Inside and outside are one building: the ring's masonry stops exactly
+    // where the street's wall does, on both of the stadium's stone meshes.
+    for (const name of ['arena:stone', 'arena:stone-south']) {
+      const box = new Box3().setFromObject(named(room.group, name));
+      expect(box.max.y, name).toBeCloseTo(COLOSSEUM_WALL_TOP, 5);
+    }
+    // The street lost a storey, so this came down with it — but it is still a
+    // colonnade and not a lip: the piers stand a storey clear of the arcade's
+    // own cornice, with the architrave above them.
+    expect(COLOSSEUM_WALL_TOP).toBeLessThan(5);
+    expect(COLOSSEUM_ATTIC_TOP - (ARENA_SURFACE.arcade + 0.12)).toBeGreaterThan(0.6);
+    expect(COLOSSEUM_WALL_TOP).toBeGreaterThan(COLOSSEUM_ATTIC_TOP);
+    room.dispose();
+  });
 
   it('fades the near stands and the west tunnel\'s south side alone as an occluder, so they never hide the player', () => {
     const room = build();

@@ -133,8 +133,10 @@ export const JUMP_MIN_INTERVAL_MS = JUMP_AIR_MS;
  * The floor the client wrapper holds its own jumps to, in ms: 50 ms above the
  * server floor, so jitter never drops an honest jump. The World's own jump
  * (800 ms in the air, then a 150 ms cooldown: 950 ms) is slower still. Moves,
- * sandbox actions, kicks and jumps together stay under
- * `MAX_MESSAGES_PER_SECOND`: 20 + 5 + 3.3 + 1.2 a second, against 40.
+ * sandbox actions, kicks, jumps, the arena's intents, attacks and blocks, and
+ * the swing's intents together stay under `MAX_MESSAGES_PER_SECOND`:
+ * 20 + 5 + 3.3 + 1.2 + 1 + 2.2 + 4 + 1 = 37.7 a second, against 40 (D-128,
+ * D-133; `client-arena.test.ts` pins the sum).
  */
 export const JUMP_CLIENT_INTERVAL_MS = JUMP_AIR_MS + 50;
 
@@ -245,9 +247,9 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Ten verbs, none of them financial. There is no message type through which
- * a client could tell the room anything else, which is the enforcement: the
- * room's surface has no field for it.
+ * Thirteen verbs, none of them financial. There is no message type through
+ * which a client could tell the room anything else, which is the
+ * enforcement: the room's surface has no field for it.
  */
 export const MESSAGE = Object.freeze({
   /**
@@ -317,6 +319,15 @@ export const MESSAGE = Object.freeze({
    * champion, and moves them onto (or off) the throne itself. Never read.
    */
   arenaSit: 'arena:sit',
+  /**
+   * No payload — D-133: claim the Exchange roof's lookout swing from the
+   * deck in front of it. Only while the swing is idle and the sender is live
+   * on the roof; the room sits the rider on the seat itself. Whatever a
+   * client sends with it is never read.
+   */
+  swingClaim: 'roof:swing-claim',
+  /** No payload — D-133: get off the swing early (the ride ends as `left`). Never read. */
+  swingLeave: 'roof:swing-leave',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];

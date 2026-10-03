@@ -11,14 +11,26 @@
  * map's (map/colosseum.ts) and never move with these numbers.
  */
 
-/** The base course the arcades stand on. */
+/** The base course the arcade stands on. */
 export const COLOSSEUM_PLINTH = 0.45;
-/** Top of the first arcade, and of the second. */
-export const COLOSSEUM_TIER1_TOP = 2.5;
-export const COLOSSEUM_TIER2_TOP = 4.5;
-/** The blind attic over the arcades, and the cornice that caps the wall. */
-export const COLOSSEUM_ATTIC_TOP = 6.0;
-export const COLOSSEUM_WALL_TOP = 6.2;
+/**
+ * Top of the arcade: one storey of arches, not two (amended 2026-10-03). The
+ * middle storey came off because the building stood over the street's own
+ * buildings and hid them; the ground arcade and the attic above it are the
+ * two floors that are left, and the ground arcade is exactly what it was.
+ */
+export const COLOSSEUM_ARCADE_TOP = 2.5;
+/**
+ * The blind attic over the arcade, and the cornice that caps the wall.
+ *
+ * The attic is the taller of the two floors now: the arena room's own arcade
+ * (`ARENA_SURFACE.arcade`, with its banners hung above the top tier) sets how
+ * low this pair of numbers can go before the room's attic colonnade stops
+ * being a colonnade. So the wall came down by less than the storey that came
+ * off it (1.4 of 6.2, not 2.0), and the attic took up the difference.
+ */
+export const COLOSSEUM_ATTIC_TOP = 4.6;
+export const COLOSSEUM_WALL_TOP = 4.8;
 
 /**
  * Head clearance under the grand arch, over its walkable threshold: the one

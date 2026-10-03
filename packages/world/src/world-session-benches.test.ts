@@ -6,7 +6,7 @@ import { ROOM_ORIGIN } from './world-layout.js';
 import type { InteractionPrompt } from './interaction.js';
 import type { MovementInput } from './street-movement.js';
 import { createRemotePeerSource, type RemotePeerSnapshot } from './remote-peer.js';
-import { SIT_LABEL, STREET_BENCHES, roomBenches } from './seats.js';
+import { PLAZA_BENCH_PROFILE, SIT_LABEL, STREET_BENCHES, roomBenches } from './seats.js';
 import { createWorldSession, type WorldKeyboard, type WorldSessionView } from './world-session.js';
 
 /**
@@ -155,7 +155,11 @@ describe('sittable benches in the session (D-127)', () => {
     expect(world.session.seat?.id).toBe(seat.id);
     expect(world.position()).toEqual({ x: seat.x, y: seat.y });
     expect(world.last('setPlayerFacing')).toEqual([seat.facing]);
-    expect(world.last('setPlayerSeated')).toEqual([true]);
+    // The seat goes with it, so the view can lift the figure onto the bench
+    // rather than leaving it on the ground, sunk into the slats (D-127 amended).
+    expect(world.last('setPlayerSeated')).toEqual([seat.place]);
+    expect(seat.place.surface).toBe(PLAZA_BENCH_PROFILE.surface);
+    expect(seat.place.front).toBeCloseTo(0.225, 6);
     // Sitting holds the stations, so nothing else is focused and no chip shows.
     expect(world.session.interactions.suspended).toBe(true);
     expect(world.session.interactionPrompt).toBeNull();
@@ -164,7 +168,7 @@ describe('sittable benches in the session (D-127)', () => {
     world.keyboard.hold({ left: true });
     world.session.update(16);
     expect(world.session.seat).toBeNull();
-    expect(world.last('setPlayerSeated')).toEqual([false]);
+    expect(world.last('setPlayerSeated')).toEqual([null]);
     expect(world.session.interactions.suspended).toBe(false);
     world.session.destroy();
   });

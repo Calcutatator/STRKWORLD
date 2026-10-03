@@ -13,16 +13,16 @@ import {
   ARENA_SEAT_IDLE_MS,
 } from '../arena-swing.js';
 import { arenaTileCentre } from '@strkworld/shared';
-import { ARENA_SURFACE, ARENA_THRONE_SEAT_TOP } from './arena-room.js';
+import { ARENA_SURFACE, ARENA_THRONE_ARM, ARENA_THRONE_SEAT } from './arena-room.js';
 import {
   BLOCK_SHIELD_ARM_ANGLE,
-  avatarSeatedHipHeight,
+  avatarSeatedContact,
   createAvatarFigure,
   disposeAvatarFigureCache,
-  seatedBaseHeight,
 } from './avatar-figure.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
-import { arenaPoses, findAvatarClipping, formatClipping, summarizeClipping } from '../../tools/avatar-clipping.js';
+import { CLIP_TOLERANCE, arenaPoses, findAvatarClipping, formatClipping, summarizeClipping } from '../../tools/avatar-clipping.js';
+import { findSeatFindings, formatSeatFinding, seatTypes } from '../../tools/avatar-seat.js';
 
 const CHECK_TIMEOUT_MS = 120_000;
 const IDLE: AvatarMotion = Object.freeze({ moving: false, sprinting: false });
@@ -246,32 +246,67 @@ describe('avatar figure: the arena poses (D-114)', () => {
   });
 
   /*
-   * D-128, amended 2026-10-03: the throne has a seat with a known top, and a
-   * seated figure's hips rest on it. Before this, every look sat at the
-   * podium's own height — inside the chair.
+   * D-128, amended 2026-10-03: a champion the ring seats sits *on* the throne,
+   * not inside it. The rise is D-127's seat system — one `SeatPlace` on the
+   * motion, the figure lifting itself until its weight-bearing parts meet the
+   * seat top — so the throne is checked by the same audit as the benches
+   * (tools/avatar-seat.ts) and there is no second height to drift from.
    */
-  describe('sitting on a seat of a known height', () => {
-    it.each(AVATAR_SPRITE_KEYS)('%s: the hips land on the seat top, whatever the build', (key) => {
-      const seatTop = ARENA_THRONE_SEAT_TOP;
-      const figure = createAvatarFigure(key);
-      try {
-        settle(figure, SEATED, 200);
-        figure.object.position.y = seatedBaseHeight(seatTop, key);
-        figure.object.updateMatrixWorld(true);
-        const hips = node(figure, 'avatar-hips').getWorldPosition(new Vector3());
-        expect(hips.y).toBeCloseTo(seatTop, 3);
-        // And the figure is on the throne, not in it: nothing of it reaches
-        // the podium the chair stands on.
-        expect(seatedBaseHeight(seatTop, key)).toBeGreaterThan(ARENA_SURFACE.podium - 0.3);
-        expect(avatarSeatedHipHeight(key)).toBeGreaterThan(0);
-      } finally {
-        figure.dispose();
-      }
+  describe('sitting on the emperor\'s throne', () => {
+    const throne = (): ReturnType<typeof seatTypes>[number] => {
+      const found = seatTypes().find((seat) => seat.name === 'arena throne');
+      if (!found) throw new Error('the arena has lost its throne');
+      return found;
+    };
+
+    it('is the throne\'s own declared seat, above the podium the box stands on', () => {
+      expect(throne().place).toBe(ARENA_THRONE_SEAT);
+      expect(ARENA_THRONE_SEAT.surface).toBeGreaterThan(0);
+      // A seat on the box's floor, not a second storey: the podium is what its
+      // sitter's feet stand on, and the pad is a chair's height above it.
+      expect(ARENA_THRONE_SEAT.surface).toBeLessThan(ARENA_SURFACE.podium * 0.6);
     });
 
-    it('the seat top stands clear of the podium the box is built on', () => {
-      expect(ARENA_THRONE_SEAT_TOP).toBeGreaterThan(ARENA_SURFACE.podium);
-      expect(ARENA_THRONE_SEAT_TOP - ARENA_SURFACE.podium).toBeLessThan(0.6);
+    it.each(AVATAR_SPRITE_KEYS)(
+      '%s: rests on the pad with nothing through the throne, whatever the build',
+      (key) => {
+        expect(findSeatFindings(key, throne()).map(formatSeatFinding)).toEqual([]);
+        // The rise is the look's own: its backside's distance from its feet.
+        expect(avatarSeatedContact(key)).toBeLessThan(0);
+      },
+      CHECK_TIMEOUT_MS,
+    );
+
+    it('catches the champion the old throne stood inside', () => {
+      // Told nothing about the seat, the figure takes the pose on the box's
+      // own floor — a whole chair's height below the pad it should be on,
+      // which is the champion the lead saw standing in the furniture.
+      const rest = findSeatFindings('avatar-12', throne(), null)
+        .find((finding) => finding.check === 'rest');
+      expect(rest?.depth).toBeLessThan(-0.3);
+      expect(formatSeatFinding(rest!)).toContain('below the seat top');
+    });
+
+    it('judges the arms on width, so a chair with arms is checked too', () => {
+      // The arms are the one seat solid that does not run across its sitter.
+      // Pulled in to where a broad build's thighs are, they are a finding;
+      // that is what their declared inner edge is holding off.
+      const [pad, back] = throne().solids;
+      const narrow = [-1, 1].map((side) => ({
+        minY: ARENA_THRONE_SEAT.surface,
+        maxY: ARENA_THRONE_SEAT.surface + ARENA_THRONE_ARM.rise,
+        minZ: -0.28,
+        maxZ: ARENA_THRONE_SEAT.front,
+        minX: side < 0 ? -0.3 : 0.1,
+        maxX: side < 0 ? -0.1 : 0.3,
+      }));
+      const findings = findSeatFindings('avatar-12', {
+        ...throne(),
+        solids: [pad!, back!, ...narrow],
+      });
+      expect(findings.map((finding) => finding.check)).toContain('through');
+      // And the throne as drawn is clear of the same build's legs.
+      expect(ARENA_THRONE_ARM.inner).toBeGreaterThan(0.299 + CLIP_TOLERANCE);
     });
   });
 

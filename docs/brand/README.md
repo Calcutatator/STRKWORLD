@@ -69,6 +69,11 @@ Partner buildings keep their own brand colours and type inside their refits: the
 - The fonts are Google Fonts under the SIL Open Font License: Press Start 2P's bitmaps for the wordmark's letterforms, and Jersey 15, VT323 and Silkscreen for type.
 - No third-party logos or characters are copied. The Vesu logo on the Vault roof is the in-game building's own sign.
 
+## Favicon and app icons (`apps/web/public/`)
+
+- `favicon.ico` (16, 32 and 48 px), `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` (180 px on the brand sky gradient), and transparent `icon-192.png` and `icon-512.png` for `site.webmanifest`. The 1600 px source is `assets/favicon-source.png`.
+- They are a close-up of Avatar 1's head, rendered from `avatar-figure.ts` and `lighting.ts` through `packages/world/tools/brand-render` in portrait mode (`?mode=portrait&key=1&yaw=0&span=1.05&fov=12&pitch=6&fill=0.9&aim=1.0`), cropped to the head, with a thin Outline (`#24120A`) ring.
+
 ## Don't
 
 - Don't use rounded system or UI fonts (SF Pro Rounded, Nunito and similar) for brand surfaces. They are what made earlier material look generic.

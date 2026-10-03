@@ -14041,8 +14041,45 @@ transaction was used.
 
 ---
 
+### 2026-10-03 — A balance you can press: the fee has to come from the panel's own maths, and the figure shown is not the figure filled
+Making every balance line fill its amount input (D-131) looked like a UI
+change and was really an arithmetic one. Three traps.
+**The shown figure is rounded; the filled figure must not be.** `balanceText`
+goes through `formatTokenAmount`, which trims for reading: a pool holding
+`100.000000000000000001 STRK` reads "100 STRK". Filling what the line *reads*
+would silently drop or invent wei, so the press fills
+`formatTokenAmountExact(balance - fee)` — the Exchange's Max already did this,
+and its test (`94.000000000000000001`) is the one that catches a regression.
+The `aria-label` keeps the rounded words, so what a screen reader hears
+matches what the eye reads.
+**Never re-derive the fee in the component.** The fee that may be kept aside
+differs per counter and per asset — the pool fee comes out of the balance on
+UNSHIELD, STAKE, TRANSFER and a STRK SUPPLY, out of the *wallet* on SHIELD
+(same asset, so still kept aside), and not at all from a REDEEM, a REPAY or a
+withdrawal, whose figure is the loan's own. A swap keeps it aside only when
+the asset sold is the fee's token. So `AmountField` takes one `balanceFee`
+prop and the panel passes the very `feeReserve(token, pool)` it already uses
+for its `limit`, its Max and its review; the kit does the subtraction once
+(`fillFromBalance`) and nothing duplicates the 6 STRK.
+**"Not fetched", "unknown fee" and "too small" are three different states,
+and only one of them is "no balance line".** Balances are user-requested
+(the wallet prompts), so no line is drawn at all until a figure is read; a
+read balance with an unread pool fee, or one the fee alone would eat, still
+shows its figure but as plain dim text with the reason in `title`, never a
+dead button. `fillFromBalance` returns `null` for all three and the component
+branches on that single answer.
+*Verified:* `apps/web/src/panels/kit/amount-math.test.ts` and `kit.test.tsx`
+for the maths and the control (exact decimals at 18 and 6 places, the fee
+aside, keyboard activation without touching the game's E, Refresh unaffected,
+every unpressable state), plus a flow per panel family through the real
+windows in `panels/amount-standard.flow.test.tsx`,
+`exchange/ExchangePanel.amount.test.tsx` and `bridge/BridgePanel.test.tsx`.
+Full suite (295 files, 6255 tests) and `npm run typecheck` pass. A Playwright
+render of the Bank's SHIELD counter with the figure hovered and the amount
+filled by it is in the working scratchpad (`renders/balance-click.png`), shot
+through the real `VisitLayer` over the deterministic fake seam. No wallet,
+RPC, funds or transaction was used.
 ### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
-
 Adding a seated pose to shared presence looks like a new message and a new
 state block. It is neither. Sitting down *is* a move — onto the seat's own
 spot — so the seat index can ride on the existing `move` payload: the client's
@@ -14052,7 +14089,6 @@ server's copy matches, and the room's message budget does not change at all
 true). And because both sides share one frozen seat table, the wire needs only
 an index: the position, the facing and which bench it is all come out of the
 table. `PresenceState.seat` is therefore a single `int8`.
-
 Two things that only worked because of that shape. The server's whole rule is
 "the index is real, the position I just wrote is that seat's own spot, nobody
 else holds it, and you are on the street" — no geometry, no tolerance, no
@@ -14062,7 +14098,6 @@ trust. That needs the seat spots to be **whole pixels**, since
 mentions a seat the room refuses keeps re-sending it forever unless the
 reconcile comparison includes the seat, which is why `samePlacement` and the
 client's own view of its server entry both carry it.
-
 Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
 its sibling modules at the bottom, and `arena.ts` gets away with importing
 back from it only because every one of those imports is type-only; a *value*
@@ -14071,12 +14106,10 @@ read back at module scope is a real ESM cycle and dies in the TDZ. The new
 pinning the two together. And adding a field to a validated snapshot breaks
 every `toEqual` on it across three packages at once (51 tests here) — the
 field has to be added to the fixtures, not worked around.
-
 Also worth knowing: a bench did not need a "no cue" mechanism to look right —
 registering no affordance shell already leaves it dark. It needed one to *stay*
 right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
 even if a shell for that id turns up later.
-
 *Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
 `packages/world/src/world-session-benches.test.ts`,
 `packages/lobby/src/seats.test.ts`, plus a real-wire test in
@@ -14086,11 +14119,8 @@ harness in headless Chrome: `renders/benches-plaza.png`,
 `benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
 suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
 funds or transaction was used.
-
 ---
-
 ### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
-
 The D-123 shimmer is tuned as a single global level, and the amendment that
 made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
 dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
@@ -14103,7 +14133,6 @@ it worse, because a near-black station takes the pale warm fallback tint
 station in the game. The lead saw it as "the shimmer on the plaza pillar"
 specifically, 80% too strong, while the rest of the world was only 30% too
 strong.
-
 What this means for the next cue: a per-object strength knob is not a
 special case to be avoided, it is a requirement of any additive cue applied
 across both interiors and daylight. Keep the knob *relative* to the global
@@ -14114,7 +14143,6 @@ shell buffer's `aSweep` attribute had a free third component, so
 per-frame work. The ember edge glow is a separate effect and must not read the
 multiplier: widening the gap between "usable" and "the one E would use" is the
 point.
-
 *Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
 70%, the monument at 0.2 and every other station at 1, the multiplier baked
 per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
@@ -14123,13 +14151,8 @@ renders from the same harness and the same camera —
 the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
 used.
-
----
-
 ## 6. Findings log
-
 ### A hidden entrance is not a door, so none of the doors' machinery applies to it
-
 The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
 tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
 handles it before `DoorTrigger.update` is ever reached. So the Studio got none
@@ -14140,7 +14163,6 @@ up the path instead of outside the room (the lead's bug, D-125) — and it had n
 re-entry hold, which only looked harmless because the wrong return tile was too
 far away for a held key to carry anyone back in. Fixing the first on its own
 would have introduced the bounce PR #205 had already fixed for the doors.
-
 The lesson generalises past this entrance: when a feature is built *beside* a
 shared mechanism rather than *through* it, every invariant the mechanism
 carries has to be re-checked by hand, and a later amendment to the mechanism
@@ -14150,7 +14172,6 @@ one call site) found the whole gap in one pass; grepping for the *concept*
 now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
 trigger and the Studio's entrance as its two users, so the next amendment to it
 lands on both.
-
 *Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
 real keys end to end (walk in from the street entrance, walk out of the Studio
 exit, land on the tile outside the entrance facing away, with the street
@@ -14161,13 +14182,7 @@ each lands on a walkable street tile off its own door and touching it, none of
 which needed changing). Each new assertion was also run against the unfixed
 code and seen to fail. Full suite (296 files, 6260 tests) and
 `npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
-
----
-
-## 6. Findings log
-
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
-
 The private leaderboard's first mainnet probe had every variable set, the
 ledger address in the bundle, `?lb=1` in the tab and the placement stand on
 the lawn — and attached no receipt at all. `ownPolicy` in
@@ -14179,7 +14194,6 @@ one step before `WalletApiPrivacyOperations` could see it. With no ledger that
 class builds no receipts object, which is byte-for-byte a build with the
 leaderboard switched off: no receipt, no `countsTowardPlacement`, no review
 line, and no error anywhere.
-
 Two things make this class of bug worth writing down. First, the stand kept
 working, which argued the probe was fine: it reads
 `placementStandFrom(environment)`, a seam that never passes through the
@@ -14192,7 +14206,6 @@ channel that reports every decision as a reason code (`no-ledger`,
 formatter admits each field from a fixed list, so `p`, a commitment, a shadow
 address, the account, a nonce and a transaction hash cannot be written even by
 a caller that offers them.
-
 *Verified:* reproduced red first — with `ownPolicy` restored,
 `apps/web/src/production/leaderboard-receipts.test.tsx` fails on the admitted
 policy's missing ledger. That file now drives the real production wiring (a
@@ -14205,9 +14218,6 @@ seven otherwise; the notices are checked against the real operations in
 backend receives them in `apps/web/src/debug/debug-logs.test.tsx`. Full suite
 (298 files, 6293 tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction
 was used; the live ledger's `leaf_count()` has not been re-read.
-
----
-
 ### 2026-10-03 — A room scene gets none of the street's scenery, so it floats in fog unless you mount it yourself
 The arena (D-114) is a room, drawn at the interiors' origin over the hidden
 street (D-039). The city, the backdrop and D-124's south vista are all mounted
@@ -14234,6 +14244,21 @@ Also: the room drew bare earth on its `void` tiles, which was invisible while
 there was nothing around it and became a hard-edged brown apron the moment
 there was a lawn. When you give a scene a world, re-check every surface that
 was only ever seen against nothing.
+### 2026-10-03 — A height shared by two models is a two-way constraint: the inside sets the floor on how low the outside can go
+Taking a storey off the street's Colosseum (D-129 amended) looked like editing
+one number in `three/colosseum-style.ts`. It is not: `COLOSSEUM_WALL_TOP` is
+also where the arena room's attic colonnade stops, and that colonnade stands
+on the room's own arcade at `ARENA_SURFACE.arcade` (3.6), which is itself held
+up by the banners hung on that face above the top tier (2.6) — each needs
+about 0.6 of wall. Drop the shared top by a full storey (2.0, to 4.2) and the
+room's colonnade silently becomes a 0.28 lip, and one of its shadow quads
+inverts (`v0 > v1`). The exterior absorbed the difference in its attic
+instead: one arcade storey plus a taller attic to 4.8. Before you move a
+shared proportion, walk *both* models' stacks from the ground up and find
+which one has the least slack — the number belongs to the tighter of the two.
+Verified by rendering both sides from the in-game camera (north-facing street
+shot and the sand) and by tests that pin the stack on each side.
+
 ## The arena's block and the emperor's box (D-128)
 Two traps cost time here, both about the gap between a test's shortcut and
 what a player can actually do.
@@ -14264,7 +14289,6 @@ the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
 reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
 and then asserts `carrying` is null — unrelated to this work. Renders are from
 the offline rasteriser, not a GPU.
----
 ### 2026-10-03 — Per-route commitment caches add up to one prompt per route; the wallet sees the sum
 Every `ShadowAccountResolver` cached its own partial commitment "once per
 connection", and so did the placement's `LeaderboardReceipts`. Read route by
@@ -14328,7 +14352,122 @@ Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
 Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
-
+### A roof inside the street scene needs one vista mount, not two — and D-numbers go stale on a long branch
+The Exchange tower's roof is **not** a separate room scene: it is the tower's
+real top, built by `street-builder.ts` and drawn inside the street scene. So a
+backdrop mounted for the street (D-124's `createSouthVista`) is already behind
+anything you look at from the deck, and a second mount for a "roof scene"
+would be both wrong and a duplicate. Check which scene a walkable area belongs
+to before mounting scenery for it.
+This cost a real double mount at integration. The roof-swing branch, cut
+before D-124 landed, mounted its own placeholder vista in `three/presenter.ts`
+and on that branch `grep` honestly showed one call. Merging main — where D-124
+mounts the real module in `street-builder.ts` (and again in
+`arena-surround.ts`, for the arena room's own group) — made it two in the
+street scene. The presenter mount is gone; the swing's ride camera sees
+`street-builder.ts`'s mount, because the deck is in `street.ground` with it.
+**After any merge, re-grep for the mount of anything you mounted yourself** —
+a conflict marker never appears when the duplicate lives in another file.
+Separately: a branch that picks its D-number when it starts will collide. This
+branch wrote `D-125` throughout while `origin/main` moved from D-123 to D-131
+under it, so D-125 became the Avatar Studio exit and every comment and test
+name here was wrong. **Re-fetch `origin/main` and renumber immediately before
+committing**, not when you start.
+*Verified:* after the merge, `grep -rn createSouthVista packages/world/src`
+shows the street's one mount in `three/presenter.ts` gone and exactly two
+calls in product code — `street-builder.ts` (into `ground`) and
+`arena-surround.ts` (the arena room's own group, a different scene) —
+with `rooftop`/`roofSurfaceHeightAt` in `presenter.ts` still reading the roof
+out of the street build, no roof scene. `south-vista.test.ts` pins the street
+mount and `arena-room.test.ts` the arena one; the ride renders
+(`renders/swing-ride-1..3.png`) show the real river, station and skyline from
+the rider's camera. The number clash came from `git fetch origin` then
+`git show origin/main:docs/DECISIONS.md`, which listed D-124 … D-131 against a
+local file ending at D-123.
+---
+### 2026-10-03 — A seated pose with no seat height is a figure sitting on the floor, and a rigid leg cannot perch
+D-127's benches shipped with sitters sunk through the slats. The pose was
+reused from the arena's tiers (D-114), where it had always been wrong and
+nobody had noticed: `AvatarMotion.seated` lowered the hips and swung the
+thighs, but the figure's root stayed on the ground. A pose is a *shape*; it
+carries no idea of what the body is resting on. Nothing on the seam said how
+high the bench was, so sitting on a 0.45-high bench put the body 0.45 into it.
+The fix is a `SeatPlace` on the motion — surface height, front edge, and an
+optional settle-back — expressed entirely in the sitter's own frame, so one
+description serves a plaza bench, a bleacher plank, the Bridge lounge, an arena
+tier and the throne without any of them knowing where the others are.
+Two traps behind it. **Measure the rise, don't state it.** How far a figure
+has to come up is its own backside's distance from its feet, which differs per
+build and per outfit; and it must be measured only from the parts that take the
+weight (hip band, thighs, boots) — a robe hem or a coat tail hangs lower and
+would hold the figure up off the seat. **A one-piece leg cannot perch.** These
+legs are one rigid box from hip to sole with no knee, so *any* thigh angle that
+still dips drives the shin through the seat within a hand's width of the hips,
+however high you raise the body. Level thighs are the only sit such a leg can
+hold: they lie along the seat and carry the boots past its front edge. That in
+turn needs a lower leg pivot while seated, or the level thigh comes out through
+the front of the hip band; and a long robe's legs must tuck back inside the
+bell, which has no knee to fold over either.
+The third fault was ordinary drift: the bench's drawn numbers lived in the
+builders and the seat's numbers were guessed beside them. Each bench type now
+has one `BenchProfile` (`packages/world/src/seats.ts`) and the builder draws
+from it. D-128's throne was worse than drift — it was one closed block through
+the middle of its tile, so a seated champion stood inside it; it is now a
+plinth, a pad and a back drawn from the same solids the figure sits on.
+*Verified:* a new offline audit, `packages/world/tools/avatar-seat.ts`, in the
+style of the clipping and z-fight ones — all 16 looks × five seat types, each
+asserted to rest within `CLIP_TOLERANCE` of the seat top with no leg or hip box
+inside the seat, the backrest or the step. It pins the bug itself too: a figure
+told nothing about its seat is caught more than 0.4 below the slats, which is
+the sunk screenshot. Renders from the offline rasteriser in the scratchpad
+(game camera, side and overhead, plus a 16-look contact sheet). Full suite
+(310 files, 6528 tests) and `npm run typecheck` pass.
+---
+### 2026-10-03 — A world with an edge needs one predicate, and everything that lays ground has to ask it
+Making the World a floating rock (D-132) was not mostly modelling — it was
+finding every place that quietly assumed the ground went on forever. The
+backdrop's raster was the obvious one; the three that were not are
+street-builder's road paint (it runs to ±`HINTERLAND` on its own, not through
+the backdrop's ground codes), the south vista's water and far bank (fixed
+`VISTA_X0`/`VISTA_X1` and a straight back edge at `CITY_Z1 + 14`), and the
+sky dome's `SKY_GROUND`, a dust colour that exists only to fake land below the
+horizon. The fix that scales is one exported predicate — `onRockTop(x, z,
+margin)` in `three/sky-island.ts` — and a test that sweeps every backdrop
+surface and every vertex of the vista through it. Anything added outside the
+playable map from now on has to pass it or it hangs in the sky.
+Two numbers are load-bearing and not free to pick. The rim's radius is bounded
+*below* by `street-builder.test.ts`'s rooftop test, which fires 1,536 rays from
+the Exchange deck and requires every downward one to hit ground inside the fog
+— that needs about 161 from the rock's axis, which is why the radius is 182
+(3.3× the playable map) and not a literal 3× (167, which would be marginal).
+And the engine's camera far plane had to go from 240 to 360, or the cloud ring
+clips against the sky from the west and east ends of the street.
+*Verified:* the sweep test fails if `RIM_SETBACK` is removed from the
+backdrop's clip; the rooftop ray test fails at a radius of 150; the far-plane
+change was found by rendering the street camera from x 0 and x 111 with the
+offline rasteriser. Full suite (305 files, 6405 tests) and `npm run typecheck`
+pass.
+### 2026-10-03 — A white box in this scene is not white: give cloud its own shading
+The first cloud sea was `standardMaterial` boxes in the near-white the title
+screen uses, and every render came back the colour of wet sand. The lighting is
+why: a face pointing anywhere but up gets no sun (the hemisphere's ground term
+is `0x5b4a3c`, a dark brown), so a white box keeps only its top. The same
+arithmetic is why the rock's underside came back black — a downward normal
+lands at about 3% of the paint before tone mapping.
+Both are fixed on the paint, not on the light, because adding a light for
+scenery changes everything else in the scene. The clouds are drawn **unlit**
+(`unlitMaterial`, `toneMapped: false`, so a baked hex renders as that hex) and
+carry their own gradient: `cloudFace` takes a `-0.5..+0.5` share of the lump's
+own height and grades bright top to warm underside. Because a box's vertices
+are only at its corners, a side face interpolates that gradient for free. The
+cliff keeps the scene's light but its paint carries a warm lift that grows with
+depth, standing in for the bounce off the cloud sea — vertex colours are
+floats, so a value past 1 is allowed and is the cheapest fake bounce there is.
+*Verified:* five rounds of offline renders in
+`scratchpad/floatrock-tools/render.sh` (a copy of the D-124 vista tool with the
+island's cameras); the sand look is reproducible by putting the cloud bin back
+on the lit material. Not verified on a real GPU — the rasteriser models the
+engine's hemisphere, sun, ACES and sRGB but not its exact shader.
 ---
 ### 2026-10-03 — The server placed the champion on the throne; the client never did
 The lead pressed E at the emperor's box, the chip flipped to LEAVE THE THRONE,
@@ -14353,22 +14492,34 @@ mantles and pauldrons, and it was also what put a shield across the face at
 -1.45 rad. The block is in the pose list now and the angles chosen are the
 highest that are clipping-free. **A seat needs a declared top.** Drawing a
 seated figure at the floor height of the tile puts every look *inside* the
-furniture; the throne now has `ARENA_THRONE_SEAT_TOP` and the figure's root is
-that less the look's own seated hip height, which is the only number that works
-for all 16 builds.
+furniture. This branch and `claude/benchsit` found that independently and each
+wrote its own height; on the merge the throne was moved onto benchsit's
+(D-127's) seat system and this branch's `ARENA_THRONE_SEAT_TOP`,
+`seatedBaseHeight` and `avatarSeatedHipHeight` were deleted. The lesson is the
+second half: two correct solutions to one problem is still a defect, because
+the two numbers drift. There is now one `SeatPlace` per seat in the World and
+one measured rise per look, and the throne is the fifth seat in the same audit
+the benches use.
 *Verified:* the block's face clearance is asserted as geometry, not by eye —
 nothing on the shield arm may lie between the eyes and the camera (+Z, D-059)
 for any of the 16 looks — and the clipping check runs the block standing, on
 the walk at four phases of the gait, and easing out. The seat height is checked
-by putting each look's root at `seatedBaseHeight` and asserting its hips land
-on the seat top. The seat/stand round trip is driven through the real
+by `tools/avatar-seat.ts`, which rests all 16 looks on the throne's own pad and
+admits nothing through its pad, back or arms. The arms are the one seat solid
+in the game that does not run the whole way across its sitter, so `SeatSolid`
+gained an optional `minX`/`maxX` and the audit judges width when it is given:
+their inner edge stands clear of the broadest seated thigh (0.299) and their
+top passes under the hip band, which is broader still (0.353) — the arms this
+branch first drew would have gone straight through the four heavy builds, and
+nothing but the audit would have said so. The seat/stand round trip is driven through the real
 `world-session` host (tile, facing, no jump, held still, keys only asking,
 hold dropped on leaving the arena) and through the real session against a
 snapshot (a new champion standing the old one up, the kept stand-up re-sent
 past the intent floor, `destroy` putting the World back on its feet). Full
-suite (308 files, 6572 tests) and `npm run typecheck` pass. Renders are from
-the offline rasteriser, not a GPU: `renders/arena-block-polish.png`,
-`arena-box-label-states.png`, `arena-throne-seated.png`. Not verified: a real
+suite (317 files, 6764 tests), `npm run typecheck` and
+`./scripts/check-invariants.sh` pass after the merge with `origin/main`.
+Renders are from the offline rasteriser, not a GPU:
+`renders/arena-block-polish.png`, `arena-box-label-states.png`,
+`arena-throne-merged.png` (game camera, close-up and the chair in
+three-quarter) and `arena-throne-looks.png` (all 16 looks seated). Not verified: a real
 browser, and whether the sit-down wants a transition animation.
-
----

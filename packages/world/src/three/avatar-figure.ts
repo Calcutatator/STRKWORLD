@@ -9,6 +9,7 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
+  type Object3D,
   Quaternion,
   Vector3,
 } from 'three';
@@ -27,7 +28,7 @@ import {
   type AvatarTail,
   type AvatarWeapon,
 } from './avatar-looks.js';
-import type { AttackPose, AvatarFigure, AvatarMotion } from './types.js';
+import type { AttackPose, AvatarFigure, AvatarMotion, SeatPlace } from './types.js';
 
 /**
  * Procedural low-poly chibi avatars (D-059): presentation only.
@@ -179,10 +180,41 @@ const BLOCK_LEG_SPREAD = 0.2;
 const BLOCK_LEAN = 0.12;
 /** The hips sink this far, world units, on top of the stance's own settle. */
 const BLOCK_CROUCH = 0.07;
-/** Seated on a tier: thighs out ahead (a robe's less), the body lowered onto the seat, hands on the knees. */
-const SEAT_LEG = -0.7;
+/**
+ * Seated: the body lowered onto the seat, the thighs level along it and the
+ * hands resting forward on them.
+ *
+ * D-127, amended 2026-10-03. A leg here is one rigid box from hip to sole, so
+ * it cannot bend at the knee: a thigh left at any angle that still dips drives
+ * the shin down through the seat within a hand's width of the hips, whatever
+ * the figure is raised by. Level thighs instead lie along the seat and carry
+ * the shins and boots out past its front edge, which is a sit a one-piece leg
+ * can actually hold. The hip band would swallow a level thigh and let it out
+ * through its front — only its underside is open — so while seated the legs
+ * turn about a point low enough to clear the band's hem (`seatedPivotDrop`).
+ */
+const SEAT_LEG = -Math.PI / 2;
 const SEAT_DROP = 0.12;
 const SEAT_ARM = -0.4;
+/** The clearance a level thigh keeps below the hip band's hem. */
+const SEAT_THIGH_CLEARANCE = 0.01;
+/**
+ * How far the deepest piece on a leg stands beyond the leg's own box: a boot
+ * (0.06 wider and set 0.025 toward the toe), and over the shin a greave's knee
+ * cop. Turned level, that depth is what stands *above* the thigh, so the legs
+ * have to hang this much further below the hip band to clear its hem.
+ */
+const SEAT_LEG_PIECE_REACH = 0.055;
+/**
+ * How far back a robe's legs tuck while seated. A long robe is a closed bell
+ * the legs stride inside, and cloth cannot fold over a knee here: level thighs
+ * would put the boots through the bell's front. Tucked this far they stay
+ * inside it, which is what a seated robe looks like anyway — a bell on the
+ * bench with the boots below its hem.
+ */
+const SEAT_ROBE_TUCK = 0.04;
+/** The hip band's hem below the hip line (buildTorso's band: 0.13 tall, centred 0.015 up). */
+const HIP_BAND_HEM = 0.05;
 
 /** Body proportions per size class, in world units (1 unit = 1 tile). */
 interface BuildDims {
@@ -319,6 +351,17 @@ function headChamfer(d: BuildDims): number {
 const LEG_PIVOT_DROP = 0.1;
 /** How far a leg's top reaches above its pivot, up inside the hip band. */
 const LEG_TOP = 0.06;
+
+/**
+ * How far below the hip line the legs swing from while seated: far enough that
+ * a level thigh — whose own depth is what stands above the pivot once it has
+ * turned — stays clear under the hip band's hem rather than crossing it. The
+ * legs ease down to it with the seat and back up out of it, so nothing moves
+ * on a figure that never sits.
+ */
+function seatedPivotDrop(d: BuildDims): number {
+  return d.legDepth / 2 + SEAT_LEG_PIECE_REACH + HIP_BAND_HEM + SEAT_THIGH_CLEARANCE;
+}
 
 /** How far the boot toe reaches ahead of the leg axis; the hips lift by it as a leg swings. */
 function footReach(d: BuildDims): number {
@@ -1817,6 +1860,7 @@ interface LookParts {
 
 const partCache = new Map<AvatarSpriteKey, LookParts>();
 const heightCache = new Map<AvatarSpriteKey, number>();
+const contactCache = new Map<AvatarSpriteKey, number>();
 let eyeCache: BufferGeometry | null = null;
 let materialCache: MeshStandardMaterial | null = null;
 
@@ -1873,32 +1917,6 @@ export function disposeAvatarFigureCache(): void {
   materialCache = null;
 }
 
-/**
- * How far one look's hips sit above the plane its feet stand on while it is
- * seated, build scale included, in world units. A still figure's hips rest at
- * its leg length; the seat pose drops them by `SEAT_DROP`.
- *
- * TODO unify with claude/benchsit, which is deriving the same number for the
- * street's benches. Whichever lands second should delete its own copy: there
- * is one seated hip height per look, and two would drift.
- */
-export function avatarSeatedHipHeight(key: AvatarSpriteKey): number {
-  const dims = BUILDS[avatarLook(validateAvatarSprite(key)).character.build];
-  return (dims.legLength - SEAT_DROP) * dims.scale;
-}
-
-/**
- * Where a look's figure must stand — the y its root takes — to sit *on* a seat
- * whose top surface is `seatTop` world units up, rather than inside it: the
- * seat top less the look's own seated hip height. Used for the emperor's
- * throne (D-128, amended 2026-10-03), by the presenter for the local champion
- * and by the remote layer for everyone else's view of them.
- */
-export function seatedBaseHeight(seatTop: number, key: AvatarSpriteKey): number {
-  const top = Number.isFinite(seatTop) ? seatTop : 0;
-  return top - avatarSeatedHipHeight(key);
-}
-
 /** Standing still at the top of a breath: the highest a still figure ever reaches. */
 const PEAK_BREATH: FigurePhases = { breath: Math.PI / 2, blink: BLINK_SECONDS };
 
@@ -1919,6 +1937,62 @@ export function avatarFigureHeight(key: AvatarSpriteKey): number {
     heightCache.set(valid, height);
   }
   return height;
+}
+
+/** The parts that take a sitter's weight: the whole of each leg, and the torso's hip band. */
+const SEAT_CONTACT_LEGS: readonly string[] = Object.freeze(['avatar-leg-left', 'avatar-leg-right']);
+const SEAT_CONTACT_BAND = 'hips';
+/** Enough frames at the gait's blend to be fully seated (ten time constants). */
+const SEAT_SETTLE_FRAMES = 40;
+
+/**
+ * How high above the figure's own ground plane its backside comes to rest when
+ * it is fully seated, in world units, build scale included — the number the
+ * seat top has to meet. It is negative for most looks: level thighs hang a
+ * little below the plane the feet stand on, so a figure on a 0.45 bench rises
+ * by slightly more than 0.45.
+ *
+ * Measured from the posed geometry rather than stated, and only from the parts
+ * that take the weight (the hip band, the thighs and the boots); a robe's hem
+ * or a coat's tail hangs lower and must not hold the figure up off the seat.
+ */
+export function avatarSeatedContact(key: AvatarSpriteKey): number {
+  const valid = validateAvatarSprite(key);
+  let contact = contactCache.get(valid);
+  if (contact === undefined) {
+    // No seat on the motion, so this pose takes no rise of its own: what it
+    // measures is the bare seated figure, which is what a rise is measured from.
+    const figure = buildFigure(valid, PEAK_BREATH);
+    for (let i = 0; i < SEAT_SETTLE_FRAMES; i += 1) figure.update(25, SEATED_UNPLACED);
+    contact = lowestContact(figure.object);
+    figure.dispose();
+    contactCache.set(valid, contact);
+  }
+  return contact;
+}
+
+const SEATED_UNPLACED: AvatarMotion = Object.freeze({ moving: false, sprinting: false, seated: true });
+
+/** The lowest point of the weight-bearing boxes of a posed figure, in its root's space. */
+function lowestContact(root: Object3D): number {
+  root.updateMatrixWorld(true);
+  const point = new Vector3();
+  let lowest = Infinity;
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const leg = SEAT_CONTACT_LEGS.includes(object.name);
+    if (!leg && object.name !== 'avatar-torso') return;
+    const geometry = object.geometry as BufferGeometry;
+    const position = geometry.getAttribute('position');
+    for (const box of avatarPartBoxes(geometry)) {
+      if (!leg && box.tag !== SEAT_CONTACT_BAND) continue;
+      for (let v = box.first * 3; v < (box.first + box.count) * 3; v += 1) {
+        point.fromBufferAttribute(position, v).applyMatrix4(object.matrixWorld);
+        if (point.y < lowest) lowest = point.y;
+      }
+    }
+  });
+  return Number.isFinite(lowest) ? lowest : 0;
 }
 
 function partMesh(name: string, geometry: BufferGeometry, material: MeshStandardMaterial): Mesh {
@@ -2017,7 +2091,14 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
   let seatWeight = 0;
   /** D-128: the block's weight, eased the same way. */
   let blockWeight = 0;
+  /** D-127: the seat this figure is sitting on, or null for a pose with no seat under it. */
+  let seatPlace: SeatPlace | null = null;
+  /** This look's seated contact height, measured once and kept until the look changes. */
+  let contactY: number | null = null;
+  const seatedContact = (): number => (contactY ??= avatarSeatedContact(current));
   let attack: AttackPose | null = null;
+  /** D-127: this look wears a closed robe, so its seated legs tuck inside the bell. */
+  let robeBell = false;
   /** D-114: this look's swing, set by applyLook. */
   let guardArm = GUARD_ARM_RIGHT;
   let windupArm = SWING_WINDUP_ARM;
@@ -2033,6 +2114,9 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     const look = avatarLook(current);
     const next = lookParts(current);
     dims = BUILDS[look.character.build];
+    // A new look sits on its own measurements: a taller build's backside is
+    // further from its feet, so the rise onto the same bench is different.
+    contactY = null;
     // Scaling about the feet keeps them on y = 0; pairs share a build, so F-toggling keeps size.
     applyBodyScale();
     torso.geometry = next.torso;
@@ -2048,7 +2132,8 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     armRightPivot.position.set(-shoulderX(dims, look.outfit), shoulderY(dims), 0);
     eyes.position.set(0, EYE_HEIGHT * dims.headHeight, dims.headDepth / 2);
     // A long robe shortens the stride, so the legs stay inside its bell.
-    strideScale = findGear(look.outfit, 'coat')?.length === 'ankle' ? ROBE_STRIDE : 1;
+    robeBell = findGear(look.outfit, 'coat')?.length === 'ankle';
+    strideScale = robeBell ? ROBE_STRIDE : 1;
     const weapon = look.outfit.weapon;
     const shield = findGear(look.outfit, 'shield');
     swingLeft = shield ? STEADY_ARM_SWING : 1;
@@ -2189,11 +2274,34 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
     }
     if (seatWeight > 0) {
       const s = seatWeight;
-      legLeftPivot.rotation.x = lerp(legLeftPivot.rotation.x, SEAT_LEG * strideScale, s);
-      legRightPivot.rotation.x = lerp(legRightPivot.rotation.x, SEAT_LEG * strideScale, s);
+      legLeftPivot.rotation.x = lerp(legLeftPivot.rotation.x, SEAT_LEG, s);
+      legRightPivot.rotation.x = lerp(legRightPivot.rotation.x, SEAT_LEG, s);
+      // The legs turn from lower down while seated, so a level thigh passes
+      // under the hip band instead of out through its front.
+      const drop = lerp(LEG_PIVOT_DROP, seatedPivotDrop(dims), s);
+      legLeftPivot.position.y = -drop;
+      legRightPivot.position.y = -drop;
+      const tuck = robeBell ? -SEAT_ROBE_TUCK * s : 0;
+      legLeftPivot.position.z = tuck;
+      legRightPivot.position.z = tuck;
       hips.position.y -= SEAT_DROP * s;
       armLeftPivot.rotation.x = lerp(armLeftPivot.rotation.x, SEAT_ARM, s);
       armRightPivot.rotation.x = lerp(armRightPivot.rotation.x, SEAT_ARM, s);
+      // Rise onto the seat, and settle back on it when the walker stood in
+      // front of one. Both are the seat's own geometry, eased with the pose,
+      // so a figure is never halfway into a bench on the way down.
+      const place = seatPlace;
+      if (place) {
+        const back = Number.isFinite(place.back) ? place.back! : 0;
+        body.position.y = Math.max(0, place.surface - seatedContact()) * s;
+        body.position.z = -back * s;
+      }
+    } else {
+      if (body.position.y !== 0 || body.position.z !== 0) body.position.set(0, 0, 0);
+      if (legLeftPivot.position.y !== -LEG_PIVOT_DROP || legLeftPivot.position.z !== 0) {
+        legLeftPivot.position.set(dims.legSpacing, -LEG_PIVOT_DROP, 0);
+        legRightPivot.position.set(-dims.legSpacing, -LEG_PIVOT_DROP, 0);
+      }
     }
   };
 
@@ -2240,6 +2348,10 @@ function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
       const pose = motion?.attack;
       attack = pose && (pose.stage === 'windup' || pose.stage === 'strike' || pose.stage === 'recover') ? pose : null;
       const seated = motion?.seated === true && !moving && attack === null && !jump;
+      // D-127: the seat holds while the pose eases in and out, so the figure
+      // never drops to the floor a frame before it stands up.
+      const place = motion?.seat;
+      if (seated) seatPlace = place && Number.isFinite(place.surface) ? place : null;
       // D-128: a block implies the stance, and never plays while seated or
       // in the air — there is no blocking from a throne or mid-jump.
       const blocking = motion?.blocking === true && !seated && !jump;

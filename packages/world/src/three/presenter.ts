@@ -19,12 +19,20 @@ import { isSandboxTile } from '../sandbox-channel.js';
 import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights } from '../sandbox.js';
 import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
 import { buildFootball, type FootballView } from './football-view.js';
-import { avatarFigureHeight, seatedBaseHeight } from './avatar-figure.js';
+import { avatarFigureHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
-import { ARENA_THRONE_SEAT_TOP, arenaSurfaceHeightAt, type ArenaRoomView } from './arena-room.js';
+import {
+  ARENA_THRONE_SEAT,
+  ARENA_TIER_SEAT,
+  arenaSurfaceHeightAt,
+  type ArenaRoomView,
+} from './arena-room.js';
 import { createArenaFx, type ArenaFx, type RemoteSwingPort } from './arena-fx.js';
 import type { ArenaViewFrame } from '../arena-channel.js';
+import type { RoofSwingViewFrame } from '../roof-swing-channel.js';
+import { ROOF_SWING_TARGET_ID } from '@strkworld/shared';
+import type { CameraShot } from './camera-rig.js';
 // D-114: one swing timeline and one seat rule, shared with the remote layer (C's arena-swing.ts).
 import { ARENA_SEAT_IDLE_MS, attackPoseAt, isArenaSeatAt } from '../arena-swing.js';
 import { buildAvatarStudio } from './studio-builder.js';
@@ -50,6 +58,7 @@ import type {
   LabelFactory,
   Occluder,
   RoomView,
+  SeatPlace,
   StreetView,
   StudioView,
   TextLabel,
@@ -116,6 +125,12 @@ export interface Presenter {
   readonly cameraBounds: CameraBounds | null;
   /** How the camera frames the player: level with the street, or looking down from a roof. */
   readonly cameraPreset: CameraPresetId;
+  /**
+   * D-133: a cinematic override for the rider on the roof swing — south over
+   * the edge, following the arc — or null for the preset's own angle. The
+   * engine also widens the fog while one is set, so the vista shows.
+   */
+  readonly cameraShot: CameraShot | null;
   /** True once after a teleport, so the camera can jump instead of easing. */
   consumeSnap(): boolean;
   /** Start presenting a new session; retires the previous session's view. */
@@ -227,6 +242,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
   };
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
+  /*
+   * D-133: the roof's swing looks south over D-124's river, station and
+   * skyline. There is no mount here: `street-builder.ts` already puts the
+   * vista in `street.ground`, and the roof is drawn inside the street scene
+   * (it is the tower's real top), so that one mount serves the deck and the
+   * ride camera too. Mounting it again here would draw it twice.
+   */
   /**
    * Where a remote peer stands (D-087). On a roof the lobby sends the roof's
    * players and the street's passers-by below, and never a street player
@@ -461,8 +483,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let arenaFrame: ArenaViewFrame | null = null;
   /** D-114: how long the local avatar has stood still on an arena tier. */
   let idleOnTier = 0;
-  /** D-127: the session says the local avatar is sitting on a bench. */
-  let benchSeated = false;
+  /** D-127: the bench seat the session sat the local avatar on, or null. */
+  let benchSeat: SeatPlace | null = null;
   let arenaPrompt: TextLabel | null = null;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -472,6 +494,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let visibleRoom: string | null = null;
   /** The roof the player stands on, if any: the street stays drawn below it. */
   let rooftop: BuildingId | null = null;
+  /** D-133: the swing's frame this client is drawing, or none. */
+  let swingFrame: RoofSwingViewFrame | null = null;
+  /** Where the local rider is drawn while riding (world units); null otherwise. */
+  let swingSeat: { x: number; y: number; z: number } | null = null;
+  /** The rider's camera this frame, or null. */
+  let swingShot: CameraShot | null = null;
   let studioVisible = false;
   let remote: RemoteAvatarLayer3D | null = null;
   let sessionToken = 0;
@@ -514,12 +542,17 @@ export function createPresenter(options: PresenterOptions): Presenter {
     jumpClimbed = false;
     jumpRaise = 0;
     jumpShadow.place(0, 0, 0, 0);
+    // The roof swing's frame and camera belong to the session that set them (D-133).
+    swingFrame = null;
+    swingSeat = null;
+    swingShot = null;
+    street.swing?.setAngle(0);
     // The arena's frame, prompt and swing belong to the session that set them (D-114).
     swingElapsed = null;
     arenaFrame = null;
     idleOnTier = 0;
     // D-127: a seat belongs to the session that sat down on it.
-    benchSeated = false;
+    benchSeat = null;
     if (arenaPrompt) arenaPrompt.object.visible = false;
     arenaGate = 'open';
     arenaRoom?.setGate('open');
@@ -560,6 +593,23 @@ export function createPresenter(options: PresenterOptions): Presenter {
     return port;
   };
 
+  /** D-133: put a peer on the roof swing's seat, or take them off it. */
+  const remoteRider = (
+    gameId: GameId | null,
+    seat: { readonly x: number; readonly y: number; readonly z: number } | null,
+  ): void => {
+    const layer = remote as
+      | (RemoteAvatarLayer3D & {
+        setRider?: (id: GameId | null, at: { readonly x: number; readonly y: number; readonly z: number } | null) => void;
+      })
+      | null;
+    try {
+      layer?.setRider?.(gameId, seat);
+    } catch {
+      // A failing layer leaves the rider where the lobby holds them.
+    }
+  };
+
   /**
    * D-114: whether a World pixel point is an arena seat (a tier tile), while
    * the arena is the room shown: remote spectators standing still there sit.
@@ -591,6 +641,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   return {
     get player() {
+      // D-133: riding the roof swing, the camera follows the seat's arc.
+      if (swingSeat) return { ground: { x: swingSeat.x, z: swingSeat.z }, yaw, elevation: swingSeat.y };
       // Indoors the camera follows the feet up the arena's tiers (D-114).
       return { ground, yaw, elevation: streetVisible ? elevationShown : feet };
     },
@@ -598,7 +650,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
       return lift;
     },
     get cameraBounds() {
-      return cameraBounds;
+      // D-133: the ride swings out past the deck's bounds, so they are lifted
+      // for its length; the rig is following the seat, not the player's feet.
+      return swingSeat ? null : cameraBounds;
+    },
+    get cameraShot(): CameraShot | null {
+      return swingShot;
     },
     get cameraPreset(): CameraPresetId {
       return rooftop !== null ? 'rooftop' : 'street';
@@ -622,9 +679,6 @@ export function createPresenter(options: PresenterOptions): Presenter {
           surfaceHeight: remoteHeight,
           ...(options.reducedMotion ? { reducedMotion: options.reducedMotion } : {}),
           seatAt: arenaSeatAt,
-          // D-128, amended 2026-10-03: a peer the ring says is on the throne
-          // sits on the seat's own top, not on the podium under it.
-          throneSeatTop: ARENA_THRONE_SEAT_TOP,
         });
         remote = layer;
         root.add(layer.group);
@@ -752,11 +806,12 @@ export function createPresenter(options: PresenterOptions): Presenter {
             ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
             : null);
         },
-        setPlayerSeated(seated) {
+        setPlayerSeated(seat) {
           if (!live()) return;
-          // D-127: sitting on a bench is told, not guessed. The arena's tiers
-          // keep their own idle rule; this is simply or-ed with it.
-          benchSeated = seated === true;
+          // D-127: sitting on a bench is told, not guessed, and the seat comes
+          // with it, so the figure rises onto the bench instead of into it.
+          // The arena's tiers keep their own idle rule and their own seat.
+          benchSeat = seat && Number.isFinite(seat.surface) ? seat : null;
         },
         setInteractionPrompt(prompt) {
           if (!live()) return;
@@ -789,6 +844,35 @@ export function createPresenter(options: PresenterOptions): Presenter {
           if (!live()) return null;
           ensureRoom('arena');
           return arenaRoom?.gate ?? null;
+        },
+        roofSwingObject() {
+          if (!live()) return null;
+          return street.swing?.object ?? null;
+        },
+        syncRoofSwing(frame) {
+          if (!live()) return;
+          swingFrame = frame;
+          const swing = street.swing ?? null;
+          if (!frame || !swing) {
+            swingSeat = null;
+            swingShot = null;
+            swing?.setAngle(0);
+            remoteRider(null, null);
+            return;
+          }
+          swing.setAngle(frame.angle);
+          const seat = swing.riderAt(frame.angle);
+          // D-123: the seat stops inviting a press while someone is on it.
+          extraAffordances.get(swing.object as Object3D)?.setUsable(ROOF_SWING_TARGET_ID, !frame.busy);
+          if (frame.selfRiding) {
+            swingSeat = { x: seat.x, y: seat.y, z: seat.z };
+            swingShot = frame.shot;
+            remoteRider(null, null);
+            return;
+          }
+          swingSeat = null;
+          swingShot = null;
+          remoteRider(frame.riderId, frame.busy ? seat : null);
         },
         syncArena(frame) {
           if (!live()) return;
@@ -895,18 +979,18 @@ export function createPresenter(options: PresenterOptions): Presenter {
       // Step up and down kerbs quickly rather than popping 8 cm in one frame.
       const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
       /*
-       * D-128, amended 2026-10-03: a champion the ring has seated stands on
-       * the throne's own seat rather than on the podium the box sits on, and
-       * the drop from the seat top to the feet is this look's seated hip
-       * height — so every build sits *on* the throne instead of inside it.
-       * It eases like any kerb, so taking the seat is not a pop.
+       * D-128, amended 2026-10-03: a champion the ring has seated keeps the
+       * podium under their feet here. The rise onto the throne's own seat is
+       * the figure's (D-127's `seat`, passed below), not the kerb's, so one
+       * seat system lifts a sitter whether it is a bench, a tier or the
+       * throne; the kerb only ever says what the floor is.
        */
       const inArena = !streetVisible && visibleRoom === 'arena';
       const onThrone = inArena && arenaFrame?.selfOnThrone === true;
       // Indoors, the arena's stairs and tiers ease the same way (D-114).
       const kerb = streetVisible
         ? !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0
-        : onThrone ? seatedBaseHeight(ARENA_THRONE_SEAT_TOP, avatar.look) : roomFeet();
+        : roomFeet();
       feet = pendingSnap ? kerb : feet + (kerb - feet) * (1 - Math.exp(-dt / 45));
       // D-097: the jump rides on top of whatever the feet stand on. It never
       // moves the avatar across the ground: the session does that, as ever.
@@ -925,6 +1009,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
       const standOn = feet + (streetVisible ? elevationShown : 0);
       avatar.object.position.y = standOn + lift;
       jumpShadow.place(ground.x, standOn, ground.z, lift, jumpHeight);
+      // D-133: riding the swing, the local avatar is drawn on the seat,
+      // facing south over the edge, and casts no contact shadow out there.
+      if (swingSeat) {
+        avatar.object.position.set(swingSeat.x, swingSeat.y, swingSeat.z);
+        yaw = 0;
+        targetYaw = 0;
+        avatar.object.rotation.y = 0;
+        jumpShadow.place(swingSeat.x, swingSeat.y, swingSeat.z, 0, jumpHeight);
+      }
       // D-114: the arena swing, the fighter's battle stance, and sitting on a tier.
       let attack: AttackPose | null = null;
       if (swingElapsed !== null) {
@@ -941,13 +1034,18 @@ export function createPresenter(options: PresenterOptions): Presenter {
       // them, without the tiers' idle wait.
       const blocking = guard && arenaFrame?.challengerGuarding === true;
       avatar.update(dt, {
-        moving,
-        sprinting: moving && motion.sprinting,
+        moving: moving && swingSeat === null,
+        sprinting: moving && motion.sprinting && swingSeat === null,
         jump: pose,
         attack,
         guard,
         blocking,
-        seated: benchSeated || onThrone || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        // D-133: the swing's rider sits in it, as a spectator sits on a tier.
+        seated: benchSeat !== null || onThrone || swingSeat !== null || idleOnTier >= ARENA_SEAT_IDLE_MS,
+        // D-127/D-128: whichever seat is under them. A tier's plank sits
+        // behind where the spectator stands; the throne's own seat does not.
+        // The swing places its rider itself (D-133), so it passes no seat here.
+        seat: benchSeat ?? (onThrone ? ARENA_THRONE_SEAT : onTier ? ARENA_TIER_SEAT : null),
       });
       if (streetVisible) {
         street.update(dt);

@@ -11,13 +11,15 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from '../remote-peer.js';
-import { avatarFigureHeight, seatedBaseHeight } from './avatar-figure.js';
+import { avatarFigureHeight } from './avatar-figure.js';
 import { PIXELS_PER_UNIT, angleDelta, directionToYaw, facingToYaw } from './coords.js';
 import { createCarriedBlock, type CarriedBlock } from './sandbox-view.js';
 import { JUMP_HEIGHT, JUMP_TOTAL_MS, REDUCED_JUMP_HEIGHT, jumpLift, jumpPose } from '../jump.js';
 import { createJumpShadow, type JumpShadow } from './jump-shadow.js';
 import { createSeatTracker, createSwingClock, type SeatTracker, type SwingClock } from '../arena-swing.js';
-import type { AvatarFigure, AvatarFigureFactory, AvatarMotion } from './types.js';
+import type { AvatarFigure, AvatarFigureFactory, AvatarMotion, SeatPlace } from './types.js';
+import { ARENA_THRONE_SEAT, ARENA_TIER_SEAT } from './arena-room.js';
+import { streetSeatPlaceAt } from '../seats.js';
 
 /**
  * Time constant of the critically damped follow of the latest snapshot
@@ -107,14 +109,6 @@ export interface RemoteAvatarLayer3DOptions {
    * standing still on one for `ARENA_SEAT_IDLE_MS` sits; absent, nobody sits.
    */
   readonly seatAt?: (xPx: number, yPx: number) => boolean;
-  /**
-   * D-128, amended 2026-10-03: the top of the emperor's throne's seat, world
-   * units. The peer `setThroned` names stands at that height less their own
-   * seated hip height, so every look sits on the throne rather than inside
-   * it. Absent, a throned peer stands on whatever `surfaceHeight` says, which
-   * is the podium the box is built on.
-   */
-  readonly throneSeatTop?: number;
 }
 
 export interface RemoteAvatarLayer3D {
@@ -136,6 +130,13 @@ export interface RemoteAvatarLayer3D {
   setBlocker(gameId: string | null): void;
   /** D-128: the champion on the emperor's throne, drawn seated wherever they are; null for nobody. */
   setThroned(gameId: string | null): void;
+  /**
+   * D-133: this peer is riding the roof swing, so they are drawn sitting at
+   * `seat` (world units) instead of where the lobby holds them — the lobby's
+   * seat tile is on the ledge, and the seat itself hangs out past it. Null
+   * for nobody.
+   */
+  setRider(gameId: string | null, seat: { readonly x: number; readonly y: number; readonly z: number } | null): void;
   /** Unsubscribe and retire every figure, once. Inert afterwards. */
   destroy(): void;
 }
@@ -228,7 +229,6 @@ export function createRemoteAvatarLayer3D({
   reducedMotion,
   jumpShadows = createJumpShadow,
   seatAt,
-  throneSeatTop,
 }: RemoteAvatarLayer3DOptions): RemoteAvatarLayer3D {
   const group = new Group();
   group.name = 'remote-avatars';
@@ -253,6 +253,9 @@ export function createRemoteAvatarLayer3D({
   /** D-128: the peer holding a block, and the champion on the throne. */
   let blocker: string | null = null;
   let throned: string | null = null;
+  /** D-133: the peer on the roof swing, and where its seat is this frame. */
+  let rider: string | null = null;
+  let riderSeat: { x: number; y: number; z: number } | null = null;
 
   /** Detach and dispose one figure; true once nothing of it is left owned. */
   const retire = (avatar: RemoteAvatar, errors: unknown[]): boolean => {
@@ -298,11 +301,6 @@ export function createRemoteAvatarLayer3D({
    * stack never sinks the feet into it.
    */
   const surfaceGoal = (avatar: RemoteAvatar): number => {
-    // D-128, amended: the throne is a seat, not a floor; the server put them
-    // on it, so they sit on its top whatever the tile under it is.
-    if (throned !== null && throned === avatar.id && throneSeatTop !== undefined) {
-      return seatedBaseHeight(throneSeatTop, avatar.figure.look);
-    }
     if (!surfaceHeight) return 0;
     const underPeer = sampleSurface(surfaceHeight, avatar.targetX, avatar.targetY);
     if (avatar.x === avatar.targetX && avatar.y === avatar.targetY) return underPeer;
@@ -580,6 +578,9 @@ export function createRemoteAvatarLayer3D({
     // D-127: a bench sitter sits because the room says so — no idle timer, and
     // it holds while the figure eases onto the seat.
     let seated = avatar.benchSeat !== null && !jump;
+    // D-127 (amended 2026-10-03): the seat the sitter rests on, so a peer rises
+    // onto the bench or the plank rather than sinking into it.
+    let seat: SeatPlace | null = seated ? streetSeatPlaceAt(avatar.benchSeat) : null;
     if (seatAt && !seated) {
       let onSeat = false;
       try {
@@ -588,14 +589,20 @@ export function createRemoteAvatarLayer3D({
         onSeat = false;
       }
       seated = avatar.seat.step(dt, moving || jump != null, onSeat);
+      if (seated) seat = ARENA_TIER_SEAT;
     }
     // D-128: the champion sits the moment the server says so, without the
     // tiers' idle wait: the server put them on the throne, so they are on it.
-    if (throned === avatar.id) seated = true;
+    if (throned === avatar.id) {
+      seated = true;
+      seat = ARENA_THRONE_SEAT;
+    }
     const guard = fighter === avatar.id;
+    // D-133: a peer on the swing sits in it, whatever the floor under them says.
+    if (rider === avatar.id && riderSeat !== null) seated = true;
     const blocking = blocker === avatar.id;
     if (!attack && !seated && !guard && !blocking) return jump ? { moving, sprinting: false, jump } : moving ? WALKING : STANDING;
-    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking };
+    return { moving, sprinting: false, jump: jump ?? null, attack, guard, seated, blocking, seat };
   };
 
   return {
@@ -615,6 +622,13 @@ export function createRemoteAvatarLayer3D({
     setThroned(gameId) {
       if (destroyed) return;
       throned = typeof gameId === 'string' ? gameId : null;
+    },
+    setRider(gameId, seat) {
+      if (destroyed) return;
+      const valid = seat !== null && typeof seat === 'object' &&
+        Number.isFinite(seat.x) && Number.isFinite(seat.y) && Number.isFinite(seat.z);
+      rider = typeof gameId === 'string' && valid ? gameId : null;
+      riderSeat = rider !== null && valid ? { x: seat!.x, y: seat!.y, z: seat!.z } : null;
     },
     setVisible(visible) {
       // A visibility callback that outlives teardown is stale, not an error.
@@ -641,6 +655,12 @@ export function createRemoteAvatarLayer3D({
           const lift = avatar.jumpElapsed !== null ? jumpLiftOf(avatar, avatar.jumpElapsed) : 0;
           stepElevation(avatar, dt, goal, lift);
           place(avatar);
+        }
+        // D-133: the swing's rider is drawn on its seat, facing south out
+        // over the edge, wherever the lobby holds them on the ledge.
+        if (rider === avatar.id && riderSeat !== null) {
+          avatar.figure.object.position.set(riderSeat.x, riderSeat.y, riderSeat.z);
+          avatar.figure.object.rotation.y = 0;
         }
         const jump = dt > 0 ? stepJump(avatar, dt) : null;
         if (destroyed) break;

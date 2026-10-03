@@ -973,6 +973,17 @@ export const COPY = freezeCopy({
     countdownLive: 'Fight starts in',
   },
 
+  /**
+   * D-133: the Exchange roof's lookout swing (`roof/SwingHud.tsx`). One
+   * hint, shown to the rider only. Game copy: no money, no names, no
+   * disclosure. The World's own chip words (`SWING`, `IN USE`) live in
+   * `roof-swing-session.ts`.
+   */
+  swing: {
+    label: 'Lookout swing',
+    getOff: 'Esc to get off',
+  },
+
   presence: {
     connecting: 'Connecting to multiplayer…',
     connected: 'Multiplayer connected',
@@ -1205,6 +1216,17 @@ export const COPY = freezeCopy({
     half: '50%',
     maxLabel: 'Fill in the most you can use',
     halfLabel: 'Fill in half of the most you can use',
+    /**
+     * D-131: the balance line fills the amount. `{amount}` is the figure the
+     * line shows, `{fee}` the fee in the same asset the press keeps aside.
+     */
+    useBalance: 'Use full balance: {amount}',
+    useBalanceLessFee: 'Use {amount}, keeping the {fee} fee aside',
+    feeKeptAside: '{amount} fee kept aside',
+    /** Why the figure cannot be used: the fee in the same asset is the whole of it. */
+    balanceUnderFee: 'Too little here to cover the {fee} fee on top.',
+    /** The fee has not been read yet, so nothing honest can be filled in. */
+    balanceFeeUnknown: 'The pool fee is not known yet.',
     enterAmount: 'Enter an amount',
     chooseToken: 'Choose a token',
     insufficient: 'Insufficient {symbol}',

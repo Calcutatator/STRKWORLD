@@ -11,6 +11,7 @@
     "./sandbox": "./src/sandbox-rules.ts",
     "./football": "./src/football-rules.ts",
     "./arena": "./src/arena-rules.ts",
+    "./swing": "./src/swing-rules.ts",
     "./server": "./src/server-index.ts"
   },
   "scripts": {
