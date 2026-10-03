@@ -259,6 +259,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-10-03 — A counter locked on a capability the player cannot see reads as a broken game; the Bridge's lock was really "has the optional chunk landed?" (D-061 amended, D-123)
+
+"I went to the bridge counter and it's not popping up an interface." Nothing in
+`deploy/RAILWAY.md` disables the Bridge, and the whole press-E path is sound:
+driven end to end — the real engine-free World session, the real interaction
+system, the real Shell station registry, the real panels, the real presenter
+and `ProductionRoot` with the production route policy from `import.meta.env`
+(`VITE_WALLET_MODE=real` makes `detectRoutePolicy()` answer in a test) — every
+counter opens, the Bridge included. What is wrong is the lock, not the press.
+
+- **The gate's name was a lie.** `station-registry.ts` locks the DEPOSIT
+  counter on `bridgeAccountAvailable && bridgePlannerAvailable`, which
+  production has from boot. But `BridgeProvider.createRuntime` returned the
+  shared `unavailable` runtime (account `null`, planner `null`) for *any*
+  render without a `service` — and the service is the optional recovery
+  runtime, fetched only on Bridge entry and refused outright by
+  `production-runtime.ts`'s Web Storage write probe in a private window, with
+  site data blocked, or on a full quota. So the two capability bits really
+  meant "has the optional chunk landed?", and the counter was locked until it
+  had, or for ever.
+- **Since D-123 that lock is silent.** A locked counter has no shimmer, no key
+  chip, and `fixed-room.ts`'s `interaction()`/`activate()` return `null`/false,
+  so no `station:activated` is emitted and the `capability-unavailable` message
+  `station-registry.ts` prepares can never be rendered. The pre-D-117 walk-up
+  did not show it either; only Menu Mode ever did. A transient or
+  browser-dependent lock with no cue is indistinguishable from a bug — and it
+  only bites production, because the demo runtime needs no storage and no
+  chunk.
+- **The fix is to make the gate mean its name.** The provider publishes the
+  account and planner it was given with `service: null` until the runtime
+  lands, and carries a `loading` bit so the window says "still starting up"
+  rather than D-043's "saved recovery is unavailable in this browser" before
+  the loader has answered. D-061 (no planner → recovery-only) and D-043
+  (nothing pretends to persist) are unchanged.
+- **Two React traps on the way.** `setState(fn)` treats a function as an
+  updater, so parking a failed *loader function* in state calls it — box it
+  (`{ loader }`) or use `setState(() => fn)`. And `WorldSession.update` clamps
+  its delta (`clampFrame`), so a test cannot step D-114's 250 ms door
+  re-entry hold with one big tick; it needs real frames.
+
+*Verified:* `npx vitest run --reporter=default` (297 files, 6,273 tests) and
+`npm run typecheck`. `visits/counter-press-e.flow.test.tsx` walks the player
+into all twelve counters and presses E; the Bridge case with a loader that
+never answers failed before this change and passes after. Not verified: a real
+browser, and whether the lead's own session was the storage probe or a slow
+chunk — both end in the same silent counter, and both now open the window.
+
 ### 2026-10-02 — Leaderboard receipts: derive a shadow's address only where it matters (~30 ms each in JS), keep `p` inside `packages/privacy`, and remember a shield receipt names the account (D-122)
 
 Four traps from wiring the private leaderboard's game side. (1) `shadowAccountAddress` (`calculateContractAddressFromHash`, several Pedersen hashes in JS) costs about 30 ms. Cross-checking all 128 rows of a shadow page took about 4 s per page, in tests and in a browser alike. The count never rests on the addresses (each receipt's commitment is `h(p, n)`, derived locally, and its count is the ledger's), so only the newest deployed row is checked. (2) A value import of `@strkworld/privacy` anywhere in the Shell's eager graph fails `architecture.test.ts` (it pulls `starknet` into the entry chunk), so the placement maths runs inside `checkPlacement` and the Shell imports types only. `PrivacyError` is matched with `toFailure`, never `instanceof`. (3) `PrivacyOperations` is frozen (D-036, `operations.test.ts`): an optional member fails its "every pinned member is a method" type check, so `checkPlacement` is required and rejects while the leaderboard is off. Every test double implementing the seam needed it. (4) The tally's exposure is wider than "links a season's receipts to each other": a shield receipt rides in the shield's transaction, whose `Deposit` names the depositor, so whoever holds `p` can find the account of a player who shielded. Also, `count_of` is `-> u64` (one felt), and `tick` reverts a second receipt in one transaction, so a batch must never carry two.
@@ -13947,6 +13994,129 @@ transaction was used.
 
 ---
 
+### 2026-10-03 — Sitting down costs one byte, because a seat is a place and a seat table is shared
+
+Adding a seated pose to shared presence looks like a new message and a new
+state block. It is neither. Sitting down *is* a move — onto the seat's own
+spot — so the seat index can ride on the existing `move` payload: the client's
+move floor already paces it, the reconcile loop already re-sends it until the
+server's copy matches, and the room's message budget does not change at all
+(`client-arena.test.ts` now also pins the message set, which is how that stays
+true). And because both sides share one frozen seat table, the wire needs only
+an index: the position, the facing and which bench it is all come out of the
+table. `PresenceState.seat` is therefore a single `int8`.
+
+Two things that only worked because of that shape. The server's whole rule is
+"the index is real, the position I just wrote is that seat's own spot, nobody
+else holds it, and you are on the street" — no geometry, no tolerance, no
+trust. That needs the seat spots to be **whole pixels**, since
+`normalizeCoordinate` rounds everything the room is sent; a spot derived at
+`x * 32 * 0.425` and compared with `===` would never match. And a client that
+mentions a seat the room refuses keeps re-sending it forever unless the
+reconcile comparison includes the seat, which is why `samePlacement` and the
+client's own view of its server entry both carry it.
+
+Two traps in the surrounding code. `packages/shared/src/index.ts` re-exports
+its sibling modules at the bottom, and `arena.ts` gets away with importing
+back from it only because every one of those imports is type-only; a *value*
+read back at module scope is a real ESM cycle and dies in the TDZ. The new
+`seats.ts` therefore keeps its own copy of `STREET_ORIGIN_X` with a test
+pinning the two together. And adding a field to a validated snapshot breaks
+every `toEqual` on it across three packages at once (51 tests here) — the
+field has to be added to the fixtures, not worked around.
+
+Also worth knowing: a bench did not need a "no cue" mechanism to look right —
+registering no affordance shell already leaves it dark. It needed one to *stay*
+right, so `InteractionTarget.cue: 'none'` is a declaration the presenter obeys
+even if a shell for that id turns up later.
+
+*Verified:* `packages/shared/src/seats.test.ts`, `packages/world/src/seats.test.ts`,
+`packages/world/src/world-session-benches.test.ts`,
+`packages/lobby/src/seats.test.ts`, plus a real-wire test in
+`packages/lobby/src/client.test.ts` where a second player's claim on a taken
+seat is refused and they stand on its spot instead. Renders from a WebGL
+harness in headless Chrome: `renders/benches-plaza.png`,
+`benches-plaza-chip.png`, `benches-pitch.png`, `benches-bridge.png`. Full
+suite (301 files, 6297 tests) and `npm run typecheck` pass. No wallet, RPC,
+funds or transaction was used.
+
+---
+
+### 2026-10-02 — One global level for an additive cue cannot fit both a counter and a lone black obelisk
+
+The D-123 shimmer is tuned as a single global level, and the amendment that
+made it legible (12-20% base, a 45% crest) was tuned on the Bank's counters:
+dark surfaces, indoors, seen edge-on across a room. The plaza's monument fails
+that tuning badly. It is tall, near-black, lit by the sun, and standing alone
+on pale paving with nothing behind it, so the same additive energy lands on a
+big unbroken silhouette with maximum contrast against its surroundings — it
+reads as a lit beacon rather than as a hint, and the colour-matching rules make
+it worse, because a near-black station takes the pale warm fallback tint
+(`SHIMMER_TINT_WARM_HUE`) at lightness 0.72, which is the largest lift of any
+station in the game. The lead saw it as "the shimmer on the plaza pillar"
+specifically, 80% too strong, while the rest of the world was only 30% too
+strong.
+
+What this means for the next cue: a per-object strength knob is not a
+special case to be avoided, it is a requirement of any additive cue applied
+across both interiors and daylight. Keep the knob *relative* to the global
+level (a multiplier, not an absolute), so a later global change carries the
+exceptions with it, and bake it where the per-vertex data already is — the
+shell buffer's `aSweep` attribute had a free third component, so
+`SHIMMER_STATION_SCALES` costs no mesh, no material, no uniform and no
+per-frame work. The ember edge glow is a separate effect and must not read the
+multiplier: widening the gap between "usable" and "the one E would use" is the
+point.
+
+*Verified:* `affordance.test.ts` and `plaza-builder.test.ts` (the constants at
+70%, the monument at 0.2 and every other station at 1, the multiplier baked
+per vertex, the ember glow untouched), plus before/after headless-Chrome WebGL
+renders from the same harness and the same camera —
+`scratchpad/renders/shimmer-tune-plaza.png` and `shimmer-tune-bank.png`, with
+the "before" built from `HEAD`'s `affordance.ts`. Full suite (296 files, 6259
+tests) and `npm run typecheck` pass. No wallet, RPC, funds or transaction was
+used.
+
+---
+
+## 6. Findings log
+
+### A hidden entrance is not a door, so none of the doors' machinery applies to it
+
+The Avatar Studio's street entrance is not a `DoorZone`: it is two bottom-edge
+tiles matched by `isAvatarStudioEntrance`, and the Studio's street report
+handles it before `DoorTrigger.update` is ever reached. So the Studio got none
+of what the doors get for free, and the gap had gone unnoticed in two places at
+once. It had no return tile — `createAvatarStudio` passed `map.spawn` as its
+`streetReturn`, so leaving the changing room teleported the player eleven rows
+up the path instead of outside the room (the lead's bug, D-125) — and it had no
+re-entry hold, which only looked harmless because the wrong return tile was too
+far away for a held key to carry anyone back in. Fixing the first on its own
+would have introduced the bounce PR #205 had already fixed for the doors.
+
+The lesson generalises past this entrance: when a feature is built *beside* a
+shared mechanism rather than *through* it, every invariant the mechanism
+carries has to be re-checked by hand, and a later amendment to the mechanism
+(the hold) will not reach it. Grepping for the trigger (`isAvatarStudioEntrance`,
+one call site) found the whole gap in one pass; grepping for the *concept*
+(`reset`, `returnTile`) did not, because the Studio names neither. The hold is
+now one factory, `createReentryHold<T>()` in `door-trigger.ts`, with the door
+trigger and the Studio's entrance as its two users, so the next amendment to it
+lands on both.
+
+*Verified:* `world-session.test.ts`, the D-125 block — the bug reproduced on
+real keys end to end (walk in from the street entrance, walk out of the Studio
+exit, land on the tile outside the entrance facing away, with the street
+placement carrying it), the entrance held against a key still down after the
+exit and opening again once stepped off and back on, and an audit of every
+other room's exit (Bank, Vault, Exchange, Post Office, Bridge, bunker, arena:
+each lands on a walkable street tile off its own door and touching it, none of
+which needed changing). Each new assertion was also run against the unfixed
+code and seen to fail. Full suite (296 files, 6260 tests) and
+`npm run typecheck` pass. No wallet, RPC, funds or transaction was used.
+
+---
+
 ## 6. Findings log
 
 ### 2026-10-02 — A route-policy field the session's own copy forgets is silently off
@@ -14025,5 +14195,40 @@ the deposition of a seated predecessor. Full suite (298 files, 6345 tests) and
 reproduce in two further full runs: `sandbox` carry/pick, which sleeps 300 ms
 and then asserts `carrying` is null — unrelated to this work. Renders are from
 the offline rasteriser, not a GPU.
+
+---
+
+### 2026-10-03 — A guard with no message reads as a dead button
+
+The lead's LORDS swap never prompted a wallet. The oracle guard (D-084) had
+refused the quote at 3.96% against a 3% bound, before anything was asked —
+correct behaviour on the ground floor, wrong on the degen floor, whose tokens
+are thin by definition. The expensive half was not the number. It was that the
+refusal threw `PrivacyError('unknown', …)`, so the log said `kind=unknown` and
+the panel said "That did not go through"; in the live quote path it was one
+faint note under an empty Buy field. Nobody could tell a refused swap from a
+broken button, and the real cause sat in the seam's message string, which the
+Shell is forbidden to render.
+
+Two rules came out of it, both now enforced by tests. **A guard that can refuse
+before the wallet gets its own `PrivacyErrorKind`**, not `unknown`: a kind is
+what both the log line and the counter's copy are keyed on, so `unknown` means
+"nobody can explain this". **A guard that refuses on a figure carries that
+figure on the throw**, as own data properties, so the counter can say "4.0%
+worse than the market price" without ever rendering the seam's own sentence.
+`SwapPriceGuardError` carries only `shortfallBps` and `boundBps` — no address,
+no amount, no token — and `toFailure` reads them with the same own-descriptor
+discipline it reads `kind` with.
+
+*Verified:* reproduced red first — with the old throw restored,
+`apps/web/src/privacy/errors.test.ts` classifies the refusal as `unknown` and
+`exchange-machine.test.ts` renders the generic copy. The figures survive two
+passes of `toFailure` and are dropped when malformed, negative, fractional or
+behind a throwing getter. The degen floor's own limits (12% / 800 bps) and the
+Exchange's unchanged 3% / 300 bps are pinned in `swap-prices.test.ts` and
+`swap-operations.test.ts`, the backend's two ceilings in `degen-route.test.ts`.
+Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
+RPC, funds or transaction was used, and no live LORDS swap has been run under
+the new bound.
 
 ---

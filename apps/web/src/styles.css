@@ -3926,6 +3926,18 @@ p.exchange-price-check[data-status="unchecked"] {
   border-radius: var(--ui-radius-inner);
   background: var(--ui-surface-raised);
 }
+/*
+ * D-126: the small, non-blocking line a quote carries when it passes its
+ * floor's oracle bound but still sits more than 3% below Pragma's price, and
+ * the second line on a ground-floor refusal that points upstairs. Subtle on
+ * purpose: the theme's own warning colour (D-119/D-121) at the panel's body
+ * size, with no surface, no border and no button. Nothing here gates a swap.
+ */
+.exchange-price-warning {
+  margin: 0.4rem 0 0;
+  color: var(--ui-warn);
+  font-size: 0.9rem;
+}
 .exchange-acknowledge {
   display: flex;
   gap: 0.5em;

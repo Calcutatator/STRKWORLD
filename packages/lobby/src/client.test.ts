@@ -11,6 +11,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { matchMaker } from '@colyseus/core';
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
+import { STREET_SEATS } from '@strkworld/shared';
 import {
   DEFAULT_ROOM_NAME,
   MAX_MESSAGES_PER_SECOND,
@@ -433,6 +434,8 @@ describe('identity is server-assigned', () => {
         sprite: 'avatar-2',
         // D-060: a decoded entry without a valid palette index carries nothing.
         carrying: null,
+        // D-127: nor is it sitting on a bench.
+        seat: null,
         // D-097: a fake entry without a jump counter reads as 0 jumps.
         jumps: 0,
       }]);
@@ -1474,7 +1477,57 @@ describe('presence', () => {
       sprite: 'avatar-2',
       carrying: null,
       jumps: 0,
+      seat: null,
     });
+  });
+
+  /**
+   * D-127: a bench seat crosses the wire with the position, so peers on the
+   * street see a player sitting. One seat, one player: the second claim on it
+   * is refused and that player is simply standing on the seat's spot.
+   */
+  it('relays a bench seat to nearby peers, and gives one seat to one player', async () => {
+    const spot = STREET_SEATS[0]!;
+    const observer = makeClient(spot.x + 40, spot.y);
+    await observer.connect();
+    const sitter = makeClient(spot.x + 20, spot.y);
+    await sitter.connect();
+    await waitFor(() => observer.peers(), (list) => list.length === 1, 'the sitter to appear');
+
+    sitter.updatePosition(spot.x, spot.y, spot.facing, 0);
+    const seated = await waitFor(
+      () => observer.peers(),
+      (list) => list[0]?.seat === 0,
+      'the sitter to sit',
+    );
+    expect(seated[0]).toMatchObject({ gameId: sitter.gameId, x: spot.x, y: spot.y, seat: 0 });
+
+    // A second player claiming the same seat is refused: they stand on it.
+    const rival = makeClient(spot.x + 24, spot.y);
+    await rival.connect();
+    await waitFor(() => observer.peers(), (list) => list.length === 2, 'the rival to appear');
+    rival.updatePosition(spot.x, spot.y, spot.facing, 0);
+    const both = await waitFor(
+      () => observer.peers(),
+      (list) => list.filter((peer) => peer.x === spot.x).length === 2,
+      'the rival to reach the seat',
+    );
+    expect(both.filter((peer) => peer.seat === 0)).toHaveLength(1);
+    expect(both.find((peer) => peer.gameId === rival.gameId)?.seat).toBeNull();
+
+    // Standing up frees it, and the rival's next claim is accepted.
+    sitter.updatePosition(spot.x + 20, spot.y, 'right');
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.find((peer) => peer.gameId === sitter.gameId)?.seat === null,
+      'the sitter to stand up',
+    );
+    rival.updatePosition(spot.x, spot.y, spot.facing, 0);
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.find((peer) => peer.gameId === rival.gameId)?.seat === 0,
+      'the rival to take the seat',
+    );
   });
 
   it('does not relay a peer outside the interest radius', async () => {

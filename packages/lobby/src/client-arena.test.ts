@@ -247,6 +247,15 @@ describe('the message budget (D-114)', () => {
       2 * perSecond(ARENA_BLOCK_CLIENT_INTERVAL_MS); // block + unblock: 4
     expect(budget).toBeCloseTo(36.7, 1);
     expect(budget).toBeLessThan(MAX_MESSAGES_PER_SECOND);
+    // D-127: sitting on a bench added no message type at all — the seat rides
+    // on the move. D-128 adds the block pair and the throne's sit, all counted
+    // above, so the budget is still the whole of it.
+    expect(Object.values(MESSAGE)).toEqual([
+      'move', 'suspend', 'resume', 'area',
+      'sandbox:pick', 'sandbox:place', 'football:kick', 'jump',
+      'arena:claim', 'arena:attack', 'arena:leave',
+      'arena:block', 'arena:unblock', 'arena:sit',
+    ]);
   });
 });
 

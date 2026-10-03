@@ -73,6 +73,7 @@ const FROZEN_PRESENCE_FIELDS: Record<keyof PresenceState, true> = {
   sprite: true,
   carrying: true,
   jumps: true,
+  seat: true,
 };
 
 const FROZEN_POSITION_FIELDS: Record<keyof Position, true> = {
@@ -247,6 +248,8 @@ describe('the schema is the enforcement point', () => {
     expect(fields['carrying']).toBe('int8');
     // D-097: a jump counter, a byte that wraps; it holds nothing else.
     expect(fields['jumps']).toBe('uint8');
+    // D-127: a bench seat index or -1, and a byte cannot hold anything else.
+    expect(fields['seat']).toBe('int8');
 
     const column = Metadata.getFields(SandboxColumnEntry) as Record<string, unknown>;
     expect(column['x']).toBe('uint8');

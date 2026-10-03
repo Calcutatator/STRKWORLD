@@ -55,6 +55,10 @@ ARG VITE_STRK20_SWAP_ENABLED
 ARG VITE_STRK20_SWAP_ALLOWED_TOKENS
 ARG VITE_STRK20_SWAP_SLIPPAGE_BPS
 ARG VITE_STRK20_SWAP_DEGEN_ENABLED
+# D-126: the degen floor's own, wider slippage and oracle limits. Unset, that
+# floor uses 800 bps (8%) and 1200 bps (12%); the Exchange keeps 3% and 3%.
+ARG VITE_STRK20_SWAP_DEGEN_SLIPPAGE_BPS
+ARG VITE_STRK20_SWAP_DEGEN_ORACLE_BPS
 # D-116: the private leaderboard's ReceiptLedger contract address. Unset, no
 # action carries a receipt and the leaderboard stand stays shut.
 ARG VITE_STRK20_LEADERBOARD_LEDGER

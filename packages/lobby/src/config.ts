@@ -250,7 +250,12 @@ export const DEFAULT_FACING: Facing = 'down';
  * room's surface has no field for it.
  */
 export const MESSAGE = Object.freeze({
-  /** `{ x, y, facing }` — the only high-rate message. */
+  /**
+   * `{ x, y, facing, seat }` — the only high-rate message. D-127's `seat` (an
+   * index into `STREET_SEATS`, or -1 standing) rides along on it rather than
+   * taking a message of its own: sitting down is a move onto the seat's spot,
+   * so the client floor already paces it and the budget below is unchanged.
+   */
   move: 'move',
   /** No payload. The avatar disappears for everyone else. See D-019. */
   suspend: 'suspend',

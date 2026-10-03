@@ -5,6 +5,7 @@ import {
   DEGEN_MAX_MIN_DAILY_VOLUME_USD,
   DEGEN_MIN_CACHE_TTL_MS,
   DEGEN_TAGS,
+  SWAP_DEGEN_MAX_SLIPPAGE_BPS,
 } from './degen-catalog.js';
 import { DEFAULT_POOL_VALUE_URL } from './pool-stats.js';
 import type { StarknetRpcOptions } from './starknet-rpc.js';
@@ -148,6 +149,14 @@ function parsePoolRoute(environment: Environment, name: 'TRANSFER' | 'UNSHIELD')
  * queue; it admits the tokens the quote proxy may quote, and caps the
  * slippage a quote may ask for. `BACKEND_ROUTE_SWAP_MAX_RELAY_FEE` and
  * `BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS` are no longer read.
+ *
+ * D-126: `BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS` is the separate, wider
+ * ceiling a quote for a token the degen list admits (D-067) may ask for — the
+ * degen floor's tokens are the thin ones, and the ground floor's 3% refused
+ * every real quote for them. Optional, at most `SWAP_DEGEN_MAX_SLIPPAGE_BPS`
+ * (8%), and that is also its default: it is read only for a pair the static
+ * allowlist does not name whole, so it can never widen the Exchange's own
+ * ceiling. With no degen catalog configured nothing is quoted under it.
  */
 function parseSwapRoute(environment: Environment): RoutePolicy {
   return {
@@ -158,6 +167,13 @@ function parseSwapRoute(environment: Environment): RoutePolicy {
     allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_SWAP_ALLOWED_TOKENS'),
     // D-084: at most 3%, so the floor the chain enforces stays within 6% of the oracle.
     maxSlippageBps: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS', 1, 300),
+    degenMaxSlippageBps: parseOptionalInteger(
+      environment,
+      'BACKEND_ROUTE_SWAP_DEGEN_MAX_SLIPPAGE_BPS',
+      1,
+      SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+      SWAP_DEGEN_MAX_SLIPPAGE_BPS,
+    ),
   };
 }
 
@@ -322,6 +338,22 @@ function parseInteger(
   const parsed = BigInt(value);
   if (parsed < BigInt(minimum) || parsed > BigInt(maximum)) throw new Error(`Invalid ${name}.`);
   return Number(parsed);
+}
+
+/**
+ * D-126: an optional whole-number setting, with a default when it is unset or
+ * empty. Present but malformed, or outside its range, is still a startup error
+ * — a value the operator typed is never quietly replaced by the default.
+ */
+function parseOptionalInteger(
+  environment: Environment,
+  name: string,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  if (isUnset(environment[name])) return fallback;
+  return parseInteger(environment, name, minimum, maximum);
 }
 
 function parseUnsignedBigint(environment: Environment, name: string, maximum: bigint): bigint {

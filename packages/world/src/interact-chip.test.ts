@@ -6,6 +6,7 @@ import { createWorldSession, type WorldKeyboard, type WorldSessionView } from '.
 import { BANK_ROOM_DEFINITION, FIXED_ROOM_TILE_SIZE } from './fixed-room.js';
 import { createStreetMap, tileToWorld } from './map/street.js';
 import { ROOM_ORIGIN } from './world-layout.js';
+import { STREET_BENCHES } from './seats.js';
 
 /**
  * D-123: the key chip. It names what E would use ("[E] SHIELD") while the
@@ -92,7 +93,71 @@ function bankSession(touch: boolean, status: 'available' | 'locked' = 'available
   };
 }
 
+/**
+ * D-127: a bench's own chip. Built the same way as the Bank's, but on the
+ * street beside a plaza bench, where the chip is the whole cue.
+ */
+function benchSession(touch: boolean) {
+  const parent = mount();
+  let session!: ReturnType<typeof createWorldSession>;
+  const chip = createInteractChip({ mount: parent, touch, onPress: () => session.interact() });
+  const view = new Proxy({} as WorldSessionView, {
+    get: (_target, key) => (key === 'setInteractionPrompt' ? (prompt: never) => chip.show(prompt) : () => {}),
+  });
+  let held = { left: false, right: false, up: false, down: false };
+  const keyboard: WorldKeyboard = {
+    enabled: true,
+    get held() {
+      return held;
+    },
+    sprinting: false,
+    on: () => keyboard,
+    off: () => keyboard,
+    resetKeys: () => {},
+    disableGlobalCapture: () => {},
+    enableGlobalCapture: () => {},
+  } as unknown as WorldKeyboard;
+  session = createWorldSession({ view, keyboard });
+  const bench = STREET_BENCHES[2]!;
+  const internals = session as unknown as { position: { x: number; y: number } };
+  // Walk south one frame so the bench in front is faced, then stand at it.
+  held = { left: false, right: false, up: false, down: true };
+  session.update(1);
+  held = { left: false, right: false, up: false, down: false };
+  internals.position = { x: bench.seats[0]!.x, y: bench.rect.y - 8 };
+  session.update(16);
+  return {
+    session,
+    chip,
+    bench,
+    finish() {
+      session.destroy();
+      chip.destroy();
+    },
+  };
+}
+
 describe('the key chip (D-123)', () => {
+  it('reads "[E] SIT" at a bench, and goes away once the player sits (D-127)', () => {
+    const world = benchSession(false);
+    expect(world.chip.visible).toBe(true);
+    expect(world.chip.element.textContent).toBe('ESIT');
+    expect(world.chip.element.getAttribute('aria-label')).toBe('SIT (E)');
+    // Sitting holds the stations, so no chip is offered while seated.
+    world.session.interact();
+    expect(world.session.seat?.id).toBe(world.bench.seats[0]!.id);
+    expect(world.chip.visible).toBe(false);
+    world.finish();
+  });
+
+  it('is the tap button at a bench on a touch screen (D-127)', () => {
+    const world = benchSession(true);
+    expect(world.chip.element.style.pointerEvents).toBe('auto');
+    world.chip.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(world.session.seat?.id).toBe(world.bench.seats[0]!.id);
+    world.finish();
+  });
+
   it('reads a touch screen from a coarse pointer, or touch points without a fine one', () => {
     expect(isTouchScreen(media({ '(pointer: coarse)': true }))).toBe(true);
     expect(isTouchScreen(media({}, 5))).toBe(true);

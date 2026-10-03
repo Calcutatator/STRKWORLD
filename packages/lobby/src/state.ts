@@ -64,6 +64,13 @@ export type PositionSchema = SchemaType<typeof PositionSchema>;
  * message, so a client cannot choose its value either, and a byte holds
  * nothing else. It rides the same per-observer view as the rest of the entry,
  * so only peers that already see this player are told it jumped.
+ *
+ * `seat` (D-127) is an `int8`: an index into `STREET_SEATS`, or -1 standing.
+ * One byte is the whole cost of sitting on a bench, because the seat's own
+ * place and the way a sitter looks are in that shared table. Only the room
+ * writes it, and only for an index that is a real seat whose spot is where the
+ * room already holds that player, and only while no other live entry holds it,
+ * so a client can neither invent a seat nor share one.
  */
 export const PresenceEntry = schema(
   {
@@ -73,6 +80,7 @@ export const PresenceEntry = schema(
     sprite: 'string',
     carrying: { type: 'int8', default: -1 },
     jumps: { type: 'uint8', default: 0 },
+    seat: { type: 'int8', default: -1 },
   },
   'PresenceEntry',
 );

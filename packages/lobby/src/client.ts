@@ -106,6 +106,8 @@ import {
   ARENA_SIDES,
   ARENA_SLOT_KINDS,
   FOOTBALL_WIN_SCORE,
+  NO_SEAT,
+  streetSeatAt,
   normalizeArenaRing,
   type ArenaRingSnapshot,
   PITCH_AREA,
@@ -202,12 +204,25 @@ export interface PeerSnapshot {
    * not a byte from the server reads as 0.
    */
   readonly jumps: number;
+  /**
+   * D-127: the bench seat this player sits on — an index into `STREET_SEATS` —
+   * or null standing. Anything that is not a real seat index from the server
+   * reads as null, so a peer is only ever drawn sitting on a seat that exists.
+   */
+  readonly seat: number | null;
 }
 
 export interface Placement {
   readonly x: number;
   readonly y: number;
   readonly facing?: Facing;
+  /**
+   * D-127: the bench seat to claim with this placement — an index into
+   * `STREET_SEATS` — or -1 / absent for standing. The room judges it against
+   * the position it writes and against who else is sitting there, so a claim
+   * it refuses is simply a standing player on the seat's spot.
+   */
+  readonly seat?: number;
 }
 
 export interface LobbyClientOptions {
@@ -509,8 +524,13 @@ export class LobbyClient {
    * desired one and reconciled toward the server: sent no faster than the floor,
    * re-sent until the server's copy matches, and dropped only once confirmed. A
    * call made while suspended or disconnected does nothing.
+   *
+   * D-127: `seat` claims a bench seat with the same message — an index into
+   * `STREET_SEATS`, or -1 standing. Anything that is not a real index is sent
+   * as standing, and the room may still refuse the claim silently; the next
+   * snapshot of this avatar's own entry is the only answer.
    */
-  updatePosition(x: number, y: number, facing: Facing = 'down'): void {
+  updatePosition(x: number, y: number, facing: Facing = 'down', seat: number = NO_SEAT): void {
     if (this.#status !== 'connected' || this.#room === null) return;
     // Match the server's finite rounding and world-bound clamp before storing
     // desired state. Without this, an out-of-bounds finite coordinate would be
@@ -523,6 +543,8 @@ export class LobbyClient {
       x: normalizedX,
       y: normalizedY,
       facing: normalizeFacing(facing),
+      // D-127: only a real seat index travels; everything else is standing.
+      seat: streetSeatAt(seat) === null ? NO_SEAT : seat,
     };
     this.#pump(performance.now());
   }
@@ -587,7 +609,9 @@ export class LobbyClient {
     if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
-    const next: Required<Placement> = {
+    // A resume and an area switch are teleports, never sits: they carry no
+    // seat, and the room gives up whatever seat it held (D-127).
+    const next: SentPlacement = {
       x,
       y,
       facing: normalizeFacing(ownDataField(placement, 'facing')),
@@ -638,7 +662,7 @@ export class LobbyClient {
     if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
-    const next: Required<Placement> = {
+    const next: SentPlacement = {
       x,
       y,
       facing: normalizeFacing(ownDataField(placement, 'facing')),
@@ -1443,7 +1467,11 @@ export class LobbyClient {
     const elapsed = this.#lastSentAt === null ? null : now - this.#lastSentAt;
     if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
       const room = this.#room;
-      room.send(MESSAGE.move, desired);
+      // D-127: a standing player's move is exactly the message it always was;
+      // only a sitter's carries the extra field.
+      room.send(MESSAGE.move, desired.seat >= 0
+        ? desired
+        : { x: desired.x, y: desired.y, facing: desired.facing });
       this.#lastSentPlacement = desired;
       // A transport can report closure synchronously from send. Do not stamp
       // the retired room's send time or schedule work against its replacement.
@@ -1483,7 +1511,9 @@ export class LobbyClient {
     if (entry === undefined) return null;
     const snapshot = readPeerSnapshot(entry);
     if (snapshot === null || snapshot.gameId !== id) return null;
-    return snapshot;
+    // D-127: the room's answer to a seat claim is part of what has to match
+    // before a move counts as confirmed, so a refused seat is re-sent.
+    return { x: snapshot.x, y: snapshot.y, facing: snapshot.facing, seat: snapshot.seat ?? NO_SEAT };
   }
 
   #scheduleReconcile(delay: number): void {
@@ -2012,6 +2042,9 @@ interface PendingSandboxAction {
   readonly tile: SandboxTile;
 }
 
+/** A placement as a lifecycle message carries it: no seat (D-127). */
+type SentPlacement = { readonly x: number; readonly y: number; readonly facing: Facing };
+
 type SandboxActionMessage = typeof MESSAGE.sandboxPick | typeof MESSAGE.sandboxPlace;
 
 function ownDataField(value: object, key: string): unknown {
@@ -2055,10 +2088,16 @@ function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
       sprite: entry.sprite,
       carrying: normalizeSandboxColour(entry.carrying),
       jumps: normalizeJumps(entry.jumps),
+      seat: normalizeSeat(entry.seat),
     };
   } catch {
     return null;
   }
+}
+
+/** D-127: a real seat index, or null — standing, and anything else. */
+function normalizeSeat(value: unknown): number | null {
+  return streetSeatAt(value) === null ? null : (value as number);
 }
 
 /** D-097: a byte counter, or 0. */
@@ -2374,5 +2413,5 @@ function isValidMonotonicTime(value: number): boolean {
 }
 
 function samePlacement(a: Required<Placement>, b: Required<Placement>): boolean {
-  return a.x === b.x && a.y === b.y && a.facing === b.facing;
+  return a.x === b.x && a.y === b.y && a.facing === b.facing && a.seat === b.seat;
 }
