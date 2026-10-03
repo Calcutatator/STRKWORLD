@@ -14,7 +14,14 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import { CLIMB_WINDOW_MS, NO_SEAT, SANDBOX_STEP_HEIGHT, arenaTileCentre, isAtStreetSeat } from '@strkworld/shared';
+import {
+  CLIMB_WINDOW_MS,
+  JUMP_PASS_WINDOW_MS,
+  NO_SEAT,
+  SANDBOX_STEP_HEIGHT,
+  arenaTileCentre,
+  isAtStreetSeat,
+} from '@strkworld/shared';
 import type {
   ArenaRingSnapshot,
   Facing,
@@ -233,11 +240,13 @@ export class LobbyPresence {
   /** D-097: the jump floor, strict and per session. */
   readonly #jumpThrottle = new UpdateThrottle(JUMP_MIN_INTERVAL_MS);
   /**
-   * D-106: each session's climb window — when its last accepted jump arrived,
-   * and whether that jump has already stepped up. Server-side only; gone on
+   * D-106: each session's jump window — when its last accepted jump arrived,
+   * and whether that jump has already stepped up. The same record times
+   * D-130's airborne pass (`#airborne`), which does not spend `used`: a jump
+   * that has climbed still passes over the ball. Server-side only; gone on
    * suspend, area change and leave.
    */
-  readonly #climbs = new Map<string, { readonly at: number; used: boolean }>();
+  readonly #jumps = new Map<string, { readonly at: number; used: boolean }>();
   /** D-106: at most one resync a session per `RESYNC_MIN_INTERVAL_MS`, however many moves are refused. */
   readonly #resyncThrottle = new UpdateThrottle(RESYNC_MIN_INTERVAL_MS);
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
@@ -448,7 +457,7 @@ export class LobbyPresence {
    */
   #climbWindow(sessionKey: string, rise: number, now: number): { readonly at: number; used: boolean } | null {
     if (rise > SANDBOX_STEP_HEIGHT) return null;
-    const window = this.#climbs.get(sessionKey);
+    const window = this.#jumps.get(sessionKey);
     if (window === undefined || window.used) return null;
     const since = now - window.at;
     if (!(since >= 0 && since <= CLIMB_WINDOW_MS)) return null;
@@ -507,7 +516,7 @@ export class LobbyPresence {
     // Off the street, off the pitch: the ball stops following them (D-078).
     this.#football.lose(sessionKey);
     this.#movedAt.delete(sessionKey);
-    this.#climbs.delete(sessionKey);
+    this.#jumps.delete(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -637,7 +646,7 @@ export class LobbyPresence {
     }
     if (session.area !== area) {
       this.#areaSwitches += 1;
-      this.#climbs.delete(sessionKey);
+      this.#jumps.delete(sessionKey);
     }
     session.area = area;
     this.#movedAt.set(sessionKey, now);
@@ -670,7 +679,7 @@ export class LobbyPresence {
     this.#throttle.forget(sessionKey);
     this.#jumpThrottle.forget(sessionKey);
     this.#resyncThrottle.forget(sessionKey);
-    this.#climbs.delete(sessionKey);
+    this.#jumps.delete(sessionKey);
     this.#announce(this.#sandbox.forget(sessionKey, players));
     this.#football.forget(sessionKey);
     this.#movedAt.delete(sessionKey);
@@ -788,8 +797,9 @@ export class LobbyPresence {
    * which reaches exactly the observers whose view already holds the entry —
    * so only peers in the same presence area, inside the interest radius. Live
    * in any shared area, the Studio (D-111) and the bunker (D-112) included; a suspended session has
-   * no entry. Throttled strictly; every refusal is silent. An accepted jump opens the session's climb window (D-106); a
-   * throttled one does not.
+   * no entry. Throttled strictly; every refusal is silent. An accepted jump
+   * opens the session's climb window (D-106) and its airborne window (D-130,
+   * over the ball); a throttled one opens neither.
    */
   jump(sessionKey: string, now: number): JumpOutcome {
     const session = this.#sessions.get(sessionKey);
@@ -798,7 +808,7 @@ export class LobbyPresence {
     if (entry === undefined) return 'absent';
     if (!this.#jumpThrottle.accept(sessionKey, now)) return 'throttled';
     entry.jumps = ((entry.jumps ?? 0) + 1) & 0xff;
-    this.#climbs.set(sessionKey, { at: now, used: false });
+    this.#jumps.set(sessionKey, { at: now, used: false });
     return 'applied';
   }
 
@@ -820,12 +830,12 @@ export class LobbyPresence {
    * step timer to match.
    */
   keepFootballRunning(now: number): boolean {
-    return this.#football.keepRunning(this.#footballPlayers(), now);
+    return this.#football.keepRunning(this.#footballPlayers(now), now);
   }
 
   /** Every whole simulation step up to `now`, and what happened in them. Nothing while the ball is at rest. */
   footballTick(now: number): FootballEvent[] {
-    return this.#football.advance(now, this.#footballPlayers());
+    return this.#football.advance(now, this.#footballPlayers(now));
   }
 
   /** Whether the ball is running. */
@@ -838,16 +848,40 @@ export class LobbyPresence {
     return this.#football.snapshot();
   }
 
-  /** Every street entry as someone the ball meets, with when they last moved. */
-  #footballPlayers(): FootballPlayer[] {
+  /**
+   * Every street entry as someone the ball meets, with when they last moved
+   * and (D-130) whether the room has them in the air at `now`.
+   */
+  #footballPlayers(now: number): FootballPlayer[] {
     const players: FootballPlayer[] = [];
     for (const [key, session] of this.#sessions) {
       if (session.suspended || session.area !== 'street') continue;
       const entry = this.peers.get(session.gameId);
       if (entry === undefined) continue;
-      players.push({ key, x: entry.position.x, y: entry.position.y, at: this.#movedAt.get(key) ?? 0 });
+      const player: FootballPlayer = {
+        key,
+        x: entry.position.x,
+        y: entry.position.y,
+        at: this.#movedAt.get(key) ?? 0,
+      };
+      players.push(this.#airborne(key, now) ? { ...player, airborne: true } : player);
     }
     return players;
+  }
+
+  /**
+   * D-130: whether the room has a session in the air at `now`: it sent a jump
+   * the room accepted no more than `JUMP_PASS_WINDOW_MS` ago. Timed from the
+   * room's own clock on its own record, so a client cannot claim to be
+   * airborne — the only way over the ball is to actually jump, and the jump
+   * floor (`JUMP_MIN_INTERVAL_MS`, the whole air time) bounds how much of the
+   * time anyone can be. A jump that has already climbed (D-106) still counts.
+   */
+  #airborne(sessionKey: string, now: number): boolean {
+    const window = this.#jumps.get(sessionKey);
+    if (window === undefined) return false;
+    const since = now - window.at;
+    return since >= 0 && since <= JUMP_PASS_WINDOW_MS;
   }
 
   /** Every street entry as a sandbox player, optionally leaving one session out. */

@@ -585,6 +585,9 @@ class Session implements WorldSession {
         // D-127: the seat rides along on every street placement, so the Shell
         // never needs an event of its own for sitting down or standing up.
         () => this.publishedSeat(),
+        // D-130: and so does whether the feet are off the ground, so the ball
+        // the Shell draws knows not to come off a jumper passing over it.
+        () => this.jumpState.clearsBodies,
       );
       this.createPlayer();
       this.createInput();

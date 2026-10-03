@@ -233,6 +233,25 @@ describe('the ball the Shell draws (D-078)', () => {
     expect(pushed).toBe(true);
   });
 
+  it('leaves the drawn ball where it is while the player passes over it in the air (D-130)', () => {
+    const presenter = createBallPresenter();
+    presenter.push(snapshot(100, { ...FOOTBALL_CENTRE, vx: 0, vy: 0 }), 4000);
+    let x = FOOTBALL_CENTRE.x - 40;
+    for (let t = 4000; t < 4400; t += 1000 / 60) {
+      x += 160 / 60;
+      const jumper: LocalPlayer = { x, y: FOOTBALL_CENTRE.y, vx: 160, vy: 0, facing: 'right', airborne: true };
+      const frame = presenter.frame(t, jumper)!;
+      // Not pushed, not nudged, not even moved out of the body: it rolls on
+      // under the jumper, exactly as the authority will play it.
+      expect(frame).toMatchObject({ x: FOOTBALL_CENTRE.x, y: FOOTBALL_CENTRE.y, vx: 0, vy: 0 });
+    }
+    // The run finished past the ball, so it really did pass over it.
+    expect(x).toBeGreaterThan(FOOTBALL_CENTRE.x);
+    // And a kick on E still reaches it: the jump takes away the accident, not the action.
+    const overIt: LocalPlayer = { x: FOOTBALL_CENTRE.x - 24, y: FOOTBALL_CENTRE.y, vx: 160, vy: 0, facing: 'right', airborne: true };
+    expect(presenter.kick(4400, overIt)).toBe(true);
+  });
+
   it('starts over for another authority: a tick from before the latest', () => {
     const presenter = createBallPresenter();
     presenter.push(snapshot(500, { x: 300, y: 300, vx: 0, vy: 0 }, { west: 4 }), 20_000);

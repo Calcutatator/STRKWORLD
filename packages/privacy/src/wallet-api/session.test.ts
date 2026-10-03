@@ -2450,3 +2450,107 @@ describe('WalletSession Borrow-counter ownership (D-083)', () => {
     )).toThrow(PrivacyError);
   });
 });
+
+/**
+ * Leaderboard phase 1 (D-122, amended 2026-10-03): the shadow-account
+ * commitments a connection shared live in its operations' memory, so one
+ * placement check is one wallet prompt at most. The session is what releases
+ * them: wherever it drops a connection's operations — the HUD pill's
+ * "Disconnect & return to menu" (D-120), an account change, a wrong network,
+ * a failure, destroy — the cache is emptied, so a second account can never
+ * read the first one's commitments.
+ */
+describe('WalletSession forgets a connection\'s cached commitments', () => {
+  /** A seam that records whether its cached commitments were released. */
+  class ForgettingOperations extends FakePrivacyOperations {
+    forgotten = 0;
+    // The shipped fake caches nothing, so this stands in for the adapter's.
+    forgetCommitments(): void {
+      this.forgotten += 1;
+    }
+  }
+
+  function connected(initial: ForgettingOperations, replacement: ForgettingOperations) {
+    const selected = wallet('Ready');
+    const port = controllableConnection('0x111', initial, replacement);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port.port },
+    );
+    return { session, port };
+  }
+
+  it('on disconnect', async () => {
+    const first = new ForgettingOperations();
+    const { session } = connected(first, new ForgettingOperations());
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    expect(first.forgotten).toBe(0);
+
+    await session.disconnect();
+
+    expect(first.forgotten).toBeGreaterThan(0);
+  });
+
+  it('on an account change, before the replacement account is built', async () => {
+    const first = new ForgettingOperations();
+    const second = new ForgettingOperations();
+    const { session, port } = connected(first, second);
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    port.changeAccount('0x222');
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
+    expect(first.forgotten).toBeGreaterThan(0);
+    // The new account's own cache is untouched: it has its own commitments to share.
+    expect(second.forgotten).toBe(0);
+  });
+
+  it('on destroy, and when the selected wallet disappears', async () => {
+    const first = new ForgettingOperations();
+    const { session } = connected(first, new ForgettingOperations());
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    session.destroy();
+    expect(first.forgotten).toBeGreaterThan(0);
+
+    const other = new ForgettingOperations();
+    const discovery = controllableDiscovery(wallet('Ready'));
+    const live = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => controllableConnection('0x111', other, new ForgettingOperations()).port },
+    );
+    await live.connect(live.getSnapshot().wallets[0]!.key);
+    discovery.replace();
+    expect(other.forgotten).toBeGreaterThan(0);
+  });
+
+  it('cannot be broken by a seam that throws or does not offer it', async () => {
+    const throwing = new FakePrivacyOperations() as FakePrivacyOperations & { forgetCommitments: () => void };
+    throwing.forgetCommitments = () => { throw new Error('the cache broke'); };
+    const { session } = connected(throwing as ForgettingOperations, new ForgettingOperations());
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    await expect(session.disconnect()).resolves.toBeUndefined();
+    expect(session.getSnapshot()).toMatchObject({ phase: 'selection-required', account: null });
+
+    // The shipped fake offers no cache at all, and a disconnect is still clean.
+    const bare = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    );
+    await bare.connect(bare.getSnapshot().wallets[0]!.key);
+    await expect(bare.disconnect()).resolves.toBeUndefined();
+  });
+
+  it('answers "a prompt may come" for a retired or silent connection', async () => {
+    const bare = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    );
+    // Nothing connected yet.
+    expect(bare.operations.placementWillPrompt?.()).toBe(true);
+    await bare.connect(bare.getSnapshot().wallets[0]!.key);
+    // The shipped fake cannot say, so the safe copy stands.
+    expect(bare.operations.placementWillPrompt?.()).toBe(true);
+    await bare.disconnect();
+    expect(bare.operations.placementWillPrompt?.()).toBe(true);
+  });
+});

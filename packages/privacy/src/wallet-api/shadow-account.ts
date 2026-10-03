@@ -13,8 +13,11 @@ import { PrivacyError, type Address, type OperationProgress, type ProgressCallba
 import { isContractAddress, shadowAccountAddress, vaultOutcomeFromReceipt } from '../vault.js';
 import { shadowCommitment, withLedgerTick } from '../leaderboard.js';
 import { noticeLeaderboard, type LeaderboardFeature } from '../leaderboard-notice.js';
+import { WalletCommitmentCache } from './commitment-cache.js';
 import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import type { PoolReadClient, VaultReadClient, WalletStrk20Account } from './types.js';
+
+export { hasCommitmentMethod, isFelt } from './commitment-cache.js';
 import { freezeActions, submitThroughWallet, waitForReceipt } from './wallet-submission.js';
 
 /**
@@ -23,12 +26,15 @@ import { freezeActions, submitThroughWallet, waitForReceipt } from './wallet-sub
  * prepared batch the wallet proves and submits. The Vault
  * (`vault-operations.ts`), the Borrow counter (`borrow-operations.ts`) and
  * Endur unstaking (`endur-operations.ts`) each hold one resolver for their
- * own dapp name, with its own commitment cache and nonce check, so the three
- * addresses are different and nothing here links them.
+ * own dapp name and nonce check, so the three addresses are different and
+ * nothing here links them. The commitments themselves are cached once for the
+ * whole connection, keyed by dapp name only (`commitment-cache.ts`).
  *
  * - The wallet derives the partial commitment for the dapp name locally; no
  *   transaction is sent and no key leaves it. It is asked once per
- *   connection and never leaves the resolver.
+ *   connection — through the connection's one `WalletCommitmentCache`, shared
+ *   with every other route and with the placement (D-122, amended
+ *   2026-10-03) — and never leaves this package.
  * - The address comes from the canonical anonymizer's own view, through the
  *   backend, and must equal the address derived here from that commitment
  *   at the nonce. A mismatch fails closed before anything is proved.
@@ -53,25 +59,29 @@ export interface ShadowAccountResolverOptions {
   readonly supported: (signal?: AbortSignal) => Promise<boolean>;
   /** How errors name the counter: "The Vault could not…". */
   readonly subject: string;
+  /**
+   * The connection's one commitment cache, shared with every other route and
+   * with the placement, so no dapp name is asked for twice per connection
+   * (D-122, amended 2026-10-03). Absent, this resolver keeps its own.
+   */
+  readonly commitments?: WalletCommitmentCache;
 }
 
 export class ShadowAccountResolver {
-  private readonly wallet: WalletStrk20Account;
   private readonly dappName: string;
   private readonly nonce: string;
   private readonly reads?: Pick<VaultReadClient, 'shadowAccount'>;
   private readonly supported: (signal?: AbortSignal) => Promise<boolean>;
   private readonly subject: string;
-  /** The partial commitment once given: deterministic for this account and dapp name, so asked once. */
-  private commitment: Promise<string> | null = null;
+  private readonly commitments: WalletCommitmentCache;
 
   constructor(options: ShadowAccountResolverOptions) {
-    this.wallet = options.wallet;
     this.dappName = options.dappName;
     this.nonce = options.nonce;
     this.reads = options.reads;
     this.supported = options.supported;
     this.subject = options.subject;
+    this.commitments = options.commitments ?? new WalletCommitmentCache(options.wallet);
   }
 
   /**
@@ -143,32 +153,28 @@ export class ShadowAccountResolver {
     return this.partialCommitment(undefined);
   }
 
+  /**
+   * This counter's full commitment `C` only if its partial is already in the
+   * connection's cache, and null otherwise. Never asks the wallet, so it can
+   * never prompt: a placement check reads this, so it counts and claims only
+   * the feature shadows the player's own session has already used.
+   */
+  cachedFullCommitment(): string | null {
+    const partial = this.commitments.cached(this.dappName);
+    return partial === null ? null : shadowCommitment(partial, this.nonce);
+  }
+
+  /** The cached partial commitment, or null. Never asks the wallet. */
+  cachedPartial(): string | null {
+    return this.commitments.cached(this.dappName);
+  }
+
   private partialCommitment(onStage: VaultStageCallback | undefined): Promise<string> {
-    if (this.commitment) return this.commitment;
-    const request = (async () => {
-      let answer: unknown;
-      try {
-        if (!hasCommitmentMethod(this.wallet)) {
-          throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
-        }
-        answer = await this.wallet.strk20ShadowAccountCommitment!(this.dappName);
-      } catch (error) {
-        emitStage(onStage, { stage: 'commitment', ok: false, code: walletErrorCode(error) });
-        throw mapShadowWalletError(error);
-      }
-      if (typeof answer !== 'string' || !isFelt(answer) || BigInt(answer) === 0n) {
-        emitStage(onStage, { stage: 'commitment', ok: false, code: null });
-        throw new PrivacyError('unknown', 'The wallet returned an invalid shadow-account commitment.');
-      }
-      emitStage(onStage, { stage: 'commitment', ok: true });
-      return answer;
-    })();
-    this.commitment = request;
-    // A refused or failed request is asked again next time.
-    request.catch(() => {
-      if (this.commitment === request) this.commitment = null;
+    return this.commitments.commitment(this.dappName, (ok, error) => {
+      emitStage(onStage, ok
+        ? { stage: 'commitment', ok: true }
+        : { stage: 'commitment', ok: false, code: error === undefined ? null : walletErrorCode(error) });
     });
-    return request;
   }
 }
 
@@ -300,26 +306,6 @@ async function waitForShadowReceipt(
   return outcome;
 }
 
-/**
- * Whether the account exposes `strk20ShadowAccountCommitment` as a method: an
- * own or inherited data property holding a function, as `WalletAccountV6`
- * declares it on its prototype. An accessor is refused without being run, and
- * a throwing trap reads as absent.
- */
-export function hasCommitmentMethod(wallet: WalletStrk20Account): boolean {
-  try {
-    let current: object | null = wallet;
-    for (let hops = 0; current !== null && hops < 16; hops += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(current, 'strk20ShadowAccountCommitment');
-      if (descriptor) return 'value' in descriptor && typeof descriptor.value === 'function';
-      current = Object.getPrototypeOf(current) as object | null;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 /** A shadow-account action's amount: a positive u256 (D-077, D-085). */
 export function assertAmount(amount: unknown): asserts amount is bigint {
   if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
@@ -429,8 +415,3 @@ export function sameAddress(a: string, b: string): boolean {
 }
 
 const MAX_UINT256 = (1n << 256n) - 1n;
-const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
-
-export function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
-}
