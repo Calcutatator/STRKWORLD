@@ -14329,4 +14329,32 @@ Full suite (298 files, 6336 tests) and `npm run typecheck` pass. No wallet,
 RPC, funds or transaction was used, and no live LORDS swap has been run under
 the new bound.
 
+### 2026-10-03 — A tile trigger is not a doorway: entry needs the step, not the tile
+
+The Garden's street entrance (D-047, D-125) fired on *being* on one of its two
+opening tiles, which is why walking along the bottom of the map pulled you in
+sideways. The fix is not a bigger trigger or a smaller one — it is to read the
+step: `entersAvatarStudio(map, from, to)` requires the destination to be an
+opening tile, the origin not to be one, and `to.y > from.y`. Two traps here.
+**Facing is the wrong input**: it is a presentation value that a camera turn or
+a wall slide changes while the player stands still, so a facing rule would let
+someone be pulled in without moving. The tile they came from cannot change
+under them. **The hold still needs the old predicate**: D-125's re-entry hold
+arms on the *tile*, not on the step, so `isAvatarStudioEntrance` has to keep
+its old meaning and both have to be fed from the same tile report.
+
+A second, unobvious cost of making the street deeper: anything whose geometry
+was authored as "the height of my square" becomes a way round. Growing the map
+five rows left the pitch's street fence and the sandbox's west wall stopping at
+their squares' south edges, with open grass south of both — walkable straight
+into the pitch. Both now run `max(square, map)` deep, in the map and in the
+builder.
+
+*Verified:* the eight step cases (through, diagonally through, along the hedge
+from either side, between the two opening tiles, both piers, stepping back
+north) in `packages/world/src/map/street.test.ts`, and the same walk at session
+level — five steps along the bottom row entering nothing, then one step south
+through the opening entering — in `packages/world/src/world-session.test.ts`.
+Full suite (308 files, 6515 tests) and `npm run typecheck` pass.
+
 ---

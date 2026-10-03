@@ -11,7 +11,8 @@ in as plain data by the shell.
 ## What this owns
 
 - The gameplay session (`world-session.ts`): movement, tile collision, door
-  triggers, fixed rooms and stations, the Avatar Studio, the outfit toggle and
+  triggers, fixed rooms and stations, the Garden (the Avatar Studio, renamed in
+  D-134; its identifiers stay `studio`), the outfit toggle and
   the input gate — engine-agnostic and tested headlessly
 - The 3D presentation (`three/`): renderer, camera, lighting, procedural
   district and interiors, low-poly avatars, remote avatars
