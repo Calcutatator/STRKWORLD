@@ -45,6 +45,7 @@ import {
   throwIfAborted,
   type ShadowBatchDeps,
 } from './shadow-account.js';
+import type { WalletCommitmentCache } from './commitment-cache.js';
 import type { BorrowReadClient, PoolReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { WALLET_RECEIPT_WAITS_MS, abortableSleep, ownReceiptWaits } from './wallet-submission.js';
 
@@ -76,6 +77,8 @@ const MAX_U128 = (1n << 128n) - 1n;
 
 export interface ShadowBorrowOptions {
   readonly wallet: WalletStrk20Account;
+  /** The connection's one shadow-account commitment cache (D-122, amended 2026-10-03). */
+  readonly commitments?: WalletCommitmentCache;
   readonly walletAddress: Address;
   readonly pool: PoolReadClient;
   readonly reads?: BorrowReadClient;
@@ -109,6 +112,7 @@ export class ShadowBorrow {
     this.poolConfig = options.poolConfig;
     this.identity = new ShadowAccountResolver({
       wallet: options.wallet,
+      ...(options.commitments ? { commitments: options.commitments } : {}),
       dappName: BORROW_DAPP_NAME,
       nonce: BORROW_SHADOW_NONCE,
       ...(options.reads ? { reads: options.reads } : {}),
@@ -239,6 +243,20 @@ export class ShadowBorrow {
   /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
   ledgerPartial(): Promise<string> {
     return this.identity.partial();
+  }
+
+  /**
+   * Leaderboard phase 1, for a placement check: the same two answers, but only
+   * if this counter's commitment is already in the connection's cache (D-122,
+   * amended 2026-10-03). Null otherwise, so a check never prompts the wallet
+   * for a counter the player has not used this session.
+   */
+  ledgerCachedCommitment(): string | null {
+    return this.identity.cachedFullCommitment();
+  }
+
+  ledgerCachedPartial(): string | null {
+    return this.identity.cachedPartial();
   }
 
   /**

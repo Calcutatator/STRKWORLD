@@ -823,6 +823,13 @@ export const COPY = freezeCopy({
       check: 'Check privately',
       again: 'Check again',
       checking: 'Counting your receipts…',
+      /**
+       * Shown in the waiting state only when the wallet is about to ask for
+       * the season commitment — the one prompt a check can make (D-122,
+       * amended 2026-10-03). A second check in the same session reuses what
+       * the wallet already shared, prompts nothing, and so says nothing.
+       */
+      walletPrompt: 'Your wallet will ask to share your season ID',
       top: (percent: number) => `Top ${percent}%`,
       rank: (rank: number, total: number) => `Rank about ${rank} of ${total}`,
       count: (count: number) => (count === 1 ? '1 private action' : `${count} private actions`),

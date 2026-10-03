@@ -35,6 +35,7 @@ import {
   type ShadowBatchDeps,
   type ShadowIdentity,
 } from './shadow-account.js';
+import type { WalletCommitmentCache } from './commitment-cache.js';
 import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Account } from './types.js';
 import { WALLET_RECEIPT_WAITS_MS, abortableSleep, ownReceiptWaits } from './wallet-submission.js';
 
@@ -84,6 +85,8 @@ export function shadowAccountsSupported(
 
 export interface ShadowVaultOptions {
   readonly wallet: WalletStrk20Account;
+  /** The connection's one shadow-account commitment cache (D-122, amended 2026-10-03). */
+  readonly commitments?: WalletCommitmentCache;
   readonly walletAddress: Address;
   readonly pool: PoolReadClient;
   readonly reads?: VaultReadClient;
@@ -123,6 +126,7 @@ export class ShadowVault {
     this.poolConfig = options.poolConfig;
     this.identity = new ShadowAccountResolver({
       wallet: options.wallet,
+      ...(options.commitments ? { commitments: options.commitments } : {}),
       dappName: VAULT_DAPP_NAME,
       nonce: VAULT_SHADOW_NONCE,
       ...(options.reads ? { reads: options.reads } : {}),
@@ -339,6 +343,20 @@ export class ShadowVault {
   /** Leaderboard phase 1: this counter's partial commitment, sent to the tally only when it ranks DeFi. */
   ledgerPartial(): Promise<string> {
     return this.identity.partial();
+  }
+
+  /**
+   * Leaderboard phase 1, for a placement check: the same two answers, but only
+   * if this counter's commitment is already in the connection's cache (D-122,
+   * amended 2026-10-03). Null otherwise, so a check never prompts the wallet
+   * for a counter the player has not used this session.
+   */
+  ledgerCachedCommitment(): string | null {
+    return this.identity.cachedFullCommitment();
+  }
+
+  ledgerCachedPartial(): string | null {
+    return this.identity.cachedPartial();
   }
 
   /**
